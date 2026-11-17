@@ -6,6 +6,11 @@ export const TOWNS = Object.freeze([
   { id: 3, name: "和歌山島", originalName: "和歌山アイランド" }
 ]);
 
+export const STARTING_BUDGETS = Object.freeze([
+  { id: "brain", label: "頭腦", keys: ["kokugo","suugaku","rika","syakai","eigo","ongaku","bijutu"], max: 200 },
+  { id: "body", label: "身體", keys: ["looks","tairyoku","kenkou","speed","power","wanryoku","kyakuryoku"], max: 200 },
+  { id: "other", label: "其他", keys: ["love","unique","etti"], max: 100 }
+]);
 export const WORK_COOLDOWN_MS = 5 * 60 * 1000;
 export const ENERGY_RECOVERY_MS = 10 * 1000;
 export const MAX_ENERGY = 100; // 暫定角色初始值，尚未移植原版註冊配點
@@ -98,35 +103,80 @@ export function parseLegacyJobs(source) {
       bodyCost: Math.max(0, toNumber(v[25])),
       brainCost: Math.max(0, toNumber(v[26])),
       rank: Math.max(1, toNumber(v[27], 1)),
-      previousJob: v[28] || null
+      previousJob: v[28] || null,
+      bonusRate: Math.max(0, toNumber(v[29])),
+      raiseRate: Math.max(0, toNumber(v[30]))
     };
   }).filter(Boolean);
 }
 
-export function createCharacterData(name, gender = "other", now = Date.now()) {
+export function validateStartingStats(input) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error("請完整填寫初始能力值");
+  const stats = {};
+  for (const key of STAT_KEYS) {
+    if (!Number.isSafeInteger(input[key]) || input[key] < 1 || input[key] > 200)
+      throw new Error(STAT_LABELS[key] + "必須是大於零的整數");
+    stats[key] = input[key];
+  }
+  for (const group of STARTING_BUDGETS) {
+    const sum = group.keys.reduce((total, key) => total + stats[key], 0);
+    if (sum > group.max) throw new Error(group.label + "能力值總和不可超過 " + group.max);
+  }
+  return stats;
+}
+
+export function maxBodyEnergy(stats) {
+  return Math.floor(
+    stats.tairyoku / 2 + stats.kenkou / 3 + stats.power / 5 +
+    stats.wanryoku / 8 + stats.kyakuryoku / 8
+  );
+}
+
+export function maxBrainEnergy(stats) {
+  return Math.floor(STARTING_BUDGETS[0].keys.reduce((sum, key) => sum + stats[key] / 4, 0));
+}
+
+export function bodyMassIndex(height, weight) {
+  return Math.round(weight / ((height / 100) ** 2) * 10) / 10;
+}
+
+export function createCharacterData(
+  name, gender = "other", now = Date.now(),
+  inputStats = Object.fromEntries(STAT_KEYS.map(key => [key, 20])),
+  random = Math.random
+) {
+  const stats = validateStartingStats(inputStats);
+  // 原版由性別決定隨機初始身高、體重。未指定性別為 Web 擴充選項。
+  const height = gender === "male" ? 165 + Math.floor(random() * 20)
+    : gender === "female" ? 150 + Math.floor(random() * 25) : 165;
+  const weight = gender === "male" ? 50 + Math.floor(random() * 35)
+    : gender === "female" ? 48 + Math.floor(random() * 20) : 60;
   return {
-    name, gender, townId: 0, money: 10000, bank: 0,
-    bodyEnergy: MAX_ENERGY, brainEnergy: MAX_ENERGY, recoveredAt: now,
-    jobId: null, workProgress: 0, lastWorkAt: 0, workCount: 0,
-    height: 165, bmi: 20,
-    stats: Object.fromEntries(STAT_KEYS.map(key => [key, 20]))
+    name, gender, townId: 0, money: 100000, bank: 0,
+    bodyEnergy: maxBodyEnergy(stats), brainEnergy: maxBrainEnergy(stats), recoveredAt: now,
+    jobId: "legacy-2", workProgress: 0, lastWorkAt: 0,
+    workCount: 0, jobWorkCount: 0, jobExperience: 0, masteredJob: null,
+    height, weight, bmi: bodyMassIndex(height, weight), stats
   };
 }
 
 export function recoverEnergy(character, now = Date.now()) {
   const ticks = Math.max(0, Math.floor((now - character.recoveredAt) / ENERGY_RECOVERY_MS));
-  if (!ticks) return { ...character };
-  const bodyEnergy = Math.min(MAX_ENERGY, character.bodyEnergy + ticks);
-  const brainEnergy = Math.min(MAX_ENERGY, character.brainEnergy + ticks);
+  const maxBody = maxBodyEnergy(character.stats);
+  const maxBrain = maxBrainEnergy(character.stats);
+  const bodyEnergy = Math.min(maxBody, character.bodyEnergy + ticks);
+  const brainEnergy = Math.min(maxBrain, character.brainEnergy + ticks);
   return {
     ...character, bodyEnergy, brainEnergy,
-    recoveredAt: bodyEnergy === MAX_ENERGY && brainEnergy === MAX_ENERGY
-      ? now : character.recoveredAt + ticks * ENERGY_RECOVERY_MS
+    recoveredAt: !ticks ? character.recoveredAt :
+      bodyEnergy === maxBody && brainEnergy === maxBrain
+        ? now : character.recoveredAt + ticks * ENERGY_RECOVERY_MS
   };
 }
 
-export function jobEligibility(character, job) {
-  if (job.previousJob) return "需先精通前置職業（尚未移植）";
+function eligibility(character, job, checkPrerequisite = true) {
+  if (checkPrerequisite && job.previousJob && job.previousJob !== character.masteredJob)
+    return "需先精通：" + job.previousJob;
   if (job.gender && character.gender !== job.gender) return "不符合原始職業的性別限制";
   if (character.bmi < job.bmiMin || (job.bmiMax && character.bmi > job.bmiMax)) return "體格指數不足";
   if (character.height < job.minHeight) return "身高不足";
@@ -136,27 +186,61 @@ export function jobEligibility(character, job) {
   return null;
 }
 
+export function jobEligibility(character, job) {
+  return eligibility(character, job);
+}
+
 export function selectJob(character, job) {
   const reason = jobEligibility(character, job);
   if (reason) throw new Error(reason);
-  return { ...character, jobId: job.key, workProgress: 0 };
+  return { ...character, jobId: job.key, workProgress: 0, jobWorkCount: 0, jobExperience: 0 };
 }
 
-export function performWork(character, job, now = Date.now()) {
+export function performWork(character, job, now = Date.now(), random = Math.random) {
   if (!job || character.jobId !== job.key) throw new Error("請先選擇職業");
   const remaining = character.lastWorkAt === 0 ? 0 : Math.max(0, WORK_COOLDOWN_MS - (now - character.lastWorkAt));
   if (remaining > 0) throw new Error("還需要等待 " + Math.ceil(remaining / 1000) + " 秒才能工作");
   const current = recoverEnergy(character, now);
-  if (current.bodyEnergy < job.bodyCost || current.brainEnergy < job.brainCost) {
+  const reason = eligibility(current, job, false);
+  if (reason) throw new Error(reason);
+  if (current.bodyEnergy < job.bodyCost || current.brainEnergy < job.brainCost)
     throw new Error("身體或頭腦能量不足");
-  }
-  const workProgress = current.workProgress + 1;
-  const paid = workProgress >= job.payEvery ? job.salary : 0;
+  // 原版以當前狀態（飽足、健康、體型、精力等）計算經驗，
+  // 但這些模組尚未全數移植。此處暫用「普通」狀態的 5 + 1~5 點。
+  const experienceGain = 5 + Math.floor(random() * 5) + 1;
+  const oldLevel = Math.floor((current.jobExperience ?? 0) / 100);
+  const jobExperience = (current.jobExperience ?? 0) + experienceGain;
+  const jobLevel = Math.floor(jobExperience / 100);
+  const leveledUp = jobLevel > oldLevel;
+  // 原版是每次工作以職業基礎薪資與當次等級計算，不累加上一輪的加薪。
+  const effectiveSalary = Math.trunc(job.salary * (1 + jobLevel / 100 * job.raiseRate));
+  const nextJobCount = (current.jobWorkCount ?? 0) + 1;
+  const paid = nextJobCount % job.payEvery === 0 ? effectiveSalary * job.payEvery : 0;
+  const bonus = leveledUp ? effectiveSalary * job.bonusRate : 0;
+  const mastered = leveledUp && jobLevel >= 15 && current.masteredJob !== job.originalName;
+  const weight = Math.max(1, Math.round(((current.weight ?? 60) - job.bodyCost / 100) * 100) / 100);
   const next = {
     ...current, bodyEnergy: current.bodyEnergy - job.bodyCost,
     brainEnergy: current.brainEnergy - job.brainCost,
-    money: current.money + paid, workProgress: paid ? 0 : workProgress,
+    money: current.money + paid + bonus,
+    workProgress: nextJobCount % job.payEvery,
+    jobWorkCount: nextJobCount,
+    jobExperience,
+    masteredJob: mastered ? job.originalName : current.masteredJob,
+    weight, bmi: bodyMassIndex(current.height, weight),
     lastWorkAt: now, workCount: current.workCount + 1
   };
-  return { character: next, paid, pending: next.workProgress };
+  return { character: next, paid, pending: next.workProgress,
+    experienceGain, jobLevel, leveledUp, bonus, mastered, effectiveSalary };
+}
+
+export function bankTransaction(character, action, amount) {
+  if (!["deposit", "withdraw"].includes(action)) throw new Error("無效的銀行操作");
+  if (!Number.isSafeInteger(amount) || amount <= 0) throw new Error("金額必須為正整數");
+  if (action === "deposit") {
+    if (amount > character.money) throw new Error("現金餘額不足");
+    return { ...character, money: character.money - amount, bank: character.bank + amount };
+  }
+  if (amount > character.bank) throw new Error("銀行存款不足");
+  return { ...character, money: character.money + amount, bank: character.bank - amount };
 }
