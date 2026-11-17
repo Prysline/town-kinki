@@ -6,7 +6,8 @@ import { randomBytes, createHash, scryptSync, timingSafeEqual } from "node:crypt
 import { DatabaseSync } from "node:sqlite";
 import {
   TOWNS, WORK_COOLDOWN_MS, decodeLegacyText, parseLegacyJobs,
-  createCharacterData, recoverEnergy, jobEligibility, selectJob, performWork
+  createCharacterData, recoverEnergy, jobEligibility, selectJob, performWork,
+  maxBodyEnergy, maxBrainEnergy, bankTransaction
 } from "./engine.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -28,6 +29,19 @@ db.exec([
   "CREATE TABLE IF NOT EXISTS sessions (token_hash TEXT PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, expires_at INTEGER NOT NULL);",
   "CREATE TABLE IF NOT EXISTS characters (id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE, name TEXT NOT NULL UNIQUE, gender TEXT NOT NULL, town_id INTEGER NOT NULL, money INTEGER NOT NULL, bank INTEGER NOT NULL, body_energy INTEGER NOT NULL, brain_energy INTEGER NOT NULL, recovered_at INTEGER NOT NULL, job_id TEXT, work_progress INTEGER NOT NULL, last_work_at INTEGER NOT NULL, work_count INTEGER NOT NULL, height INTEGER NOT NULL, bmi REAL NOT NULL, stats_json TEXT NOT NULL);"
 ].join("\n"));
+
+// 舊版雛形資料庫可直接升級，避免已建立的角色在更新後無法讀取。
+for (const [column, definition] of [
+  ["weight", "REAL NOT NULL DEFAULT 60"],
+  ["job_experience", "INTEGER NOT NULL DEFAULT 0"],
+  ["job_work_count", "INTEGER NOT NULL DEFAULT 0"],
+  ["mastered_job", "TEXT"]
+]) {
+  const currentColumns = db.prepare("PRAGMA table_info(characters)").all();
+  if (!currentColumns.some(info => info.name === column)) {
+    db.exec("ALTER TABLE characters ADD COLUMN " + column + " " + definition);
+  }
+}
 
 const jobPath = resolve(REPO_ROOT, "dat_dir", "job.cgi");
 if (!existsSync(jobPath)) throw new Error("找不到原始職業檔案：" + jobPath);
@@ -85,7 +99,9 @@ function characterFromRow(row) {
     brainEnergy: row.brain_energy, recoveredAt: row.recovered_at,
     jobId: row.job_id, workProgress: row.work_progress,
     lastWorkAt: row.last_work_at, workCount: row.work_count,
-    height: row.height, bmi: row.bmi, stats: JSON.parse(row.stats_json)
+    height: row.height, weight: row.weight, bmi: row.bmi,
+    jobExperience: row.job_experience, jobWorkCount: row.job_work_count,
+    masteredJob: row.mastered_job, stats: JSON.parse(row.stats_json)
   };
 }
 
@@ -94,17 +110,17 @@ function getCharacter(userId) {
 }
 
 function saveCharacter(userId, c) {
-  db.prepare("UPDATE characters SET town_id=?,money=?,bank=?,body_energy=?,brain_energy=?,recovered_at=?,job_id=?,work_progress=?,last_work_at=?,work_count=?,height=?,bmi=?,stats_json=? WHERE user_id=?")
+  db.prepare("UPDATE characters SET town_id=?,money=?,bank=?,body_energy=?,brain_energy=?,recovered_at=?,job_id=?,work_progress=?,last_work_at=?,work_count=?,height=?,bmi=?,stats_json=?,weight=?,job_experience=?,job_work_count=?,mastered_job=? WHERE user_id=?")
     .run(c.townId, c.money, c.bank, c.bodyEnergy, c.brainEnergy, c.recoveredAt,
       c.jobId, c.workProgress, c.lastWorkAt, c.workCount, c.height, c.bmi,
-      JSON.stringify(c.stats), userId);
+      JSON.stringify(c.stats), c.weight, c.jobExperience, c.jobWorkCount, c.masteredJob, userId);
 }
 
 function addCharacter(userId, c) {
-  db.prepare("INSERT INTO characters(user_id,name,gender,town_id,money,bank,body_energy,brain_energy,recovered_at,job_id,work_progress,last_work_at,work_count,height,bmi,stats_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+  db.prepare("INSERT INTO characters(user_id,name,gender,town_id,money,bank,body_energy,brain_energy,recovered_at,job_id,work_progress,last_work_at,work_count,height,bmi,stats_json,weight,job_experience,job_work_count,mastered_job) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
     .run(userId,c.name,c.gender,c.townId,c.money,c.bank,c.bodyEnergy,c.brainEnergy,
       c.recoveredAt,c.jobId,c.workProgress,c.lastWorkAt,c.workCount,c.height,
-      c.bmi,JSON.stringify(c.stats));
+      c.bmi,JSON.stringify(c.stats),c.weight,c.jobExperience,c.jobWorkCount,c.masteredJob);
 }
 
 function mutateCharacter(userId, callback) {
@@ -137,13 +153,17 @@ function snapshot(user) {
     user: user ? { username: MODE === "solo" ? "單機玩家" : user.username } : null,
     character: updated,
     currentJob: currentJob ? { key: currentJob.key, name: currentJob.name, salary: currentJob.salary, payEvery: currentJob.payEvery } : null,
+    maxBodyEnergy: updated ? maxBodyEnergy(updated.stats) : null,
+    maxBrainEnergy: updated ? maxBrainEnergy(updated.stats) : null,
+    jobLevel: updated ? Math.floor(updated.jobExperience / 100) : 0,
     towns: TOWNS,
     residents,
     workCooldownMs: updated ? Math.max(0, WORK_COOLDOWN_MS - (now - updated.lastWorkAt)) : 0,
     jobs: updated ? jobs.map(job => ({
       key: job.key, name: job.name, translated: job.translated, rank: job.rank,
       salary: job.salary, payEvery: job.payEvery, bodyCost: job.bodyCost,
-      brainCost: job.brainCost, reason: jobEligibility(updated, job)
+      brainCost: job.brainCost, previousJob: job.previousJob,
+      reason: jobEligibility(updated, job)
     })) : []
   };
 }
@@ -263,7 +283,10 @@ async function handle(req, res) {
         throw new HttpError(400, "角色名稱或性別不符合格式");
       }
       if (getCharacter(user.id)) throw new HttpError(409, "此帳號已有角色");
-      addCharacter(user.id, createCharacterData(data.name.trim(), data.gender));
+      let character;
+      try { character = createCharacterData(data.name.trim(), data.gender, Date.now(), data.stats); }
+      catch (error) { throw new HttpError(400, error.message); }
+      addCharacter(user.id, character);
       return sendJson(res, 200, snapshot(user));
     }
 
@@ -276,7 +299,21 @@ async function handle(req, res) {
 
     if (path === "/api/work") {
       const result = mutateCharacter(user.id, old => performWork(old, jobsByKey.get(old.jobId)));
-      return sendJson(res, 200, { ...snapshot(user), result: { paid: result.paid, pending: result.pending } });
+      return sendJson(res, 200, { ...snapshot(user), result: {
+        paid: result.paid, pending: result.pending,
+        experienceGain: result.experienceGain, jobLevel: result.jobLevel,
+        leveledUp: result.leveledUp, bonus: result.bonus, mastered: result.mastered
+      } });
+    }
+
+    if (path === "/api/bank") {
+      const result = mutateCharacter(user.id, old => {
+        let next;
+        try { next = bankTransaction(old, data.action, data.amount); }
+        catch (error) { throw new HttpError(400, error.message); }
+        return { character: next };
+      });
+      return sendJson(res, 200, snapshot(user));
     }
 
     if (path === "/api/move") {
