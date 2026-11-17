@@ -148,3 +148,60 @@ test("既有第一階段 SQLite 角色可無破壞升級資料欄位", async () 
     assert.equal(deposited.result.character.bank, 2000);
   } finally { await srv.stop(); }
 });
+
+
+test("單機：學校與健身房使用原始資料並防止重複取得能力值", async () => {
+  const srv = await start("solo");
+  try {
+    const created = await api(srv.url, "character", {
+      name: "訓練居民", gender: "other", stats: defaultStats()
+    });
+    assert.equal(created.status, 200);
+    assert.equal(created.result.trainingLessons.filter(x => x.type === "school").length, 6);
+    assert.equal(created.result.trainingLessons.filter(x => x.type === "gym").length, 9);
+
+    const result = await api(srv.url, "train", {
+      key: "school-2", price: 0, gained: { eigo: 99999 }
+    });
+    assert.equal(result.status, 200);
+    assert.equal(result.result.character.stats.eigo, 30);
+    assert.equal(result.result.character.money, 84000);
+    assert.equal(result.result.trainingResult.paid, 16000);
+
+    const duplicate = await api(srv.url, "train", { key: "school-3" });
+    assert.equal(duplicate.status, 400);
+    assert.equal((await api(srv.url, "state")).result.character.stats.kokugo, 21);
+
+    const gym = await api(srv.url, "train", { key: "gym-3" });
+    assert.equal(gym.status, 200);
+    assert.equal(gym.result.character.money, 83200);
+    assert.equal(gym.result.character.stats.kenkou, 23);
+    const gymAgain = await api(srv.url, "train", { key: "gym-2" });
+    assert.equal(gymAgain.status, 400);
+    assert.equal((await api(srv.url, "state")).result.character.money, 83200);
+    assert.equal((await api(srv.url, "train", { key: "gym-999" })).status, 404);
+  } finally { await srv.stop(); }
+});
+
+test("多人：課程限制分別記錄在每位玩家資料中", async () => {
+  const srv = await start("multi");
+  try {
+    const a = await api(srv.url, "register", { username: "trainuserone", password: "correct-horse-battery" });
+    const b = await api(srv.url, "register", { username: "trainusertwo", password: "some-other-password" });
+    assert.equal(a.status, 200);
+    assert.equal(b.status, 200);
+    await api(srv.url, "character", { name: "學員甲", gender: "female", stats: defaultStats() }, a.cookie);
+    await api(srv.url, "character", { name: "學員乙", gender: "male", stats: defaultStats() }, b.cookie);
+    const trained = await api(srv.url, "train", { key: "school-2" }, a.cookie);
+    assert.equal(trained.status, 200);
+    assert.equal(trained.result.schoolRemainingToday, true);
+    assert.equal((await api(srv.url, "train", { key: "school-3" }, a.cookie)).status, 400);
+    const other = await api(srv.url, "state", undefined, b.cookie);
+    assert.equal(other.result.schoolRemainingToday, false);
+    assert.equal(other.result.character.stats.eigo, 20);
+    const trainedB = await api(srv.url, "train", { key: "school-2" }, b.cookie);
+    assert.equal(trainedB.status, 200);
+    assert.equal(trainedB.result.character.stats.eigo, 30);
+    assert.equal((await api(srv.url, "train", { key: "gym-3" })).status, 401);
+  } finally { await srv.stop(); }
+});
