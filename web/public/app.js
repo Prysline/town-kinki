@@ -4,7 +4,7 @@ const labels = {
   kokugo:"國語",suugaku:"數學",rika:"理科",syakai:"社會",eigo:"英語",
   ongaku:"音樂",bijutu:"美術",looks:"外貌",tairyoku:"體力",
   kenkou:"健康",speed:"速度",power:"力量",wanryoku:"臂力",
-  kyakuryoku:"腿力",love:"魅力",unique:"幽默",etti:"性感"
+  kyakuryoku:"腿力",love:"LOVE",unique:"有趣度",etti:"情色度"
 };
 const money = n => new Intl.NumberFormat("zh-TW").format(n) + " 元";
 
@@ -108,10 +108,14 @@ function render() {
   text("current-town", state.towns.find(t => t.id === c.townId)?.name || "未知");
   text("money", money(c.money));
   text("bank", money(c.bank));
-  text("body-energy", c.bodyEnergy + " / 100");
-  text("brain-energy", c.brainEnergy + " / 100");
+  text("body-energy", c.bodyEnergy + " / " + state.maxBodyEnergy);
+  text("brain-energy", c.brainEnergy + " / " + state.maxBrainEnergy);
   text("current-job", state.currentJob?.name || "尚未就職");
-  text("work-count", c.workCount + " 次");
+  text("work-count", c.workCount + " 次（目前職業 " + c.jobWorkCount + " 次）");
+  text("job-experience", c.jobExperience + " 點");
+  text("job-level", state.jobLevel + " 級");
+  text("mastered-job", c.masteredJob || "無");
+  text("measurements", c.height + " 公分／" + c.weight + " 公斤");
   const ready = Boolean(state.currentJob) && state.workCooldownMs === 0;
   el("work").disabled = !ready;
   text("cooldown", !state.currentJob ? "請先前往職業介紹所選擇工作。" :
@@ -129,8 +133,13 @@ async function action(path, data, message) {
   try {
     state = await api(path, data);
     if (path === "work") {
-      const amount = state.result.paid;
-      notify(amount ? "本次工作獲得 " + money(amount) + "。" : "完成工作，尚未達到薪資結算次數。");
+      const result = state.result;
+      const messages = ["工作完成，職業經驗 +" + result.experienceGain + " 點。"];
+      if (result.paid) messages.push("獲得薪資 " + money(result.paid) + "。");
+      if (result.bonus) messages.push("升級獎金 " + money(result.bonus) + "。");
+      if (result.leveledUp) messages.push("職業等級提升至 " + result.jobLevel + " 級。");
+      if (result.mastered) messages.push("已精通目前職業，開放相關進階職業。");
+      notify(messages.join(" "));
     } else if (message) notify(message);
     render();
   } catch (error) { notify(error.message, true); }
@@ -146,9 +155,39 @@ el("register-form").addEventListener("submit", event => {
   event.preventDefault();
   action("register", formValues(event.currentTarget), "帳號已建立，請建立角色");
 });
+const statGroups = {
+  brain: { keys: ["kokugo","suugaku","rika","syakai","eigo","ongaku","bijutu"], max: 200 },
+  body: { keys: ["looks","tairyoku","kenkou","speed","power","wanryoku","kyakuryoku"], max: 200 },
+  other: { keys: ["love","unique","etti"], max: 100 }
+};
+function updateStatTotals() {
+  const form = el("create-form");
+  let valid = true;
+  for (const [key, group] of Object.entries(statGroups)) {
+    const values = group.keys.map(name => Number(form.elements.namedItem(name).value));
+    const total = values.reduce((sum, num) => sum + num, 0);
+    const ok = values.every(num => Number.isSafeInteger(num) && num >= 1) && total <= group.max;
+    text("sum-" + key, total + " / " + group.max + (ok ? "" : "（不符合限制）"));
+    valid &&= ok;
+  }
+  el("create-submit").disabled = !valid;
+}
+el("create-form").addEventListener("input", updateStatTotals);
+updateStatTotals();
 el("create-form").addEventListener("submit", event => {
   event.preventDefault();
-  action("character", formValues(event.currentTarget), "角色建立完成");
+  const data = formValues(event.currentTarget);
+  const stats = Object.fromEntries(Object.values(statGroups).flatMap(group =>
+    group.keys.map(key => [key, Number(data[key])])
+  ));
+  action("character", { name: data.name, gender: data.gender, stats }, "角色建立完成");
+});
+el("bank-form").addEventListener("submit", event => {
+  event.preventDefault();
+  const actionName = event.submitter?.value === "withdraw" ? "withdraw" : "deposit";
+  const amount = Number(new FormData(event.currentTarget).get("amount"));
+  action("bank", { action: actionName, amount },
+    (actionName === "deposit" ? "存款" : "提款") + "完成：" + money(amount));
 });
 el("logout").addEventListener("click", async () => {
   try { await api("logout", {}); state = await api("state"); render(); notify("已登出"); }
