@@ -46,7 +46,7 @@ function run() {
       if (!saved.configured) throw new Error("此城鎮尚無地圖，無法輸出。");
       const serialized = serializeLegacyTown(saved, TOWNS[townId].originalName);
       writeFileSync(resolve(output), serialized, "utf8");
-      console.log("已輸出地圖到 " + resolve(output) + "（UTF-8 原版欄位格式）。");
+      console.log("已輸出地圖到 " + resolve(output) + "（UTF-8，保留原版欄位結構；回寫舊 CGI 前請先核對字元編碼）。");
     }
   } finally {
     db.close();
