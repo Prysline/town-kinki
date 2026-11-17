@@ -6,6 +6,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { DatabaseSync } from "node:sqlite";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const delay = ms => new Promise(done => setTimeout(done, ms));
@@ -19,9 +20,10 @@ async function freePort() {
     });
   });
 }
-async function start(mode) {
+async function start(mode, seed) {
   const port = await freePort();
   const directory = mkdtempSync(join(tmpdir(), "town-web-"));
+  if (seed) seed(directory);
   const child = spawn(process.execPath, ["src/server.mjs"], {
     cwd: root, env: { ...process.env, HOST: "127.0.0.1", PORT: String(port), GAME_MODE: mode, DATA_DIR: directory }
   });
@@ -115,5 +117,34 @@ test("多人：兩位玩家可獨立登入並看見同城居民", async () => {
     assert.deepEqual(view.result.residents, ["第二位居民"]);
     await api(srv.url, "logout", {}, a.cookie);
     assert.equal((await api(srv.url, "state", undefined, a.cookie)).result.user, null);
+  } finally { await srv.stop(); }
+});
+
+
+test("既有第一階段 SQLite 角色可無破壞升級資料欄位", async () => {
+  const seed = directory => {
+    const database = new DatabaseSync(join(directory, "solo.sqlite"));
+    database.exec([
+      "CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT UNIQUE NOT NULL COLLATE NOCASE, password_salt TEXT NOT NULL, password_hash TEXT NOT NULL, created_at INTEGER NOT NULL);",
+      "CREATE TABLE characters (id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE, name TEXT NOT NULL UNIQUE, gender TEXT NOT NULL, town_id INTEGER NOT NULL, money INTEGER NOT NULL, bank INTEGER NOT NULL, body_energy INTEGER NOT NULL, brain_energy INTEGER NOT NULL, recovered_at INTEGER NOT NULL, job_id TEXT, work_progress INTEGER NOT NULL, last_work_at INTEGER NOT NULL, work_count INTEGER NOT NULL, height INTEGER NOT NULL, bmi REAL NOT NULL, stats_json TEXT NOT NULL);"
+    ].join("\n"));
+    database.prepare("INSERT INTO users(id,username,password_salt,password_hash,created_at) VALUES(1,?,?,?,?)")
+      .run("__local_player__", "salt", "hash", Date.now());
+    database.prepare("INSERT INTO characters(user_id,name,gender,town_id,money,bank,body_energy,brain_energy,recovered_at,job_id,work_progress,last_work_at,work_count,height,bmi,stats_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+      .run(1, "舊版居民", "other", 0, 50000, 1000, 10, 20, Date.now(), null, 0, 0, 2, 165, 22, JSON.stringify(defaultStats()));
+    database.close();
+  };
+  const srv = await start("solo", seed);
+  try {
+    const state = await api(srv.url, "state");
+    assert.equal(state.status, 200);
+    assert.equal(state.result.character.name, "舊版居民");
+    assert.equal(state.result.character.money, 50000);
+    assert.equal(state.result.character.workCount, 2);
+    assert.equal(state.result.character.jobExperience, 0);
+    const deposited = await api(srv.url, "bank", { action: "deposit", amount: 1000 });
+    assert.equal(deposited.status, 200);
+    assert.equal(deposited.result.character.money, 49000);
+    assert.equal(deposited.result.character.bank, 2000);
   } finally { await srv.stop(); }
 });
