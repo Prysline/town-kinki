@@ -39,6 +39,88 @@ function addRow(parent, key, value) {
   parent.append(row);
 }
 
+let selectedMapCell = null;
+
+function renderTownMap() {
+  const map = state.map;
+  const board = el("town-map");
+  board.replaceChildren();
+  if (!map) return;
+  const editor = el("map-editor");
+  editor.hidden = !map.editable;
+  const palette = el("map-palette");
+  const previousSymbol = palette.value;
+  palette.replaceChildren();
+  for (const symbol of map.palette || []) {
+    const option = document.createElement("option");
+    option.value = symbol.key;
+    option.textContent = symbol.label;
+    palette.append(option);
+  }
+  if (map.palette?.some(item => item.key === previousSymbol)) palette.value = previousSymbol;
+  palette.disabled = !el("map-edit-toggle").checked;
+  const sourceText = !map.configured
+    ? "這個城鎮目前沒有原始街區資料，顯示未配置的空白地圖。"
+    : map.source === "legacy" || map.source === "legacy-import"
+      ? "已讀取原版街區配置，未支援的設施將保留原始代碼。"
+      : "目前使用 Web 版儲存的街區配置。";
+  text("map-source", sourceText);
+
+  board.style.backgroundImage = "url('/legacy-assets/" + map.background + "')";
+  const corner = document.createElement("span");
+  corner.className = "map-axis map-corner";
+  corner.textContent = "";
+  board.append(corner);
+  for (let col = 1; col <= 16; col++) {
+    const heading = document.createElement("span");
+    heading.className = "map-axis";
+    heading.textContent = String(col);
+    board.append(heading);
+  }
+  for (let row = 0; row < 12; row++) {
+    const rowName = "ABCDEFGHIJKL"[row];
+    const rowHeading = document.createElement("span");
+    rowHeading.className = "map-axis";
+    rowHeading.textContent = rowName;
+    board.append(rowHeading);
+    for (let col = 0; col < 16; col++) {
+      const cell = map.cells[row * 16 + col];
+      const name = rowName + (col + 1);
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "map-cell map-" + cell.category;
+      if (selectedMapCell === name) button.classList.add("selected");
+      button.title = name + "：" + cell.label;
+      button.setAttribute("aria-label", name + "：" + cell.label);
+      if (cell.image) {
+        const image = document.createElement("img");
+        image.src = "/legacy-assets/" + cell.image;
+        image.alt = "";
+        image.loading = "lazy";
+        button.append(image);
+      } else if (cell.raw) {
+        const unknown = document.createElement("span");
+        unknown.className = "map-unknown-text";
+        unknown.textContent = "?";
+        button.append(unknown);
+      }
+      button.addEventListener("click", () => {
+        selectedMapCell = name;
+        text("map-selection", name + "：" + cell.label +
+          (cell.raw && cell.category === "unknown" ? "（" + cell.raw + "）" : ""));
+        if (map.editable && el("map-edit-toggle").checked) {
+          action("map/tile", { row, column: col, symbol: el("map-palette").value },
+            name + " 的街區內容已儲存。");
+        } else {
+          board.querySelectorAll(".map-cell.selected").forEach(node => node.classList.remove("selected"));
+          button.classList.add("selected");
+        }
+      });
+      board.append(button);
+    }
+  }
+}
+
 function renderTowns() {
   const target = el("towns");
   target.replaceChildren();
@@ -175,6 +257,7 @@ function render() {
   for (const [key, label] of Object.entries(labels)) addRow(attrs, label, c.stats[key] ?? 0);
   text("residents", state.residents.length ? state.residents.join("、") : "目前沒有其他玩家在這個城鎮。");
   renderTowns();
+  renderTownMap();
   renderTraining();
   renderJobs();
 }
@@ -250,6 +333,12 @@ el("bank-form").addEventListener("submit", event => {
 el("logout").addEventListener("click", async () => {
   try { await api("logout", {}); state = await api("state"); render(); notify("已登出"); }
   catch (error) { notify(error.message, true); }
+});
+el("map-edit-toggle").addEventListener("change", () => {
+  el("map-palette").disabled = !el("map-edit-toggle").checked;
+  text("map-selection", el("map-edit-toggle").checked
+    ? "編輯模式已啟用。點選街區格子即可設定為選單中的設施。"
+    : "編輯模式已關閉。點選格子可查看位置與設施。");
 });
 el("refresh").addEventListener("click", async () => {
   try { state = await api("state"); render(); notify("遊戲資料已更新"); }
