@@ -146,6 +146,11 @@ test("既有第一階段 SQLite 角色可無破壞升級資料欄位", async () 
     assert.equal(deposited.status, 200);
     assert.equal(deposited.result.character.money, 49000);
     assert.equal(deposited.result.character.bank, 2000);
+    const trained = await api(srv.url, "train", { key: "school-3" });
+    assert.equal(trained.status, 200);
+    assert.equal(trained.result.character.money, 35000);
+    assert.equal(trained.result.character.stats.kokugo, 30);
+    assert.equal(trained.result.schoolRemainingToday, true);
   } finally { await srv.stop(); }
 });
 
