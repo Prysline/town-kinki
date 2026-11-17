@@ -78,7 +78,7 @@ test("不允許餘額不足、能量不足、無效訓練與不合法舊資料",
   const tired = { ...p, brainEnergy: 0 };
   assert.match(trainingAvailability(tired, schools[0], now, "2026-11-18"), /頭腦能量不足/);
   assert.match(trainingAvailability(p, null, now, "2026-11-18"), /找不到訓練/);
-  assert.throws(() => parseLegacySchool("header\\n異常課程<>-1<>0<>0"), /無效/);
+  assert.throws(() => parseLegacySchool("header\n異常課程<>-1<>0<>0"), /無效/);
 });
 
 test("日界線依指定世界時區判定，不依玩家瀏覽器時區", () => {
