@@ -22,3 +22,22 @@
 .training-tile button{width:100%;margin-top:auto}
 .training-blocked{margin:0;font-size:.8rem;color:#8b5947}
 @media(max-width:450px){.training-grid{grid-template-columns:1fr}}
+
+/* 原版 12x16 城鎮配置，格子內容來自可信的原版代碼對照表。 */
+.map-scroll{overflow:auto;max-width:100%;border:1px solid #d5dfd3;border-radius:10px;background:#eef4e9;padding:.45rem;margin:.7rem 0}
+.town-map{display:grid;grid-template-columns:20px repeat(16,34px);grid-template-rows:18px repeat(12,34px);gap:1px;width:max-content;min-width:564px;padding:2px;background-color:#deeadd;background-position:center;background-size:cover}
+.map-axis{display:grid;place-items:center;color:#315441;font-size:.73rem;font-weight:700;background:#ffffffca;border-radius:2px}
+.map-cell{width:34px;height:34px;min-width:34px;padding:0;border:1px solid #1c492830;background:#ffffff50;border-radius:2px;display:grid;place-items:center;cursor:pointer;position:relative}
+.map-cell img{width:32px;height:32px;max-width:32px;max-height:32px;object-fit:contain;image-rendering:pixelated;pointer-events:none}
+.map-cell:hover{border:2px solid #215c43;background:#d7e9d8}
+.map-cell.selected,.map-cell:focus-visible{outline:2px solid #236d50;outline-offset:0;z-index:1}
+.map-lot{background:#ecebd0a9}
+.map-road{background:#f3f3ef80}
+.map-house{background:#e4edfb90}
+.map-unknown{background:#fbe6e6a8}
+.map-unknown-text{font-size:1.1rem;font-weight:bold;color:#aa3a39}
+.map-editor{margin:.8rem 0;background:#f2f7f2;border:1px solid #d0dfd2;border-radius:9px;padding:.8rem}
+.map-editor label{margin-bottom:.4rem}
+.map-editor-switch{display:flex;align-items:center;gap:.5rem;margin-bottom:.55rem!important}
+.map-editor-switch input{width:auto;margin:0}
+.map-editor select{max-width:320px}
