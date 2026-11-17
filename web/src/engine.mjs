@@ -144,7 +144,7 @@ export function selectJob(character, job) {
 
 export function performWork(character, job, now = Date.now()) {
   if (!job || character.jobId !== job.key) throw new Error("請先選擇職業");
-  const remaining = Math.max(0, WORK_COOLDOWN_MS - (now - character.lastWorkAt));
+  const remaining = character.lastWorkAt === 0 ? 0 : Math.max(0, WORK_COOLDOWN_MS - (now - character.lastWorkAt));
   if (remaining > 0) throw new Error("還需要等待 " + Math.ceil(remaining / 1000) + " 秒才能工作");
   const current = recoverEnergy(character, now);
   if (current.bodyEnergy < job.bodyCost || current.brainEnergy < job.brainCost) {
