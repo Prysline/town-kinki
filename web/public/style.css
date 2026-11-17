@@ -12,3 +12,13 @@
 .ability-inputs input{margin-top:.3rem}
 .bank-actions{display:grid;grid-template-columns:1fr 1fr;gap:.6rem}
 @media(max-width:780px){.new-char{grid-template-columns:1fr}.new-char>.stat-group,.new-char>#create-submit{grid-column:1}}
+
+/* 原版課程及健身房資料的繁體中文訓練介面 */
+.facility-icon{height:27px;max-width:40px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:.55rem}
+.training-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:.85rem}
+.training-tile{display:flex;flex-direction:column;align-items:flex-start;gap:.55rem;border:1px solid #d9e6db;border-radius:10px;padding:1rem;background:#fbfcfa;min-width:0}
+.training-tile strong{font-size:.99rem;color:#224e36}
+.training-tile .small{margin:0;line-height:1.45}
+.training-tile button{width:100%;margin-top:auto}
+.training-blocked{margin:0;font-size:.8rem;color:#8b5947}
+@media(max-width:450px){.training-grid{grid-template-columns:1fr}}
