@@ -38,7 +38,7 @@
     </section>
     <section id="create" class="intro card" hidden>
       <h2>建立角色</h2>
-      <p>第一階段使用暫定初始能力值；原版自由配點系統尚未移植。</p>
+      <p>依照原版的初始能力配點限制，頭腦與身體各最多 200 點，其他能力最多 100 點，每項至少 1 點。</p>
       <form id="create-form" class="new-char">
         <label>角色名稱<input name="name" minlength="1" maxlength="18" required></label>
         <label>角色性別
@@ -46,7 +46,39 @@
             <option value="other">未指定</option><option value="male">男性</option><option value="female">女性</option>
           </select>
         </label>
-        <button type="submit">開始人生</button>
+        <fieldset class="stat-group" data-group="brain">
+          <legend>頭腦能力 <strong id="sum-brain">140 / 200</strong></legend>
+          <div class="ability-inputs">
+            <label>國語<input name="kokugo" type="number" min="1" max="200" step="1" value="20" required></label>
+            <label>數學<input name="suugaku" type="number" min="1" max="200" step="1" value="20" required></label>
+            <label>理科<input name="rika" type="number" min="1" max="200" step="1" value="20" required></label>
+            <label>社會<input name="syakai" type="number" min="1" max="200" step="1" value="20" required></label>
+            <label>英語<input name="eigo" type="number" min="1" max="200" step="1" value="20" required></label>
+            <label>音樂<input name="ongaku" type="number" min="1" max="200" step="1" value="20" required></label>
+            <label>美術<input name="bijutu" type="number" min="1" max="200" step="1" value="20" required></label>
+          </div>
+        </fieldset>
+        <fieldset class="stat-group" data-group="body">
+          <legend>身體能力 <strong id="sum-body">140 / 200</strong></legend>
+          <div class="ability-inputs">
+            <label>外貌<input name="looks" type="number" min="1" max="200" step="1" value="20" required></label>
+            <label>體力<input name="tairyoku" type="number" min="1" max="200" step="1" value="20" required></label>
+            <label>健康<input name="kenkou" type="number" min="1" max="200" step="1" value="20" required></label>
+            <label>速度<input name="speed" type="number" min="1" max="200" step="1" value="20" required></label>
+            <label>力量<input name="power" type="number" min="1" max="200" step="1" value="20" required></label>
+            <label>臂力<input name="wanryoku" type="number" min="1" max="200" step="1" value="20" required></label>
+            <label>腿力<input name="kyakuryoku" type="number" min="1" max="200" step="1" value="20" required></label>
+          </div>
+        </fieldset>
+        <fieldset class="stat-group" data-group="other">
+          <legend>其他能力 <strong id="sum-other">60 / 100</strong></legend>
+          <div class="ability-inputs">
+            <label>LOVE<input name="love" type="number" min="1" max="100" step="1" value="20" required></label>
+            <label>趣味<input name="unique" type="number" min="1" max="100" step="1" value="20" required></label>
+            <label>色情<input name="etti" type="number" min="1" max="100" step="1" value="20" required></label>
+          </div>
+        </fieldset>
+        <button id="create-submit" type="submit">開始人生</button>
       </form>
     </section>
     <div id="game" class="layout" hidden>
@@ -61,10 +93,25 @@
             <div><dt>頭腦能量</dt><dd id="brain-energy"></dd></div>
             <div><dt>目前職業</dt><dd id="current-job"></dd></div>
             <div><dt>工作次數</dt><dd id="work-count"></dd></div>
+            <div><dt>目前職業經驗</dt><dd id="job-experience"></dd></div>
+            <div><dt>目前職業等級</dt><dd id="job-level"></dd></div>
+            <div><dt>精通職業</dt><dd id="mastered-job"></dd></div>
+            <div><dt>身高／體重</dt><dd id="measurements"></dd></div>
           </dl>
           <button id="work" class="primary" type="button">前往工作</button>
           <p id="cooldown" class="small"></p>
           <button id="refresh" class="secondary full" type="button">更新狀態</button>
+        </section>
+        <section class="card">
+          <h3>銀行</h3>
+          <p class="small">目前支援現金存款與提款，原版利息、定期存款及帳戶明細仍待移植。</p>
+          <form id="bank-form">
+            <label>金額（元）<input name="amount" type="number" min="1" step="1" required></label>
+            <div class="bank-actions">
+              <button type="submit" name="action" value="deposit">存款</button>
+              <button type="submit" name="action" value="withdraw" class="secondary">提款</button>
+            </div>
+          </form>
         </section>
         <section class="card">
           <h3>能力值</h3><dl class="stats" id="attributes"></dl>
