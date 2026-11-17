@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>TOWN 人生遊戲｜繁體中文 Web 雛形</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script type="module" src="/static/app.js"></script>
+</head>
+<body>
+  <header class="header">
+    <div class="identity">
+      <img class="mark" src="/legacy-assets/house/house_1.gif" alt="" width="46" height="46">
+      <div><h1>TOWN 人生遊戲</h1><p>繁體中文 Web 移植版 · 第一階段</p></div>
+    </div>
+    <div class="header-right"><span id="mode" class="mode">載入中</span><button id="logout" class="secondary" hidden>登出</button></div>
+  </header>
+  <main>
+    <div id="notice" role="status" aria-live="polite" hidden></div>
+    <section id="auth" class="intro card" hidden>
+      <h2>登入城鎮</h2>
+      <p>多人模式可使用不同帳號建立角色，共享同一座城鎮。</p>
+      <div class="columns">
+        <form id="login-form" class="field-box">
+          <h3>登入</h3>
+          <label>帳號<input name="username" required autocomplete="username"></label>
+          <label>密碼<input name="password" type="password" required autocomplete="current-password"></label>
+          <button type="submit">登入</button>
+        </form>
+        <form id="register-form" class="field-box">
+          <h3>建立帳號</h3>
+          <label>帳號<input name="username" minlength="2" maxlength="24" required autocomplete="username"></label>
+          <label>密碼<input name="password" type="password" minlength="8" maxlength="128" required autocomplete="new-password"></label>
+          <button type="submit">註冊</button>
+        </form>
+      </div>
+    </section>
+    <section id="create" class="intro card" hidden>
+      <h2>建立角色</h2>
+      <p>第一階段使用暫定初始能力值；原版自由配點系統尚未移植。</p>
+      <form id="create-form" class="new-char">
+        <label>角色名稱<input name="name" minlength="1" maxlength="18" required></label>
+        <label>角色性別
+          <select name="gender" required>
+            <option value="other">未指定</option><option value="male">男性</option><option value="female">女性</option>
+          </select>
+        </label>
+        <button type="submit">開始人生</button>
+      </form>
+    </section>
+    <div id="game" class="layout" hidden>
+      <aside class="sidebar">
+        <section class="card">
+          <div class="eyebrow">居民資料</div><h2 id="character-name"></h2>
+          <dl class="stats">
+            <div><dt>所在地</dt><dd id="current-town"></dd></div>
+            <div><dt>現金</dt><dd id="money"></dd></div>
+            <div><dt>銀行存款</dt><dd id="bank"></dd></div>
+            <div><dt>身體能量</dt><dd id="body-energy"></dd></div>
+            <div><dt>頭腦能量</dt><dd id="brain-energy"></dd></div>
+            <div><dt>目前職業</dt><dd id="current-job"></dd></div>
+            <div><dt>工作次數</dt><dd id="work-count"></dd></div>
+          </dl>
+          <button id="work" class="primary" type="button">前往工作</button>
+          <p id="cooldown" class="small"></p>
+          <button id="refresh" class="secondary full" type="button">更新狀態</button>
+        </section>
+        <section class="card">
+          <h3>能力值</h3><dl class="stats" id="attributes"></dl>
+        </section>
+      </aside>
+      <div class="content">
+        <section class="card">
+          <div class="heading"><div><div class="eyebrow">城鎮</div><h2>探索附近地區</h2></div><span class="muted">原版地圖尚待移植</span></div>
+          <div class="towns" id="towns"></div>
+          <h3>同城居民</h3><p class="small" id="residents"></p>
+        </section>
+        <section class="card">
+          <div class="heading"><div><div class="eyebrow">職業介紹所</div><h2>選擇工作</h2></div><span id="job-count" class="muted"></span></div>
+          <div class="filters">
+            <label class="sr-only" for="job-search">搜尋職業</label>
+            <input id="job-search" placeholder="搜尋職業名稱">
+            <label class="sr-only" for="job-filter">職業篩選</label>
+            <select id="job-filter"><option value="available">目前可選</option><option value="all">全部職業</option></select>
+          </div>
+          <div id="jobs" class="jobs"></div>
+          <p class="small">未翻譯的職業會暫時顯示原始日文。職業精通、升遷與完整原版判定尚未移植。</p>
+        </section>
+      </div>
+    </div>
+  </main>
+  <footer>本頁為移植中的測試版本，原始 CGI 程式及遊戲素材保留在原始儲存庫。</footer>
+</body>
+</html>
