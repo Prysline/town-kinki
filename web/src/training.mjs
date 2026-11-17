@@ -77,10 +77,8 @@ export function trainingAvailability(character, lesson, now = Date.now(), day = 
   const current = recoverEnergy(character, now);
   if (lesson.type === "school" && current.lastSchoolDay === day)
     return "今日已經上過一堂課，請明天再來";
-  if (lesson.type === "gym" && current.lastGymAt > 0) {
-    const wait = lesson.cooldownMs - (now - current.lastGymAt);
-    if (wait > 0) return "健身房還需要等待 " + Math.ceil(wait / 1000) + " 秒";
-  }
+  if (lesson.type === "gym" && current.gymReadyAt > now)
+    return "健身房還需要等待 " + Math.ceil((current.gymReadyAt - now) / 1000) + " 秒";
   if (current.money < lesson.price) return "現金不足";
   if (lesson.type === "school" && current.brainEnergy < lesson.energyCost)
     return "頭腦能量不足";
@@ -102,7 +100,8 @@ export function performTraining(character, lesson, now = Date.now(), day = calen
     ...current, money: current.money - lesson.price, stats,
     ...(lesson.type === "school"
       ? { brainEnergy: current.brainEnergy - lesson.energyCost, lastSchoolDay: day }
-      : { bodyEnergy: current.bodyEnergy - lesson.energyCost, lastGymAt: now })
+      : { bodyEnergy: current.bodyEnergy - lesson.energyCost,
+          lastGymAt: now, gymReadyAt: now + lesson.cooldownMs })
   };
   return { character: next, gained: lesson.gains, paid: lesson.price, lesson: lesson.name };
 }
