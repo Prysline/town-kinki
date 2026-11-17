@@ -94,6 +94,55 @@ function renderJobs() {
   }
 }
 
+function renderTraining() {
+  const byType = {
+    school: el("school-lessons"),
+    gym: el("gym-lessons")
+  };
+  Object.values(byType).forEach(target => target.replaceChildren());
+  const statusSchool = state.schoolRemainingToday ? "今天已完成課程" : "今天還可以上課";
+  const wait = state.gymCooldownMs ?? 0;
+  text("school-status", statusSchool);
+  text("gym-status", wait > 0 ? "距離下次訓練約 " + Math.ceil(wait / 60_000) + " 分鐘" : "現在可以訓練");
+  for (const lesson of state.trainingLessons || []) {
+    const target = byType[lesson.type];
+    if (!target) continue;
+    const tile = document.createElement("div");
+    tile.className = "training-tile";
+    const name = document.createElement("strong");
+    name.textContent = lesson.name;
+    const cost = document.createElement("p");
+    cost.className = "small";
+    cost.textContent = "費用 " + money(lesson.price) + "，" +
+      (lesson.type === "school" ? "頭腦" : "身體") +
+      "能量消耗 " + lesson.energyCost;
+    const gains = document.createElement("p");
+    gains.className = "small";
+    const values = Object.entries(lesson.gains)
+      .filter(([, amount]) => amount > 0)
+      .map(([key, amount]) => (labels[key] || key) + " +" + amount);
+    gains.textContent = values.length ? values.join("、") : "沒有額外能力增幅";
+    const action = document.createElement("button");
+    action.type = "button";
+    action.textContent = lesson.reason ? "目前不可進行" : lesson.type === "school" ? "參加課程" : "開始訓練";
+    action.disabled = Boolean(lesson.reason);
+    if (lesson.reason) {
+      const blocked = document.createElement("p");
+      blocked.className = "training-blocked";
+      blocked.textContent = lesson.reason;
+      tile.append(name, cost, gains, blocked, action);
+    } else {
+      tile.append(name, cost, gains, action);
+    }
+    action.addEventListener("click", () => actionTraining(lesson.key));
+    target.append(tile);
+  }
+}
+
+function actionTraining(key) {
+  action("train", { key });
+}
+
 function render() {
   if (!state) return;
   const solo = state.mode === "solo";
@@ -126,6 +175,7 @@ function render() {
   for (const [key, label] of Object.entries(labels)) addRow(attrs, label, c.stats[key] ?? 0);
   text("residents", state.residents.length ? state.residents.join("、") : "目前沒有其他玩家在這個城鎮。");
   renderTowns();
+  renderTraining();
   renderJobs();
 }
 
@@ -140,6 +190,14 @@ async function action(path, data, message) {
       if (result.leveledUp) messages.push("職業等級提升至 " + result.jobLevel + " 級。");
       if (result.mastered) messages.push("已精通目前職業，開放相關進階職業。");
       notify(messages.join(" "));
+    } else if (path === "train") {
+      const result = state.trainingResult;
+      const gains = Object.entries(result.gained)
+        .filter(([, amount]) => amount > 0)
+        .map(([key, amount]) => (labels[key] || key) + " +" + amount)
+        .join("、");
+      notify("完成" + result.name + "，花費 " + money(result.paid) +
+        (gains ? "，能力提升：" + gains : "") + "。");
     } else if (message) notify(message);
     render();
   } catch (error) { notify(error.message, true); }
