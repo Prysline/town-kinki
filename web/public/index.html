@@ -121,6 +121,20 @@
         <section class="card">
           <div class="heading"><div><div class="eyebrow">城鎮</div><h2>探索附近地區</h2></div><span class="muted">原版地圖尚待移植</span></div>
           <div class="towns" id="towns"></div>
+          <h3>街區地圖</h3>
+          <p class="small" id="map-source"></p>
+          <div class="map-editor" id="map-editor" hidden>
+            <label class="map-editor-switch">
+              <input type="checkbox" id="map-edit-toggle"> 開啟單機街區編輯模式
+            </label>
+            <label for="map-palette">選擇格子設施</label>
+            <select id="map-palette" disabled></select>
+            <p class="small">啟用後，點選地圖格子即可儲存選定設施。修改只寫入 Web 資料庫，不會覆蓋原版 CGI。</p>
+          </div>
+          <div class="map-scroll" tabindex="0" aria-label="城鎮街區地圖，可水平捲動">
+            <div id="town-map" class="town-map" role="grid" aria-label="12 列 16 欄街區"></div>
+          </div>
+          <p class="small" id="map-selection" role="status"></p>
           <h3>同城居民</h3><p class="small" id="residents"></p>
         </section>
         <section class="card">
