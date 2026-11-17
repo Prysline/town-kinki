@@ -210,3 +210,61 @@ test("多人：課程限制分別記錄在每位玩家資料中", async () => {
     assert.equal((await api(srv.url, "train", { key: "gym-3" })).status, 401);
   } finally { await srv.stop(); }
 });
+
+
+test("單機：可配置原版街區圖示，切換城鎮後地圖保留", async () => {
+  const srv = await start("solo");
+  try {
+    await api(srv.url, "character", { name: "地圖編輯者", gender: "other", stats: defaultStats() });
+    const initial = await api(srv.url, "state");
+    assert.equal(initial.result.map.configured, false);
+    assert.equal(initial.result.map.editable, true);
+    assert.equal(initial.result.map.cells.length, 192);
+    const updated = await api(srv.url, "map/tile", { row: 0, column: 0, symbol: "銀行" });
+    assert.equal(updated.status, 200);
+    assert.equal(updated.result.map.configured, true);
+    assert.equal(updated.result.map.cells[0].image, "bank.gif");
+    assert.equal(updated.result.map.cells[0].raw, "銀行");
+    assert.equal((await api(srv.url, "map/tile", { row: 1, column: 1, symbol: "../../secret" })).status, 400);
+    assert.equal((await api(srv.url, "map/tile", { row: 12, column: 0, symbol: "銀行" })).status, 400);
+    const next = await api(srv.url, "move", { townId: 1 });
+    assert.equal(next.status, 200);
+    assert.equal(next.result.map.configured, false);
+    const back = await api(srv.url, "move", { townId: 0 });
+    assert.equal(back.status, 200);
+    assert.equal(back.result.map.cells[0].raw, "銀行");
+    const removed = await api(srv.url, "map/tile", { row: 0, column: 0, symbol: "" });
+    assert.equal(removed.status, 200);
+    assert.equal(removed.result.map.cells[0].raw, "");
+  } finally { await srv.stop(); }
+});
+
+test("多人：載入同一座街區地圖，但普通玩家無法修改伺服器地圖", async () => {
+  const seed = directory => {
+    const db = new DatabaseSync(join(directory, "multi.sqlite"));
+    db.exec("CREATE TABLE town_maps(town_id INTEGER PRIMARY KEY, original_name TEXT NOT NULL DEFAULT '', original_record TEXT NOT NULL DEFAULT '', source TEXT NOT NULL, tiles_json TEXT NOT NULL, updated_at INTEGER NOT NULL)");
+    const grid = Array(192).fill("");
+    grid[0] = "駅";
+    db.prepare("INSERT INTO town_maps(town_id,original_name,source,tiles_json,updated_at) VALUES(?,?,?,?,?)")
+      .run(0, "京阪神ストリート", "legacy-import", JSON.stringify(grid), Date.now());
+    db.close();
+  };
+  const srv = await start("multi", seed);
+  try {
+    const first = await api(srv.url, "register", { username: "mapresidentone", password: "password-for-map-one" });
+    const second = await api(srv.url, "register", { username: "mapresidenttwo", password: "password-for-map-two" });
+    assert.equal(first.status, 200);
+    assert.equal(second.status, 200);
+    await api(srv.url, "character", { name: "地圖玩家甲", gender: "male", stats: defaultStats() }, first.cookie);
+    await api(srv.url, "character", { name: "地圖玩家乙", gender: "female", stats: defaultStats() }, second.cookie);
+    const viewA = await api(srv.url, "state", undefined, first.cookie);
+    const viewB = await api(srv.url, "state", undefined, second.cookie);
+    assert.equal(viewA.result.map.cells[0].raw, "駅");
+    assert.equal(viewB.result.map.cells[0].raw, "駅");
+    assert.equal(viewA.result.map.editable, false);
+    assert.equal(viewB.result.map.editable, false);
+    const forbidden = await api(srv.url, "map/tile", { row: 0, column: 0, symbol: "銀行" }, first.cookie);
+    assert.equal(forbidden.status, 403);
+    assert.equal((await api(srv.url, "state", undefined, second.cookie)).result.map.cells[0].raw, "駅");
+  } finally { await srv.stop(); }
+});
