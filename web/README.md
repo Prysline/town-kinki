@@ -97,7 +97,7 @@ node scripts/town-map.mjs --town 0 --mode solo --import ../log_dir/townlog0.cgi
 node scripts/town-map.mjs --town 0 --mode multi --import ../log_dir/townlog0.cgi
 ```
 
-如果城鎮已配置，工具會拒絕覆蓋。確認備份後，才可明確加入 `--replace`。輸出為可由原版讀取的 UTF-8 分隔資料：
+如果城鎮已配置，工具會拒絕覆蓋。確認備份後，才可明確加入 `--replace`。輸出會保留原版欄位結構，檔案文字編碼為 UTF-8。如果要將資料放回原始 CGI 伺服器，需先確認舊環境使用的日文編碼並進行轉換，不可直接假設 UTF-8 能被原版正確讀取：
 
 ```sh
 node scripts/town-map.mjs --town 0 --mode solo --export ./town0-export.cgi
