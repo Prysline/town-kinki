@@ -12,7 +12,7 @@
   <header class="header">
     <div class="identity">
       <img class="mark" src="/legacy-assets/house/house_1.gif" alt="" width="46" height="46">
-      <div><h1>TOWN 人生遊戲</h1><p>繁體中文 Web 移植版 · 第一階段</p></div>
+      <div><h1>TOWN 人生遊戲</h1><p>繁體中文 Web 移植版 · 開發中</p></div>
     </div>
     <div class="header-right"><span id="mode" class="mode">載入中</span><button id="logout" class="secondary" hidden>登出</button></div>
   </header>
@@ -124,6 +124,22 @@
           <h3>同城居民</h3><p class="small" id="residents"></p>
         </section>
         <section class="card">
+          <div class="heading">
+            <div><div class="eyebrow">能力培養</div><h2><img class="facility-icon" src="/legacy-assets/school.gif" alt="">學校</h2></div>
+            <span id="school-status" class="muted">每日一堂課</span>
+          </div>
+          <p class="small">沿用原始課程的能力增幅、費用和頭腦能量消耗；每天最多一堂。</p>
+          <div id="school-lessons" class="training-grid"></div>
+        </section>
+        <section class="card">
+          <div class="heading">
+            <div><div class="eyebrow">能力培養</div><h2><img class="facility-icon" src="/legacy-assets/gym.gif" alt="">健身房</h2></div>
+            <span id="gym-status" class="muted">等待狀態</span>
+          </div>
+          <p class="small">沿用原始訓練項目、能力增幅、費用和體力消耗。時間間隔暫依原始資料欄位計算。</p>
+          <div id="gym-lessons" class="training-grid"></div>
+        </section>
+        <section class="card">
           <div class="heading"><div><div class="eyebrow">職業介紹所</div><h2>選擇工作</h2></div><span id="job-count" class="muted"></span></div>
           <div class="filters">
             <label class="sr-only" for="job-search">搜尋職業</label>
@@ -132,7 +148,7 @@
             <select id="job-filter"><option value="available">目前可選</option><option value="all">全部職業</option></select>
           </div>
           <div id="jobs" class="jobs"></div>
-          <p class="small">未翻譯的職業會暫時顯示原始日文。職業精通、升遷與完整原版判定尚未移植。</p>
+          <p class="small">未翻譯的職業會暫時顯示原始日文。職業經驗與精通已支援，但健康、飽足度等完整原版判定尚未移植。</p>
         </section>
       </div>
     </div>
