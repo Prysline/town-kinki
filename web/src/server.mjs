@@ -10,6 +10,7 @@ import {
   maxBodyEnergy, maxBrainEnergy, bankTransaction
 } from "./engine.mjs";
 import { parseLegacySchool, parseLegacyGym, calendarDay, trainingAvailability, performTraining } from "./training.mjs";
+import { initTownMapTable, bootstrapLegacyTownMaps, publicTownMap, editTownTile } from "./town-storage.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const REPO_ROOT = resolve(ROOT, "..");
@@ -47,6 +48,9 @@ for (const [column, definition] of [
     db.exec("ALTER TABLE characters ADD COLUMN " + column + " " + definition);
   }
 }
+
+initTownMapTable(db);
+const importedTownIds = bootstrapLegacyTownMaps(db, REPO_ROOT);
 
 const jobPath = resolve(REPO_ROOT, "dat_dir", "job.cgi");
 if (!existsSync(jobPath)) throw new Error("找不到原始職業檔案：" + jobPath);
@@ -172,6 +176,7 @@ function snapshot(user) {
     maxBrainEnergy: updated ? maxBrainEnergy(updated.stats) : null,
     jobLevel: updated ? Math.floor(updated.jobExperience / 100) : 0,
     towns: TOWNS,
+    map: updated ? publicTownMap(db, updated.townId, MODE === "solo") : null,
     residents,
     workCooldownMs: updated ? (updated.lastWorkAt === 0 ? 0 : Math.max(0, WORK_COOLDOWN_MS - (now - updated.lastWorkAt))) : 0,
     schoolRemainingToday: updated ? updated.lastSchoolDay === today : false,
@@ -353,6 +358,15 @@ async function handle(req, res) {
       return sendJson(res, 200, snapshot(user));
     }
 
+    if (path === "/api/map/tile") {
+      if (MODE !== "solo") throw new HttpError(403, "多人模式只能由伺服器管理員匯入街區地圖");
+      const character = getCharacter(user.id);
+      if (!character) throw new HttpError(409, "請先建立角色");
+      try { editTownTile(db, character.townId, data.row, data.column, data.symbol); }
+      catch (error) { throw new HttpError(400, error.message); }
+      return sendJson(res, 200, snapshot(user));
+    }
+
     if (path === "/api/move") {
       if (!Number.isInteger(data.townId) || !TOWNS.some(t => t.id === data.townId)) {
         throw new HttpError(400, "不存在的城鎮");
@@ -380,4 +394,5 @@ async function handle(req, res) {
 createServer(handle).listen(PORT, HOST, () => {
   console.log("TOWN Web [" + MODE + "] http://" + HOST + ":" + PORT);
   console.log("已載入職業：" + jobs.length + "，翻譯：" + jobs.filter(job => job.translated).length);
+  console.log("原始地圖匯入城鎮：" + (importedTownIds.length ? importedTownIds.join(", ") : "無，保持未設定狀態"));
 });
