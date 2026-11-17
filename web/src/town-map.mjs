@@ -49,7 +49,7 @@ const BASE = [
   ["草", "草地", "kusa.gif", "nature"],
   ["砂漠", "沙地", "sabaku.gif", "nature"],
   ["灯台", "燈塔", "toudai.gif", "nature"],
-  ["木", "樹木", "spring/sakura.gif", "nature"],
+  ["木", "樹木", "sakura.gif", "nature"],
   ["道横", "橫向道路", "road/yoko.gif", "road"],
   ["道縦", "縱向道路", "road/tate.gif", "road"],
   ["歩道横", "橫向步道", "road/hodo_yoko.gif", "road"],
