@@ -13,7 +13,6 @@ export const STARTING_BUDGETS = Object.freeze([
 ]);
 export const WORK_COOLDOWN_MS = 5 * 60 * 1000;
 export const ENERGY_RECOVERY_MS = 10 * 1000;
-export const MAX_ENERGY = 100; // 暫定角色初始值，尚未移植原版註冊配點
 export const STAT_KEYS = [
   "kokugo", "suugaku", "rika", "syakai", "eigo", "ongaku", "bijutu",
   "looks", "tairyoku", "kenkou", "speed", "power", "wanryoku",
@@ -24,7 +23,7 @@ export const STAT_LABELS = {
   eigo: "英語", ongaku: "音樂", bijutu: "美術",
   looks: "外貌", tairyoku: "體力", kenkou: "健康", speed: "速度",
   power: "力量", wanryoku: "臂力", kyakuryoku: "腿力",
-  love: "魅力", unique: "幽默", etti: "性感"
+  love: "LOVE", unique: "有趣度", etti: "情色度"
 };
 
 export const JOB_ZH_TW = Object.freeze({
