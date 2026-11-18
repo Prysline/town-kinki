@@ -138,6 +138,20 @@
             </form>
             <button id="term-cancel" type="button" class="secondary">解約並領回全部定期存款</button>
           </div>
+          <div class="bank-loan">
+            <h3>住宅貸款與融資</h3>
+            <p class="small">依目前職業薪資、經驗、工作次數及存款評估最高貸款額。原版提供 12 至 120 期，每期為一個遊戲日，利息 5% 至 14%。</p>
+            <div id="loan-status" class="small"></div>
+            <form id="loan-borrow-form">
+              <label>還款方案
+                <select id="loan-plan" name="payments"></select>
+              </label>
+              <p id="loan-quote" class="small"></p>
+              <button id="loan-borrow" type="submit">借入評估最高額度</button>
+            </form>
+            <button id="loan-payoff" type="button" class="secondary" hidden>一次清償剩餘貸款</button>
+            <p class="small">每日首次讀取狀態時，先計息再扣當期款項。餘額不足會記錄一次未繳並保留剩餘期數，不會扣成負數，與原版的負餘額行為不同。</p>
+          </div>
           <div class="bank-passbook">
             <h3>銀行交易明細</h3>
             <label for="bank-ledger-filter">帳戶篩選</label>
