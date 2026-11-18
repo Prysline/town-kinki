@@ -104,7 +104,7 @@ test("不可超提款、偽造單位或溢位；任何出錯的利息和帳簿�
   const db=createDb();
   try {
     settleBankInterest(db,1,"2026-11-17",1000);
-    assert.throws(() => bankOperation(db,1,"withdraw",1100000,"2026-11-18",2000),/餘額不足/);
+    assert.throws(() => bankOperation(db,1,"withdraw",1100000,"2026-11-18",2000),/存款不足/);
     assert.equal(db.prepare("SELECT bank FROM characters WHERE user_id=1").get().bank,1000000);
     assert.equal(bankOverview(db,1).lastInterestDay,"2026-11-17");
     assert.equal(bankLedger(db,1).length,0);
