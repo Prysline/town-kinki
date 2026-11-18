@@ -5,13 +5,13 @@ import { diseaseFromIndex } from "./health.mjs";
 import { MEAL_COOLDOWN_MS } from "./dining.mjs";
 import { initLegacyInventoryTables } from "./legacy-inventory.mjs";
 
-export const CONSUMABLE_REJECTED_EFFECTS=Object.freeze(["万能","ランダム品"]);
+export const CONSUMABLE_REJECTED_EFFECTS=Object.freeze(["ランダム品"]);
 const STATS_INDEX=Object.freeze([
   2,3,4,5,6,7,8,10,11,12,13,14,15,16,18,19,20
 ]);
 const NON_CONSUMABLE=new Set(["ギフト","武器","防具","魔法","御守"]);
 const FOOD_TYPES=new Set(["食料品","ファーストフード"]);
-const SPECIAL_TYPES=new Set(["無","風邪","下痢","肺炎","結核",
+const SPECIAL_TYPES=new Set(["無","万能","風邪","下痢","肺炎","結核",
   "ウエイトアップ","ダイエット","身長","縮み"]);
 const ID_RE=/^[a-zA-Z0-9_-]{8,80}$/;
 
@@ -144,11 +144,15 @@ function applyEffects(character,item,now){
   }
   const healthBefore=next.healthIndex??50;
   let healthAfter=healthBefore,weightDelta=0,heightDelta=0;
-  if(item.effect==="風邪"&&["slightCold","cold"].includes(diseaseFromIndex(healthBefore).key)||
-     item.effect==="下痢"&&diseaseFromIndex(healthBefore).key==="diarrhea"||
-     item.effect==="肺炎"&&diseaseFromIndex(healthBefore).key==="pneumonia"||
-     item.effect==="結核"&&diseaseFromIndex(healthBefore).key==="tuberculosis")
-    healthAfter+=item.magnitude;
+  const diseaseKey=diseaseFromIndex(healthBefore).key;
+  // 原版 basic.cgi 將 eq "万能\") 誤寫成跳脫引號，依商品描述及相鄰
+  // 風邪／下痢等分支修正為萬能藥不限制病名，直接增加疾病指數。
+  const matchesIllness=item.effect==="万能"||
+    (item.effect==="風邪"&&["slightCold","cold"].includes(diseaseKey))||
+    (item.effect==="下痢"&&diseaseKey==="diarrhea")||
+    (item.effect==="肺炎"&&diseaseKey==="pneumonia")||
+    (item.effect==="結核"&&diseaseKey==="tuberculosis");
+  if(matchesIllness)healthAfter+=item.magnitude;
   if(item.effect==="ウエイトアップ")weightDelta+=item.magnitude;
   if(item.effect==="ダイエット")weightDelta-=item.magnitude;
   if(item.effect==="身長")heightDelta+=item.magnitude;
