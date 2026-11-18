@@ -123,7 +123,7 @@ test("付款不足、錯誤期數及零借款資格時，貸款與資產原子�
   try {
     assert.throws(()=>borrowBankLoan(db,1,JOB,13,"2026-11-18",1000),/期數/);
     assert.equal(bankLoanOverview(db,1,JOB).active,false);
-    assert.throws(()=>borrowBankLoan(db,2,{salary:0},12,"2026-11-18",1000),/貸款/);
+    assert.throws(()=>borrowBankLoan(db,2,{salary:0},12,"2026-11-18",1000),/可借款額度/);
     const plan=borrowBankLoan(db,1,JOB,12,"2026-11-18",1000);
     db.prepare("UPDATE characters SET bank=99 WHERE user_id=1").run();
     assert.throws(()=>payoffBankLoan(db,1,"2026-11-18",2000),/普通存款不足/);
