@@ -93,3 +93,11 @@
 .bank-passbook select{width:100%;margin:.3rem 0}
 .bank-ledger-list{padding-left:1.2rem;max-height:260px;overflow:auto;font-size:.85rem;overflow-wrap:anywhere}
 .bank-ledger-list li{padding:.5rem 0;border-bottom:1px solid #e2ebe3}
+
+/* 第十階段：玩家間銀行轉帳 */
+.bank-transfer{border-top:1px solid #d8e2d7;padding-top:.8rem;margin-top:1rem}
+.bank-transfer h3{margin:.4rem 0}
+.bank-transfer form{display:grid;gap:.6rem}
+.bank-transfer label{display:block}
+.bank-transfer input{width:100%;max-width:100%}
+.bank-transfer button{width:100%}
