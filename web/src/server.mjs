@@ -13,7 +13,7 @@ import { parseLegacySchool, parseLegacyGym, calendarDay, trainingAvailability, p
 import { initTownMapTable, bootstrapLegacyTownMaps, publicTownMap, editTownTile } from "./town-storage.mjs";
 import { parseHouseCatalog, initHousingTables, listHouses, publicHouseCatalog, buildHouse, renameHouse, sellHouse, getHouseSaleQuote, listHouseEvents, remodelHouse, listHouseRemodelEvents } from "./housing.mjs";
 import { initRoomsTables, ROOM_TYPES, setRoomSlots, viewRoom, addRoomPost, deleteRoomPost } from "./rooms.mjs";
-import { initBankTables, settleBankInterest, bankOperation, bankOverview, bankLedger } from "./banking.mjs";
+import { initBankTables, settleBankInterest, bankOperation, bankOverview, bankLedger, transferToPlayer, BANK_TRANSFER_LIMIT, NEW_MEMBER_DAYS, NEW_MEMBER_TRANSFER_LIMIT } from "./banking.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const REPO_ROOT = resolve(ROOT, "..");
@@ -198,6 +198,10 @@ function snapshot(user) {
     character: updated,
     bankAccount: updated ? bankOverview(db,user.id) : null,
     bankLedger: updated ? bankLedger(db,user.id) : [],
+    bankTransferRules: MODE === "multi" && updated ? {
+      maxAmount: BANK_TRANSFER_LIMIT, newMemberDays: NEW_MEMBER_DAYS,
+      newMemberMaxExclusive: NEW_MEMBER_TRANSFER_LIMIT
+    } : null,
     currentJob: currentJob ? { key: currentJob.key, name: currentJob.name, salary: currentJob.salary, payEvery: currentJob.payEvery } : null,
     maxBodyEnergy: updated ? maxBodyEnergy(updated.stats) : null,
     maxBrainEnergy: updated ? maxBrainEnergy(updated.stats) : null,
@@ -405,6 +409,16 @@ async function handle(req, res) {
         }
       } catch (error) { throw new HttpError(400,error.message); }
       return sendJson(res, 200, { ...snapshot(user), bankResult: result });
+    }
+
+    if (path === "/api/bank/transfer") {
+      if (MODE !== "multi") throw new HttpError(403,"單機模式無法轉帳給其他玩家");
+      let result;
+      try {
+        result = transferToPlayer(db,user.id,data.recipientName,data.amount,
+          calendarDay(Date.now(),GAME_TIMEZONE),data.requestId);
+      } catch(error) { throw new HttpError(400,error.message); }
+      return sendJson(res,200,{ ...snapshot(user),transferResult:result });
     }
 
     if (path === "/api/house/room/config") {
