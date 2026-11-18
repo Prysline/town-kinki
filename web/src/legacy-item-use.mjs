@@ -1,0 +1,244 @@
+// 原版 basic.cgi::item_do 的安全子集。
+// 原始 mono.cgi 封存保持唯讀，使用次數與時間另存在 Web 獨立資料表。
+import { STAT_KEYS, maxBodyEnergy, maxBrainEnergy, recoverEnergy, bodyMassIndex } from "./engine.mjs";
+import { diseaseFromIndex } from "./health.mjs";
+import { MEAL_COOLDOWN_MS } from "./dining.mjs";
+import { initLegacyInventoryTables } from "./legacy-inventory.mjs";
+
+export const CONSUMABLE_REJECTED_EFFECTS=Object.freeze(["万能","ランダム品"]);
+const STATS_INDEX=Object.freeze([
+  2,3,4,5,6,7,8,10,11,12,13,14,15,16,18,19,20
+]);
+const NON_CONSUMABLE=new Set(["ギフト","武器","防具","魔法","御守"]);
+const FOOD_TYPES=new Set(["食料品","ファーストフード"]);
+const SPECIAL_TYPES=new Set(["無","風邪","下痢","肺炎","結核",
+  "ウエイトアップ","ダイエット","身長","縮み"]);
+const ID_RE=/^[a-zA-Z0-9_-]{8,80}$/;
+
+function signedNumber(input,label,min=-1000000,max=1000000){
+  if(!/^-?\d+$/.test(input))throw new Error(label+"不是整數");
+  const n=Number(input);
+  if(!Number.isSafeInteger(n)||n<min||n>max)
+    throw new Error(label+"超出可安全處理的範圍");
+  return n;
+}
+function nonnegative(input,label,max=1000000){
+  return signedNumber(input,label,0,max);
+}
+function parseArchivedItem(row){
+  let raw;
+  try{raw=JSON.parse(row.raw_fields_json);}catch{}
+  if(!Array.isArray(raw)||raw.length!==33||
+    raw.some(x=>typeof x!=="string")||
+    raw[0]!==row.category||raw[1]!==row.original_name)
+    throw new Error("封存物品資料不完整或與索引不一致");
+  if(row.durability_unit!=="回"||raw[22]!=="回"||
+      NON_CONSUMABLE.has(row.category)||row.original_name==="ランダム品")
+    return null;
+  const parts=raw[9].split(",");
+  if(parts.length>2||!SPECIAL_TYPES.has(parts[0]))return null;
+  const effect=parts[0];
+  if(effect!=="無"&&(parts.length!==2||!/^\d+$/.test(parts[1])))return null;
+  if(effect==="無"&&parts.length!==1)return null;
+  // 排除以效果字串重新分類的商品、特殊禮物或需要尚未移植系統的功能。
+  const magnitude=effect==="無"?0:nonnegative(parts[1],"特殊效果",100000);
+  const bonuses=Object.fromEntries(STAT_KEYS.map((key,index)=>[
+    key,signedNumber(raw[STATS_INDEX[index]],key+"能力增減")
+  ]));
+  const intervalMinutes=nonnegative(raw[23],"使用間隔",1000000);
+  const bodyCost= signedNumber(raw[27]||"0","身體能量消耗");
+  const brainCost=signedNumber(raw[28]||"0","頭腦能量消耗");
+  const calories=nonnegative(raw[25]||"0","熱量",1000000);
+  const lastUsedSec=nonnegative(raw[26]||"0","最後使用時間",Number.MAX_SAFE_INTEGER);
+  const originalRemaining=nonnegative(String(row.durability),"原始耐久",1000000);
+  const food=FOOD_TYPES.has(row.category);
+  const next=lastUsedSec*1000+intervalMinutes*60000;
+  if(!Number.isSafeInteger(next))throw new Error("原始物品冷卻日期超出安全範圍");
+  return {sourceLine:row.source_line,name:row.original_name,category:row.category,
+    effect,magnitude,bonuses,intervalMinutes,bodyCost,brainCost,calories,
+    originalRemaining,originalLastUsedAt:lastUsedSec*1000,
+    food};
+}
+function readRows(db,userId){
+  const present=db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='legacy_inventory_items'").get();
+  if(!present)return [];
+  return db.prepare([
+    "SELECT i.*,u.remaining AS web_remaining,u.last_used_at_ms",
+    "FROM legacy_inventory_items i LEFT JOIN legacy_item_usage u",
+    "ON u.user_id=i.user_id AND u.source_line=i.source_line",
+    "WHERE i.user_id=? ORDER BY i.source_line LIMIT 100"
+  ].join(" ")).all(userId);
+}
+function status(item,character,remaining,lastUsedAt,now){
+  if(remaining<=0)return {canUse:false,reason:"原始物品耐久已用盡",readyAt:null};
+  const readyAt=lastUsedAt+item.intervalMinutes*60000;
+  if(now<readyAt)return {canUse:false,reason:"物品使用間隔尚未結束",readyAt};
+  if(item.food&&character.lastMealAt>0&&
+      now-character.lastMealAt<MEAL_COOLDOWN_MS)
+    return {canUse:false,reason:"距離上次用餐未滿 60 分鐘",
+      readyAt:character.lastMealAt+MEAL_COOLDOWN_MS};
+  if(character.bodyEnergy<item.bodyCost||character.brainEnergy<item.brainCost)
+    return {canUse:false,reason:"角色目前能量不足",readyAt:null};
+  return {canUse:true,reason:null,readyAt:null};
+}
+export function initLegacyItemUseTables(db){
+  initLegacyInventoryTables(db);
+  db.exec([
+    "CREATE TABLE IF NOT EXISTS legacy_item_usage(",
+    "user_id INTEGER NOT NULL,source_line INTEGER NOT NULL,",
+    "remaining INTEGER NOT NULL CHECK(remaining>=0),",
+    "last_used_at_ms INTEGER NOT NULL,",
+    "PRIMARY KEY(user_id,source_line),",
+    "FOREIGN KEY(user_id,source_line) REFERENCES legacy_inventory_items(user_id,source_line) ON DELETE CASCADE);",
+    "CREATE TABLE IF NOT EXISTS legacy_item_use_history(",
+    "id INTEGER PRIMARY KEY AUTOINCREMENT,",
+    "user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,",
+    "source_line INTEGER NOT NULL,request_id TEXT NOT NULL,",
+    "original_name TEXT NOT NULL,changes_json TEXT NOT NULL,",
+    "used_at INTEGER NOT NULL,",
+    "UNIQUE(user_id,request_id));",
+    "CREATE INDEX IF NOT EXISTS legacy_item_use_history_user_idx",
+    "ON legacy_item_use_history(user_id,id);"
+  ].join("\n"));
+}
+export function listLegacyItemActions(db,userId,character,now=Date.now()){
+  if(!Number.isSafeInteger(userId)||userId<=0)throw new Error("無效的玩家帳號");
+  return readRows(db,userId).flatMap(row=>{
+    const item=parseArchivedItem(row);
+    if(!item)return [];
+    const remaining=row.web_remaining??item.originalRemaining;
+    const lastUsedAt=row.last_used_at_ms??item.originalLastUsedAt;
+    return [{
+      sourceLine:item.sourceLine,name:item.name,category:item.category,
+      remaining,originalRemaining:item.originalRemaining,
+      intervalMinutes:item.intervalMinutes,food:item.food,
+      ...status(item,character,remaining,lastUsedAt,now)
+    }];
+  });
+}
+export function listLegacyItemUseHistory(db,userId,limit=20){
+  if(!Number.isSafeInteger(userId)||userId<=0)throw new Error("無效的玩家帳號");
+  const count=Number.isSafeInteger(limit)?Math.max(1,Math.min(limit,50)):20;
+  return db.prepare(
+    "SELECT source_line,original_name,changes_json,used_at FROM legacy_item_use_history WHERE user_id=? ORDER BY id DESC LIMIT ?"
+  ).all(userId,count).map(row=>({
+    sourceLine:row.source_line,name:row.original_name,
+    changes:JSON.parse(row.changes_json),usedAt:row.used_at
+  }));
+}
+function applyEffects(character,item,now){
+  const current=recoverEnergy(character,now);
+  const next={...current,stats:{...current.stats}};
+  const gained={};
+  for(let i=0;i<STAT_KEYS.length;i++){
+    const key=STAT_KEYS[i],delta=item.bonuses[key];
+    const previous=next.stats[key];
+    if(!Number.isSafeInteger(previous)||previous<0)
+      throw new Error("角色能力資料不正確");
+    const target=Math.max(0,previous+delta);
+    if(!Number.isSafeInteger(target))throw new Error("角色能力數值超出安全範圍");
+    next.stats[key]=target;
+    if(target!==previous)gained[key]=target-previous;
+  }
+  const healthBefore=next.healthIndex??50;
+  let healthAfter=healthBefore,weightDelta=0,heightDelta=0;
+  if(item.effect==="風邪"&&["slightCold","cold"].includes(diseaseFromIndex(healthBefore).key)||
+     item.effect==="下痢"&&diseaseFromIndex(healthBefore).key==="diarrhea"||
+     item.effect==="肺炎"&&diseaseFromIndex(healthBefore).key==="pneumonia"||
+     item.effect==="結核"&&diseaseFromIndex(healthBefore).key==="tuberculosis")
+    healthAfter+=item.magnitude;
+  if(item.effect==="ウエイトアップ")weightDelta+=item.magnitude;
+  if(item.effect==="ダイエット")weightDelta-=item.magnitude;
+  if(item.effect==="身長")heightDelta+=item.magnitude;
+  if(item.effect==="縮み")heightDelta-=item.magnitude;
+  weightDelta+=item.calories/1000;
+  next.healthIndex=healthAfter;
+  if(!Number.isSafeInteger(healthAfter))throw new Error("疾病指數超出安全範圍");
+  next.weight=Math.max(.01,Math.round((current.weight+weightDelta)*100)/100);
+  next.height=Math.max(1,current.height+heightDelta);
+  if(!Number.isFinite(next.weight)||!Number.isSafeInteger(next.height))
+    throw new Error("角色身高體重超出安全範圍");
+  next.bmi=bodyMassIndex(next.height,next.weight);
+  next.bodyEnergy=Math.max(0,Math.min(maxBodyEnergy(next.stats),
+    current.bodyEnergy-item.bodyCost));
+  next.brainEnergy=Math.max(0,Math.min(maxBrainEnergy(next.stats),
+    current.brainEnergy-item.brainCost));
+  next.recoveredAt=now;
+  if(item.food)next.lastMealAt=now;
+  return {
+    character:next,
+    changes:{
+      stats:gained,healthIndex:healthAfter-healthBefore,
+      weight:Math.round((next.weight-current.weight)*100)/100,
+      height:next.height-current.height,
+      bodyEnergy:next.bodyEnergy-current.bodyEnergy,
+      brainEnergy:next.brainEnergy-current.brainEnergy,
+      food:item.food
+    }
+  };
+}
+export function useLegacyItem(db,userId,sourceLine,requestId,now=Date.now()){
+  if(!Number.isSafeInteger(userId)||userId<=0)throw new Error("無效的玩家帳號");
+  if(!Number.isSafeInteger(sourceLine)||sourceLine<=0)throw new Error("物品行號不正確");
+  if(typeof requestId!=="string"||!ID_RE.test(requestId))
+    throw new Error("道具使用識別碼格式不正確");
+  if(!Number.isSafeInteger(now)||now<=0)throw new Error("使用時間不正確");
+  db.exec("BEGIN IMMEDIATE");
+  try{
+    const previous=db.prepare(
+      "SELECT source_line,original_name,changes_json,used_at FROM legacy_item_use_history WHERE user_id=? AND request_id=?"
+    ).get(userId,requestId);
+    if(previous){
+      if(previous.source_line!==sourceLine)throw new Error("相同請求編號不可用於其他道具");
+      db.exec("COMMIT");
+      return {sourceLine,name:previous.original_name,
+        changes:JSON.parse(previous.changes_json),usedAt:previous.used_at,replayed:true};
+    }
+    const row=db.prepare([
+      "SELECT i.*,u.remaining AS web_remaining,u.last_used_at_ms",
+      "FROM legacy_inventory_items i LEFT JOIN legacy_item_usage u",
+      "ON u.user_id=i.user_id AND u.source_line=i.source_line",
+      "WHERE i.user_id=? AND i.source_line=?"
+    ].join(" ")).get(userId,sourceLine);
+    if(!row)throw new Error("找不到本人可使用的原版物品");
+    const item=parseArchivedItem(row);
+    if(!item)throw new Error("這項原版物品的使用效果尚未支援");
+    const character=db.prepare("SELECT * FROM characters WHERE user_id=?").get(userId);
+    if(!character)throw new Error("請先建立角色");
+    const current={
+      stats:JSON.parse(character.stats_json),
+      bodyEnergy:character.body_energy,brainEnergy:character.brain_energy,
+      recoveredAt:character.recovered_at,
+      healthIndex:character.health_index,weight:character.weight,
+      height:character.height,lastMealAt:character.last_meal_at
+    };
+    const updated=recoverEnergy(current,now);
+    const remaining=row.web_remaining??item.originalRemaining;
+    const lastUsedAt=row.last_used_at_ms??item.originalLastUsedAt;
+    const availability=status(item,updated,remaining,lastUsedAt,now);
+    if(!availability.canUse)throw new Error(availability.reason);
+    const applied=applyEffects(updated,item,now);
+    const next=applied.character;
+    db.prepare([
+      "UPDATE characters SET stats_json=?,body_energy=?,brain_energy=?,recovered_at=?,",
+      "health_index=?,weight=?,height=?,bmi=?,last_meal_at=? WHERE user_id=?"
+    ].join(" ")).run(JSON.stringify(next.stats),next.bodyEnergy,next.brainEnergy,
+      next.recoveredAt,next.healthIndex,next.weight,next.height,next.bmi,
+      next.lastMealAt,userId);
+    db.prepare([
+      "INSERT INTO legacy_item_usage(user_id,source_line,remaining,last_used_at_ms)",
+      "VALUES(?,?,?,?) ON CONFLICT(user_id,source_line) DO UPDATE",
+      "SET remaining=excluded.remaining,last_used_at_ms=excluded.last_used_at_ms"
+    ].join(" ")).run(userId,sourceLine,remaining-1,now);
+    db.prepare([
+      "INSERT INTO legacy_item_use_history(user_id,source_line,request_id,original_name,changes_json,used_at)",
+      "VALUES(?,?,?,?,?,?)"
+    ].join(" ")).run(userId,sourceLine,requestId,item.name,
+      JSON.stringify(applied.changes),now);
+    db.exec("COMMIT");
+    return {sourceLine,name:item.name,changes:applied.changes,usedAt:now,replayed:false};
+  }catch(error){
+    db.exec("ROLLBACK");
+    throw error;
+  }
+}
