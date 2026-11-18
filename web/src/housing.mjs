@@ -3,6 +3,7 @@
 import { readTownMap, storeTownMap } from "./town-storage.mjs";
 import { describeTile, tileIndex } from "./town-map.mjs";
 import { TOWNS } from "./engine.mjs";
+import { recordBankEntry } from "./banking.mjs";
 
 export const INTERIOR_LABELS = Object.freeze(["A 級（四個內容欄位）","B 級（三個內容欄位）","C 級（兩個內容欄位）","D 級（一個內容欄位）"]);
 export const RESIDENTIAL_LOTS = Object.freeze(["空地","空地2","空地3","空地4"]);
@@ -322,6 +323,7 @@ export function buildHouse(db, catalog, userId, position, options, now = Date.no
     }, "web-edited");
     const field = source === "cash" ? "money" : "bank";
     db.prepare("UPDATE characters SET " + field + "=? WHERE user_id=?").run(balance, userId);
+    if (source === "bank") recordBankEntry(db,userId,"ordinary","住宅建造",quote.total,0,balance,now);
     db.prepare(
       "INSERT INTO house_events(user_id,house_id,event_type,town_id,row_num,column_num,house_name,image,amount,created_at) VALUES(?,?,'built',?,?,?,?,?,?,?)"
     ).run(userId,houseId,character.town_id,position.row,position.column,name,
