@@ -79,6 +79,22 @@ export function initHousingTables(db) {
     ");"
   ].join(""));
   db.exec("CREATE INDEX IF NOT EXISTS houses_owner_idx ON houses(owner_user_id)");
+  db.exec([
+    "CREATE TABLE IF NOT EXISTS house_events (",
+    "id INTEGER PRIMARY KEY,",
+    "user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,",
+    "house_id INTEGER NOT NULL,",
+    "event_type TEXT NOT NULL CHECK(event_type IN ('built','sold')),",
+    "town_id INTEGER NOT NULL,",
+    "row_num INTEGER NOT NULL,",
+    "column_num INTEGER NOT NULL,",
+    "house_name TEXT NOT NULL,",
+    "image TEXT NOT NULL,",
+    "amount INTEGER NOT NULL CHECK(amount>=0),",
+    "created_at INTEGER NOT NULL",
+    ");"
+  ].join(""));
+  db.exec("CREATE INDEX IF NOT EXISTS house_events_user_idx ON house_events(user_id,id)");
 }
 
 export function listHouses(db, ownerUserId = null) {
@@ -104,6 +120,73 @@ export function publicHouseCatalog(catalog, townId, existingNormalHouses) {
     maxNormalHouses: MAX_NORMAL_HOUSES,
     originalMaximumBuildings: catalog.legacyMaximumHouses
   };
+}
+
+export function getHouseSaleQuote(catalog, townId) {
+  if (!Number.isInteger(townId) || !TOWNS.some(town => t.id === townId))
+    throw new Error("不存在的城鎮");
+  // original_house.cgi：出售僅退還城鎮土地地價，不退外觀與內裝。
+  const landWan = catalog.landWan[townId];
+  const refund = landWan * 10000;
+  if (!Number.isSafeInteger(refund) || refund <= 0)
+    throw new Error("土地退款金額無效");
+  return { townId, landWan, refund };
+}
+
+export function listHouseEvents(db, userId, limit = 20) {
+  if (!Number.isSafeInteger(userId) || userId < 1) throw new Error("無效的玩家");
+  const capped = Number.isSafeInteger(limit) ? Math.max(1, Math.min(limit, 50)) : 20;
+  return db.prepare(
+    "SELECT id,house_id,event_type,town_id,row_num,column_num,house_name,image,amount,created_at FROM house_events WHERE user_id=? ORDER BY id DESC LIMIT ?"
+  ).all(userId, capped).map(row => ({
+    id: row.id, houseId: row.house_id, action: row.event_type,
+    townId: row.town_id, townName: TOWNS[row.town_id]?.name ?? "未知城鎮",
+    location: "ABCDEFGHIJKL"[row.row_num] + (row.column_num + 1),
+    houseName: row.house_name, image: row.image,
+    amount: row.amount, occurredAt: row.created_at
+  }));
+}
+
+export function sellHouse(db, catalog, userId, houseId, now = Date.now()) {
+  if (!Number.isSafeInteger(houseId) || houseId < 1)
+    throw new Error("無效的房屋編號");
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    const house = db.prepare(
+      "SELECT * FROM houses WHERE id=? AND owner_user_id=?"
+    ).get(houseId, userId);
+    if (!house) throw new Error("找不到你擁有的房屋，可能已出售");
+    if (!RESIDENTIAL_LOTS.includes(house.original_plot))
+      throw new Error("無法確認住宅的原始空地種類");
+    const character = db.prepare("SELECT money FROM characters WHERE user_id=?").get(userId);
+    if (!character) throw new Error("請先建立角色");
+    const map = readTownMap(db, house.town_id);
+    const idx = house.row_num * 16 + house.column_num;
+    const expected = "webhouse_" + house.id + "=" + house.original_plot;
+    if (map.tiles[idx] !== expected)
+      throw new Error("街區與房屋所有權資料不一致，停止出售以避免資料遺失");
+    const quote = getHouseSaleQuote(catalog, house.town_id);
+    const newMoney = character.money + quote.refund;
+    if (!Number.isSafeInteger(newMoney)) throw new Error("出售後金額超出可處理範圍");
+    const restored = [...map.tiles];
+    restored[idx] = house.original_plot;
+    storeTownMap(db, house.town_id, {
+      tiles: restored, originalName: map.originalName,
+      originalRecord: map.fields ? map.fields.join("<>") + "\n" : ""
+    }, "web-edited");
+    db.prepare("DELETE FROM houses WHERE id=? AND owner_user_id=?").run(house.id,userId);
+    db.prepare("UPDATE characters SET money=? WHERE user_id=?").run(newMoney,userId);
+    db.prepare(
+      "INSERT INTO house_events(user_id,house_id,event_type,town_id,row_num,column_num,house_name,image,amount,created_at) VALUES(?,?,'sold',?,?,?,?,?,?,?)"
+    ).run(userId,house.id,house.town_id,house.row_num,house.column_num,house.name,
+      house.image,quote.refund,now);
+    db.exec("COMMIT");
+    return {houseId, location:"ABCDEFGHIJKL"[house.row_num]+(house.column_num+1),
+      originalPlot:house.original_plot, ...quote};
+  } catch(error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
 }
 
 export function buildHouse(db, catalog, userId, position, options, now = Date.now()) {
@@ -140,6 +223,10 @@ export function buildHouse(db, catalog, userId, position, options, now = Date.no
     }, "web-edited");
     const field = source === "cash" ? "money" : "bank";
     db.prepare("UPDATE characters SET " + field + "=? WHERE user_id=?").run(balance, userId);
+    db.prepare(
+      "INSERT INTO house_events(user_id,house_id,event_type,town_id,row_num,column_num,house_name,image,amount,created_at) VALUES(?,?,'built',?,?,?,?,?,?,?)"
+    ).run(userId,houseId,character.town_id,position.row,position.column,name,
+      quote.image,quote.total,now);
     db.exec("COMMIT");
     return { houseId, quote };
   } catch (error) {
