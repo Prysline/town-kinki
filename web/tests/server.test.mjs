@@ -445,3 +445,149 @@ test("多人：非屋主不得出售，兩個同時出售請求只退一次錢�
     assert.equal((await api(srv.url,"state",undefined,a.cookie)).result.houseEvents.length,2);
   } finally { await srv.stop(); }
 });
+
+
+test("單機：房屋室內欄位、留言板與搬家後個人資料保留", async () => {
+  const srv = await start("solo");
+  try {
+    assert.equal((await api(srv.url, "character", {
+      name:"室內測試",gender:"other",stats:defaultStats()
+    })).status,200);
+    await api(srv.url,"move",{townId:3});
+    await api(srv.url,"map/tile",{row:0,column:0,symbol:"空地"});
+    await api(srv.url,"map/tile",{row:0,column:1,symbol:"空地2"});
+    const db=new DatabaseSync(join(srv.directory,"solo.sqlite"));
+    try {db.prepare("UPDATE characters SET money=20000000 WHERE name='室內測試'").run();}
+    finally {db.close();}
+    const built=await api(srv.url,"house/build",{
+      row:0,column:0,image:"house/kamakura.gif",interiorRank:1,payment:"cash"
+    });
+    assert.equal(built.status,200);
+    const houseId=built.result.houses[0].id;
+    const visitRoute="house/visit?houseId="+houseId;
+    const initially=await api(srv.url,visitRoute);
+    assert.equal(initially.status,200);
+    assert.equal(initially.result.capacity,3);
+    assert.equal(initially.result.available.length,0);
+    assert.equal((await api(srv.url,"house/room/config",{
+      houseId,slots:[{type:"0",title:"第一區"},{type:"3",title:"屋主公告"}]
+    })).status,400);
+    const setting=await api(srv.url,"house/room/config",{
+      houseId,slots:[
+        {type:"0",title:"一般留言區"},
+        {type:"3",title:"公告區"},
+        {type:"2",title:"參考網站",url:"https://example.com/town"}
+      ]
+    });
+    assert.equal(setting.status,200);
+    const room=await api(srv.url,visitRoute);
+    assert.equal(room.result.available.length,3);
+    assert.equal(room.result.selected.type,"0");
+    assert.equal(room.result.owner,true);
+    const posted=await api(srv.url,"house/room/post",{
+      houseId,slotIndex:0,body:"我的第一篇室內留言"
+    });
+    assert.equal(posted.status,200);
+    const announcement=await api(srv.url,"house/room/post",{
+      houseId,slotIndex:1,body:"屋主新公告"
+    });
+    assert.equal(announcement.status,200);
+    assert.equal((await api(srv.url,visitRoute)).result.posts[0].body,"我的第一篇室內留言");
+    assert.equal((await api(srv.url,visitRoute+"&slot=1")).result.posts[0].body,"屋主新公告");
+    assert.equal((await api(srv.url,visitRoute+"&slot=2")).result.selected.url,"https://example.com/town");
+    const sold=await api(srv.url,"house/sell",{houseId});
+    assert.equal(sold.status,200);
+    assert.equal((await api(srv.url,visitRoute)).status,400);
+    const second=await api(srv.url,"house/build",{
+      row:0,column:1,image:"house/kamakura.gif",interiorRank:3,payment:"cash"
+    });
+    assert.equal(second.status,200);
+    const newId=second.result.houses[0].id;
+    const moved=await api(srv.url,"house/visit?houseId="+newId);
+    assert.equal(moved.status,200);
+    assert.equal(moved.result.capacity,1);
+    assert.deepEqual(moved.result.available.map(s=>s.title),["一般留言區"]);
+    assert.equal(moved.result.posts[0].body,"我的第一篇室內留言");
+  } finally {await srv.stop();}
+});
+
+test("多人：訪客可留言但不可改設定，屋主公告與自訂網址受權限限制", async () => {
+  const seed=directory => {
+    const db=new DatabaseSync(join(directory,"multi.sqlite"));
+    db.exec("CREATE TABLE town_maps(town_id INTEGER PRIMARY KEY,original_name TEXT NOT NULL DEFAULT '',original_record TEXT NOT NULL DEFAULT '',source TEXT NOT NULL,tiles_json TEXT NOT NULL,updated_at INTEGER NOT NULL)");
+    const tiles=Array(192).fill("");
+    tiles[0]="空地";
+    db.prepare("INSERT INTO town_maps(town_id,original_name,source,tiles_json,updated_at) VALUES(?,?,?,?,?)")
+      .run(3,"和歌山アイランド","legacy-import",JSON.stringify(tiles),Date.now());
+    db.close();
+  };
+  const srv=await start("multi",seed);
+  try {
+    const a=await api(srv.url,"register",{username:"roomOwner",password:"good-long-room-password1"});
+    const b=await api(srv.url,"register",{username:"roomVisitor",password:"good-long-room-password2"});
+    assert.equal(a.status,200);assert.equal(b.status,200);
+    await api(srv.url,"character",{name:"房主玩家",gender:"male",stats:defaultStats()},a.cookie);
+    await api(srv.url,"character",{name:"參觀玩家",gender:"female",stats:defaultStats()},b.cookie);
+    await api(srv.url,"move",{townId:3},a.cookie);
+    await api(srv.url,"move",{townId:3},b.cookie);
+    const db=new DatabaseSync(join(srv.directory,"multi.sqlite"));
+    try { db.prepare("UPDATE characters SET bank=20000000").run(); }
+    finally {db.close();}
+    const built=await api(srv.url,"house/build",{
+      row:0,column:0,image:"house/kamakura.gif",interiorRank:3,payment:"bank"
+    },a.cookie);
+    assert.equal(built.status,200);
+    const houseId=built.result.houses[0].id;
+    const visit="house/visit?houseId="+houseId;
+    assert.equal((await api(srv.url,visit,undefined,b.cookie)).status,400);
+    assert.equal((await api(srv.url,"house/room/config",{
+      houseId,slots:[{type:"0",title:"偽造"}]
+    },b.cookie)).status,400);
+    assert.equal((await api(srv.url,"house/room/config",{
+      houseId,slots:[{type:"0",title:"大家留言"}]
+    },a.cookie)).status,200);
+    const guest=await api(srv.url,visit,undefined,b.cookie);
+    assert.equal(guest.status,200);
+    assert.equal(guest.result.owner,false);
+    assert.equal(guest.result.editableSlots,null);
+    assert.equal(guest.result.canPost,true);
+    const post=await api(srv.url,"house/room/post",{
+      houseId,slotIndex:0,body:"訪客的留言"
+    },b.cookie);
+    assert.equal(post.status,200);
+    assert.equal((await api(srv.url,visit,undefined,a.cookie)).result.posts[0].body,"訪客的留言");
+    const visitorPostId=(await api(srv.url,visit,undefined,b.cookie)).result.posts[0].id;
+    assert.equal((await api(srv.url,"house/room/delete",{
+      houseId,postId:visitorPostId
+    },b.cookie)).status,200);
+    assert.equal((await api(srv.url,"house/room/config",{
+      houseId,slots:[{type:"3",title:"屋主公告"}]
+    },a.cookie)).status,200);
+    const readOnly=await api(srv.url,visit,undefined,b.cookie);
+    assert.equal(readOnly.result.canPost,false);
+    assert.equal(readOnly.result.posts.length,0);
+    assert.equal((await api(srv.url,"house/room/post",{
+      houseId,slotIndex:0,body:"訪客越權公告"
+    },b.cookie)).status,400);
+    assert.equal((await api(srv.url,"house/room/post",{
+      houseId,slotIndex:0,body:"正式公告"
+    },a.cookie)).status,200);
+    assert.equal((await api(srv.url,visit,undefined,b.cookie)).result.posts[0].body,"正式公告");
+    assert.equal((await api(srv.url,"house/room/config",{
+      houseId,slots:[{type:"1",title:"商店"}]
+    },a.cookie)).status,400);
+    assert.equal((await api(srv.url,"house/room/config",{
+      houseId,slots:[{type:"2",title:"偽連結",url:"javascript:alert(1)"}]
+    },a.cookie)).status,400);
+    assert.equal((await api(srv.url,"house/room/config",{
+      houseId,slots:[{type:"2",title:"外部網站",url:"https://example.org/"}]
+    },a.cookie)).status,200);
+    assert.equal((await api(srv.url,visit,undefined,b.cookie)).result.selected.url,"https://example.org/");
+    assert.equal((await api(srv.url,"house/room/post",{
+      houseId,slotIndex:0,body:"不允許留言"
+    },b.cookie)).status,400);
+    await api(srv.url,"move",{townId:0},b.cookie);
+    assert.equal((await api(srv.url,visit,undefined,b.cookie)).status,400);
+    assert.equal((await api(srv.url,visit)).status,401);
+  } finally { await srv.stop(); }
+});
