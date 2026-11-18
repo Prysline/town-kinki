@@ -13,6 +13,8 @@ export const STARTING_BUDGETS = Object.freeze([
 ]);
 export const WORK_COOLDOWN_MS = 5 * 60 * 1000;
 export const ENERGY_RECOVERY_MS = 10 * 1000;
+import { deriveCondition } from "./dining.mjs";
+
 export const STAT_KEYS = [
   "kokugo", "suugaku", "rika", "syakai", "eigo", "ongaku", "bijutu",
   "looks", "tairyoku", "kenkou", "speed", "power", "wanryoku",
@@ -156,6 +158,7 @@ export function createCharacterData(
     jobId: "legacy-2", workProgress: 0, lastWorkAt: 0,
     workCount: 0, jobWorkCount: 0, jobExperience: 0, masteredJob: null,
     lastSchoolDay: "", lastGymAt: 0, gymReadyAt: 0,
+    lastMealAt: 0,
     height, weight, bmi: bodyMassIndex(height, weight), stats
   };
 }
@@ -205,11 +208,15 @@ export function performWork(character, job, now = Date.now(), random = Math.rand
   if (reason) throw new Error(reason);
   if (current.bodyEnergy < job.bodyCost || current.brainEnergy < job.brainCost)
     throw new Error("身體或頭腦能量不足");
-  // 原版以當前狀態（飽足、健康、體型、精力等）計算經驗，
-  // 但這些模組尚未全數移植。此處暫用「普通」狀態的 5 + 1~5 點。
-  const experienceGain = 5 + Math.floor(random() * 5) + 1;
+  const condition = deriveCondition(current,maxBodyEnergy(current.stats),
+    maxBrainEnergy(current.stats),now);
+  if (condition.baseExperience===null)
+    throw new Error("目前身體狀態過差，無法工作");
+  // 原版依當前狀態給 15／10／5／1／-5 再加 1 至 5 的亂數。
+  // 沒有用餐歷史的舊 Web 角色暫按普通狀態處理，不回推飢餓懲罰。
+  const experienceGain = condition.baseExperience + Math.floor(random() * 5) + 1;
   const oldLevel = Math.floor((current.jobExperience ?? 0) / 100);
-  const jobExperience = (current.jobExperience ?? 0) + experienceGain;
+  const jobExperience = Math.max(0,(current.jobExperience ?? 0) + experienceGain);
   const jobLevel = Math.floor(jobExperience / 100);
   const leveledUp = jobLevel > oldLevel;
   // 原版是每次工作以職業基礎薪資與當次等級計算，不累加上一輪的加薪。
@@ -231,7 +238,8 @@ export function performWork(character, job, now = Date.now(), random = Math.rand
     lastWorkAt: now, workCount: current.workCount + 1
   };
   return { character: next, paid, pending: next.workProgress,
-    experienceGain, jobLevel, leveledUp, bonus, mastered, effectiveSalary };
+    experienceGain, jobLevel, leveledUp, bonus, mastered, effectiveSalary,
+    condition:condition.label };
 }
 
 export function bankTransaction(character, action, amount) {
