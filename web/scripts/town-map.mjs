@@ -38,12 +38,22 @@ function run() {
       if (existing.configured && !process.argv.includes("--replace")) {
         throw new Error("這座城鎮已有地圖。若要覆蓋，請明確加入 --replace 並先備份資料庫。");
       }
+      const housesTable = db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='houses'").get();
+      const houseCount = housesTable
+        ? db.prepare("SELECT COUNT(*) AS count FROM houses WHERE town_id=?").get(townId).count
+        : 0;
+      if (houseCount || existing.tiles.some(tile => tile.startsWith("webhouse_"))) {
+        throw new Error("城鎮已有 Web 版住宅，為避免土地與所有權資料失聯，禁止直接覆蓋地圖。");
+      }
       storeTownMap(db, townId, { ...parsed, originalRecord: raw }, "legacy-import");
       console.log("已匯入 " + TOWNS[townId].name + " 的 12×16 地圖，共 " +
         parsed.tiles.filter(Boolean).length + " 格有內容。");
     } else {
       const saved = readTownMap(db, townId);
       if (!saved.configured) throw new Error("此城鎮尚無地圖，無法輸出。");
+      if (saved.tiles.some(tile => tile.startsWith("webhouse_"))) {
+        throw new Error("城鎮包含 Web 版住宅；原版房屋紀錄尚未同步匯出，暫停輸出以避免產生不完整的舊版地圖。");
+      }
       const serialized = serializeLegacyTown(saved, TOWNS[townId].originalName);
       writeFileSync(resolve(output), serialized, "utf8");
       console.log("已輸出地圖到 " + resolve(output) + "（UTF-8，保留原版欄位結構；回寫舊 CGI 前請先核對字元編碼）。");
