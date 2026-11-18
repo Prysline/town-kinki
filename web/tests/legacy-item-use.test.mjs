@@ -76,11 +76,12 @@ test("只允許原版 33 欄與可確定的「回」耐久效果，特殊道具�
     const available=listLegacyItemActions(db,1,{
       bodyEnergy:25,brainEnergy:35,lastMealAt:0
     },NOW);
-    assert.deepEqual(available.map(x=>x.sourceLine),[1,6]);
+    assert.deepEqual(available.map(x=>x.sourceLine),[1,2,6]);
     assert.equal(available[0].canUse,true);
-    assert.equal(available[1].canUse,false);
-    assert.match(available[1].reason,/用盡/);
-    for(const line of [2,3,4,5])
+    assert.equal(available[1].canUse,true);
+    assert.equal(available[2].canUse,false);
+    assert.match(available[2].reason,/用盡/);
+    for(const line of [3,4,5])
       assert.throws(()=>use(db,line,"blocked-"+line+"-01"),/尚未支援/);
     assert.equal(listLegacyItemUseHistory(db,1).length,0);
   }finally{db.close();}
@@ -263,5 +264,54 @@ test("不完整的原版物品只從可使用清單略過，保留唯讀封存�
     assert.throws(()=>use(db,2,"broken-item-01"),/封存物品/);
     assert.equal(db.prepare("SELECT COUNT(*) n FROM legacy_item_usage").get().n,0);
     assert.equal(db.prepare("SELECT COUNT(*) n FROM legacy_item_use_history").get().n,0);
+  }finally{db.close();}
+});
+
+
+test("原版萬能藥錯誤判斷式修正：任何疾病分級及健康時皆直接增加疾病指數",()=>{
+  for(const [before,amount] of [
+    [-130,3],[-80,15],[-50,20],[-30,2],[-13,15],[-5,20],[0,3],[50,15]
+  ]){
+    const db=createDb();
+    try{
+      db.prepare("UPDATE characters SET health_index=? WHERE user_id=1").run(before);
+      addItem(db,1,archived({
+        name:"おばあちゃんの知恵薬",effect:"万能,"+amount,
+        durability:2,interval:0
+      }));
+      const actions=listLegacyItemActions(db,1,{
+        bodyEnergy:25,brainEnergy:35,lastMealAt:0
+      },NOW);
+      assert.equal(actions.length,1);
+      assert.equal(actions[0].canUse,true);
+      const result=use(db,1,"universal-medicine-01");
+      assert.equal(result.changes.healthIndex,amount);
+      assert.equal(read(db).health_index,before+amount);
+      assert.equal(db.prepare("SELECT remaining FROM legacy_item_usage").get().remaining,1);
+      const replay=use(db,1,"universal-medicine-01",NOW+1000);
+      assert.equal(replay.replayed,true);
+      assert.equal(read(db).health_index,before+amount);
+      assert.equal(listLegacyItemUseHistory(db,1).length,1);
+    }finally{db.close();}
+  }
+});
+
+test("萬能藥與只治特定疾病的藥物保持分流，非法萬能格式不能執行",()=>{
+  const db=createDb();
+  try{
+    addItem(db,1,archived({name:"萬能藥",effect:"万能,15",interval:0}));
+    addItem(db,2,archived({name:"損壞萬能藥",effect:"万能,-15",interval:0}));
+    addItem(db,3,archived({name:"效果缺失",effect:"万能",interval:0}));
+    addItem(db,4,archived({name:"萬能藥多段",effect:"万能,15,20",interval:0}));
+    const actions=listLegacyItemActions(db,1,{
+      bodyEnergy:25,brainEnergy:35,lastMealAt:0
+    },NOW);
+    assert.deepEqual(actions.map(x=>x.sourceLine),[1]);
+    for(const line of [2,3,4])
+      assert.throws(()=>use(db,line,"invalid-universal-"+line),/尚未支援/);
+    const result=use(db,1,"valid-universal-01");
+    assert.equal(result.changes.healthIndex,15);
+    assert.equal(read(db).health_index,2);
+    assert.equal(listLegacyItemUseHistory(db,1).length,1);
   }finally{db.close();}
 });
