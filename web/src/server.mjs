@@ -11,7 +11,7 @@ import {
 } from "./engine.mjs";
 import { parseLegacySchool, parseLegacyGym, calendarDay, trainingAvailability, performTraining } from "./training.mjs";
 import { initTownMapTable, bootstrapLegacyTownMaps, publicTownMap, editTownTile } from "./town-storage.mjs";
-import { parseHouseCatalog, initHousingTables, listHouses, publicHouseCatalog, buildHouse, renameHouse } from "./housing.mjs";
+import { parseHouseCatalog, initHousingTables, listHouses, publicHouseCatalog, buildHouse, renameHouse, sellHouse, getHouseSaleQuote, listHouseEvents } from "./housing.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const REPO_ROOT = resolve(ROOT, "..");
@@ -169,7 +169,9 @@ function snapshot(user) {
   const updated = character ? recoverEnergy(character, now) : null;
   if (character && updated.recoveredAt !== character.recoveredAt) saveCharacter(user.id, updated);
   const currentJob = updated?.jobId ? jobsByKey.get(updated.jobId) : null;
-  const ownedHouses = updated ? listHouses(db, user.id) : [];
+  const ownedHouses = updated ? listHouses(db, user.id).map(h => ({
+    ...h, saleRefund: getHouseSaleQuote(houseCatalog, h.townId).refund
+  })) : [];
   const townHouses = updated ? listHouses(db).filter(h => h.townId === updated.townId) : [];
   const map = updated ? publicTownMap(db, updated.townId, MODE === "solo") : null;
   if (map) for (const house of townHouses) {
@@ -196,6 +198,7 @@ function snapshot(user) {
     towns: TOWNS,
     map,
     houses: ownedHouses,
+    houseEvents: updated ? listHouseEvents(db, user.id) : [],
     townHouses,
     houseCatalog: updated ? publicHouseCatalog(houseCatalog, updated.townId, ownedHouses.length) : null,
     residents,
@@ -389,6 +392,13 @@ async function handle(req, res) {
         throw new HttpError(400, error.message);
       }
       return sendJson(res, 200, { ...snapshot(user), houseResult: result });
+    }
+
+    if (path === "/api/house/sell") {
+      let result;
+      try { result = sellHouse(db, houseCatalog, user.id, data.houseId); }
+      catch (error) { throw new HttpError(400, error.message); }
+      return sendJson(res, 200, { ...snapshot(user), houseSaleResult: result });
     }
 
     if (path === "/api/house/rename") {
