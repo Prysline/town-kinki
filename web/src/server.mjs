@@ -7,12 +7,13 @@ import { DatabaseSync } from "node:sqlite";
 import {
   TOWNS, WORK_COOLDOWN_MS, decodeLegacyText, parseLegacyJobs,
   createCharacterData, recoverEnergy, jobEligibility, selectJob, performWork,
-  maxBodyEnergy, maxBrainEnergy, bankTransaction
+  maxBodyEnergy, maxBrainEnergy
 } from "./engine.mjs";
 import { parseLegacySchool, parseLegacyGym, calendarDay, trainingAvailability, performTraining } from "./training.mjs";
 import { initTownMapTable, bootstrapLegacyTownMaps, publicTownMap, editTownTile } from "./town-storage.mjs";
 import { parseHouseCatalog, initHousingTables, listHouses, publicHouseCatalog, buildHouse, renameHouse, sellHouse, getHouseSaleQuote, listHouseEvents, remodelHouse, listHouseRemodelEvents } from "./housing.mjs";
 import { initRoomsTables, ROOM_TYPES, setRoomSlots, viewRoom, addRoomPost, deleteRoomPost } from "./rooms.mjs";
+import { initBankTables, settleBankInterest, bankOperation, bankOverview, bankLedger } from "./banking.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const REPO_ROOT = resolve(ROOT, "..");
@@ -54,6 +55,7 @@ for (const [column, definition] of [
 initTownMapTable(db);
 initHousingTables(db);
 initRoomsTables(db);
+initBankTables(db);
 const houseCatalog = parseHouseCatalog(
   decodeLegacyText(readFileSync(resolve(REPO_ROOT, "town_ini.cgi"))),
   decodeLegacyText(readFileSync(resolve(REPO_ROOT, "command.pl")))
@@ -167,6 +169,7 @@ function mutateCharacter(userId, callback) {
 function snapshot(user) {
   const now = Date.now();
   const today = calendarDay(now, GAME_TIMEZONE);
+  if (user) settleBankInterest(db,user.id,today,now);
   const character = user ? getCharacter(user.id) : null;
   const updated = character ? recoverEnergy(character, now) : null;
   if (character && updated.recoveredAt !== character.recoveredAt) saveCharacter(user.id, updated);
@@ -193,6 +196,8 @@ function snapshot(user) {
     mode: MODE,
     user: user ? { username: MODE === "solo" ? "單機玩家" : user.username } : null,
     character: updated,
+    bankAccount: updated ? bankOverview(db,user.id) : null,
+    bankLedger: updated ? bankLedger(db,user.id) : [],
     currentJob: currentJob ? { key: currentJob.key, name: currentJob.name, salary: currentJob.salary, payEvery: currentJob.payEvery } : null,
     maxBodyEnergy: updated ? maxBodyEnergy(updated.stats) : null,
     maxBrainEnergy: updated ? maxBrainEnergy(updated.stats) : null,
@@ -385,14 +390,21 @@ async function handle(req, res) {
       } });
     }
 
-    if (path === "/api/bank") {
-      const result = mutateCharacter(user.id, old => {
-        let next;
-        try { next = bankTransaction(old, data.action, data.amount); }
-        catch (error) { throw new HttpError(400, error.message); }
-        return { character: next };
-      });
-      return sendJson(res, 200, snapshot(user));
+    if (path === "/api/bank" || path === "/api/bank/term") {
+      const now = Date.now();
+      const today = calendarDay(now,GAME_TIMEZONE);
+      let result;
+      try {
+        if (path === "/api/bank") {
+          result = bankOperation(db,user.id,data.action,data.amount,today,now);
+        } else {
+          const action = data.action === "deposit" ? "termDeposit" :
+            data.action === "cancel" ? "termCancel" : data.action;
+          result = bankOperation(db,user.id,action,
+            action === "termCancel" ? data.amount : data.units,today,now);
+        }
+      } catch (error) { throw new HttpError(400,error.message); }
+      return sendJson(res, 200, { ...snapshot(user), bankResult: result });
     }
 
     if (path === "/api/house/room/config") {
