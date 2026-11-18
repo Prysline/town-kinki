@@ -16,6 +16,7 @@ import { initRoomsTables, ROOM_TYPES, setRoomSlots, viewRoom, addRoomPost, delet
 import { parseLegacyMeals, eatMeal, deriveCondition, hungerStatus, physiqueStatus, MEAL_COOLDOWN_MS } from "./dining.mjs";
 import { healthStatus, settleDailyHealth, conditionWithIllness, getTreatmentQuote, treatAtHospital } from "./health.mjs";
 import { initCharacterEvents, settleDailyIllnessEvent, listCharacterEvents } from "./events.mjs";
+import { parseLegacyInsurance, initInventoryTables, inventoryOverview, hasActiveHealthInsurance, listInsurancePurchases, buyHealthInsurance } from "./inventory.mjs";
 import { initBankTables, settleBankInterest, bankOperation, bankOverview, bankLedger, transferToPlayer, BANK_TRANSFER_LIMIT, NEW_MEMBER_DAYS, NEW_MEMBER_TRANSFER_LIMIT, bankLoanOverview, borrowBankLoan, payoffBankLoan } from "./banking.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -65,6 +66,7 @@ initHousingTables(db);
 initRoomsTables(db);
 initBankTables(db);
 initCharacterEvents(db);
+initInventoryTables(db);
 const houseCatalog = parseHouseCatalog(
   decodeLegacyText(readFileSync(resolve(REPO_ROOT, "town_ini.cgi"))),
   decodeLegacyText(readFileSync(resolve(REPO_ROOT, "command.pl")))
@@ -86,6 +88,7 @@ const meals = [
   ...parseLegacyMeals(decodeLegacyText(readFileSync(resolve(REPO_ROOT,"dat_dir","syokudou2.cgi"))),"second")
 ];
 const mealsByKey = new Map(meals.map(meal => [meal.key,meal]));
+const insuranceItem=parseLegacyInsurance(decodeLegacyText(readFileSync(resolve(REPO_ROOT,"dat_dir","syouhin.cgi"))));
 
 const sessionHash = token => createHash("sha256").update(token).digest("hex");
 const passwordHash = (password, salt) => scryptSync(password, salt, 64).toString("hex");
@@ -237,7 +240,9 @@ function snapshot(user) {
       maxBodyEnergy(updated.stats),maxBrainEnergy(updated.stats),now),updated) : null,
     health: updated ? healthStatus(updated) : null,
     healthEvents: updated ? listCharacterEvents(db,user.id) : [],
-    hospital: updated ? getTreatmentQuote(updated) : null,
+    hospital: updated ? getTreatmentQuote(updated,hasActiveHealthInsurance(db,user.id,insuranceItem,now)) : null,
+    insurance: updated ? inventoryOverview(db,user.id,insuranceItem,now) : null,
+    insurancePurchases: updated ? listInsurancePurchases(db,user.id) : [],
     hunger: updated ? hungerStatus(updated.lastMealAt,now) : null,
     physique: updated ? physiqueStatus(updated.height,updated.weight) : null,
     mealCooldownMs: updated && updated.lastMealAt ?
@@ -430,13 +435,24 @@ async function handle(req, res) {
     }
 
     if (path === "/api/hospital/treat") {
+      const now=Date.now();
       const result=mutateCharacter(user.id,old=>{
-        try {return treatAtHospital(old);}
+        try {return treatAtHospital(old,now,
+          hasActiveHealthInsurance(db,user.id,insuranceItem,now));}
         catch(error){throw new HttpError(400,error.message);}
       });
       return sendJson(res,200,{...snapshot(user),hospitalResult:{
         paid:result.paid,previousDisease:result.previousDisease
       }});
+    }
+
+    if (path === "/api/inventory/insurance/buy") {
+      let result;
+      try {
+        result=buyHealthInsurance(db,user.id,insuranceItem,
+          data.quantity,data.requestId,Date.now());
+      } catch(error) {throw new HttpError(400,error.message);}
+      return sendJson(res,200,{...snapshot(user),insuranceResult:result});
     }
 
     if (path === "/api/meal/eat") {
