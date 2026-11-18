@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {DatabaseSync} from "node:sqlite";
-import {STAT_KEYS} from "../src/engine.mjs";
+import {readFileSync} from "node:fs";
+import {STAT_KEYS,decodeLegacyText} from "../src/engine.mjs";
 import {
   initLegacyItemUseTables,listLegacyItemActions,listLegacyItemUseHistory,useLegacyItem
 } from "../src/legacy-item-use.mjs";
@@ -313,5 +314,39 @@ test("萬能藥與只治特定疾病的藥物保持分流，非法萬能格式�
     assert.equal(result.changes.healthIndex,15);
     assert.equal(read(db).health_index,2);
     assert.equal(listLegacyItemUseHistory(db,1).length,1);
+  }finally{db.close();}
+});
+
+
+test("原版商品表五款萬能藥可按原本的疾病指數增幅直接使用",()=>{
+  const catalog=decodeLegacyText(
+    readFileSync(new URL("../../dat_dir/syouhin.cgi",import.meta.url))
+  );
+  const rows=catalog.split(/\r?\n/).filter(line=>line.startsWith("薬<>"))
+    .map(line=>{
+      const fields=line.split("<>");
+      if(fields.length===34&&fields[33]==="")fields.pop();
+      return fields;
+    }).filter(fields=>fields[9]?.startsWith("万能,"));
+  const expected=[
+    ["ユンケル",3],["おばあちゃんの知恵薬",15],
+    ["おばあちゃんの知恵薬（スーパー）",20],
+    ["リポビタンD",2],["リコリス",2]
+  ];
+  assert.deepEqual(rows.map(fields=>[fields[1],Number(fields[9].split(",")[1])]),expected);
+  const db=createDb();
+  try{
+    db.prepare("UPDATE characters SET health_index=-80 WHERE user_id=1").run();
+    for(let i=0;i<rows.length;i++){
+      const fields=rows[i];
+      assert.equal(fields.length,33);
+      addItem(db,i+1,fields);
+      const oldIndex=read(db).health_index;
+      const result=use(db,i+1,"actual-medicine-"+(i+1));
+      assert.equal(result.changes.healthIndex,expected[i][1]);
+      assert.equal(read(db).health_index,oldIndex+expected[i][1]);
+    }
+    assert.equal(read(db).health_index,-38);
+    assert.equal(listLegacyItemUseHistory(db,1).length,5);
   }finally{db.close();}
 });
