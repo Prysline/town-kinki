@@ -112,7 +112,28 @@
           <p id="hospital-diagnosis" class="small"></p>
           <p id="hospital-cost" class="small"></p>
           <button id="hospital-treat" type="button">接受治療</button>
-          <p class="small">治療會將疾病指數恢復為 50。原版健康保險可減免費用，但目前尚未移植保險道具，僅使用原始未投保收費。</p>
+          <p class="small">治療會將疾病指數恢復為 50。有效的健康保險可將醫療費降為三分之一，折抵金額由伺服器依持有物判定。</p>
+        </section>
+        <section class="card" id="inventory-panel">
+          <div class="eyebrow">持有物</div>
+          <h3>健康保險與個人物品</h3>
+          <p id="insurance-status" class="small"></p>
+          <p class="small">原始「日用品／健康保険」標價 10,000 元，有效 30 天。Web 版暫用原始基準價直接購買，正式百貨、每日上架、玩家商店價格與庫存仍未移植。</p>
+          <form id="insurance-buy-form">
+            <label>購買份數
+              <select id="insurance-quantity" name="quantity">
+                <option value="1">1 份</option>
+                <option value="2">2 份</option>
+                <option value="3">3 份</option>
+                <option value="4">4 份</option>
+                <option value="5">5 份</option>
+              </select>
+            </label>
+            <p id="insurance-quote" class="small"></p>
+            <button type="submit" id="insurance-buy">購買健康保險</button>
+          </form>
+          <h4>近期購買紀錄</h4>
+          <div id="insurance-purchases"></div>
         </section>
         <section class="card" id="event-panel">
           <div class="eyebrow">日常生活</div>
