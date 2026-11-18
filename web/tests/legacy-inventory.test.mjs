@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { resolve, join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { initInventoryTables, hasActiveHealthInsurance, parseLegacyInsurance, DAY_MS } from "../src/inventory.mjs";
+import { decodeLegacyText } from "../src/engine.mjs";
 import { LEGACY_ITEM_FIELDS, parseLegacyInventory, importLegacyInventory,
   listLegacyInventoryItems, initLegacyInventoryTables } from "../src/legacy-inventory.mjs";
 
@@ -14,7 +15,7 @@ const here=resolve(dirname(fileURLToPath(import.meta.url)),"..");
 const original=resolve(here,"..");
 const ORIGINAL_NOW=1700000000000;
 const nowSecs=Math.floor(ORIGINAL_NOW/1000);
-const insurance=parseLegacyInsurance(readFileSync(join(original,"dat_dir","syouhin.cgi"),"utf8"));
+const insurance=parseLegacyInsurance(decodeLegacyText(readFileSync(join(original,"dat_dir","syouhin.cgi"))));
 function item(fields={}) {
   const base={
     category:"日用品",name:"健康保険",durability:"30",durability_unit:"日",
