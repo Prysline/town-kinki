@@ -226,12 +226,47 @@ function renderHouses() {
     const button = document.createElement("button");
     button.type = "submit";
     button.textContent = "儲存名稱";
-    box.append(img, title, where, label, button);
+    const saleInfo = document.createElement("p");
+    saleInfo.className = "small house-sale-info";
+    saleInfo.textContent = "原版出售退款（僅土地地價）：" + money(house.saleRefund);
+    const sellButton = document.createElement("button");
+    sellButton.type = "button";
+    sellButton.className = "secondary house-sell";
+    sellButton.textContent = "出售住宅";
+    sellButton.addEventListener("click", () => {
+      const confirmed = window.confirm(
+        "確定出售「" + house.name + "」嗎？\n" +
+        "將退還 " + money(house.saleRefund) + " 至現金，外觀與室內費用不退還。\n" +
+        "原位置會恢復為空地，出售後可以重新購屋。"
+      );
+      if (confirmed) action("house/sell", { houseId: house.id });
+    });
+    box.append(img, title, where, label, button, saleInfo, sellButton);
     box.addEventListener("submit", event => {
       event.preventDefault();
       action("house/rename", { houseId: house.id, name: input.value }, "已更新住宅名稱。");
     });
     listing.append(box);
+  }
+  const events = el("house-events");
+  events.replaceChildren();
+  if (!state.houseEvents?.length) {
+    const info = document.createElement("p");
+    info.className = "small";
+    info.textContent = "尚無住宅建造或出售紀錄。舊版 Web 建屋紀錄不會被虛構補入。";
+    events.append(info);
+  } else {
+    const list = document.createElement("ul");
+    list.className = "house-event-list";
+    for (const event of state.houseEvents) {
+      const item = document.createElement("li");
+      const date = new Date(event.occurredAt).toLocaleString("zh-TW");
+      item.textContent = date + "｜" +
+        (event.action === "sold" ? "出售退還 " : "建造支付 ") +
+        money(event.amount) + "｜" + event.townName + " " + event.location;
+      list.append(item);
+    }
+    events.append(list);
   }
   updateHouseQuote();
 }
@@ -391,6 +426,8 @@ async function action(path, data, message) {
       notify(messages.join(" "));
     } else if (path === "house/build") {
       notify("住宅建造完成，費用：" + money(state.houseResult.quote.total) + "。");
+    } else if (path === "house/sell") {
+      notify("住宅已出售，土地地價退還 " + money(state.houseSaleResult.refund) + " 至現金。");
     } else if (path === "train") {
       const result = state.trainingResult;
       const gains = Object.entries(result.gained)
