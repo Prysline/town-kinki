@@ -189,7 +189,7 @@ export function transferToPlayer(db, senderId, recipientName, amount, today,
     ).get(senderId);
     if (!sender) throw new Error("請先建立角色");
     const recipient = db.prepare(
-      "SELECT c.user_id,c.name,u.created_at FROM characters c JOIN users u ON u.id=c.user_id WHERE c.name=?"
+      "SELECT user_id,name,created_at FROM characters WHERE name=?"
     ).get(recipientName.trim());
     if (!recipient) throw new Error("找不到指定的收款角色");
     if (recipient.user_id === senderId) throw new Error("不能轉帳給自己的角色");
@@ -205,7 +205,7 @@ export function transferToPlayer(db, senderId, recipientName, amount, today,
       return { transferId:previous.id,recipientName:recipient.name,amount,duplicate:true };
     }
 
-    // 原版以收款角色首次存取時間計算註冊七天；Web 版採用帳號建立時間。
+    // 原版依角色 first_access 判斷註冊七天。舊 Web 存檔沒有原建立日期時預設 0，視為既有角色。
     if (now - recipient.created_at < NEW_MEMBER_DAYS * DAY_MS &&
         amount >= NEW_MEMBER_TRANSFER_LIMIT)
       throw new Error("註冊未滿七天的收款人，單筆不得達 100 萬元");
