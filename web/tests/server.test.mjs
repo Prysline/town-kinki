@@ -1211,3 +1211,36 @@ test("多人：醫療費由當前帳號自行負擔，生病玩家與健康玩�
     assert.equal((await api(srv.url,"state",undefined,b.cookie)).result.character.money,90000);
   } finally {await srv.stop();}
 });
+
+
+test("疾病跨日結算：首次建基準、每日僅一次且完整保存於原有角色表",async()=>{
+  const srv=await start("solo");
+  try {
+    const created=await api(srv.url,"character",{
+      name:"跨日健康居民",gender:"other",stats:defaultStats()
+    });
+    assert.equal(created.status,200);
+    assert.equal(created.result.health.index,50);
+    assert.ok(created.result.health.lastSettledDay);
+    const db=new DatabaseSync(join(srv.directory,"solo.sqlite"));
+    try {
+      db.prepare(
+        "UPDATE characters SET health_index=-1,last_health_day='2025-01-01',last_meal_at=? WHERE name='跨日健康居民'"
+      ).run(Date.now()-2*3600000);
+    } finally {db.close();}
+    const settled=await api(srv.url,"state");
+    assert.equal(settled.status,200);
+    assert.equal(settled.result.health.index,1);
+    assert.equal(settled.result.health.key,"healthy");
+    assert.equal(settled.result.health.lastSettledDay,created.result.health.lastSettledDay);
+    assert.equal((await api(srv.url,"state")).result.health.index,1);
+    assert.equal((await api(srv.url,"state")).result.health.index,1);
+    const saved=new DatabaseSync(join(srv.directory,"solo.sqlite"));
+    try {
+      const row=saved.prepare("SELECT health_index,last_health_day,last_meal_at FROM characters WHERE name='跨日健康居民'").get();
+      assert.equal(row.health_index,1);
+      assert.equal(row.last_health_day,created.result.health.lastSettledDay);
+      assert.ok(row.last_meal_at>0);
+    } finally {saved.close();}
+  } finally {await srv.stop();}
+});
