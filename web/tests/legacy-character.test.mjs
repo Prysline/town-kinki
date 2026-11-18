@@ -148,7 +148,7 @@ test("正式匯入多人新帳號採獨立密碼，不保存原始明文密碼�
     assert.equal(ref.source_file,"log.cgi");
     assert.ok(/^[a-f0-9]{64}$/.test(ref.source_hash));
     assert.equal(ref.unmapped_json.includes("OLD_PLAINTEXT_SECRET"),false);
-    assert.equal(ref.unmapped_json.includes("1700000000"),true);
+    assert.equal(ref.unmapped_json.includes("1690000000"),true);
     assert.throws(()=>importLegacyCharacter(db,inspected,{...opts,username:"anotheruser"}),/已匯入/);
     assert.equal(db.prepare("SELECT COUNT(*) n FROM users").get().n,1);
     assert.equal(db.prepare("SELECT COUNT(*) n FROM characters").get().n,1);
