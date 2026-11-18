@@ -44,7 +44,8 @@ for (const [column, definition] of [
   ["mastered_job", "TEXT"],
   ["last_school_day", "TEXT NOT NULL DEFAULT ''"],
   ["last_gym_at", "INTEGER NOT NULL DEFAULT 0"],
-  ["gym_ready_at", "INTEGER NOT NULL DEFAULT 0"]
+  ["gym_ready_at", "INTEGER NOT NULL DEFAULT 0"],
+  ["created_at", "INTEGER NOT NULL DEFAULT 0"]
 ]) {
   const currentColumns = db.prepare("PRAGMA table_info(characters)").all();
   if (!currentColumns.some(info => info.name === column)) {
@@ -144,11 +145,11 @@ function saveCharacter(userId, c) {
 }
 
 function addCharacter(userId, c) {
-  db.prepare("INSERT INTO characters(user_id,name,gender,town_id,money,bank,body_energy,brain_energy,recovered_at,job_id,work_progress,last_work_at,work_count,height,bmi,stats_json,weight,job_experience,job_work_count,mastered_job,last_school_day,last_gym_at,gym_ready_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+  db.prepare("INSERT INTO characters(user_id,name,gender,town_id,money,bank,body_energy,brain_energy,recovered_at,job_id,work_progress,last_work_at,work_count,height,bmi,stats_json,weight,job_experience,job_work_count,mastered_job,last_school_day,last_gym_at,gym_ready_at,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
     .run(userId,c.name,c.gender,c.townId,c.money,c.bank,c.bodyEnergy,c.brainEnergy,
       c.recoveredAt,c.jobId,c.workProgress,c.lastWorkAt,c.workCount,c.height,
       c.bmi,JSON.stringify(c.stats),c.weight,c.jobExperience,c.jobWorkCount,c.masteredJob,
-      c.lastSchoolDay,c.lastGymAt,c.gymReadyAt);
+      c.lastSchoolDay,c.lastGymAt,c.gymReadyAt,c.recoveredAt);
 }
 
 function mutateCharacter(userId, callback) {
