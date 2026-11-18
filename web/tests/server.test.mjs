@@ -1,12 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createServer } from "node:net";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
+import { LEGACY_CHARACTER_FIELDS } from "../src/legacy-character.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const delay = ms => new Promise(done => setTimeout(done, ms));
@@ -929,4 +930,63 @@ test("多人：新註冊收款人與並行轉帳的金額安全限制",async()=>
     try {assert.equal(saved.prepare("SELECT COUNT(*) AS n FROM bank_transfers").get().n,1);}
     finally {saved.close();}
   } finally {await srv.stop();}
+});
+
+
+test("原版角色匯入後可用全新多人帳號密碼登入，資產與能力維持，原版密碼不被沿用",async()=>{
+  const srv=await start("multi");
+  try{
+    const original=Array(LEGACY_CHARACTER_FIELDS.length).fill("");
+    const properties={
+      k_id:"00880",name:"舊版居民",pass:"UNSAFE_OLD_CGI_PASSWORD",
+      money:"350000",bank:"1200000",job:"日払いバイト",
+      first_access:"1710000000",sex:"m",super_teiki:"2000000",
+      sintyou:"180",taijuu:"75",energy:"30",nou_energy:"30",
+      job_keiken:"200",job_kaisuu:"3"
+    };
+    for(const key of [
+      "kokugo","suugaku","rika","syakai","eigo","ongaku","bijutu",
+      "looks","tairyoku","kenkou","speed","power","wanryoku","kyakuryoku",
+      "love","unique","etti"
+    ])properties[key]="20";
+    for(const [key,value]of Object.entries(properties))
+      original[LEGACY_CHARACTER_FIELDS.indexOf(key)]=value;
+    const path=join(srv.directory,"legacy-sample.cgi");
+    writeFileSync(path,original.join("<>")+"<>\n");
+    const imported=spawnSync(process.execPath,[
+      "scripts/legacy-character.mjs","--file",path,"--mode","multi",
+      "--username","restoredplayer","--apply","--accept-partial"
+    ],{
+      cwd:root,encoding:"utf8",
+      env:{...process.env,DATA_DIR:srv.directory,TOWN_IMPORT_PASSWORD:"separate-modern-password"}
+    });
+    assert.equal(imported.status,0,imported.stderr);
+    assert.doesNotMatch(imported.stdout,/UNSAFE_OLD_CGI_PASSWORD/);
+    const old=await api(srv.url,"login",{username:"restoredplayer",password:"UNSAFE_OLD_CGI_PASSWORD"});
+    assert.equal(old.status,401);
+    const login=await api(srv.url,"login",{username:"restoredplayer",password:"separate-modern-password"});
+    assert.equal(login.status,200);
+    const profile=await api(srv.url,"state",undefined,login.cookie);
+    assert.equal(profile.status,200);
+    assert.equal(profile.result.character.name,"舊版居民");
+    assert.equal(profile.result.character.money,350000);
+    assert.equal(profile.result.character.bank,1200000);
+    assert.equal(profile.result.character.stats.kokugo,20);
+    assert.equal(profile.result.character.jobExperience,200);
+    assert.equal(profile.result.bankAccount.termBalance,2000000);
+    const db=new DatabaseSync(join(srv.directory,"multi.sqlite"));
+    try{
+      const row=db.prepare("SELECT * FROM legacy_character_imports WHERE original_id='00880'").get();
+      assert.ok(row);
+      assert.equal(row.original_name,"舊版居民");
+      assert.equal(row.unmapped_json.includes("UNSAFE_OLD_CGI_PASSWORD"),false);
+    }finally{db.close();}
+    const again=spawnSync(process.execPath,[
+      "scripts/legacy-character.mjs","--file",path,"--mode","multi",
+      "--username","anotherrestored","--apply","--accept-partial"
+    ],{cwd:root,encoding:"utf8",
+      env:{...process.env,DATA_DIR:srv.directory,TOWN_IMPORT_PASSWORD:"another-modern-password"}});
+    assert.notEqual(again.status,0);
+    assert.match(again.stderr,/已匯入/);
+  }finally{await srv.stop();}
 });
