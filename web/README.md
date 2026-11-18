@@ -71,9 +71,8 @@ web/
   src/training.mjs     舊版學校、健身房資料解析與訓練規則
   src/town-map.mjs     原版城鎮資料格式、格子及安全的圖示對照
   src/town-storage.mjs SQLite 城鎮地圖儲存與原始檔匯入
-  src/housing.mjs      原版建造／出售、所有權、交易紀錄與原子交易
+  src/housing.mjs      住宅建造／出售／改裝、所有權、收費及交易紀錄
   src/rooms.mjs        住宅室內配置、兩種留言板與訪客權限
-  src/housing.mjs      另包含室內／外觀改裝費用與交易紀錄
   scripts/town-map.mjs 街區離線匯入／匯出指令
   public/index.html    繁體中文網頁
   public/app.js        瀏覽器互動
