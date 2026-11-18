@@ -15,6 +15,7 @@ import { parseHouseCatalog, initHousingTables, listHouses, publicHouseCatalog, b
 import { initRoomsTables, ROOM_TYPES, setRoomSlots, viewRoom, addRoomPost, deleteRoomPost } from "./rooms.mjs";
 import { parseLegacyMeals, eatMeal, deriveCondition, hungerStatus, physiqueStatus, MEAL_COOLDOWN_MS } from "./dining.mjs";
 import { healthStatus, settleDailyHealth, conditionWithIllness, getTreatmentQuote, treatAtHospital } from "./health.mjs";
+import { initCharacterEvents, settleDailyIllnessEvent, listCharacterEvents } from "./events.mjs";
 import { initBankTables, settleBankInterest, bankOperation, bankOverview, bankLedger, transferToPlayer, BANK_TRANSFER_LIMIT, NEW_MEMBER_DAYS, NEW_MEMBER_TRANSFER_LIMIT, bankLoanOverview, borrowBankLoan, payoffBankLoan } from "./banking.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -50,7 +51,8 @@ for (const [column, definition] of [
   ["created_at", "INTEGER NOT NULL DEFAULT 0"],
   ["last_meal_at", "INTEGER NOT NULL DEFAULT 0"],
   ["health_index", "INTEGER NOT NULL DEFAULT 50"],
-  ["last_health_day", "TEXT NOT NULL DEFAULT ''"]
+  ["last_health_day", "TEXT NOT NULL DEFAULT ''"],
+  ["last_event_day", "TEXT NOT NULL DEFAULT ''"]
 ]) {
   const currentColumns = db.prepare("PRAGMA table_info(characters)").all();
   if (!currentColumns.some(info => info.name === column)) {
@@ -62,6 +64,7 @@ initTownMapTable(db);
 initHousingTables(db);
 initRoomsTables(db);
 initBankTables(db);
+initCharacterEvents(db);
 const houseCatalog = parseHouseCatalog(
   decodeLegacyText(readFileSync(resolve(REPO_ROOT, "town_ini.cgi"))),
   decodeLegacyText(readFileSync(resolve(REPO_ROOT, "command.pl")))
@@ -139,7 +142,8 @@ function characterFromRow(row) {
     masteredJob: row.mastered_job, stats: JSON.parse(row.stats_json),
     lastSchoolDay: row.last_school_day, lastGymAt: row.last_gym_at,
     gymReadyAt: row.gym_ready_at, lastMealAt: row.last_meal_at,
-    healthIndex: row.health_index, lastHealthDay: row.last_health_day
+    healthIndex: row.health_index, lastHealthDay: row.last_health_day,
+    lastEventDay: row.last_event_day
   };
 }
 
@@ -148,21 +152,21 @@ function getCharacter(userId) {
 }
 
 function saveCharacter(userId, c) {
-  db.prepare("UPDATE characters SET town_id=?,money=?,bank=?,body_energy=?,brain_energy=?,recovered_at=?,job_id=?,work_progress=?,last_work_at=?,work_count=?,height=?,bmi=?,stats_json=?,weight=?,job_experience=?,job_work_count=?,mastered_job=?,last_school_day=?,last_gym_at=?,gym_ready_at=?,last_meal_at=?,health_index=?,last_health_day=? WHERE user_id=?")
+  db.prepare("UPDATE characters SET town_id=?,money=?,bank=?,body_energy=?,brain_energy=?,recovered_at=?,job_id=?,work_progress=?,last_work_at=?,work_count=?,height=?,bmi=?,stats_json=?,weight=?,job_experience=?,job_work_count=?,mastered_job=?,last_school_day=?,last_gym_at=?,gym_ready_at=?,last_meal_at=?,health_index=?,last_health_day=?,last_event_day=? WHERE user_id=?")
     .run(c.townId, c.money, c.bank, c.bodyEnergy, c.brainEnergy, c.recoveredAt,
       c.jobId, c.workProgress, c.lastWorkAt, c.workCount, c.height, c.bmi,
       JSON.stringify(c.stats), c.weight, c.jobExperience, c.jobWorkCount, c.masteredJob,
       c.lastSchoolDay, c.lastGymAt, c.gymReadyAt, c.lastMealAt ?? 0,
-      c.healthIndex ?? 50,c.lastHealthDay ?? "",userId);
+      c.healthIndex ?? 50,c.lastHealthDay ?? "",c.lastEventDay ?? "",userId);
 }
 
 function addCharacter(userId, c) {
-  db.prepare("INSERT INTO characters(user_id,name,gender,town_id,money,bank,body_energy,brain_energy,recovered_at,job_id,work_progress,last_work_at,work_count,height,bmi,stats_json,weight,job_experience,job_work_count,mastered_job,last_school_day,last_gym_at,gym_ready_at,created_at,last_meal_at,health_index,last_health_day) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+  db.prepare("INSERT INTO characters(user_id,name,gender,town_id,money,bank,body_energy,brain_energy,recovered_at,job_id,work_progress,last_work_at,work_count,height,bmi,stats_json,weight,job_experience,job_work_count,mastered_job,last_school_day,last_gym_at,gym_ready_at,created_at,last_meal_at,health_index,last_health_day,last_event_day) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
     .run(userId,c.name,c.gender,c.townId,c.money,c.bank,c.bodyEnergy,c.brainEnergy,
       c.recoveredAt,c.jobId,c.workProgress,c.lastWorkAt,c.workCount,c.height,
       c.bmi,JSON.stringify(c.stats),c.weight,c.jobExperience,c.jobWorkCount,c.masteredJob,
       c.lastSchoolDay,c.lastGymAt,c.gymReadyAt,c.recoveredAt,c.lastMealAt ?? 0,
-      c.healthIndex ?? 50,c.lastHealthDay ?? "");
+      c.healthIndex ?? 50,c.lastHealthDay ?? "",c.lastEventDay ?? "");
 }
 
 function mutateCharacter(userId, callback) {
@@ -192,6 +196,11 @@ function snapshot(user) {
     if (updated.recoveredAt !== character.recoveredAt ||
         updated.lastHealthDay !== character.lastHealthDay ||
         updated.healthIndex !== character.healthIndex) saveCharacter(user.id,updated);
+    // 原版 event_happen 會在主畫面隨機抽取，Web 每日只抽一次。
+    if ((updated.lastEventDay??"")<today) {
+      settleDailyIllnessEvent(db,user.id,today,now);
+      updated = getCharacter(user.id);
+    }
   }
   const currentJob = updated?.jobId ? jobsByKey.get(updated.jobId) : null;
   const ownedHouses = updated ? listHouses(db, user.id).map(h => ({
@@ -227,6 +236,7 @@ function snapshot(user) {
     condition: updated ? conditionWithIllness(deriveCondition(updated,
       maxBodyEnergy(updated.stats),maxBrainEnergy(updated.stats),now),updated) : null,
     health: updated ? healthStatus(updated) : null,
+    healthEvents: updated ? listCharacterEvents(db,user.id) : [],
     hospital: updated ? getTreatmentQuote(updated) : null,
     hunger: updated ? hungerStatus(updated.lastMealAt,now) : null,
     physique: updated ? physiqueStatus(updated.height,updated.weight) : null,
