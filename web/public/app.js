@@ -647,6 +647,7 @@ function renderInsurance() {
     note.className="small";
     note.textContent="尚無購買紀錄。";
     target.append(note);
+    renderLegacyItems();
     return;
   }
   const list=document.createElement("ol");
@@ -657,6 +658,29 @@ function renderInsurance() {
       "｜"+purchase.quantity+" 份｜支付 "+money(purchase.paid)+
       "｜有效期累加至 "+new Date(purchase.active_until).toLocaleString("zh-TW");
     list.append(item);
+  }
+  target.append(list);
+  renderLegacyItems();
+}
+
+function renderLegacyItems() {
+  const target=el("legacy-inventory-list");
+  target.replaceChildren();
+  if(!state.legacyInventory?.length){
+    const note=document.createElement("p");
+    note.className="small";
+    note.textContent="尚未匯入原版物品存檔。";
+    target.append(note);
+    return;
+  }
+  const list=document.createElement("ol");
+  list.className="health-event-list";
+  for(const item of state.legacyInventory){
+    const row=document.createElement("li");
+    row.textContent=item.category+"｜"+item.name+"｜耐久 "+
+      item.durability+" "+(item.unit||"（未標示單位）")+
+      "｜原始存檔第 "+item.sourceLine+" 行（唯讀）";
+    list.append(row);
   }
   target.append(list);
 }
