@@ -852,7 +852,7 @@ test("多人：收款角色名稱轉帳、匯款雙方帳簿與重複請求的�
     const db=new DatabaseSync(join(srv.directory,"multi.sqlite"));
     try {
       db.prepare("UPDATE characters SET bank=5000000 WHERE name='匯款居民甲'").run();
-      db.prepare("UPDATE users SET created_at=? WHERE username='receiverPlayerAccount'")
+      db.prepare("UPDATE characters SET created_at=? WHERE name='收款居民乙'")
         .run(Date.now()-8*86400000);
     } finally {db.close();}
     const request={
