@@ -111,7 +111,8 @@ function applyInterest(db, userId, today, now) {
   if (ordinaryInterest) recordBankEntry(db,userId,"ordinary","普通存款利息",0,ordinaryInterest,ordinaryBalance,now);
   if (termInterest) recordBankEntry(db,userId,"term","超級定期利息",0,termInterest,termBalance,now);
   const repayment = applyDailyLoanRepayment(db,userId,today,now);
-  return { ordinary:ordinaryInterest, term:termInterest, applied:true, repayment };
+  return { ordinary:ordinaryInterest, term:termInterest, applied:true,
+    ...(repayment ? { repayment } : {}) };
 }
 export function settleBankInterest(db,userId,today,now=Date.now()) {
   db.exec("BEGIN IMMEDIATE");
