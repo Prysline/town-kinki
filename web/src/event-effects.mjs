@@ -1,4 +1,5 @@
 // 從原版 event.pl::event_happen 移植不需額外道具與其他模組的事件分支。
+import { maxBodyEnergy, maxBrainEnergy } from "./engine.mjs";
 // 原 CGI 可產生負數金錢／能力；Web 版為保持既有非負值模型將扣除量限制在當前持有量。
 const STAT_EVENTS = Object.freeze({
   7:{key:"literature",title:"國語事件",stat:"kokugo",label:"國語",
@@ -13,7 +14,7 @@ const STAT_EVENTS = Object.freeze({
     positive:"對藝術產生興趣",negative:"在美術課睡著了"}
 });
 export const NON_ITEM_EVENT_IDS = Object.freeze([
-  1,2,5,6,7,8,9,10,12,13,14,24,25,41,43
+  1,2,5,6,7,8,9,10,12,13,14,24,25,26,27,33,39,41,43
 ]);
 
 function draw(random,n) {
@@ -70,6 +71,35 @@ export function resolveNonItemEvent(originalId,character,random=Math.random) {
     changes.bmi=computed.bmi;
     effects.weight=computed.actualDelta;
     return computed.actualDelta;
+  }
+  function adjustEnergy(column,delta,limit=null) {
+    const old=int(character[column],column==="body_energy"?"身體能量":"頭腦能量");
+    const next=Math.max(0,Math.min(limit??Number.MAX_SAFE_INTEGER,old+delta));
+    if(!Number.isSafeInteger(next))throw new Error("事件能量值超出安全範圍");
+    changes[column]=next;
+    effects[column==="body_energy"?"bodyEnergy":"brainEnergy"]=next-old;
+    return next-old;
+  }
+  function grantEnergy(amount){
+    const stats=JSON.parse(character.stats_json);
+    const bodyMax=maxBodyEnergy(stats),brainMax=maxBrainEnergy(stats);
+    if(!Number.isSafeInteger(bodyMax)||bodyMax<0||!Number.isSafeInteger(brainMax)||brainMax<0)
+      throw new Error("角色能量上限資料不正確");
+    const body=adjustEnergy("body_energy",amount,bodyMax);
+    const brain=adjustEnergy("brain_energy",amount,brainMax);
+    return {body,brain};
+  }
+  function subtractEnergy(column,divisor) {
+    const existing=int(character[column],column);
+    return adjustEnergy(column,-Math.floor(existing/divisor));
+  }
+  function addJobExperience(delta){
+    const old=int(character.job_experience,"職業經驗");
+    const next=Math.max(0,old+delta);
+    if(!Number.isSafeInteger(next))throw new Error("事件職業經驗超出安全範圍");
+    changes.job_experience=next;
+    effects.jobExperience=next-old;
+    return next-old;
   }
   switch(originalId) {
     case 1: {
@@ -143,6 +173,57 @@ export function resolveNonItemEvent(originalId,character,random=Math.random) {
       event.key="osakaScolding";event.title="大阪阿姨說教";
       const loss= -addWeight(-1);
       event.description="被大阪阿姨說教後精神緊繃，體重減少 "+loss+" 公斤。";
+      break;
+    }
+    case 26:{
+      event.key="streetFight";event.title="街頭衝突";
+      const outcome=draw(random,5);
+      if(outcome===1){
+        const loss=-subtractEnergy("body_energy",3);
+        event.description="遭到街頭衝突波及，身體能量減少 "+loss+" 點。";
+      }else if(outcome===2){
+        const loss=-subtractEnergy("brain_energy",3);
+        event.description="遭到街頭衝突波及，頭腦能量減少 "+loss+" 點。";
+      }else if(outcome===3){
+        const body=-subtractEnergy("body_energy",4);
+        const brain=-subtractEnergy("brain_energy",4);
+        event.description="遭到街頭衝突波及，身體與頭腦能量分別減少 "+body+"、"+brain+" 點。";
+      }else{
+        event.description="發現街頭衝突將要發生，及時離開而沒有受傷。";
+      }
+      break;
+    }
+    case 27:{
+      event.key="hotspring";event.title="溫泉招待券";
+      const gained=grantEnergy(1000);
+      event.description="收到溫泉招待券，身體與頭腦能量分別恢復 "+gained.body+"、"+gained.brain+" 點。";
+      break;
+    }
+    case 33:{
+      event.key="localEncounter";event.title="地方偶遇";
+      const outcome=draw(random,3);
+      if(outcome===1){
+        const change=changeStat(character.stats_json,"unique",3);
+        changes.stats_json=change.stats_json;
+        effects.stats={unique:change.actualDelta};
+        event.description="遇見吉本藝人，有趣度增加 "+change.actualDelta+" 點。";
+      }else if(outcome===2){
+        const loss=-subtractEnergy("body_energy",3);
+        event.description="在奈良被鹿踩到，身體能量減少 "+loss+" 點。";
+      }else{
+        const loss=-subtractEnergy("body_energy",2);
+        const cost=-addMoney(-50000);
+        event.description="在琵琶湖溺水，身體能量減少 "+loss+" 點，支付救援費 "+cost+" 元。";
+      }
+      break;
+    }
+    case 39:{
+      event.key="workFocus";event.title="工作專注度";
+      const fullEnergy=int(character.body_energy,"身體能量")>=500 &&
+        int(character.brain_energy,"頭腦能量")>=500;
+      const change=addJobExperience(fullEnergy?10:-5);
+      event.description=fullEnergy?"工作特別專注，職業經驗增加 "+change+" 點。":
+        "工作時精神不濟，職業經驗減少 "+(-change)+" 點。";
       break;
     }
     case 41:{
