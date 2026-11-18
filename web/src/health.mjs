@@ -1,6 +1,6 @@
 // 原版 town_maker.cgi 的疾病指數與 basic.cgi::byouin 診療。
 import { deriveCondition } from "./dining.mjs";
-import { maxBodyEnergy, maxBrainEnergy } from "./engine.mjs";
+
 
 export const DEFAULT_HEALTH_INDEX = 50;
 export const TREATMENT_COSTS = Object.freeze({
@@ -35,7 +35,7 @@ export function healthStatus(character) {
   const illness=diseaseFromIndex(index);
   return {...illness,index,lastSettledDay:character.lastHealthDay??""};
 }
-export function settleDailyHealth(character,day,now=Date.now()) {
+export function settleDailyHealth(character,day,maxBody,maxBrain,now=Date.now()) {
   if (typeof day!=="string"||!/^\d{4}-\d{2}-\d{2}$/.test(day))
     throw new Error("疾病結算日期不正確");
   const previous=character.lastHealthDay??"";
@@ -43,8 +43,7 @@ export function settleDailyHealth(character,day,now=Date.now()) {
   if (!previous) return {character:{...character,lastHealthDay:day,
     healthIndex:character.healthIndex??DEFAULT_HEALTH_INDEX},
     applied:false,delta:0};
-  const condition=deriveCondition(character,maxBodyEnergy(character.stats),
-    maxBrainEnergy(character.stats),now);
+  const condition=deriveCondition(character,maxBody,maxBrain,now);
   // 舊角色尚未有餐點時間時只做首次登記，不追溯疾病演化。
   if (condition.provisional) return {character:{...character,lastHealthDay:day},
     applied:false,delta:0};
