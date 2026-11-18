@@ -95,6 +95,21 @@ export function initHousingTables(db) {
     ");"
   ].join(""));
   db.exec("CREATE INDEX IF NOT EXISTS house_events_user_idx ON house_events(user_id,id)");
+  // 舊版 house_events 的 CHECK 僅容許 built/sold。用獨立表保存改裝紀錄，免重建既有資料表。
+  db.exec([
+    "CREATE TABLE IF NOT EXISTS house_remodel_events(",
+    "id INTEGER PRIMARY KEY AUTOINCREMENT,",
+    "user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,",
+    "house_id INTEGER NOT NULL,",
+    "town_id INTEGER NOT NULL,",
+    "row_num INTEGER NOT NULL,",
+    "column_num INTEGER NOT NULL,",
+    "old_image TEXT NOT NULL, new_image TEXT NOT NULL,",
+    "old_interior_rank INTEGER NOT NULL, new_interior_rank INTEGER NOT NULL,",
+    "amount INTEGER NOT NULL CHECK(amount>0),",
+    "created_at INTEGER NOT NULL);",
+    "CREATE INDEX IF NOT EXISTS house_remodel_events_user_idx ON house_remodel_events(user_id,id);"
+  ].join("\n"));
 }
 
 export function listHouses(db, ownerUserId = null) {
@@ -145,6 +160,82 @@ export function listHouseEvents(db, userId, limit = 20) {
     houseName: row.house_name, image: row.image,
     amount: row.amount, occurredAt: row.created_at
   }));
+}
+
+export function getHouseRemodelQuote(catalog, house, options) {
+  if (!house || !Number.isSafeInteger(house.id) || house.id < 1)
+    throw new Error("找不到有效的住宅");
+  if (!options || typeof options !== "object" || Array.isArray(options))
+    throw new Error("無效的改裝選項");
+  // 原版 house_change：空外觀與 99 級代表不修改；Web API 則統一使用 null。
+  const imageChanged = options.image !== null;
+  const interiorChanged = options.interiorRank !== null;
+  if (!imageChanged && !interiorChanged) throw new Error("至少需要選擇一項改裝");
+  const image = imageChanged ? catalog.houses.find(x => x.id === options.image) : null;
+  if (imageChanged && (!image || !image.supported))
+    throw new Error("尚未支援的房屋外觀或價格");
+  const rank = interiorChanged ? options.interiorRank : house.interiorRank;
+  if (!Number.isInteger(rank) || rank < 0 || rank > 3)
+    throw new Error("無效的房屋室內等級");
+  const imageWan = imageChanged ? image.priceWan : 0;
+  const interiorWan = interiorChanged ? catalog.interiorWan[rank] : 0;
+  const totalWan = imageWan + interiorWan;
+  const total = totalWan * 10000;
+  if (!Number.isSafeInteger(total) || total <= 0)
+    throw new Error("改裝費用超出目前支援範圍");
+  return {
+    image: imageChanged ? image.image : house.image,
+    interiorRank: rank, oldImage: house.image,
+    oldInteriorRank: house.interiorRank,
+    imageWan, interiorWan, totalWan, total
+  };
+}
+
+export function listHouseRemodelEvents(db, userId, limit = 20) {
+  if (!Number.isSafeInteger(userId) || userId < 1) throw new Error("無效的玩家");
+  const capped = Number.isSafeInteger(limit) ? Math.max(1, Math.min(limit, 50)) : 20;
+  return db.prepare(
+    "SELECT id,house_id,town_id,row_num,column_num,old_image,new_image,old_interior_rank,new_interior_rank,amount,created_at FROM house_remodel_events WHERE user_id=? ORDER BY id DESC LIMIT ?"
+  ).all(userId,capped).map(row => ({
+    id:row.id,houseId:row.house_id,townId:row.town_id,
+    townName:TOWNS[row.town_id]?.name ?? "未知城鎮",
+    location:"ABCDEFGHIJKL"[row.row_num] + (row.column_num + 1),
+    oldImage:row.old_image,newImage:row.new_image,
+    oldInteriorRank:row.old_interior_rank,newInteriorRank:row.new_interior_rank,
+    amount:row.amount,occurredAt:row.created_at
+  }));
+}
+
+export function remodelHouse(db, catalog, userId, houseId, options, now = Date.now()) {
+  if (!Number.isSafeInteger(houseId) || houseId < 1) throw new Error("無效的房屋編號");
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    const house = db.prepare("SELECT * FROM houses WHERE id=? AND owner_user_id=?").get(houseId,userId);
+    if (!house) throw new Error("找不到你擁有的房屋");
+    const quote = getHouseRemodelQuote(catalog, house, options);
+    const character = db.prepare("SELECT money FROM characters WHERE user_id=?").get(userId);
+    if (!character) throw new Error("請先建立角色");
+    if (character.money < quote.total) throw new Error("現金不足以支付改裝費");
+    const newMoney = character.money - quote.total;
+    if (!Number.isSafeInteger(newMoney) || newMoney < 0) throw new Error("改裝後金額超出可處理範圍");
+    const map = readTownMap(db, house.town_id);
+    if (map.tiles[house.row_num*16+house.column_num] !==
+        "webhouse_" + house.id + "=" + house.original_plot)
+      throw new Error("街區與住宅資料不一致，停止改裝以避免資料遺失");
+    // 不改地圖識別碼與房屋 ID，只改外觀與室內等級；室內欄位會依新等級顯示。
+    db.prepare("UPDATE houses SET image=?,interior_rank=? WHERE id=? AND owner_user_id=?")
+      .run(quote.image,quote.interiorRank,house.id,userId);
+    db.prepare("UPDATE characters SET money=? WHERE user_id=?").run(newMoney,userId);
+    db.prepare(
+      "INSERT INTO house_remodel_events(user_id,house_id,town_id,row_num,column_num,old_image,new_image,old_interior_rank,new_interior_rank,amount,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)"
+    ).run(userId,house.id,house.town_id,house.row_num,house.column_num,
+      quote.oldImage,quote.image,quote.oldInteriorRank,quote.interiorRank,quote.total,now);
+    db.exec("COMMIT");
+    return {houseId,quote};
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
 }
 
 export function sellHouse(db, catalog, userId, houseId, now = Date.now()) {
