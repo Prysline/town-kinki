@@ -8,6 +8,7 @@ import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
 import { LEGACY_CHARACTER_FIELDS } from "../src/legacy-character.mjs";
+import { initLegacyInventoryTables } from "../src/legacy-inventory.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const delay = ms => new Promise(done => setTimeout(done, ms));
@@ -1419,5 +1420,76 @@ test("多人：健康保險只能由本人購買使用，對方不可藉請求�
     const otherAgain=await api(srv.url,"state",undefined,b.cookie);
     assert.equal(otherAgain.result.character.money,90000);
     assert.equal(otherAgain.result.insurancePurchases.length,0);
+  }finally{await srv.stop();}
+});
+
+
+test("單機：原版物品封存透過狀態快照唯讀顯示，不提供未實作的道具使用 API",async()=>{
+  const srv=await start("solo");
+  try{
+    const created=await api(srv.url,"character",{
+      name:"原版物品展示",gender:"other",stats:defaultStats()
+    });
+    assert.equal(created.status,200);
+    assert.deepEqual(created.result.legacyInventory,[]);
+    const db=new DatabaseSync(join(srv.directory,"solo.sqlite"));
+    try {
+      initLegacyInventoryTables(db);
+      const userId=db.prepare("SELECT user_id FROM characters WHERE name='原版物品展示'").get().user_id;
+      db.prepare([
+        "INSERT INTO legacy_inventory_items(user_id,original_id,source_line,category,original_name,",
+        "effect,durability,durability_unit,purchased_at,last_used_at,raw_fields_json)",
+        "VALUES(?,?,?,?,?,?,?,?,?,?,?)"
+      ].join(" ")).run(userId,"00042",1,"薬","原版秘藥","万能,20",2,"回",null,0,"[]");
+    }finally{db.close();}
+    const state=await api(srv.url,"state");
+    assert.equal(state.status,200);
+    assert.deepEqual(state.result.legacyInventory,[{
+      sourceLine:1,category:"薬",name:"原版秘藥",
+      durability:2,unit:"回",purchasedAt:null,readOnly:true
+    }]);
+    assert.equal((await api(srv.url,"legacy/inventory/use",{id:1})).status,404);
+    assert.equal((await api(srv.url,"legacy/inventory/sell",{id:1})).status,404);
+    assert.equal((await api(srv.url,"state")).result.character.money,
+      created.result.character.money);
+  }finally{await srv.stop();}
+});
+
+test("多人：封存物品只出現在自己的帳號，無角色者不會取得其他玩家持有物",async()=>{
+  const srv=await start("multi");
+  try {
+    const a=await api(srv.url,"register",{
+      username:"legacyItemAlpha",password:"legacy-item-alpha-password"
+    });
+    const b=await api(srv.url,"register",{
+      username:"legacyItemBeta",password:"legacy-item-beta-password"
+    });
+    assert.equal(a.status,200);
+    assert.equal(b.status,200);
+    await api(srv.url,"character",{
+      name:"封存物品甲",gender:"male",stats:defaultStats()
+    },a.cookie);
+    await api(srv.url,"character",{
+      name:"封存物品乙",gender:"female",stats:defaultStats()
+    },b.cookie);
+    const db=new DatabaseSync(join(srv.directory,"multi.sqlite"));
+    try {
+      initLegacyInventoryTables(db);
+      const userId=db.prepare("SELECT user_id FROM characters WHERE name='封存物品甲'").get().user_id;
+      db.prepare([
+        "INSERT INTO legacy_inventory_items(user_id,original_id,source_line,category,original_name,",
+        "effect,durability,durability_unit,purchased_at,last_used_at,raw_fields_json)",
+        "VALUES(?,?,?,?,?,?,?,?,?,?,?)"
+      ].join(" ")).run(userId,"00042",5,"日用品","原版持有物","無",7,"日",0,0,"[]");
+    }finally{db.close();}
+    const owned=await api(srv.url,"state",undefined,a.cookie);
+    const other=await api(srv.url,"state",undefined,b.cookie);
+    assert.equal(owned.status,200);
+    assert.equal(owned.result.legacyInventory.length,1);
+    assert.equal(owned.result.legacyInventory[0].name,"原版持有物");
+    assert.deepEqual(other.result.legacyInventory,[]);
+    const anonymous=await api(srv.url,"state");
+    assert.equal(anonymous.status,200);
+    assert.deepEqual(anonymous.result.legacyInventory,[]);
   }finally{await srv.stop();}
 });
