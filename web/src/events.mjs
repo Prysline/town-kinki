@@ -60,7 +60,7 @@ export function settleDailyIllnessEvent(db,userId,day,now=Date.now(),random=Math
   db.exec("BEGIN IMMEDIATE");
   try {
     const old=db.prepare(
-      "SELECT health_index,last_event_day,money,weight,height,bmi,stats_json FROM characters WHERE user_id=?"
+      "SELECT health_index,last_event_day,money,weight,height,bmi,stats_json,body_energy,brain_energy,job_experience,recovered_at FROM characters WHERE user_id=?"
     ).get(userId);
     if(!old) throw new Error("請先建立角色");
     if(old.last_event_day>=day) {
@@ -82,7 +82,12 @@ export function settleDailyIllnessEvent(db,userId,day,now=Date.now(),random=Math
     db.prepare("UPDATE characters SET last_event_day=? WHERE user_id=?")
       .run(day,userId);
     if(effect){
-      const allowed=["health_index","money","weight","bmi","stats_json"];
+      const allowed=["health_index","money","weight","bmi","stats_json",
+        "body_energy","brain_energy","job_experience","recovered_at"];
+      // 身體／頭腦能量變動以當下重新起算每十秒的恢復計時。
+      if(effect.changes.body_energy!==undefined ||
+         effect.changes.brain_energy!==undefined)
+        effect.changes.recovered_at=now;
       const fields=Object.entries(effect.changes);
       if(fields.some(([key])=>!allowed.includes(key)))throw new Error("無效的事件欄位");
       if(fields.length){
@@ -126,7 +131,11 @@ export function listCharacterEvents(db,userId,limit=15) {
         row.event_key==="mathematics"?"數學事件":
         row.event_key==="science"?"理科事件":
         row.event_key==="history"?"社會事件":
-        row.event_key==="arts"?"美術事件":"未知事件"),
+        row.event_key==="arts"?"美術事件":
+        row.event_key==="streetFight"?"街頭衝突":
+        row.event_key==="hotspring"?"溫泉招待券":
+        row.event_key==="localEncounter"?"地方偶遇":
+        row.event_key==="workFocus"?"工作專注度":"未知事件"),
       description:row.description||event?.description||"",
       effects:JSON.parse(row.effects_json||"{}"),
       oldHealthIndex:row.old_health_index,newHealthIndex:row.new_health_index,
