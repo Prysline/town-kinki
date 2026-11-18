@@ -113,6 +113,11 @@ export function inspectLegacyCharacter(record, jobs, options = {}) {
   const bodyMax = maxBodyEnergy(stats), brainMax = maxBrainEnergy(stats);
   const jobCount = optionalInteger(row.job_kaisuu,"job_kaisuu");
   const schoolTime = originalTime(row.last_school);
+  if (optionalInteger(row.energy,"energy",bodyMax) > bodyMax ||
+      optionalInteger(row.nou_energy,"nou_energy",brainMax) > brainMax)
+    warnings.push("原版能量超出目前 Web 計算上限，將暫時限制在 Web 版能量上限內");
+  if (row.last_ene_time || row.last_nouene_time)
+    warnings.push("原版個別的體力與頭腦恢復時間尚未精確移植，Web 版會重新開始計時");
   const currentNow = options.now ?? Date.now();
   const timeZone = options.timeZone ?? "Asia/Taipei";
   const character = {
@@ -121,7 +126,8 @@ export function inspectLegacyCharacter(record, jobs, options = {}) {
     brainEnergy:limit(optionalInteger(row.nou_energy,"nou_energy",brainMax),brainMax),
     recoveredAt:currentNow,
     jobId:matchedJob?.key ?? jobs[0]?.key ?? "legacy-2",
-    workProgress:0,lastWorkAt:originalTime(row.house_name),
+    workProgress:matchedJob ? jobCount % matchedJob.payEvery : 0,
+    lastWorkAt:originalTime(row.house_name),
     workCount:jobCount,jobWorkCount:jobCount,
     jobExperience:optionalInteger(row.job_keiken,"job_keiken"),
     masteredJob:row.jobsyu || null,
