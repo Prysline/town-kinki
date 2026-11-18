@@ -7,6 +7,7 @@ import { DatabaseSync } from "node:sqlite";
 import { parseHouseCatalog, getHouseQuote, getHouseSaleQuote, initHousingTables, listHouses, listHouseEvents, publicHouseCatalog, buildHouse, renameHouse, sellHouse, getHouseRemodelQuote, remodelHouse, listHouseRemodelEvents } from "../src/housing.mjs";
 import { initTownMapTable, storeTownMap, readTownMap, editTownTile } from "../src/town-storage.mjs";
 import { emptyTownMap, describeTile } from "../src/town-map.mjs";
+import { initBankTables, bankLedger } from "../src/banking.mjs";
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const cfg = readFileSync(resolve(repoRoot, "town_ini.cgi"), "utf8");
 const commands = readFileSync(resolve(repoRoot, "command.pl"), "utf8");
@@ -23,6 +24,7 @@ function createDb() {
   ].join("\n"));
   initTownMapTable(db);
   initHousingTables(db);
+  initBankTables(db);
   db.prepare("INSERT INTO users(id,username) VALUES(1,'player1'),(2,'player2')").run();
   db.prepare("INSERT INTO characters(user_id,name,town_id,money,bank) VALUES(1,'甲',3,100000000,100000000),(2,'乙',3,100000000,100000000)").run();
   const tiles = emptyTownMap();
@@ -115,6 +117,10 @@ test("銀行存款付款、不足款項、偽造費用及非空地均不會破�
     assert.equal(result.quote.total,6500000);
     assert.equal(db.prepare("SELECT money FROM characters WHERE user_id=1").get().money,50);
     assert.equal(db.prepare("SELECT bank FROM characters WHERE user_id=1").get().bank,93500000);
+    const ledger = bankLedger(db,1);
+    assert.equal(ledger[0].action,"住宅建造");
+    assert.equal(ledger[0].debit,6500000);
+    assert.equal(ledger[0].balance,93500000);
   } finally { db.close(); }
 });
 
