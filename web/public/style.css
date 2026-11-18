@@ -101,3 +101,10 @@
 .bank-transfer label{display:block}
 .bank-transfer input{width:100%;max-width:100%}
 .bank-transfer button{width:100%}
+
+/* 銀行住宅貸款與提前清償 */
+.bank-loan{border-top:1px solid #d8e2d7;padding-top:.8rem;margin-top:1rem}
+.bank-loan h3{margin:.4rem 0}
+.bank-loan form{display:grid;gap:.55rem;margin:.6rem 0}
+.bank-loan select{width:100%;margin-top:.3rem}
+#loan-status{line-height:1.6;margin:.55rem 0}
