@@ -247,3 +247,21 @@ test("建立道具使用資料表後重複初始化不會刪除既有封存或�
     assert.equal(db.prepare("SELECT remaining FROM legacy_item_usage").get().remaining,2);
   }finally{db.close();}
 });
+
+
+test("不完整的原版物品只從可使用清單略過，保留唯讀封存且不能消耗",()=>{
+  const db=createDb();
+  try{
+    addItem(db,1,archived({effect:"無",interval:0}));
+    addItem(db,2,archived({effect:"無",interval:0}));
+    db.prepare("UPDATE legacy_inventory_items SET raw_fields_json='[]' WHERE user_id=1 AND source_line=2").run();
+    const actions=listLegacyItemActions(db,1,{
+      bodyEnergy:25,brainEnergy:35,lastMealAt:0
+    },NOW);
+    assert.deepEqual(actions.map(x=>x.sourceLine),[1]);
+    assert.equal(db.prepare("SELECT COUNT(*) n FROM legacy_inventory_items WHERE user_id=1").get().n,2);
+    assert.throws(()=>use(db,2,"broken-item-01"),/封存物品/);
+    assert.equal(db.prepare("SELECT COUNT(*) n FROM legacy_item_usage").get().n,0);
+    assert.equal(db.prepare("SELECT COUNT(*) n FROM legacy_item_use_history").get().n,0);
+  }finally{db.close();}
+});
