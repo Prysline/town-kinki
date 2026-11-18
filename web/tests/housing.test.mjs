@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
-import { parseHouseCatalog, getHouseQuote, getHouseSaleQuote, initHousingTables, listHouses, listHouseEvents, publicHouseCatalog, buildHouse, renameHouse, sellHouse } from "../src/housing.mjs";
+import { parseHouseCatalog, getHouseQuote, getHouseSaleQuote, initHousingTables, listHouses, listHouseEvents, publicHouseCatalog, buildHouse, renameHouse, sellHouse, getHouseRemodelQuote, remodelHouse, listHouseRemodelEvents } from "../src/housing.mjs";
 import { initTownMapTable, storeTownMap, readTownMap, editTownTile } from "../src/town-storage.mjs";
 import { emptyTownMap, describeTile } from "../src/town-map.mjs";
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -230,4 +230,114 @@ test("出售後安全整數溢位會拒絕出售並維持原房屋", () => {
     assert.equal(listHouses(db,1).length,1);
     assert.equal(readTownMap(db,3).tiles[0],"webhouse_"+built.houseId+"=空地");
   } finally { db.close(); }
+});
+
+
+test("原版住宅改裝不再次計算土地價格，外觀與室內可單獨更換", () => {
+  const house={id:7,image:smallHouse,interiorRank:3};
+  const both=getHouseRemodelQuote(catalog,house,{image:largeHouse,interiorRank:1});
+  assert.equal(both.imageWan,160);
+  assert.equal(both.interiorWan,800);
+  assert.equal(both.totalWan,960);
+  assert.equal(both.total,9600000);
+  assert.equal(both.image,largeHouse);
+  assert.equal(both.interiorRank,1);
+  const facade=getHouseRemodelQuote(catalog,house,{image:largeHouse,interiorRank:null});
+  assert.equal(facade.total,1600000);
+  assert.equal(facade.interiorRank,3);
+  const grade=getHouseRemodelQuote(catalog,house,{image:null,interiorRank:0});
+  assert.equal(grade.total,12000000);
+  assert.equal(grade.image,smallHouse);
+  assert.throws(() => getHouseRemodelQuote(catalog,house,{image:null,interiorRank:null}),/至少/);
+  assert.throws(() => getHouseRemodelQuote(catalog,house,{image:"unknown",interiorRank:null}),/外觀/);
+  assert.throws(() => getHouseRemodelQuote(catalog,house,{image:null,interiorRank:4}),/室內/);
+});
+
+test("改裝外觀只扣完整外觀價格，住宅座標、原購入價格、銀行餘額保持不變", () => {
+  const db=createDb();
+  try {
+    const built=buildHouse(db,catalog,1,{row:0,column:0},
+      {image:smallHouse,interiorRank:3,payment:"cash"},1000);
+    const balance=db.prepare("SELECT money,bank FROM characters WHERE user_id=1").get();
+    const result=remodelHouse(db,catalog,1,built.houseId,{image:largeHouse,interiorRank:null},2000);
+    assert.equal(result.quote.total,1600000);
+    assert.equal(result.quote.oldImage,smallHouse);
+    assert.equal(result.quote.image,largeHouse);
+    const after=db.prepare("SELECT money,bank FROM characters WHERE user_id=1").get();
+    assert.equal(after.money,balance.money-1600000);
+    assert.equal(after.bank,balance.bank);
+    const home=listHouses(db,1)[0];
+    assert.equal(home.image,largeHouse);
+    assert.equal(home.interiorRank,3);
+    assert.equal(home.purchasePrice,6500000);
+    assert.equal(home.location,"A1");
+    assert.equal(home.ownerUserId,1);
+    assert.equal(readTownMap(db,3).tiles[0],"webhouse_"+built.houseId+"=空地");
+    assert.deepEqual(listHouseEvents(db,1).map(x=>x.action),["built"]);
+    const history=listHouseRemodelEvents(db,1);
+    assert.equal(history.length,1);
+    assert.equal(history[0].amount,1600000);
+    assert.equal(history[0].newImage,largeHouse);
+    assert.equal(history[0].occurredAt,2000);
+  } finally {db.close();}
+});
+
+test("室內改裝升級與降級一律依所選級別的完整費用收費，沒有舊裝潢差額退款", () => {
+  const db=createDb();
+  try {
+    const built=buildHouse(db,catalog,1,{row:0,column:0},
+      {image:smallHouse,interiorRank:3,payment:"cash"});
+    const before=db.prepare("SELECT money FROM characters WHERE user_id=1").get().money;
+    const upgrade=remodelHouse(db,catalog,1,built.houseId,{image:null,interiorRank:0},2000);
+    const downgrade=remodelHouse(db,catalog,1,built.houseId,{image:null,interiorRank:2},3000);
+    assert.equal(upgrade.quote.total,12000000);
+    assert.equal(downgrade.quote.total,4000000);
+    assert.equal(listHouses(db,1)[0].interiorRank,2);
+    assert.equal(db.prepare("SELECT money FROM characters WHERE user_id=1").get().money,
+      before-12000000-4000000);
+    assert.deepEqual(listHouseRemodelEvents(db,1).map(x=>x.newInteriorRank),[2,0]);
+    initHousingTables(db);
+    assert.equal(listHouseRemodelEvents(db,1).length,2);
+  } finally {db.close();}
+});
+
+test("改裝權限、缺款、無效請求不會改動任何房屋及交易紀錄", () => {
+  const db=createDb();
+  try {
+    const built=buildHouse(db,catalog,1,{row:0,column:0},
+      {image:smallHouse,interiorRank:3,payment:"cash"});
+    assert.throws(() => remodelHouse(db,catalog,2,built.houseId,
+      {image:largeHouse,interiorRank:null}),/你擁有/);
+    assert.throws(() => remodelHouse(db,catalog,1,999999,
+      {image:largeHouse,interiorRank:null}),/你擁有/);
+    assert.throws(() => remodelHouse(db,catalog,1,built.houseId,
+      {image:null,interiorRank:null}),/至少/);
+    assert.throws(() => remodelHouse(db,catalog,1,built.houseId,
+      {image:null,interiorRank:99}),/室內/);
+    db.prepare("UPDATE characters SET money=100 WHERE user_id=1").run();
+    assert.throws(() => remodelHouse(db,catalog,1,built.houseId,
+      {image:largeHouse,interiorRank:null}),/現金不足/);
+    assert.equal(db.prepare("SELECT money FROM characters WHERE user_id=1").get().money,100);
+    assert.equal(listHouses(db,1)[0].image,smallHouse);
+    assert.equal(listHouseRemodelEvents(db,1).length,0);
+    assert.equal(listHouseRemodelEvents(db,2).length,0);
+  } finally {db.close();}
+});
+
+test("地圖與房屋狀態不一致時改裝回滾，不會部分扣款或改變住宅", () => {
+  const db=createDb();
+  try {
+    const built=buildHouse(db,catalog,1,{row:0,column:0},
+      {image:smallHouse,interiorRank:3,payment:"cash"});
+    const before=db.prepare("SELECT money FROM characters WHERE user_id=1").get().money;
+    const map=readTownMap(db,3);
+    const tiles=[...map.tiles];
+    tiles[0]="銀行";
+    storeTownMap(db,3,{...map,tiles},"test-mismatch");
+    assert.throws(() => remodelHouse(db,catalog,1,built.houseId,
+      {image:largeHouse,interiorRank:1}),/資料不一致/);
+    assert.equal(db.prepare("SELECT money FROM characters WHERE user_id=1").get().money,before);
+    assert.equal(listHouses(db,1)[0].image,smallHouse);
+    assert.equal(listHouseRemodelEvents(db,1).length,0);
+  } finally {db.close();}
 });
