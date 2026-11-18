@@ -177,6 +177,8 @@ test("出售後可重新買屋，需精確恢復原始空地種類", () => {
     const second = buildHouse(db,catalog,1,{row:0,column:2},
       {image:largeHouse,interiorRank:3,payment:"bank"});
     assert.equal(second.quote.total,7600000);
+    assert.notEqual(second.houseId,first.houseId);
+    assert.throws(() => sellHouse(db,catalog,1,first.houseId),/可能已出售/);
     assert.equal(listHouses(db,1)[0].location,"A3");
     assert.deepEqual(listHouseEvents(db,1).map(x => x.action),["built","sold","built"]);
   } finally { db.close(); }
