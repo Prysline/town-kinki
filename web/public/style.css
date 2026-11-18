@@ -41,3 +41,17 @@
 .map-editor-switch{display:flex;align-items:center;gap:.5rem;margin-bottom:.55rem!important}
 .map-editor-switch input{width:auto;margin:0}
 .map-editor select{max-width:320px}
+
+/* 土地與住宅建造 */
+.housing-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.85rem;margin:.9rem 0 1.3rem}
+.housing-form label{min-width:0}
+.housing-form .house-preview-row{display:flex;gap:.8rem;align-items:center;border:1px solid #e2ebe2;background:#f7faf6;border-radius:8px;padding:.65rem}
+.house-preview-row img,.owned-house img{object-fit:contain;image-rendering:pixelated;border:1px solid #d7e0d4;border-radius:4px;background:#fff}
+.housing-form #house-quote,.housing-form #house-submit{grid-column:1/-1}
+.housing-form #house-submit{justify-self:start;min-width:180px}
+.housing-form #house-quote{margin:.2rem 0}
+.owned-houses{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:.8rem;margin:.7rem 0}
+.owned-house{padding:1rem;border-radius:10px;border:1px solid #d6e2d9;background:#fafcf9;display:flex;flex-direction:column;align-items:start}
+.owned-house label,.owned-house button{width:100%}
+.owned-house .small{margin:0}
+@media(max-width:520px){.housing-form{grid-template-columns:1fr}.housing-form #house-quote,.housing-form #house-submit{grid-column:1}}
