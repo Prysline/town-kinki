@@ -113,6 +113,19 @@
               <button type="submit" name="action" value="withdraw" class="secondary">提款</button>
             </div>
           </form>
+          <div class="bank-transfer" id="bank-transfer-panel" hidden>
+            <h3>轉帳給其他玩家</h3>
+            <p class="small">從普通存款轉入對方的普通存款。單筆與每日同一收款人的上限均為 1 兆元，超額會直接拒絕。收款人註冊未滿七天時，單筆不得達 100 萬元。</p>
+            <form id="bank-transfer-form">
+              <label>收款角色名稱
+                <input name="recipientName" type="text" maxlength="18" autocomplete="off" required>
+              </label>
+              <label>轉帳金額（元）
+                <input name="amount" type="number" min="1" max="1000000000000" step="1" required>
+              </label>
+              <button type="submit">確認轉帳</button>
+            </form>
+          </div>
           <div class="bank-term">
             <h3>超級定期存款</h3>
             <p class="small">以每 100 萬元為單位存入，解約必須全數提領至現金。</p>
