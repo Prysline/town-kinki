@@ -1132,3 +1132,82 @@ test("多人：各玩家用餐冷卻與費用分開保存，不能改動其他�
     } finally {savedDb.close();}
   } finally {await srv.stop();}
 });
+
+
+test("單機：疾病指數顯示、腦瘤收費、病中不可工作及治療保存",async()=>{
+  const srv=await start("solo");
+  try {
+    const made=await api(srv.url,"character",{
+      name:"住院測試居民",gender:"other",stats:defaultStats()
+    });
+    assert.equal(made.status,200);
+    assert.equal(made.result.health.index,50);
+    assert.equal(made.result.hospital.price,10000);
+    assert.ok(made.result.health.lastSettledDay);
+    const day=made.result.health.lastSettledDay;
+    const db=new DatabaseSync(join(srv.directory,"solo.sqlite"));
+    try {
+      db.prepare("UPDATE characters SET health_index=-71,last_health_day=? WHERE name='住院測試居民'")
+        .run(day);
+    } finally {db.close();}
+    const sick=await api(srv.url,"state");
+    assert.equal(sick.result.health.key,"brainTumor");
+    assert.equal(sick.result.condition.label,"腦瘤");
+    assert.equal(sick.result.condition.baseExperience,null);
+    assert.equal(sick.result.hospital.price,64000);
+    assert.equal((await api(srv.url,"work",{})).status,400);
+    const cured=await api(srv.url,"hospital/treat",{});
+    assert.equal(cured.status,200);
+    assert.equal(cured.result.hospitalResult.paid,64000);
+    assert.equal(cured.result.hospitalResult.previousDisease,"腦瘤");
+    assert.equal(cured.result.character.money,36000);
+    assert.equal(cured.result.character.healthIndex,50);
+    assert.equal(cured.result.health.key,"healthy");
+    assert.equal(cured.result.hospital.price,10000);
+    const reload=await api(srv.url,"state");
+    assert.equal(reload.result.health.index,50);
+    assert.equal(reload.result.character.money,36000);
+    const precaution=await api(srv.url,"hospital/treat",{insured:true,discount:1});
+    assert.equal(precaution.status,200);
+    assert.equal(precaution.result.hospitalResult.paid,10000);
+    assert.equal(precaution.result.character.money,26000);
+    const db2=new DatabaseSync(join(srv.directory,"solo.sqlite"));
+    try {
+      db2.prepare("UPDATE characters SET health_index=-101,money=100 WHERE name='住院測試居民'").run();
+    } finally {db2.close();}
+    assert.equal((await api(srv.url,"hospital/treat",{})).status,400);
+    const unchanged=await api(srv.url,"state");
+    assert.equal(unchanged.result.health.key,"cancer");
+    assert.equal(unchanged.result.character.money,100);
+  } finally {await srv.stop();}
+});
+
+test("多人：醫療費由當前帳號自行負擔，生病玩家與健康玩家資料互不干擾",async()=>{
+  const srv=await start("multi");
+  try {
+    const a=await api(srv.url,"register",{username:"hospitalPlayerA",password:"secure-hospital-player-A"});
+    const b=await api(srv.url,"register",{username:"hospitalPlayerB",password:"secure-hospital-player-B"});
+    assert.equal(a.status,200); assert.equal(b.status,200);
+    await api(srv.url,"character",{name:"病患甲",gender:"male",stats:defaultStats()},a.cookie);
+    await api(srv.url,"character",{name:"病患乙",gender:"female",stats:defaultStats()},b.cookie);
+    const db=new DatabaseSync(join(srv.directory,"multi.sqlite"));
+    try {
+      db.prepare("UPDATE characters SET health_index=-41 WHERE name='病患甲'").run();
+    } finally {db.close();}
+    const sick=await api(srv.url,"state",undefined,a.cookie);
+    assert.equal(sick.result.hospital.disease.key,"tuberculosis");
+    assert.equal(sick.result.hospital.price,48000);
+    const healthy=await api(srv.url,"state",undefined,b.cookie);
+    assert.equal(healthy.result.hospital.price,10000);
+    assert.equal((await api(srv.url,"hospital/treat",{})).status,401);
+    const second=await api(srv.url,"hospital/treat",{},b.cookie);
+    assert.equal(second.status,200);
+    assert.equal(second.result.character.money,90000);
+    assert.equal((await api(srv.url,"state",undefined,a.cookie)).result.health.key,"tuberculosis");
+    const first=await api(srv.url,"hospital/treat",{},a.cookie);
+    assert.equal(first.status,200);
+    assert.equal(first.result.character.money,52000);
+    assert.equal(first.result.health.key,"healthy");
+    assert.equal((await api(srv.url,"state",undefined,b.cookie)).result.character.money,90000);
+  } finally {await srv.stop();}
+});
