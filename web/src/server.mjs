@@ -11,7 +11,7 @@ import {
 } from "./engine.mjs";
 import { parseLegacySchool, parseLegacyGym, calendarDay, trainingAvailability, performTraining } from "./training.mjs";
 import { initTownMapTable, bootstrapLegacyTownMaps, publicTownMap, editTownTile } from "./town-storage.mjs";
-import { parseHouseCatalog, initHousingTables, listHouses, publicHouseCatalog, buildHouse, renameHouse, sellHouse, getHouseSaleQuote, listHouseEvents } from "./housing.mjs";
+import { parseHouseCatalog, initHousingTables, listHouses, publicHouseCatalog, buildHouse, renameHouse, sellHouse, getHouseSaleQuote, listHouseEvents, remodelHouse, listHouseRemodelEvents } from "./housing.mjs";
 import { initRoomsTables, ROOM_TYPES, setRoomSlots, viewRoom, addRoomPost, deleteRoomPost } from "./rooms.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -201,6 +201,7 @@ function snapshot(user) {
     map,
     houses: ownedHouses,
     houseEvents: updated ? listHouseEvents(db, user.id) : [],
+    houseRemodelEvents: updated ? listHouseRemodelEvents(db, user.id) : [],
     townHouses,
     roomTypes: updated ? ROOM_TYPES : [],
     houseCatalog: updated ? publicHouseCatalog(houseCatalog, updated.townId, ownedHouses.length) : null,
@@ -425,6 +426,15 @@ async function handle(req, res) {
         throw new HttpError(400, error.message);
       }
       return sendJson(res, 200, { ...snapshot(user), houseResult: result });
+    }
+
+    if (path === "/api/house/remodel") {
+      let result;
+      try {
+        result = remodelHouse(db, houseCatalog, user.id, data.houseId,
+          { image: data.image, interiorRank: data.interiorRank });
+      } catch(error) { throw new HttpError(400, error.message); }
+      return sendJson(res, 200, { ...snapshot(user), houseRemodelResult: result });
     }
 
     if (path === "/api/house/sell") {
