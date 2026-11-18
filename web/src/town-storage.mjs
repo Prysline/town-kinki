@@ -90,6 +90,9 @@ export function editTownTile(db, townId, row, column, symbol) {
   db.exec("BEGIN IMMEDIATE");
   try {
     const previous = readTownMap(db, townId);
+    const current = previous.tiles[row * 16 + column];
+    if (describeTile(current).category === "house")
+      throw new Error("房屋已有人持有，不可透過地圖編輯器清除或覆蓋");
     const tiles = setTile(previous.tiles, row, column, symbol);
     storeTownMap(db, townId, {
       tiles, originalName: previous.originalName,
