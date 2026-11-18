@@ -45,7 +45,7 @@ async function start(mode, seed) {
     throw new Error("無法啟動測試伺服器：" + log);
   }
   return {
-    url,
+    url, directory,
     async stop() {
       if (child.exitCode === null) {
         const exited = new Promise(done => child.once("exit", done));
@@ -266,5 +266,88 @@ test("多人：載入同一座街區地圖，但普通玩家無法修改伺服�
     const forbidden = await api(srv.url, "map/tile", { row: 0, column: 0, symbol: "銀行" }, first.cookie);
     assert.equal(forbidden.status, 403);
     assert.equal((await api(srv.url, "state", undefined, second.cookie)).result.map.cells[0].raw, "駅");
+  } finally { await srv.stop(); }
+});
+
+
+test("單機：從街區空地建屋、以原版費率支付、儲存後不允許覆蓋或再次建屋", async () => {
+  const srv = await start("solo");
+  try {
+    const created = await api(srv.url, "character",
+      { name: "購屋測試", gender: "other", stats: defaultStats() });
+    assert.equal(created.status, 200);
+    await api(srv.url, "move", { townId:3 });
+    assert.equal((await api(srv.url, "map/tile", { row:0,column:0,symbol:"空地" })).status, 200);
+    assert.equal((await api(srv.url, "map/tile", { row:0,column:1,symbol:"空地2" })).status, 200);
+    const db = new DatabaseSync(join(srv.directory, "solo.sqlite"));
+    try { db.prepare("UPDATE characters SET money=10000000 WHERE name='購屋測試'").run(); }
+    finally { db.close(); }
+    const built = await api(srv.url,"house/build",{
+      row:0,column:0,image:"house/kamakura.gif",interiorRank:3,payment:"cash",price:1
+    });
+    assert.equal(built.status,200);
+    assert.equal(built.result.houseResult.quote.total,6500000);
+    assert.equal(built.result.character.money,3500000);
+    assert.equal(built.result.houses.length,1);
+    assert.equal(built.result.houses[0].name,"購屋測試的家");
+    assert.equal(built.result.map.cells[0].category,"house");
+    assert.equal(built.result.map.cells[0].image,"house/kamakura.gif");
+    assert.equal((await api(srv.url, "map/tile", {row:0,column:0,symbol:""})).status,400);
+    assert.equal((await api(srv.url, "house/build", {
+      row:0,column:0,image:"house/kamakura.gif",interiorRank:3,payment:"cash"
+    })).status,400);
+    assert.equal((await api(srv.url, "house/build", {
+      row:0,column:1,image:"house/kamakura.gif",interiorRank:3,payment:"cash"
+    })).status,400);
+    const renamed = await api(srv.url,"house/rename",{
+      houseId:built.result.houses[0].id,name:"湖畔住宅"
+    });
+    assert.equal(renamed.status,200);
+    assert.equal(renamed.result.map.cells[0].label.includes("湖畔住宅"),true);
+    assert.equal((await api(srv.url, "state")).result.character.money,3500000);
+  } finally { await srv.stop(); }
+});
+
+test("多人：爭購同一塊地時只有一人成功，且房屋資料可以共享、不可竄改", async () => {
+  const seed = directory => {
+    const db = new DatabaseSync(join(directory, "multi.sqlite"));
+    db.exec("CREATE TABLE town_maps(town_id INTEGER PRIMARY KEY, original_name TEXT NOT NULL DEFAULT '', original_record TEXT NOT NULL DEFAULT '', source TEXT NOT NULL, tiles_json TEXT NOT NULL, updated_at INTEGER NOT NULL)");
+    const tiles = Array(192).fill("");
+    tiles[0] = "空地";
+    db.prepare("INSERT INTO town_maps(town_id,original_name,source,tiles_json,updated_at) VALUES(?,?,?, ?,?)")
+      .run(0,"京阪神ストリート","legacy-import",JSON.stringify(tiles),Date.now());
+    db.close();
+  };
+  const srv = await start("multi",seed);
+  try {
+    const a = await api(srv.url,"register",{username:"housingone",password:"housing-password-one"});
+    const b = await api(srv.url,"register",{username:"housingtwo",password:"housing-password-two"});
+    assert.equal(a.status,200);assert.equal(b.status,200);
+    await api(srv.url,"character",{name:"建屋甲",gender:"male",stats:defaultStats()},a.cookie);
+    await api(srv.url,"character",{name:"建屋乙",gender:"female",stats:defaultStats()},b.cookie);
+    const db = new DatabaseSync(join(srv.directory, "multi.sqlite"));
+    try { db.prepare("UPDATE characters SET bank=100000000").run(); } finally { db.close(); }
+    const options={row:0,column:0,image:"house/kamakura.gif",interiorRank:3,payment:"bank"};
+    const outcomes=await Promise.all([
+      api(srv.url,"house/build",options,a.cookie),
+      api(srv.url,"house/build",options,b.cookie)
+    ]);
+    assert.deepEqual(outcomes.map(x=>x.status).sort((x,y)=>x-y),[200,400]);
+    const resultA=await api(srv.url,"state",undefined,a.cookie);
+    const resultB=await api(srv.url,"state",undefined,b.cookie);
+    assert.equal(resultA.result.townHouses.length,1);
+    assert.equal(resultB.result.townHouses.length,1);
+    assert.equal(resultA.result.map.cells[0].category,"house");
+    assert.equal(resultB.result.map.cells[0].category,"house");
+    const owner=resultA.result.townHouses[0];
+    const enemyCookie=owner.ownerName==="建屋甲"?b.cookie:a.cookie;
+    assert.equal((await api(srv.url,"house/rename",{houseId:owner.id,name:"竄改別人房屋"},enemyCookie)).status,400);
+    assert.equal((await api(srv.url,"map/tile",{row:0,column:0,symbol:"空地"},enemyCookie)).status,403);
+    const dbAfter=new DatabaseSync(join(srv.directory,"multi.sqlite"));
+    try {
+      assert.equal(dbAfter.prepare("SELECT COUNT(*) n FROM houses").get().n,1);
+      assert.equal(dbAfter.prepare("SELECT COUNT(*) n FROM characters WHERE bank=100000000-51500000").get().n,1);
+      assert.equal(dbAfter.prepare("SELECT COUNT(*) n FROM characters WHERE bank=100000000").get().n,1);
+    } finally { dbAfter.close(); }
   } finally { await srv.stop(); }
 });
