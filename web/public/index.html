@@ -104,14 +104,38 @@
         </section>
         <section class="card">
           <h3>銀行</h3>
-          <p class="small">目前支援現金存款與提款，原版利息、定期存款及帳戶明細仍待移植。</p>
+          <p class="small">普通存款每日利息 0.5%，超級定期每日利息 1%。Web 版於每日第一次讀取狀態時計息一次，不會補發未讀取期間的多日利息。</p>
+          <p class="small" id="bank-interest-day"></p>
           <form id="bank-form">
-            <label>金額（元）<input name="amount" type="number" min="1" step="1" required></label>
+            <label>普通帳戶金額（元）<input name="amount" type="number" min="1" step="1" required></label>
             <div class="bank-actions">
               <button type="submit" name="action" value="deposit">存款</button>
               <button type="submit" name="action" value="withdraw" class="secondary">提款</button>
             </div>
           </form>
+          <div class="bank-term">
+            <h3>超級定期存款</h3>
+            <p class="small">以每 100 萬元為單位存入，解約必須全數提領至現金。</p>
+            <p id="term-balance" class="bank-balance"></p>
+            <form id="term-deposit-form">
+              <label>存入單位（每單位 100 萬元）
+                <input name="units" type="number" min="1" step="1" required>
+              </label>
+              <button type="submit">存入超級定期</button>
+            </form>
+            <button id="term-cancel" type="button" class="secondary">解約並領回全部定期存款</button>
+          </div>
+          <div class="bank-passbook">
+            <h3>銀行交易明細</h3>
+            <label for="bank-ledger-filter">帳戶篩選</label>
+            <select id="bank-ledger-filter">
+              <option value="all">全部紀錄</option>
+              <option value="ordinary">普通存款</option>
+              <option value="term">超級定期</option>
+            </select>
+            <p class="small">普通與定期合計保存最近 100 筆明細，較舊的紀錄會被移除。</p>
+            <div id="bank-ledger-list"></div>
+          </div>
         </section>
         <section class="card">
           <h3>能力值</h3><dl class="stats" id="attributes"></dl>
