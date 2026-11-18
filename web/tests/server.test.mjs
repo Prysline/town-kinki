@@ -990,3 +990,59 @@ test("原版角色匯入後可用全新多人帳號密碼登入，資產與能�
     assert.match(again.stderr,/已匯入/);
   }finally{await srv.stop();}
 });
+
+
+test("多人銀行貸款：試算、撥款、每日扣款、禁止重複借款及一次清償",async()=>{
+  const srv=await start("multi");
+  try{
+    const a=await api(srv.url,"register",{username:"loanBorrowerA",password:"loan-borrower-pass-123"});
+    const b=await api(srv.url,"register",{username:"loanObserverB",password:"loan-observer-pass-123"});
+    assert.equal(a.status,200);assert.equal(b.status,200);
+    assert.equal((await api(srv.url,"character",{
+      name:"貸款玩家",gender:"male",stats:defaultStats()
+    },a.cookie)).status,200);
+    assert.equal((await api(srv.url,"character",{
+      name:"旁觀居民",gender:"female",stats:defaultStats()
+    },b.cookie)).status,200);
+    const database=new DatabaseSync(join(srv.directory,"multi.sqlite"));
+    try {database.prepare("UPDATE characters SET bank=2000000 WHERE name='貸款玩家'").run();}
+    finally {database.close();}
+    const before=await api(srv.url,"state",undefined,a.cookie);
+    const credit=before.result.bankLoan.maxPrincipal;
+    assert.equal(credit,4000000);
+    assert.equal(before.result.bankLoan.active,false);
+    assert.equal(before.result.bankLoan.plans.length,10);
+    assert.equal((await api(srv.url,"bank/loan/borrow",{payments:13},a.cookie)).status,400);
+    assert.equal((await api(srv.url,"bank/loan/borrow",{payments:12})).status,401);
+    const loan=await api(srv.url,"bank/loan/borrow",{payments:12},a.cookie);
+    assert.equal(loan.status,200);
+    assert.equal(loan.result.loanResult.principal,credit);
+    assert.equal(loan.result.loanResult.dailyPayment,350000);
+    assert.equal(loan.result.character.bank,6000000);
+    assert.equal(loan.result.bankLoan.remainingPayments,12);
+    assert.equal(loan.result.bankLedger[0].action,"住宅貸款撥款");
+    assert.equal((await api(srv.url,"bank/loan/borrow",{payments:24},a.cookie)).status,400);
+    const other=await api(srv.url,"state",undefined,b.cookie);
+    assert.equal(other.result.bankLoan.active,false);
+    assert.equal(other.result.bankLedger.length,0);
+    const db=new DatabaseSync(join(srv.directory,"multi.sqlite"));
+    try {
+      db.prepare("UPDATE bank_accounts SET last_interest_day='2026-11-17' WHERE user_id=(SELECT user_id FROM characters WHERE name='貸款玩家')").run();
+      db.prepare("UPDATE bank_loans SET last_attempt_day='2026-11-17' WHERE user_id=(SELECT user_id FROM characters WHERE name='貸款玩家')").run();
+    } finally {db.close();}
+    const next=await api(srv.url,"state",undefined,a.cookie);
+    assert.equal(next.status,200);
+    assert.equal(next.result.character.bank,5680000);
+    assert.equal(next.result.bankLoan.remainingPayments,11);
+    assert.equal(next.result.bankLedger[0].action,"住宅貸款每日還款");
+    assert.equal((await api(srv.url,"state",undefined,a.cookie)).result.character.bank,5680000);
+    const payoff=await api(srv.url,"bank/loan/payoff",{},a.cookie);
+    assert.equal(payoff.status,200);
+    assert.equal(payoff.result.loanResult.paid,3850000);
+    assert.equal(payoff.result.character.bank,1830000);
+    assert.equal(payoff.result.bankLoan.active,false);
+    assert.equal(payoff.result.bankLedger[0].action,"住宅貸款一次清償");
+    assert.equal((await api(srv.url,"bank/loan/payoff",{},a.cookie)).status,400);
+    assert.equal((await api(srv.url,"state",undefined,b.cookie)).result.character.bank,0);
+  }finally{await srv.stop();}
+});
