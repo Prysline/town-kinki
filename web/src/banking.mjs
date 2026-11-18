@@ -46,6 +46,18 @@ export function initBankTables(db) {
     "created_at INTEGER NOT NULL);",
     "CREATE INDEX IF NOT EXISTS bank_ledger_user_idx ON bank_ledger(user_id,id);"
   ].join("\n"));
+  db.exec([
+    "CREATE TABLE IF NOT EXISTS bank_transfers(",
+    "id INTEGER PRIMARY KEY AUTOINCREMENT,",
+    "sender_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,",
+    "recipient_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,",
+    "amount INTEGER NOT NULL CHECK(amount>0),",
+    "transfer_day TEXT NOT NULL,",
+    "request_key TEXT NOT NULL,",
+    "created_at INTEGER NOT NULL,",
+    "UNIQUE(sender_user_id,request_key));",
+    "CREATE INDEX IF NOT EXISTS bank_transfers_daily_idx ON bank_transfers(sender_user_id,recipient_user_id,transfer_day);"
+  ].join("\n"));
 }
 function assertDay(today) {
   if (typeof today !== "string" || !DATE.test(today))
@@ -147,6 +159,88 @@ export function bankOperation(db,userId,action,amount,today,now=Date.now()) {
     throw error;
   }
 }
+// basic.cgi 的原版限制：單次、每日每位收款對象的總額 <= 1 兆元。
+// 原版超過上限時，預設將超出額視為捐款；Web 版為防止意外損失，直接拒絕超額請求。
+export const BANK_TRANSFER_LIMIT = 1000000000000;
+export const NEW_MEMBER_TRANSFER_LIMIT = 1000000;
+export const NEW_MEMBER_DAYS = 7;
+const DAY_MS = 86400000;
+
+export function transferToPlayer(db, senderId, recipientName, amount, today,
+  requestId, now = Date.now()) {
+  if (!Number.isSafeInteger(senderId) || senderId < 1)
+    throw new Error("無效的轉帳玩家");
+  if (typeof recipientName !== "string" || !recipientName.trim() ||
+      Array.from(recipientName.trim()).length > 18)
+    throw new Error("請提供有效的收款角色名稱");
+  if (!Number.isSafeInteger(amount) || amount <= 0)
+    throw new Error("轉帳金額必須為正整數");
+  if (amount > BANK_TRANSFER_LIMIT)
+    throw new Error("轉帳金額超過每次 1 兆元上限");
+  if (typeof requestId !== "string" || !/^[A-Za-z0-9_-]{16,80}$/.test(requestId))
+    throw new Error("轉帳請求識別碼無效");
+  assertDay(today);
+  if (!Number.isSafeInteger(now) || now < 0) throw new Error("無效的轉帳時間");
+
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    const sender = db.prepare(
+      "SELECT user_id,name FROM characters WHERE user_id=?"
+    ).get(senderId);
+    if (!sender) throw new Error("請先建立角色");
+    const recipient = db.prepare(
+      "SELECT c.user_id,c.name,u.created_at FROM characters c JOIN users u ON u.id=c.user_id WHERE c.name=?"
+    ).get(recipientName.trim());
+    if (!recipient) throw new Error("找不到指定的收款角色");
+    if (recipient.user_id === senderId) throw new Error("不能轉帳給自己的角色");
+
+    // 在帳戶異動之前確認同一請求是否已執行，重送不會再次扣款。
+    const previous = db.prepare(
+      "SELECT recipient_user_id,amount,id FROM bank_transfers WHERE sender_user_id=? AND request_key=?"
+    ).get(senderId,requestId);
+    if (previous) {
+      if (previous.recipient_user_id !== recipient.user_id || previous.amount !== amount)
+        throw new Error("同一轉帳識別碼不可用於不同交易");
+      db.exec("COMMIT");
+      return { transferId:previous.id,recipientName:recipient.name,amount,duplicate:true };
+    }
+
+    // 原版以收款角色首次存取時間計算註冊七天；Web 版採用帳號建立時間。
+    if (now - recipient.created_at < NEW_MEMBER_DAYS * DAY_MS &&
+        amount >= NEW_MEMBER_TRANSFER_LIMIT)
+      throw new Error("註冊未滿七天的收款人，單筆不得達 100 萬元");
+
+    const daily = db.prepare(
+      "SELECT COALESCE(SUM(amount),0) AS total FROM bank_transfers WHERE sender_user_id=? AND recipient_user_id=? AND transfer_day=?"
+    ).get(senderId,recipient.user_id,today).total;
+    if (daily > BANK_TRANSFER_LIMIT - amount)
+      throw new Error("今日對這位收款人的轉帳總額將超過 1 兆元");
+
+    // 匯款人與收款人先以原有餘額完成當日利息結算，再進行轉帳。
+    // 避免收款後首次讀取狀態時對剛轉入的款項再計算當日利息。
+    applyInterest(db,senderId,today,now);
+    applyInterest(db,recipient.user_id,today,now);
+    const source = db.prepare("SELECT bank FROM characters WHERE user_id=?").get(senderId).bank;
+    const target = db.prepare("SELECT bank FROM characters WHERE user_id=?").get(recipient.user_id).bank;
+    if (source < amount) throw new Error("普通存款不足以完成轉帳");
+    const senderBalance = source - amount;
+    const recipientBalance = safeSum(target,amount);
+    db.prepare("UPDATE characters SET bank=? WHERE user_id=?").run(senderBalance,senderId);
+    db.prepare("UPDATE characters SET bank=? WHERE user_id=?").run(recipientBalance,recipient.user_id);
+    const transfer = db.prepare(
+      "INSERT INTO bank_transfers(sender_user_id,recipient_user_id,amount,transfer_day,request_key,created_at) VALUES(?,?,?,?,?,?)"
+    ).run(senderId,recipient.user_id,amount,today,requestId,now);
+    recordBankEntry(db,senderId,"ordinary","轉帳給："+recipient.name,amount,0,senderBalance,now);
+    recordBankEntry(db,recipient.user_id,"ordinary","收到轉帳："+sender.name,0,amount,recipientBalance,now);
+    db.exec("COMMIT");
+    return {transferId:Number(transfer.lastInsertRowid),recipientName:recipient.name,
+      amount,duplicate:false,bank:senderBalance};
+  } catch(error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+}
+
 export function bankOverview(db,userId) {
   const account = db.prepare("SELECT term_balance,last_interest_day FROM bank_accounts WHERE user_id=?").get(userId);
   return { termBalance:account?.term_balance ?? 0, lastInterestDay:account?.last_interest_day ?? null,
