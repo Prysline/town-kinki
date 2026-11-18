@@ -352,6 +352,86 @@ function updateHouseQuote() {
   submit.disabled = !catalog.canBuild || !isLot || price === null;
 }
 
+function makeHouseRemodelForm(house, catalog) {
+  const form = document.createElement("form");
+  form.className = "house-remodel-form";
+  const heading = document.createElement("strong");
+  heading.textContent = "住宅改裝";
+  const desc = document.createElement("p");
+  desc.className = "small";
+  desc.textContent = "依原版：新外觀與新室內等級各收完整標價，只從現金扣款，不重新收取地價。";
+  const imageLabel = document.createElement("label");
+  imageLabel.textContent = "外觀更換";
+  const images = document.createElement("select");
+  images.name = "image";
+  const keepImage = document.createElement("option");
+  keepImage.value = "";
+  keepImage.textContent = "外觀保持現狀（不收費）";
+  images.append(keepImage);
+  for (const item of catalog.designs) {
+    if (!item.supported) continue;
+    const opt = document.createElement("option");
+    opt.value = item.id;
+    opt.textContent = item.id.split("/").pop() + "（" + money(item.priceWan * 10000) + "）";
+    images.append(opt);
+  }
+  imageLabel.append(images);
+  const rankLabel = document.createElement("label");
+  rankLabel.textContent = "室內等級調整";
+  const ranks = document.createElement("select");
+  ranks.name = "interiorRank";
+  const keepRank = document.createElement("option");
+  keepRank.value = "";
+  keepRank.textContent = "室內保持現狀（不收費）";
+  ranks.append(keepRank);
+  for (const item of catalog.interiorOptions) {
+    const opt = document.createElement("option");
+    opt.value = String(item.rank);
+    opt.textContent = item.label + "（" + money(item.priceWan * 10000) + "）";
+    ranks.append(opt);
+  }
+  rankLabel.append(ranks);
+  const preview = document.createElement("img");
+  preview.className = "house-remodel-preview";
+  preview.src = "/legacy-assets/" + house.image;
+  preview.alt = "房屋改裝外觀預覽";
+  preview.width = 42;
+  preview.height = 42;
+  const total = document.createElement("p");
+  total.className = "small";
+  const submit = document.createElement("button");
+  submit.type = "submit";
+  submit.textContent = "確認改裝";
+  const update = () => {
+    const image = catalog.designs.find(item => item.id === images.value);
+    const rank = catalog.interiorOptions.find(item => String(item.rank) === ranks.value);
+    const amount = ((image?.priceWan ?? 0) + (rank?.priceWan ?? 0)) * 10000;
+    preview.src = "/legacy-assets/" + (image?.image ?? house.image);
+    total.textContent = amount > 0
+      ? "改裝費用：" + money(amount) + "，現金：" + money(state.character.money)
+      : "請選擇要修改的外觀或室內等級。";
+    submit.disabled = amount <= 0 || !Number.isSafeInteger(amount);
+  };
+  images.addEventListener("change", update);
+  ranks.addEventListener("change", update);
+  update();
+  form.append(heading, desc, imageLabel, rankLabel, preview, total, submit);
+  form.addEventListener("submit", event => {
+    event.preventDefault();
+    const image = images.value || null;
+    const interiorRank = ranks.value === "" ? null : Number(ranks.value);
+    const choice = catalog.designs.find(item => item.id === image);
+    const grade = catalog.interiorOptions.find(item => item.rank === interiorRank);
+    const cost = ((choice?.priceWan ?? 0) + (grade?.priceWan ?? 0)) * 10000;
+    if (!Number.isSafeInteger(cost) || cost <= 0) return;
+    if (window.confirm("確定改裝「" + house.name + "」嗎？\n將由現金支付 " + money(cost) +
+      "，原有裝潢費不退。室內欄位會依新等級顯示，原設定與文章仍保留。")) {
+      action("house/remodel", { houseId:house.id,image,interiorRank });
+    }
+  });
+  return form;
+}
+
 function renderHouses() {
   const catalog = state?.houseCatalog;
   if (!catalog) return;
@@ -386,7 +466,7 @@ function renderHouses() {
     listing.append(info);
   }
   for (const house of state.houses) {
-    const box = document.createElement("form");
+    const box = document.createElement("div");
     box.className = "owned-house";
     const img = document.createElement("img");
     img.src = "/legacy-assets/" + house.image;
@@ -429,8 +509,11 @@ function renderHouses() {
     visit.className = "secondary";
     visit.textContent = "進入室內／設定";
     visit.addEventListener("click", () => openRoom(house.id));
-    box.append(img, title, where, visit, label, button, saleInfo, sellButton);
-    box.addEventListener("submit", event => {
+    const renameForm = document.createElement("form");
+    renameForm.className = "house-rename-form";
+    renameForm.append(label, button);
+    box.append(img, title, where, visit, renameForm, makeHouseRemodelForm(house, catalog), saleInfo, sellButton);
+    renameForm.addEventListener("submit", event => {
       event.preventDefault();
       action("house/rename", { houseId: house.id, name: input.value }, "已更新住宅名稱。");
     });
@@ -455,6 +538,31 @@ function renderHouses() {
       list.append(item);
     }
     events.append(list);
+  }
+  const remodelHistory = el("house-remodel-events");
+  remodelHistory.replaceChildren();
+  if (!state.houseRemodelEvents?.length) {
+    const info = document.createElement("p");
+    info.className = "small";
+    info.textContent = "尚未有房屋改裝紀錄。";
+    remodelHistory.append(info);
+  } else {
+    const list = document.createElement("ul");
+    list.className = "house-event-list";
+    for (const event of state.houseRemodelEvents) {
+      const item = document.createElement("li");
+      const date = new Date(event.occurredAt).toLocaleString("zh-TW");
+      const grade = ["A","B","C","D"];
+      const changes = [];
+      if (event.oldImage !== event.newImage) changes.push("已更換外觀");
+      if (event.oldInteriorRank !== event.newInteriorRank)
+        changes.push("室內 " + grade[event.oldInteriorRank] + " 級改為 " + grade[event.newInteriorRank] + " 級");
+      item.textContent = date + "｜支付 " + money(event.amount) + "｜" +
+        event.townName + " " + event.location + "｜" +
+        (changes.length ? changes.join("、") : "重新裝修原外觀／室內等級");
+      list.append(item);
+    }
+    remodelHistory.append(list);
   }
   updateHouseQuote();
 }
@@ -616,6 +724,9 @@ async function action(path, data, message) {
       notify(messages.join(" "));
     } else if (path === "house/build") {
       notify("住宅建造完成，費用：" + money(state.houseResult.quote.total) + "。");
+    } else if (path === "house/remodel") {
+      closeRoom();
+      notify("房屋改裝完成，支付現金 " + money(state.houseRemodelResult.quote.total) + "。");
     } else if (path === "house/sell") {
       closeRoom();
       notify("住宅已出售，土地地價退還 " + money(state.houseSaleResult.refund) + " 至現金。");
