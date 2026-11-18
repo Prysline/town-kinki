@@ -622,6 +622,56 @@ function renderJobs() {
   }
 }
 
+function renderDining() {
+  if (!state?.character) return;
+  const status=state.hunger;
+  text("hunger-status",status?.label ?? "未知");
+  text("physique-status",(state.physique?.label ?? "未知") +
+    "（BMI " + (state.physique?.bmi ?? "?") + "）");
+  text("condition-status",state.condition?.label +
+    (state.condition?.provisional ? "（缺少用餐紀錄，暫定）" : ""));
+  const wait=state.mealCooldownMs ?? 0;
+  text("meal-status",wait>0 ?
+    "距離下次用餐還有 " + Math.ceil(wait/60000) + " 分鐘" :
+    "現在可以用餐");
+  const list=el("meal-list");
+  list.replaceChildren();
+  const menu=el("meal-menu").value;
+  for(const meal of state.meals??[]) {
+    if(meal.menu!==menu) continue;
+    const tile=document.createElement("div");
+    tile.className="training-tile";
+    const title=document.createElement("strong");
+    title.textContent=meal.name;
+    const desc=document.createElement("p");
+    desc.className="small";
+    desc.textContent="餐費："+money(meal.price)+"，熱量："+meal.calories+
+      "，體重預計增加 "+(meal.calories/1000).toFixed(2)+" 公斤";
+    const gains=document.createElement("p");
+    gains.className="small";
+    const parts=Object.entries(meal.gains).filter(([,n])=>n>0)
+      .map(([key,n])=>(labels[key]||key)+" +"+n);
+    gains.textContent=parts.length?parts.join("、"):"不增加能力值";
+    const button=document.createElement("button");
+    button.type="button";
+    button.textContent=meal.reason?"目前無法用餐":"選擇這道餐點";
+    button.disabled=Boolean(meal.reason);
+    button.addEventListener("click",()=>{
+      if(window.confirm("確定支付 "+money(meal.price)+" 食用「"+meal.name+"」嗎？"))
+        action("meal/eat",{key:meal.key});
+    });
+    tile.append(title,desc,gains);
+    if(meal.reason){
+      const reason=document.createElement("p");
+      reason.className="training-blocked";
+      reason.textContent=meal.reason;
+      tile.append(reason);
+    }
+    tile.append(button);
+    list.append(tile);
+  }
+}
+
 function renderTraining() {
   const byType = {
     school: el("school-lessons"),
@@ -778,6 +828,7 @@ function render() {
   text("job-level", state.jobLevel + " 級");
   text("mastered-job", c.masteredJob || "無");
   text("measurements", c.height + " 公分／" + c.weight + " 公斤");
+  renderDining();
   const ready = Boolean(state.currentJob) && state.workCooldownMs === 0;
   el("work").disabled = !ready;
   text("cooldown", !state.currentJob ? "請先前往職業介紹所選擇工作。" :
@@ -801,7 +852,8 @@ async function action(path, data, message) {
     state = await api(path, data);
     if (path === "work") {
       const result = state.result;
-      const messages = ["工作完成，職業經驗 +" + result.experienceGain + " 點。"];
+      const messages = ["工作完成（狀態："+(result.condition??"普通")+"），職業經驗 "+
+        (result.experienceGain>=0?"+":"")+result.experienceGain+" 點。"];
       if (result.paid) messages.push("獲得薪資 " + money(result.paid) + "。");
       if (result.bonus) messages.push("升級獎金 " + money(result.bonus) + "。");
       if (result.leveledUp) messages.push("職業等級提升至 " + result.jobLevel + " 級。");
@@ -815,6 +867,13 @@ async function action(path, data, message) {
     } else if (path === "house/sell") {
       closeRoom();
       notify("住宅已出售，土地地價退還 " + money(state.houseSaleResult.refund) + " 至現金。");
+    } else if (path === "meal/eat") {
+      const result=state.mealResult;
+      const gains=Object.entries(result.gained).filter(([,value])=>value>0)
+        .map(([key,value])=>(labels[key]||key)+" +"+value).join("、");
+      notify("已享用 "+result.name+"，支付 "+money(result.paid)+
+        "，體重增加 "+result.weightGain+" 公斤"+
+        (gains?"，能力提升："+gains:"")+"。");
     } else if (path === "train") {
       const result = state.trainingResult;
       const gains = Object.entries(result.gained)
@@ -927,6 +986,7 @@ el("loan-payoff").addEventListener("click",()=>{
       " 以清償貸款嗎？")) return;
   action("bank/loan/payoff",{},"剩餘貸款已全額清償。");
 });
+el("meal-menu").addEventListener("change",renderDining);
 el("bank-ledger-filter").addEventListener("change", renderBank);
 el("term-deposit-form").addEventListener("submit", event => {
   event.preventDefault();
