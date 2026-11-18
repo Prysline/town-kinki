@@ -672,6 +672,7 @@ function actionTraining(key) {
 }
 
 function renderBank() {
+  el("bank-transfer-panel").hidden = state.mode !== "multi";
   const account = state.bankAccount;
   if (!account) return;
   text("term-balance", "目前定期存款：" + money(account.termBalance));
@@ -824,6 +825,36 @@ el("bank-form").addEventListener("submit", event => {
   const amount = Number(new FormData(event.currentTarget).get("amount"));
   action("bank", { action: actionName, amount },
     (actionName === "deposit" ? "存款" : "提款") + "完成：" + money(amount));
+});
+el("bank-transfer-form").addEventListener("submit", async event => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  if (state?.mode !== "multi") return;
+  const data = formValues(form);
+  const recipientName = data.recipientName.trim();
+  const amount = Number(data.amount);
+  if (!recipientName || !Number.isSafeInteger(amount) || amount < 1 ||
+      amount > 1000000000000) {
+    return notify("請確認收款角色名稱與轉帳金額。", true);
+  }
+  if (!window.confirm("確定從普通存款轉帳 " + money(amount) +
+      " 給「" + recipientName + "」嗎？請先確認收款人姓名。")) return;
+  const submit = form.querySelector("button[type=submit]");
+  submit.disabled = true;
+  // 瀏覽器產生唯一識別碼，重送相同識別碼時伺服器不會重複扣款。
+  const requestId = crypto.randomUUID();
+  try {
+    state = await api("bank/transfer", {recipientName,amount,requestId});
+    render();
+    notify(state.transferResult.duplicate ?
+      "這筆轉帳已處理過，沒有重複扣款。" :
+      "成功轉帳 " + money(amount) + " 給「" + recipientName + "」。");
+    form.reset();
+  } catch(error) {
+    notify(error.message, true);
+  } finally {
+    submit.disabled = false;
+  }
 });
 el("bank-ledger-filter").addEventListener("change", renderBank);
 el("term-deposit-form").addEventListener("submit", event => {
