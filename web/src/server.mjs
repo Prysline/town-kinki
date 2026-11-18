@@ -12,6 +12,7 @@ import {
 import { parseLegacySchool, parseLegacyGym, calendarDay, trainingAvailability, performTraining } from "./training.mjs";
 import { initTownMapTable, bootstrapLegacyTownMaps, publicTownMap, editTownTile } from "./town-storage.mjs";
 import { parseHouseCatalog, initHousingTables, listHouses, publicHouseCatalog, buildHouse, renameHouse, sellHouse, getHouseSaleQuote, listHouseEvents } from "./housing.mjs";
+import { initRoomsTables, ROOM_TYPES, setRoomSlots, viewRoom, addRoomPost, deleteRoomPost } from "./rooms.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const REPO_ROOT = resolve(ROOT, "..");
@@ -52,6 +53,7 @@ for (const [column, definition] of [
 
 initTownMapTable(db);
 initHousingTables(db);
+initRoomsTables(db);
 const houseCatalog = parseHouseCatalog(
   decodeLegacyText(readFileSync(resolve(REPO_ROOT, "town_ini.cgi"))),
   decodeLegacyText(readFileSync(resolve(REPO_ROOT, "command.pl")))
@@ -200,6 +202,7 @@ function snapshot(user) {
     houses: ownedHouses,
     houseEvents: updated ? listHouseEvents(db, user.id) : [],
     townHouses,
+    roomTypes: updated ? ROOM_TYPES : [],
     houseCatalog: updated ? publicHouseCatalog(houseCatalog, updated.townId, ownedHouses.length) : null,
     residents,
     workCooldownMs: updated ? (updated.lastWorkAt === 0 ? 0 : Math.max(0, WORK_COOLDOWN_MS - (now - updated.lastWorkAt))) : 0,
@@ -283,6 +286,15 @@ async function handle(req, res) {
     if (req.method === "GET" && path.startsWith("/static/")) return safeFile(res, STATIC_ROOT, path, "/static/");
     if (req.method === "GET" && path.startsWith("/legacy-assets/")) return safeFile(res, IMG_ROOT, path, "/legacy-assets/");
     if (req.method === "GET" && path === "/api/state") return sendJson(res, 200, snapshot(getUser(req)));
+    if (req.method === "GET" && path === "/api/house/visit") {
+      const visitor = getUser(req);
+      if (!visitor) throw new HttpError(401, "請先登入");
+      const houseId = Number(url.searchParams.get("houseId"));
+      const slotParam = url.searchParams.get("slot");
+      const slot = slotParam === null ? null : Number(slotParam);
+      try { return sendJson(res, 200, viewRoom(db, visitor.id, houseId, slot)); }
+      catch (error) { throw new HttpError(400, error.message); }
+    }
     if (req.method !== "POST") throw new HttpError(404, "找不到指定的功能");
     const origin = req.headers.origin;
     if (origin) {
@@ -380,6 +392,27 @@ async function handle(req, res) {
         return { character: next };
       });
       return sendJson(res, 200, snapshot(user));
+    }
+
+    if (path === "/api/house/room/config") {
+      let result;
+      try { result = setRoomSlots(db, user.id, data.houseId, data.slots); }
+      catch (error) { throw new HttpError(400, error.message); }
+      return sendJson(res, 200, { ...snapshot(user), roomResult: result });
+    }
+
+    if (path === "/api/house/room/post") {
+      let result;
+      try { result = addRoomPost(db, user.id, data.houseId, data.slotIndex, data.body); }
+      catch (error) { throw new HttpError(400, error.message); }
+      return sendJson(res, 200, { ...snapshot(user), roomResult: result });
+    }
+
+    if (path === "/api/house/room/delete") {
+      let result;
+      try { result = deleteRoomPost(db, user.id, data.houseId, data.postId); }
+      catch (error) { throw new HttpError(400, error.message); }
+      return sendJson(res, 200, { ...snapshot(user), roomResult: result });
     }
 
     if (path === "/api/house/build") {
