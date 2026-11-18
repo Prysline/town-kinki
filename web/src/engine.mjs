@@ -14,6 +14,7 @@ export const STARTING_BUDGETS = Object.freeze([
 export const WORK_COOLDOWN_MS = 5 * 60 * 1000;
 export const ENERGY_RECOVERY_MS = 10 * 1000;
 import { deriveCondition } from "./dining.mjs";
+import { conditionWithIllness, DEFAULT_HEALTH_INDEX } from "./health.mjs";
 
 export const STAT_KEYS = [
   "kokugo", "suugaku", "rika", "syakai", "eigo", "ongaku", "bijutu",
@@ -158,7 +159,7 @@ export function createCharacterData(
     jobId: "legacy-2", workProgress: 0, lastWorkAt: 0,
     workCount: 0, jobWorkCount: 0, jobExperience: 0, masteredJob: null,
     lastSchoolDay: "", lastGymAt: 0, gymReadyAt: 0,
-    lastMealAt: 0,
+    lastMealAt: 0, healthIndex: DEFAULT_HEALTH_INDEX, lastHealthDay: "",
     height, weight, bmi: bodyMassIndex(height, weight), stats
   };
 }
@@ -208,11 +209,11 @@ export function performWork(character, job, now = Date.now(), random = Math.rand
   if (reason) throw new Error(reason);
   if (current.bodyEnergy < job.bodyCost || current.brainEnergy < job.brainCost)
     throw new Error("身體或頭腦能量不足");
-  const condition = deriveCondition(current,maxBodyEnergy(current.stats),
-    maxBrainEnergy(current.stats),now);
+  const condition = conditionWithIllness(deriveCondition(current,maxBodyEnergy(current.stats),
+    maxBrainEnergy(current.stats),now),current);
   if (condition.baseExperience===null)
-    throw new Error("目前身體狀態過差，無法工作");
-  // 原版依當前狀態給 15／10／5／1／-5 再加 1 至 5 的亂數。
+    throw new Error("目前疾病或身體狀態過差，無法工作");
+  // 原版依一般狀態或疾病類別決定經驗基數，再加 1 至 5 的亂數。
   // 沒有用餐歷史的舊 Web 角色暫按普通狀態處理，不回推飢餓懲罰。
   const experienceGain = condition.baseExperience + Math.floor(random() * 5) + 1;
   const oldLevel = Math.floor((current.jobExperience ?? 0) / 100);
