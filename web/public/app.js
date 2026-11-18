@@ -663,26 +663,86 @@ function renderInsurance() {
   renderLegacyItems();
 }
 
+let pendingLegacyUse=null;
+async function submitLegacyUse(sourceLine,name){
+  if(!window.confirm("確定使用「"+name+"」一次嗎？將消耗一次原始耐久。"))return;
+  if(!pendingLegacyUse||pendingLegacyUse.sourceLine!==sourceLine)
+    pendingLegacyUse={sourceLine,requestId:crypto.randomUUID()};
+  try{
+    state=await api("inventory/legacy/use",pendingLegacyUse);
+    const result=state.itemUseResult;
+    pendingLegacyUse=null;
+    render();
+    notify(result.replayed?
+      "相同道具使用請求已處理，沒有重複扣除耐久。" :
+      "已使用「"+result.name+"」，效果已套用。");
+  }catch(error){
+    notify(error.message,true);
+    renderLegacyItems();
+  }
+}
 function renderLegacyItems() {
   const target=el("legacy-inventory-list");
   target.replaceChildren();
+  const actions=new Map((state.legacyItemActions??[]).map(x=>[x.sourceLine,x]));
   if(!state.legacyInventory?.length){
     const note=document.createElement("p");
     note.className="small";
     note.textContent="尚未匯入原版物品存檔。";
     target.append(note);
-    return;
+  }else{
+    const list=document.createElement("ol");
+    list.className="health-event-list";
+    for(const item of state.legacyInventory){
+      const row=document.createElement("li");
+      const actionInfo=actions.get(item.sourceLine);
+      const label=document.createElement("span");
+      label.textContent=item.category+"｜"+item.name+"｜剩餘耐久 "+
+        (actionInfo?.remaining??item.durability)+" "+
+        (item.unit||"（未標示單位）")+"｜原始存檔第 "+item.sourceLine+" 行"+
+        (actionInfo?"（已支援使用）":"（唯讀封存）");
+      row.append(label);
+      if(actionInfo){
+        const button=document.createElement("button");
+        button.type="button";
+        button.className="secondary";
+        button.textContent=actionInfo.canUse?"使用一次":"目前無法使用";
+        button.disabled=!actionInfo.canUse;
+        button.addEventListener("click",()=>submitLegacyUse(item.sourceLine,item.name));
+        row.append(button);
+        if(actionInfo.reason){
+          const note=document.createElement("p");
+          note.className="small";
+          note.textContent=actionInfo.reason;
+          row.append(note);
+        }
+      }
+      list.append(row);
+    }
+    target.append(list);
   }
-  const list=document.createElement("ol");
-  list.className="health-event-list";
-  for(const item of state.legacyInventory){
-    const row=document.createElement("li");
-    row.textContent=item.category+"｜"+item.name+"｜耐久 "+
-      item.durability+" "+(item.unit||"（未標示單位）")+
-      "｜原始存檔第 "+item.sourceLine+" 行（唯讀）";
-    list.append(row);
+  const history=el("legacy-item-use-history");
+  history.replaceChildren();
+  if(!state.legacyItemHistory?.length){
+    const empty=document.createElement("p");
+    empty.className="small";
+    empty.textContent="目前沒有原版消耗品使用紀錄。";
+    history.append(empty);
+  }else{
+    const list=document.createElement("ol");
+    list.className="health-event-list";
+    for(const item of state.legacyItemHistory){
+      const li=document.createElement("li");
+      li.textContent=new Date(item.usedAt).toLocaleString("zh-TW")+
+        "｜"+item.name+"｜能力變化 "+
+        Object.entries(item.changes.stats??{}).map(([key,n])=>
+          (labels[key]||key)+(n>=0?"+":"")+n).join("、")+
+        "｜疾病指數 "+(item.changes.healthIndex>=0?"+":"")+item.changes.healthIndex+
+        "｜體重 "+(item.changes.weight>=0?"+":"")+item.changes.weight+" 公斤";
+      list.append(li);
+    }
+    history.append(list);
   }
-  target.append(list);
 }
 
 function renderDining() {
