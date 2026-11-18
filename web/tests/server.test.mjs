@@ -1046,3 +1046,89 @@ test("多人銀行貸款：試算、撥款、每日扣款、禁止重複借款�
     assert.equal((await api(srv.url,"state",undefined,b.cookie)).result.character.bank,0);
   }finally{await srv.stop();}
 });
+
+
+test("單機：原版食堂資料、用餐費用、飽足狀態與 60 分鐘限制完整串接",async()=>{
+  const srv=await start("solo");
+  try {
+    const created=await api(srv.url,"character",{
+      name:"用餐玩家",gender:"other",stats:defaultStats()
+    });
+    assert.equal(created.status,200);
+    assert.equal(created.result.hunger.key,"untracked");
+    assert.equal(created.result.condition.key,"normal");
+    assert.equal(created.result.condition.provisional,true);
+    assert.equal(created.result.mealCooldownMs,0);
+    const main=created.result.meals.filter(x=>x.menu==="main");
+    const other=created.result.meals.filter(x=>x.menu==="second");
+    assert.ok(main.length>0);
+    assert.ok(other.length>0);
+    const chosen=main.find(x=>x.price>0&&x.price<100000);
+    assert.ok(chosen);
+    const before=created.result.character;
+    const response=await api(srv.url,"meal/eat",{key:chosen.key});
+    assert.equal(response.status,200);
+    assert.equal(response.result.mealResult.paid,chosen.price);
+    assert.equal(response.result.mealResult.weightGain,chosen.calories/1000);
+    assert.equal(response.result.character.money,before.money-chosen.price);
+    assert.equal(response.result.character.stats.kenkou,
+      before.stats.kenkou+(chosen.gains.kenkou??0));
+    assert.ok(response.result.character.lastMealAt>0);
+    assert.equal(response.result.hunger.key,"full");
+    assert.ok(response.result.mealCooldownMs>0);
+    assert.equal(response.result.condition.provisional,false);
+    assert.equal((await api(srv.url,"meal/eat",{key:chosen.key})).status,400);
+    assert.equal((await api(srv.url,"meal/eat",{key:"meal-invalid-999"})).status,404);
+    const db=new DatabaseSync(join(srv.directory,"solo.sqlite"));
+    try {
+      db.prepare("UPDATE characters SET last_meal_at=? WHERE name='用餐玩家'")
+        .run(Date.now()-13*3600000);
+    } finally {db.close();}
+    const hungry=await api(srv.url,"state");
+    assert.equal(hungry.status,200);
+    assert.equal(hungry.result.hunger.key,"hungry");
+    assert.equal(hungry.result.mealCooldownMs,0);
+    const second=await api(srv.url,"meal/eat",{key:other[0].key});
+    assert.equal(second.status,200);
+    assert.equal(second.result.hunger.key,"full");
+    assert.equal(second.result.character.money,
+      before.money-chosen.price-other[0].price);
+    const preserved=await api(srv.url,"state");
+    assert.equal(preserved.result.character.lastMealAt,second.result.character.lastMealAt);
+    assert.equal(preserved.result.hunger.key,"full");
+  } finally {await srv.stop();}
+});
+
+test("多人：各玩家用餐冷卻與費用分開保存，不能改動其他玩家狀態",async()=>{
+  const srv=await start("multi");
+  try {
+    const a=await api(srv.url,"register",{username:"mealPersonOne",password:"meal-owner-password-123"});
+    const b=await api(srv.url,"register",{username:"mealPersonTwo",password:"meal-other-password-123"});
+    assert.equal(a.status,200);assert.equal(b.status,200);
+    await api(srv.url,"character",{name:"第一位食客",gender:"male",stats:defaultStats()},a.cookie);
+    await api(srv.url,"character",{name:"第二位食客",gender:"female",stats:defaultStats()},b.cookie);
+    const aState=await api(srv.url,"state",undefined,a.cookie);
+    const bState=await api(srv.url,"state",undefined,b.cookie);
+    const meal=aState.result.meals.find(x=>x.menu==="main"&&x.price<100000);
+    assert.ok(meal);
+    const eaten=await api(srv.url,"meal/eat",{key:meal.key},a.cookie);
+    assert.equal(eaten.status,200);
+    assert.equal((await api(srv.url,"meal/eat",{key:meal.key},a.cookie)).status,400);
+    const untouched=await api(srv.url,"state",undefined,b.cookie);
+    assert.equal(untouched.result.character.money,bState.result.character.money);
+    assert.equal(untouched.result.hunger.key,"untracked");
+    const other=await api(srv.url,"meal/eat",{key:meal.key},b.cookie);
+    assert.equal(other.status,200);
+    assert.equal(other.result.hunger.key,"full");
+    assert.equal((await api(srv.url,"meal/eat",{key:meal.key})).status,401);
+    const savedDb=new DatabaseSync(join(srv.directory,"multi.sqlite"));
+    try {
+      const saved=savedDb.prepare(
+        "SELECT name,last_meal_at,money FROM characters ORDER BY name"
+      ).all();
+      assert.equal(saved.length,2);
+      assert.ok(saved.every(r=>r.last_meal_at>0));
+      assert.ok(saved.every(r=>r.money===100000-meal.price));
+    } finally {savedDb.close();}
+  } finally {await srv.stop();}
+});
