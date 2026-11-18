@@ -91,7 +91,7 @@ test("保險可續購並累加剩餘有效日數，但有效耐久不得超過�
     assert.equal(second.activeUntil,NOW+(2+3)*30*DAY_MS);
     assert.equal(inventoryOverview(db,1,insurance,NOW+DAY_MS).remainingDays,149);
     const before=db.prepare("SELECT money FROM characters WHERE user_id=1").get().money;
-    assert.throws(()=>buy(db,1,"ins-extra-003",1,NOW+DAY_MS),/五份/);
+    assert.throws(()=>buy(db,1,"ins-extra-003",1,NOW+DAY_MS),/5 份/);
     assert.equal(db.prepare("SELECT money FROM characters WHERE user_id=1").get().money,before);
     assert.equal(listInsurancePurchases(db,1).length,2);
     assert.equal(inventoryOverview(db,1,insurance,NOW+(2+3)*30*DAY_MS).active,false);
