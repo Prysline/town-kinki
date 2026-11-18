@@ -1493,3 +1493,141 @@ test("多人：封存物品只出現在自己的帳號，無角色者不會取�
     assert.deepEqual(anonymous.result.legacyInventory,[]);
   }finally{await srv.stop();}
 });
+
+
+function originalConsumableFields({name="風邪薬",category="薬",effect="風邪,10",
+    durability=2,interval=30,calories=0,lastUsedAt=0,bonus=0}={}){
+  const f=Array(33).fill("");
+  f[0]=category;f[1]=name;f[9]=effect;f[12]=String(bonus);
+  for(const i of [2,3,4,5,6,7,8,10,11,13,14,15,16,18,19,20])f[i]="0";
+  f[17]="1500";f[21]=String(durability);f[22]="回";f[23]=String(interval);
+  f[25]=String(calories);f[26]=String(lastUsedAt);f[27]="0";f[28]="0";
+  f[30]="1700000000";
+  return f;
+}
+function injectOriginalConsumable(db,userId,line,fields) {
+  db.prepare([
+    "INSERT INTO legacy_inventory_items(user_id,original_id,source_line,category,original_name,",
+    "effect,durability,durability_unit,purchased_at,last_used_at,raw_fields_json)",
+    "VALUES(?,?,?,?,?,?,?,?,?,?,?)"
+  ].join(" ")).run(userId,"00042",line,fields[0],fields[1],fields[9],
+    Number(fields[21]),fields[22],Number(fields[30]),Number(fields[26]),
+    JSON.stringify(fields));
+}
+
+test("單機：原版藥品使用、原始耐久保存、二次請求防重、食品與食堂冷卻共用",async()=>{
+  const srv=await start("solo");
+  try{
+    const created=await api(srv.url,"character",{
+      name:"消耗品整合測試",gender:"other",stats:defaultStats()
+    });
+    assert.equal(created.status,200);
+    const db=new DatabaseSync(join(srv.directory,"solo.sqlite"));
+    try{
+      const userId=db.prepare("SELECT user_id FROM characters WHERE name='消耗品整合測試'").get().user_id;
+      db.prepare("UPDATE characters SET health_index=-13 WHERE user_id=?").run(userId);
+      injectOriginalConsumable(db,userId,1,originalConsumableFields());
+      injectOriginalConsumable(db,userId,2,originalConsumableFields({
+        name:"牛丼弁当",category:"食料品",effect:"無",
+        durability:1,interval:0,calories:720,bonus:1
+      }));
+      injectOriginalConsumable(db,userId,3,originalConsumableFields({
+        name:"萬能藥",effect:"万能,15",durability:2
+      }));
+    }finally{db.close();}
+    const before=await api(srv.url,"state");
+    assert.equal(before.status,200);
+    assert.equal(before.result.legacyInventory.length,3);
+    assert.deepEqual(before.result.legacyItemActions.map(x=>x.sourceLine),[1,2]);
+    assert.equal(before.result.legacyItemHistory.length,0);
+    const first=await api(srv.url,"inventory/legacy/use",{
+      sourceLine:1,requestId:"test-consume-cold-001"
+    });
+    assert.equal(first.status,200);
+    assert.equal(first.result.itemUseResult.replayed,false);
+    assert.equal(first.result.itemUseResult.changes.healthIndex,10);
+    assert.equal(first.result.character.healthIndex,-3);
+    assert.equal(first.result.legacyItemActions[0].remaining,1);
+    assert.equal(first.result.legacyInventory[0].durability,2);
+    assert.equal(first.result.legacyItemHistory.length,1);
+    const repeat=await api(srv.url,"inventory/legacy/use",{
+      sourceLine:1,requestId:"test-consume-cold-001"
+    });
+    assert.equal(repeat.status,200);
+    assert.equal(repeat.result.itemUseResult.replayed,true);
+    assert.equal(repeat.result.character.healthIndex,-3);
+    assert.equal(repeat.result.legacyItemActions[0].remaining,1);
+    assert.equal((await api(srv.url,"inventory/legacy/use",{
+      sourceLine:1,requestId:"test-consume-cold-002"
+    })).status,400);
+    const meal=await api(srv.url,"inventory/legacy/use",{
+      sourceLine:2,requestId:"test-consume-food-001"
+    });
+    assert.equal(meal.status,200);
+    assert.equal(meal.result.itemUseResult.changes.food,true);
+    assert.equal(meal.result.character.lastMealAt>0,true);
+    assert.equal(meal.result.legacyItemActions[1].remaining,0);
+    assert.equal((await api(srv.url,"meal/eat",{
+      key:before.result.meals[0].key
+    })).status,400);
+    assert.equal((await api(srv.url,"inventory/legacy/use",{
+      sourceLine:3,requestId:"test-consume-unsupported-001"
+    })).status,400);
+    const persisted=await api(srv.url,"state");
+    assert.equal(persisted.result.legacyItemHistory.length,2);
+    assert.equal(persisted.result.legacyInventory[0].durability,2);
+    const savedDb=new DatabaseSync(join(srv.directory,"solo.sqlite"));
+    try{
+      const saved=savedDb.prepare("SELECT remaining FROM legacy_item_usage WHERE user_id=(SELECT user_id FROM characters WHERE name='消耗品整合測試') AND source_line=1").get();
+      assert.equal(saved.remaining,1);
+      const raw=savedDb.prepare("SELECT raw_fields_json FROM legacy_inventory_items WHERE source_line=1").get();
+      assert.equal(JSON.parse(raw.raw_fields_json)[21],"2");
+    }finally{savedDb.close();}
+  }finally{await srv.stop();}
+});
+
+test("多人：道具使用限定本人，不能用其他玩家持有物行號或重送識別碼",async()=>{
+  const srv=await start("multi");
+  try{
+    const a=await api(srv.url,"register",{
+      username:"usableLegacyA",password:"usable-legacy-user-a"
+    });
+    const b=await api(srv.url,"register",{
+      username:"usableLegacyB",password:"usable-legacy-user-b"
+    });
+    assert.equal(a.status,200);assert.equal(b.status,200);
+    await api(srv.url,"character",{
+      name:"消耗品居民甲",gender:"male",stats:defaultStats()
+    },a.cookie);
+    await api(srv.url,"character",{
+      name:"消耗品居民乙",gender:"female",stats:defaultStats()
+    },b.cookie);
+    const db=new DatabaseSync(join(srv.directory,"multi.sqlite"));
+    try{
+      const row=db.prepare("SELECT user_id FROM characters WHERE name='消耗品居民甲'").get();
+      injectOriginalConsumable(db,row.user_id,8,originalConsumableFields({
+        name:"頭腦訓練片",effect:"無",interval:0,bonus:2
+      }));
+    }finally{db.close();}
+    const first=await api(srv.url,"state",undefined,a.cookie);
+    const second=await api(srv.url,"state",undefined,b.cookie);
+    assert.deepEqual(first.result.legacyItemActions.map(x=>x.sourceLine),[8]);
+    assert.deepEqual(second.result.legacyItemActions,[]);
+    assert.equal((await api(srv.url,"inventory/legacy/use",{
+      sourceLine:8,requestId:"consumable-other-01"
+    })).status,401);
+    assert.equal((await api(srv.url,"inventory/legacy/use",{
+      sourceLine:8,requestId:"consumable-other-01"
+    },b.cookie)).status,400);
+    const used=await api(srv.url,"inventory/legacy/use",{
+      sourceLine:8,requestId:"consumable-owner-01"
+    },a.cookie);
+    assert.equal(used.status,200);
+    assert.equal(used.result.character.stats.kenkou,22);
+    assert.equal(used.result.legacyItemActions[0].remaining,1);
+    const other=await api(srv.url,"state",undefined,b.cookie);
+    assert.equal(other.result.character.stats.kenkou,20);
+    assert.equal(other.result.legacyItemHistory.length,0);
+    assert.equal(other.result.legacyInventory.length,0);
+  }finally{await srv.stop();}
+});
