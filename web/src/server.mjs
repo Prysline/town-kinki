@@ -18,6 +18,7 @@ import { healthStatus, settleDailyHealth, conditionWithIllness, getTreatmentQuot
 import { initCharacterEvents, settleDailyIllnessEvent, listCharacterEvents } from "./events.mjs";
 import { parseLegacyInsurance, initInventoryTables, inventoryOverview, hasActiveHealthInsurance, listInsurancePurchases, buyHealthInsurance } from "./inventory.mjs";
 import { listLegacyInventoryItems } from "./legacy-inventory.mjs";
+import { initLegacyItemUseTables, listLegacyItemActions, listLegacyItemUseHistory, useLegacyItem } from "./legacy-item-use.mjs";
 import { initBankTables, settleBankInterest, bankOperation, bankOverview, bankLedger, transferToPlayer, BANK_TRANSFER_LIMIT, NEW_MEMBER_DAYS, NEW_MEMBER_TRANSFER_LIMIT, bankLoanOverview, borrowBankLoan, payoffBankLoan } from "./banking.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -68,6 +69,7 @@ initRoomsTables(db);
 initBankTables(db);
 initCharacterEvents(db);
 initInventoryTables(db);
+initLegacyItemUseTables(db);
 const houseCatalog = parseHouseCatalog(
   decodeLegacyText(readFileSync(resolve(REPO_ROOT, "town_ini.cgi"))),
   decodeLegacyText(readFileSync(resolve(REPO_ROOT, "command.pl")))
@@ -245,6 +247,8 @@ function snapshot(user) {
     insurance: updated ? inventoryOverview(db,user.id,insuranceItem,now) : null,
     insurancePurchases: updated ? listInsurancePurchases(db,user.id) : [],
     legacyInventory: updated ? listLegacyInventoryItems(db,user.id) : [],
+    legacyItemActions: updated ? listLegacyItemActions(db,user.id,updated,now) : [],
+    legacyItemHistory: updated ? listLegacyItemUseHistory(db,user.id) : [],
     hunger: updated ? hungerStatus(updated.lastMealAt,now) : null,
     physique: updated ? physiqueStatus(updated.height,updated.weight) : null,
     mealCooldownMs: updated && updated.lastMealAt ?
@@ -446,6 +450,14 @@ async function handle(req, res) {
       return sendJson(res,200,{...snapshot(user),hospitalResult:{
         paid:result.paid,previousDisease:result.previousDisease
       }});
+    }
+
+    if (path === "/api/inventory/legacy/use") {
+      let result;
+      try {
+        result=useLegacyItem(db,user.id,data.sourceLine,data.requestId,Date.now());
+      }catch(error){throw new HttpError(400,error.message);}
+      return sendJson(res,200,{...snapshot(user),itemUseResult:result});
     }
 
     if (path === "/api/inventory/insurance/buy") {
