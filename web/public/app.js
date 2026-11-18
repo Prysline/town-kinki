@@ -183,6 +183,12 @@ function renderRoom() {
     button.addEventListener("click", () => openRoom(view.houseId, slot.index, false));
     nav.append(button);
   }
+  const reload = document.createElement("button");
+  reload.type = "button";
+  reload.className = "secondary";
+  reload.textContent = "更新室內內容";
+  reload.addEventListener("click", () => openRoom(view.houseId, view.selectedIndex, false));
+  nav.append(reload);
   const body = el("room-body");
   body.replaceChildren();
   const current = view.selected;
@@ -622,6 +628,7 @@ async function action(path, data, message) {
       notify("完成" + result.name + "，花費 " + money(result.paid) +
         (gains ? "，能力提升：" + gains : "") + "。");
     } else if (message) notify(message);
+    if (path === "login" || path === "register") closeRoom();
     render();
   } catch (error) { notify(error.message, true); }
 }
@@ -671,7 +678,7 @@ el("bank-form").addEventListener("submit", event => {
     (actionName === "deposit" ? "存款" : "提款") + "完成：" + money(amount));
 });
 el("logout").addEventListener("click", async () => {
-  try { await api("logout", {}); state = await api("state"); render(); notify("已登出"); }
+  try { await api("logout", {}); closeRoom(); state = await api("state"); render(); notify("已登出"); }
   catch (error) { notify(error.message, true); }
 });
 el("room-close").addEventListener("click", closeRoom);
