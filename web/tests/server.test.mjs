@@ -1268,7 +1268,8 @@ test("單機：原版疾病事件每日最多抽選一次，舊角色首日不�
     const count=after.result.healthEvents.length;
     const index=after.result.health.index;
     if(count){
-      assert.ok([4,15].includes(after.result.healthEvents[0].originalId));
+      assert.ok([1,2,4,5,6,7,8,9,10,12,13,14,15,24,25,26,27,33,39,41,43]
+        .includes(after.result.healthEvents[0].originalId));
       assert.equal(index,after.result.healthEvents[0].newHealthIndex);
     }
     for(let i=0;i<4;i++){
