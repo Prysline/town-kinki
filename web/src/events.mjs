@@ -5,12 +5,12 @@ export const ORIGINAL_EVENT_COUNT = 44;
 export const ORIGINAL_EVENT_CHANCE = 3;
 export const ILLNESS_EVENTS = Object.freeze({
   4: Object.freeze({
-    key:"caughtCold",originalId:4,title:"突然感冒",
-    description:"不小心感冒了。",healthIndex:-15
+    key:"caughtCold",originalId:4,title:"感冒事件",
+    description:"感冒了。",healthIndex:-15
   }),
   15: Object.freeze({
-    key:"sleptUncovered",originalId:15,title:"夜間著涼",
-    description:"睡覺時沒有蓋好被子，身體不太舒服。",healthIndex:-8
+    key:"sleptUncovered",originalId:15,title:"睡覺後身體不適",
+    description:"裸體睡覺，似乎因此身體不舒服了。",healthIndex:-8
   })
 });
 
