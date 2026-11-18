@@ -132,6 +132,7 @@ export function describeTile(raw) {
   if (typeof raw !== "string") return { key: "", label: "無法辨識的格子", image: null, category: "unknown" };
   // 原版玩家建築會使用 角色ID_...=空地 的形式。只展示標籤，絕不把 raw 當成圖片路徑。
   const [key] = raw.split("=", 1);
+  if (/^webhouse_\d+$/.test(key)) return { key, label: "Web 版居民住宅", image: "house_mini.gif", category: "house" };
   if (symbols.has(key)) return symbols.get(key);
   if (/^\d+(?:_\d+)*$/.test(key) || /^\d+_[^\s<>]+$/.test(key)) {
     return { key, label: "原版居民建築（待匯入房屋資料）", image: "house_mini.gif", category: "house" };
