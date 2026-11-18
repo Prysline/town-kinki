@@ -119,7 +119,7 @@
       </aside>
       <div class="content">
         <section class="card">
-          <div class="heading"><div><div class="eyebrow">城鎮</div><h2>探索附近地區</h2></div><span class="muted">原版地圖尚待移植</span></div>
+          <div class="heading"><div><div class="eyebrow">城鎮</div><h2>探索附近地區</h2></div><span class="muted">原版 12×16 街區</span></div>
           <div class="towns" id="towns"></div>
           <h3>街區地圖</h3>
           <p class="small" id="map-source"></p>
@@ -136,6 +136,37 @@
           </div>
           <p class="small" id="map-selection" role="status"></p>
           <h3>同城居民</h3><p class="small" id="residents"></p>
+        </section>
+        <section class="card" id="housing-panel">
+          <div class="heading">
+            <div><div class="eyebrow">土地與住宅</div><h2>建築公司</h2></div>
+            <span id="house-count" class="muted"></span>
+          </div>
+          <p class="small">請在上方街區點選「空地」或「空地（二）」等建地，再選擇房屋外觀、室內等級和付款方式。建造費依原版城鎮地價與外觀、室內價格計算。</p>
+          <p class="small" id="house-target">尚未選擇建築位置。</p>
+          <form id="house-form" class="housing-form">
+            <label>房屋外觀
+              <select id="house-design" name="image" required></select>
+            </label>
+            <div class="house-preview-row">
+              <img id="house-preview" src="/legacy-assets/house/house_1.gif" alt="目前選擇的房屋外觀" width="48" height="48">
+              <div id="house-design-cost" class="small"></div>
+            </div>
+            <label>室內等級
+              <select id="house-interior" name="interiorRank" required></select>
+            </label>
+            <label>付款方式
+              <select id="house-payment" name="payment">
+                <option value="cash">現金支付</option>
+                <option value="bank">銀行存款支付</option>
+              </select>
+            </label>
+            <dl id="house-quote" class="stats"></dl>
+            <button id="house-submit" type="submit" disabled>確認建造房屋</button>
+          </form>
+          <h3>我擁有的房屋</h3>
+          <div id="owned-houses" class="owned-houses"></div>
+          <p class="small">本階段只支援第一筆一般住宅。原版分店、公司、商店及房屋出售尚未移植。</p>
         </section>
         <section class="card">
           <div class="heading">
