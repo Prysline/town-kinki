@@ -100,10 +100,19 @@
             <div><dt>飽足度</dt><dd id="hunger-status"></dd></div>
             <div><dt>體型</dt><dd id="physique-status"></dd></div>
             <div><dt>目前狀態</dt><dd id="condition-status"></dd></div>
+            <div><dt>疾病</dt><dd id="health-status"></dd></div>
           </dl>
           <button id="work" class="primary" type="button">前往工作</button>
           <p id="cooldown" class="small"></p>
           <button id="refresh" class="secondary full" type="button">更新狀態</button>
+        </section>
+        <section class="card" id="hospital-panel">
+          <div class="eyebrow">健康管理</div>
+          <h3>醫院</h3>
+          <p id="hospital-diagnosis" class="small"></p>
+          <p id="hospital-cost" class="small"></p>
+          <button id="hospital-treat" type="button">接受治療</button>
+          <p class="small">治療會將疾病指數恢復為 50。原版健康保險可減免費用，但目前尚未移植保險道具，僅使用原始未投保收費。</p>
         </section>
         <section class="card">
           <h3>銀行</h3>
