@@ -164,8 +164,8 @@ test("食品與食堂共用 60 分鐘用餐間隔，增加熱量、能力及體�
 });
 
 test("腹瀉、肺炎及結核效果只有對應病症時作用，其他疾病不會憑空治療",()=>{
-  const effects=[["下痢,18",-17,1],["肺炎,20",-21,-1],["結核,40",-41,-1]];
-  for(const [effect,index,delta] of effects){
+  const effects=[["下痢,18",-17],["肺炎,20",-21],["結核,40",-41]];
+  for(const [effect,index] of effects){
     const db=createDb();
     try {
       db.prepare("UPDATE characters SET health_index=? WHERE user_id=1").run(index);
@@ -178,7 +178,6 @@ test("腹瀉、肺炎及結核效果只有對應病症時作用，其他疾病�
       const second=use(db,1,"disease-item-02",NOW+1);
       assert.equal(second.changes.healthIndex,0);
       assert.equal(read(db).health_index,-13);
-      assert.equal(delta===1,true||false);
     }finally{db.close();}
   }
 });
