@@ -123,7 +123,7 @@ export function publicHouseCatalog(catalog, townId, existingNormalHouses) {
 }
 
 export function getHouseSaleQuote(catalog, townId) {
-  if (!Number.isInteger(townId) || !TOWNS.some(town => t.id === townId))
+  if (!Number.isInteger(townId) || !TOWNS.some(town => town.id === townId))
     throw new Error("不存在的城鎮");
   // original_house.cgi：出售僅退還城鎮土地地價，不退外觀與內裝。
   const landWan = catalog.landWan[townId];
