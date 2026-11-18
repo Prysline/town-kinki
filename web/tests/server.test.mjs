@@ -351,3 +351,95 @@ test("多人：爭購同一塊地時只有一人成功，且房屋資料可以�
     } finally { dbAfter.close(); }
   } finally { await srv.stop(); }
 });
+
+
+test("單機：出售住宅僅退地價、保留交易紀錄並可重新建屋", async () => {
+  const srv = await start("solo");
+  try {
+    const created = await api(srv.url, "character",
+      { name: "搬家居民", gender: "other", stats: defaultStats() });
+    assert.equal(created.status, 200);
+    await api(srv.url, "move", { townId:3 });
+    await api(srv.url, "map/tile", { row:0,column:0,symbol:"空地2" });
+    await api(srv.url, "map/tile", { row:0,column:1,symbol:"空地3" });
+    const db = new DatabaseSync(join(srv.directory,"solo.sqlite"));
+    try { db.prepare("UPDATE characters SET money=20000000 WHERE name='搬家居民'").run(); }
+    finally { db.close(); }
+    const first = await api(srv.url,"house/build",{
+      row:0,column:0,image:"house/kamakura.gif",interiorRank:3,payment:"cash"
+    });
+    assert.equal(first.status,200);
+    assert.equal(first.result.character.money,13500000);
+    assert.equal(first.result.houses[0].saleRefund,5000000);
+    assert.equal(first.result.houseEvents.length,1);
+    assert.equal(first.result.houseEvents[0].action,"built");
+    const id=first.result.houses[0].id;
+    const sold=await api(srv.url,"house/sell",{houseId:id,refund:999999999});
+    assert.equal(sold.status,200);
+    assert.equal(sold.result.houseSaleResult.refund,5000000);
+    assert.equal(sold.result.character.money,18500000);
+    assert.equal(sold.result.map.cells[0].raw,"空地2");
+    assert.equal(sold.result.houses.length,0);
+    assert.equal(sold.result.houseCatalog.canBuild,true);
+    assert.deepEqual(sold.result.houseEvents.map(x=>x.action),["sold","built"]);
+    assert.equal((await api(srv.url,"house/sell",{houseId:id})).status,400);
+    assert.equal((await api(srv.url,"state")).result.character.money,18500000);
+    const second=await api(srv.url,"house/build",{
+      row:0,column:1,image:"house/kamakura.gif",interiorRank:3,payment:"cash"
+    });
+    assert.equal(second.status,200);
+    assert.equal(second.result.houses.length,1);
+    assert.equal(second.result.houses[0].location,"A2");
+    assert.equal(second.result.houseEvents.length,3);
+    assert.equal(second.result.character.money,12000000);
+  } finally { await srv.stop(); }
+});
+
+test("多人：非屋主不得出售，兩個同時出售請求只退一次錢並釋放土地", async () => {
+  const seed = directory => {
+    const db = new DatabaseSync(join(directory,"multi.sqlite"));
+    db.exec("CREATE TABLE town_maps(town_id INTEGER PRIMARY KEY, original_name TEXT NOT NULL DEFAULT '', original_record TEXT NOT NULL DEFAULT '', source TEXT NOT NULL, tiles_json TEXT NOT NULL, updated_at INTEGER NOT NULL)");
+    const tiles = Array(192).fill("");
+    tiles[0]="空地3";
+    db.prepare("INSERT INTO town_maps(town_id,original_name,source,tiles_json,updated_at) VALUES(?,?,?,?,?)")
+      .run(3,"和歌山アイランド","legacy-import",JSON.stringify(tiles),Date.now());
+    db.close();
+  };
+  const srv=await start("multi",seed);
+  try {
+    const a=await api(srv.url,"register",{username:"houseSellerOne",password:"house-seller-password-one"});
+    const b=await api(srv.url,"register",{username:"houseBuyerTwo",password:"house-buyer-password-two"});
+    assert.equal(a.status,200);assert.equal(b.status,200);
+    await api(srv.url,"character",{name:"屋主甲",gender:"male",stats:defaultStats()},a.cookie);
+    await api(srv.url,"character",{name:"買家乙",gender:"female",stats:defaultStats()},b.cookie);
+    await api(srv.url,"move",{townId:3},a.cookie);
+    await api(srv.url,"move",{townId:3},b.cookie);
+    const db=new DatabaseSync(join(srv.directory,"multi.sqlite"));
+    try {db.prepare("UPDATE characters SET bank=20000000").run();} finally {db.close();}
+    const first=await api(srv.url,"house/build",{
+      row:0,column:0,image:"house/kamakura.gif",interiorRank:3,payment:"bank"
+    },a.cookie);
+    assert.equal(first.status,200);
+    const id=first.result.houses[0].id;
+    assert.equal((await api(srv.url,"house/sell",{houseId:id},b.cookie)).status,400);
+    assert.equal((await api(srv.url,"house/sell",{houseId:id})).status,401);
+    const sales=await Promise.all([
+      api(srv.url,"house/sell",{houseId:id},a.cookie),
+      api(srv.url,"house/sell",{houseId:id},a.cookie)
+    ]);
+    assert.deepEqual(sales.map(x=>x.status).sort((x,y)=>x-y),[200,400]);
+    const after=await api(srv.url,"state",undefined,a.cookie);
+    assert.equal(after.result.character.money,5100000);
+    assert.equal(after.result.character.bank,13500000);
+    assert.equal(after.result.map.cells[0].raw,"空地3");
+    assert.equal(after.result.townHouses.length,0);
+    assert.equal(after.result.houseEvents.filter(x=>x.action==="sold").length,1);
+    assert.equal((await api(srv.url,"state",undefined,b.cookie)).result.character.money,100000);
+    const repurchased=await api(srv.url,"house/build",{
+      row:0,column:0,image:"house/kamakura.gif",interiorRank:3,payment:"bank"
+    },b.cookie);
+    assert.equal(repurchased.status,200);
+    assert.equal(repurchased.result.townHouses[0].ownerName,"買家乙");
+    assert.equal((await api(srv.url,"state",undefined,a.cookie)).result.houseEvents.length,2);
+  } finally { await srv.stop(); }
+});
