@@ -74,3 +74,12 @@
 .room-slot-editor input,.room-slot-editor select{width:100%}
 #room-body a{overflow-wrap:anywhere}
 @media(max-width:480px){#room-slot-inputs{grid-template-columns:1fr}}
+
+/* 第八階段：一般住宅改裝 */
+.house-rename-form,.house-remodel-form{width:100%;display:grid;gap:.55rem;margin:.65rem 0}
+.house-rename-form label,.house-remodel-form label{width:100%}
+.house-remodel-form{border-top:1px solid #d3dfd5;border-bottom:1px solid #d3dfd5;padding:.8rem 0}
+.house-remodel-form .small{margin:0;line-height:1.45}
+.house-remodel-form select{max-width:100%}
+.house-remodel-preview{display:block;object-fit:contain;image-rendering:pixelated;border:1px solid #d7e0d4;border-radius:4px;background:#fff}
+.owned-house .house-remodel-form button{width:100%}
