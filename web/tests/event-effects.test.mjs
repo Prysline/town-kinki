@@ -50,7 +50,7 @@ test("扒手事件依原版先抽 1 至 100000 元，再以二分之一機率被
   assert.equal(loss.changes.money,99999);
   assert.equal(loss.effects.money,-1);
   assert.match(loss.event.description,/損失現金 1 元/);
-  const reward=resolveNonItemEvent(1,row(),rng(.999,.99));
+  const reward=resolveNonItemEvent(1,row(),rng(.999999,.99));
   assert.equal(reward.changes.money,200000);
   assert.equal(reward.effects.money,100000);
   const empty=resolveNonItemEvent(1,row({money:0}),rng(.8,0));
@@ -60,7 +60,7 @@ test("扒手事件依原版先抽 1 至 100000 元，再以二分之一機率被
 
 test("錢包、NHK、幸運抽獎與販賣機找零使用原始金額，現金不足時不變負數",()=>{
   assert.equal(resolveNonItemEvent(2,row(),rng(0)).changes.money,100001);
-  assert.equal(resolveNonItemEvent(2,row(),rng(.999)).changes.money,110000);
+  assert.equal(resolveNonItemEvent(2,row(),rng(.999999)).changes.money,110000);
   assert.equal(resolveNonItemEvent(5,row()).changes.money,99000);
   assert.equal(resolveNonItemEvent(5,row({money:200})).effects.money,-200);
   assert.equal(resolveNonItemEvent(13,row(),rng(0)).changes.money,110000);
