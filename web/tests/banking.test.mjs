@@ -4,6 +4,7 @@ import { DatabaseSync } from "node:sqlite";
 import {
   BANK_RATES,TERM_UNIT,BANK_LEDGER_LIMIT,
   initBankTables,calculateInterest,settleBankInterest,bankOperation,
+  transferToPlayer,BANK_TRANSFER_LIMIT,NEW_MEMBER_DAYS,NEW_MEMBER_TRANSFER_LIMIT,
   bankOverview,bankLedger,recordBankEntry
 } from "../src/banking.mjs";
 
@@ -11,10 +12,10 @@ function createDb() {
   const db=new DatabaseSync(":memory:");
   db.exec([
     "PRAGMA foreign_keys=ON;",
-    "CREATE TABLE users(id INTEGER PRIMARY KEY,username TEXT NOT NULL);",
-    "CREATE TABLE characters(id INTEGER PRIMARY KEY,user_id INTEGER NOT NULL UNIQUE REFERENCES users(id),money INTEGER NOT NULL,bank INTEGER NOT NULL);",
+    "CREATE TABLE users(id INTEGER PRIMARY KEY,username TEXT NOT NULL,created_at INTEGER NOT NULL DEFAULT 0);",
+    "CREATE TABLE characters(id INTEGER PRIMARY KEY,user_id INTEGER NOT NULL UNIQUE REFERENCES users(id),name TEXT UNIQUE NOT NULL,money INTEGER NOT NULL,bank INTEGER NOT NULL);",
     "INSERT INTO users(id,username) VALUES(1,'alice'),(2,'bob');",
-    "INSERT INTO characters(user_id,money,bank) VALUES(1,5000000,1000000),(2,100000,50000);"
+    "INSERT INTO characters(user_id,name,money,bank) VALUES(1,'甲',5000000,1000000),(2,'乙',100000,50000);"
   ].join("\n"));
   initBankTables(db);
   return db;
@@ -146,5 +147,136 @@ test("新銀行資料表重複初始化不會重置定期存款、計息日與�
     assert.equal(bankOverview(db,1).lastInterestDay,"2026-11-18");
     assert.equal(bankLedger(db,1).length,1);
     assert.equal(db.prepare("SELECT money FROM characters WHERE user_id=1").get().money,3000000);
+  } finally {db.close();}
+});
+
+
+const transferKey = n => "transfer-test-request-" + String(n).padStart(12,"0");
+
+test("原版轉帳金額、收款新人限制、每日限額皆可核對", () => {
+  assert.equal(BANK_TRANSFER_LIMIT,1000000000000);
+  assert.equal(NEW_MEMBER_TRANSFER_LIMIT,1000000);
+  assert.equal(NEW_MEMBER_DAYS,7);
+});
+
+test("多人轉帳應同時更新雙方銀行餘額及各自帳簿，現金和定期不變", () => {
+  const db=createDb();
+  try {
+    const before=db.prepare("SELECT user_id,money,bank FROM characters ORDER BY user_id").all();
+    const result=transferToPlayer(db,1,"乙",750000,"2026-11-18",transferKey(1),1770000000000);
+    assert.equal(result.duplicate,false);
+    assert.equal(result.recipientName,"乙");
+    assert.equal(result.amount,750000);
+    const after=db.prepare("SELECT user_id,money,bank FROM characters ORDER BY user_id").all();
+    assert.deepEqual(after.map(r=>r.bank),[250000,800000]);
+    assert.deepEqual(after.map(r=>r.money),before.map(r=>r.money));
+    assert.deepEqual(bankLedger(db,1).map(e=>[e.action,e.debit,e.credit,e.balance]),
+      [["轉帳給：乙",750000,0,250000]]);
+    assert.deepEqual(bankLedger(db,2).map(e=>[e.action,e.debit,e.credit,e.balance]),
+      [["收到轉帳：甲",0,750000,800000]]);
+    assert.equal(bankOverview(db,1).termBalance,0);
+    assert.equal(bankOverview(db,2).termBalance,0);
+    assert.equal(db.prepare("SELECT COUNT(*) n FROM bank_transfers").get().n,1);
+  } finally {db.close();}
+});
+
+test("重試同一請求識別碼不會重複扣款，重用識別碼篡改金額或收款人會拒絕", () => {
+  const db=createDb();
+  try {
+    const now=1770000000000;
+    const first=transferToPlayer(db,1,"乙",200000,"2026-11-18",transferKey(2),now);
+    const duplicate=transferToPlayer(db,1,"乙",200000,"2026-11-18",transferKey(2),now+1000);
+    assert.equal(duplicate.duplicate,true);
+    assert.equal(first.transferId,duplicate.transferId);
+    assert.equal(db.prepare("SELECT bank FROM characters WHERE user_id=1").get().bank,800000);
+    assert.equal(db.prepare("SELECT bank FROM characters WHERE user_id=2").get().bank,250000);
+    assert.equal(bankLedger(db,1).length,1);
+    assert.equal(bankLedger(db,2).length,1);
+    assert.equal(db.prepare("SELECT COUNT(*) n FROM bank_transfers").get().n,1);
+    assert.throws(() => transferToPlayer(db,1,"乙",200001,"2026-11-18",transferKey(2),now+2000),/不可用於不同交易/);
+    assert.throws(() => transferToPlayer(db,1,"甲",200000,"2026-11-18",transferKey(2),now+2000),/自己的角色/);
+  } finally {db.close();}
+});
+
+test("原版新註冊未滿七天不能收到單筆達百萬的轉帳，滿七天可以", () => {
+  const db=createDb();
+  try {
+    const now=1770000000000;
+    db.prepare("UPDATE users SET created_at=? WHERE id=2").run(now-6*86400000);
+    db.prepare("UPDATE characters SET bank=3000000 WHERE user_id=1").run();
+    assert.throws(() => transferToPlayer(db,1,"乙",1000000,"2026-11-18",transferKey(3),now),/未滿七天/);
+    assert.equal(db.prepare("SELECT bank FROM characters WHERE user_id=1").get().bank,3000000);
+    const small=transferToPlayer(db,1,"乙",999999,"2026-11-18",transferKey(4),now);
+    assert.equal(small.amount,999999);
+    db.prepare("UPDATE users SET created_at=? WHERE id=2").run(now-7*86400000);
+    const big=transferToPlayer(db,1,"乙",1000000,"2026-11-18",transferKey(5),now);
+    assert.equal(big.amount,1000000);
+  } finally {db.close();}
+});
+
+test("同日向同一人轉帳累計最多一兆元，超額拒絕不會扣款或產生捐款", () => {
+  const db=createDb();
+  try {
+    const now=1770000000000,day="2026-11-18";
+    db.prepare("UPDATE characters SET bank=? WHERE user_id=1").run(1000000000500);
+    const first=transferToPlayer(db,1,"乙",800000000000,day,transferKey(6),now);
+    assert.equal(first.amount,800000000000);
+    transferToPlayer(db,1,"乙",200000000000,day,transferKey(7),now+1000);
+    assert.equal(db.prepare("SELECT bank FROM characters WHERE user_id=1").get().bank,500);
+    assert.throws(()=>transferToPlayer(db,1,"乙",1,day,transferKey(8),now+2000),/今日.*上限|今日.*超過/);
+    assert.equal(db.prepare("SELECT bank FROM characters WHERE user_id=1").get().bank,500);
+    assert.equal(db.prepare("SELECT SUM(amount) AS total FROM bank_transfers WHERE sender_user_id=1").get().total,1000000000000);
+    assert.equal(bankLedger(db,1).length,2);
+    assert.throws(()=>transferToPlayer(db,1,"乙",BANK_TRANSFER_LIMIT+1,day,transferKey(9),now+2000),/每次/);
+  } finally {db.close();}
+});
+
+test("匯款失敗時雙方計息、銀行餘額與帳簿全部回滾", () => {
+  const db=createDb();
+  try {
+    const now=1770000000000;
+    settleBankInterest(db,1,"2026-11-17",now);
+    settleBankInterest(db,2,"2026-11-17",now);
+    assert.throws(()=>transferToPlayer(db,1,"乙",999999999,"2026-11-18",transferKey(10),now),/存款不足/);
+    assert.equal(db.prepare("SELECT bank FROM characters WHERE user_id=1").get().bank,1000000);
+    assert.equal(db.prepare("SELECT bank FROM characters WHERE user_id=2").get().bank,50000);
+    assert.equal(bankOverview(db,1).lastInterestDay,"2026-11-17");
+    assert.equal(bankOverview(db,2).lastInterestDay,"2026-11-17");
+    assert.equal(bankLedger(db,1).length,0);
+    assert.equal(bankLedger(db,2).length,0);
+    assert.equal(db.prepare("SELECT COUNT(*) n FROM bank_transfers").get().n,0);
+  } finally {db.close();}
+});
+
+test("跨日轉帳會在雙方收到新款項前依原餘額計息", () => {
+  const db=createDb();
+  try {
+    const now=1770000000000;
+    settleBankInterest(db,1,"2026-11-17",now);
+    settleBankInterest(db,2,"2026-11-17",now);
+    const result=transferToPlayer(db,1,"乙",500000,"2026-11-18",transferKey(11),now);
+    assert.equal(result.bank,505000);
+    assert.equal(db.prepare("SELECT bank FROM characters WHERE user_id=2").get().bank,550250);
+    assert.deepEqual(bankLedger(db,1).map(x=>x.action),["轉帳給：乙","普通存款利息"]);
+    assert.deepEqual(bankLedger(db,2).map(x=>x.action),["收到轉帳：甲","普通存款利息"]);
+    assert.equal(settleBankInterest(db,2,"2026-11-18",now+1000).applied,false);
+  } finally {db.close();}
+});
+
+test("收款人餘額溢位、自己轉帳、無效名稱或請求識別碼都不得改變帳戶", () => {
+  const db=createDb();
+  try {
+    const now=1770000000000;
+    assert.throws(()=>transferToPlayer(db,1,"甲",1,"2026-11-18",transferKey(12),now),/自己的角色/);
+    assert.throws(()=>transferToPlayer(db,1,"不存在",1,"2026-11-18",transferKey(13),now),/找不到/);
+    assert.throws(()=>transferToPlayer(db,1,"乙",-1,"2026-11-18",transferKey(14),now),/正整數/);
+    assert.throws(()=>transferToPlayer(db,1,"乙",1,"2026-11-18","bad",now),/識別碼/);
+    settleBankInterest(db,1,"2026-11-18",now);
+    settleBankInterest(db,2,"2026-11-18",now);
+    db.prepare("UPDATE characters SET bank=? WHERE user_id=2").run(Number.MAX_SAFE_INTEGER);
+    assert.throws(()=>transferToPlayer(db,1,"乙",1,"2026-11-18",transferKey(15),now),/安全整數/);
+    assert.equal(db.prepare("SELECT bank FROM characters WHERE user_id=1").get().bank,1000000);
+    assert.equal(bankLedger(db,1).length,0);
+    assert.equal(db.prepare("SELECT COUNT(*) n FROM bank_transfers").get().n,0);
   } finally {db.close();}
 });
