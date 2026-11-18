@@ -174,8 +174,11 @@ export function getHouseRemodelQuote(catalog, house, options) {
   const image = imageChanged ? catalog.houses.find(x => x.id === options.image) : null;
   if (imageChanged && (!image || !image.supported))
     throw new Error("尚未支援的房屋外觀或價格");
-  const rank = interiorChanged ? options.interiorRank : house.interiorRank;
-  if (!Number.isInteger(rank) || rank < 0 || rank > 3)
+  // SQLite 原始列是 interior_rank；Web 公開的住宅物件是 interiorRank。
+  const previousRank = house.interiorRank ?? house.interior_rank;
+  const rank = interiorChanged ? options.interiorRank : previousRank;
+  if (!Number.isInteger(previousRank) || previousRank < 0 || previousRank > 3 ||
+      !Number.isInteger(rank) || rank < 0 || rank > 3)
     throw new Error("無效的房屋室內等級");
   const imageWan = imageChanged ? image.priceWan : 0;
   const interiorWan = interiorChanged ? catalog.interiorWan[rank] : 0;
@@ -186,7 +189,7 @@ export function getHouseRemodelQuote(catalog, house, options) {
   return {
     image: imageChanged ? image.image : house.image,
     interiorRank: rank, oldImage: house.image,
-    oldInteriorRank: house.interiorRank,
+    oldInteriorRank: previousRank,
     imageWan, interiorWan, totalWan, total
   };
 }
