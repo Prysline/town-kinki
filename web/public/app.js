@@ -671,6 +671,42 @@ function actionTraining(key) {
   action("train", { key });
 }
 
+function renderBank() {
+  const account = state.bankAccount;
+  if (!account) return;
+  text("term-balance", "目前定期存款：" + money(account.termBalance));
+  text("bank-interest-day", account.lastInterestDay
+    ? "最近已計息日期：" + account.lastInterestDay
+    : "尚無計息紀錄，將以首次讀取日期開始記錄。");
+  el("term-cancel").disabled = account.termBalance <= 0;
+  const target = el("bank-ledger-list");
+  target.replaceChildren();
+  const filter = el("bank-ledger-filter").value;
+  const rows = (state.bankLedger || []).filter(
+    item => filter === "all" || item.type === filter
+  );
+  if (!rows.length) {
+    const empty = document.createElement("p");
+    empty.className = "small";
+    empty.textContent = "目前沒有符合條件的銀行交易紀錄。";
+    target.append(empty);
+    return;
+  }
+  const list = document.createElement("ol");
+  list.className = "bank-ledger-list";
+  for (const item of rows) {
+    const li = document.createElement("li");
+    const who = item.type === "ordinary" ? "普通存款" : "超級定期";
+    const date = new Date(item.occurredAt).toLocaleString("zh-TW");
+    const amount = item.credit > 0 ? "入帳 " + money(item.credit) :
+      item.debit > 0 ? "支出 " + money(item.debit) : "金額未變動";
+    li.textContent = date + "｜" + who + "｜" + item.action + "｜" +
+      amount + "｜餘額 " + money(item.balance);
+    list.append(li);
+  }
+  target.append(list);
+}
+
 function render() {
   if (!state) return;
   const solo = state.mode === "solo";
@@ -685,6 +721,7 @@ function render() {
   text("current-town", state.towns.find(t => t.id === c.townId)?.name || "未知");
   text("money", money(c.money));
   text("bank", money(c.bank));
+  renderBank();
   text("body-energy", c.bodyEnergy + " / " + state.maxBodyEnergy);
   text("brain-energy", c.brainEnergy + " / " + state.maxBrainEnergy);
   text("current-job", state.currentJob?.name || "尚未就職");
@@ -787,6 +824,23 @@ el("bank-form").addEventListener("submit", event => {
   const amount = Number(new FormData(event.currentTarget).get("amount"));
   action("bank", { action: actionName, amount },
     (actionName === "deposit" ? "存款" : "提款") + "完成：" + money(amount));
+});
+el("bank-ledger-filter").addEventListener("change", renderBank);
+el("term-deposit-form").addEventListener("submit", event => {
+  event.preventDefault();
+  const units = Number(new FormData(event.currentTarget).get("units"));
+  if (!Number.isSafeInteger(units) || units < 1 || !Number.isSafeInteger(units*1000000))
+    return notify("定期存款單位必須為正整數。", true);
+  action("bank/term", {action:"deposit",units},
+    "已存入超級定期 " + money(units*1000000) + "。");
+});
+el("term-cancel").addEventListener("click", () => {
+  const amount=state?.bankAccount?.termBalance ?? 0;
+  if (amount <= 0) return;
+  if (window.confirm("確定解約全部超級定期存款嗎？將領回 " +
+    money(amount) + " 至現金，不能部分提款。")) {
+    action("bank/term", {action:"cancel"}, "超級定期已解約。");
+  }
 });
 el("logout").addEventListener("click", async () => {
   try { await api("logout", {}); closeRoom(); state = await api("state"); render(); notify("已登出"); }
