@@ -40,12 +40,19 @@ function addRow(parent, key, value) {
 }
 
 let selectedMapCell = null;
+let selectedHouseSpot = null;
+let selectedMapTown = null;
 
 function renderTownMap() {
   const map = state.map;
   const board = el("town-map");
   board.replaceChildren();
   if (!map) return;
+  if (selectedMapTown !== map.townId) {
+    selectedMapCell = null;
+    selectedHouseSpot = null;
+    selectedMapTown = map.townId;
+  }
   const editor = el("map-editor");
   editor.hidden = !map.editable;
   const palette = el("map-palette");
@@ -106,6 +113,10 @@ function renderTownMap() {
       }
       button.addEventListener("click", () => {
         selectedMapCell = name;
+        if (!el("map-edit-toggle").checked) {
+          selectedHouseSpot = { row, column: col };
+          updateHouseQuote();
+        }
         text("map-selection", name + "：" + cell.label +
           (cell.raw && cell.category === "unknown" ? "（" + cell.raw + "）" : ""));
         if (map.editable && el("map-edit-toggle").checked) {
@@ -119,6 +130,110 @@ function renderTownMap() {
       board.append(button);
     }
   }
+}
+
+function updateHouseQuote() {
+  const catalog = state?.houseCatalog;
+  const priceList = el("house-quote");
+  priceList.replaceChildren();
+  const target = el("house-target");
+  const submit = el("house-submit");
+  if (!catalog) {
+    submit.disabled = true;
+    return;
+  }
+  const map = state?.map;
+  const cell = selectedHouseSpot ? map?.cells[selectedHouseSpot.row * 16 + selectedHouseSpot.column] : null;
+  const location = selectedHouseSpot ? "ABCDEFGHIJKL"[selectedHouseSpot.row] + (selectedHouseSpot.column + 1) : "";
+  const isLot = ["空地","空地2","空地3","空地4"].includes(cell?.raw);
+  target.textContent = !cell
+    ? "請先點選上方地圖中的建築空地。"
+    : isLot ? "選擇位置：" + location + "（" + cell.label + "）"
+    : location + " 不是可建造的空地（" + cell.label + "）。";
+  const image = catalog.designs.find(x => x.id === el("house-design").value);
+  const rank = Number(el("house-interior").value);
+  const interior = catalog.interiorOptions.find(x => x.rank === rank);
+  const price = image?.supported && interior ? (catalog.landWan + image.priceWan + interior.priceWan) * 10000 : null;
+  const preview = el("house-preview");
+  if (image?.supported) preview.src = "/legacy-assets/" + image.image;
+  text("house-design-cost", image?.supported ? "外觀價格：" + money(image.priceWan * 10000) : "這個外觀的價格超過目前支援範圍");
+  addRow(priceList, "城鎮地價", money(catalog.landWan * 10000));
+  addRow(priceList, "房屋外觀", image?.supported ? money(image.priceWan * 10000) : "不支援");
+  addRow(priceList, "室內等級", interior ? money(interior.priceWan * 10000) : "請選擇");
+  addRow(priceList, "建造總額", price === null ? "無法計算" : money(price));
+  if (catalog.canBuild && isLot && price !== null) {
+    const available = el("house-payment").value === "cash" ? state.character.money : state.character.bank;
+    addRow(priceList, "可用餘額", money(available));
+    if (available < price) addRow(priceList, "付款狀態", "餘額不足");
+  }
+  submit.disabled = !catalog.canBuild || !isLot || price === null;
+}
+
+function renderHouses() {
+  const catalog = state?.houseCatalog;
+  if (!catalog) return;
+  text("house-count", "一般住宅：" + state.houses.length + " / " + catalog.maxNormalHouses);
+  const designSelect = el("house-design");
+  const selectedDesign = designSelect.value;
+  designSelect.replaceChildren();
+  for (const house of catalog.designs) {
+    const option = document.createElement("option");
+    option.value = house.id;
+    option.disabled = !house.supported;
+    option.textContent = house.id.split("/").pop() + (house.supported ? "（" + money(house.priceWan * 10000) + "）" : "（價格未支援）");
+    designSelect.append(option);
+  }
+  if (catalog.designs.some(x => x.id === selectedDesign && x.supported)) designSelect.value = selectedDesign;
+  const interiorSelect = el("house-interior");
+  const previousRank = interiorSelect.value;
+  interiorSelect.replaceChildren();
+  for (const item of catalog.interiorOptions) {
+    const option = document.createElement("option");
+    option.value = String(item.rank);
+    option.textContent = item.label + "：" + money(item.priceWan * 10000);
+    interiorSelect.append(option);
+  }
+  if (catalog.interiorOptions.some(x => String(x.rank) === previousRank)) interiorSelect.value = previousRank;
+  const listing = el("owned-houses");
+  listing.replaceChildren();
+  if (!state.houses.length) {
+    const info = document.createElement("p");
+    info.className = "small";
+    info.textContent = "尚未擁有住宅。";
+    listing.append(info);
+  }
+  for (const house of state.houses) {
+    const box = document.createElement("form");
+    box.className = "owned-house";
+    const img = document.createElement("img");
+    img.src = "/legacy-assets/" + house.image;
+    img.alt = "";
+    img.width = 40;
+    img.height = 40;
+    const title = document.createElement("strong");
+    title.textContent = house.name;
+    const where = document.createElement("p");
+    where.className = "small";
+    where.textContent = house.townName + " " + house.location + "，購屋價格：" + money(house.purchasePrice);
+    const label = document.createElement("label");
+    label.textContent = "修改住宅名稱";
+    const input = document.createElement("input");
+    input.name = "houseName";
+    input.value = house.name;
+    input.maxLength = 28;
+    input.required = true;
+    label.append(input);
+    const button = document.createElement("button");
+    button.type = "submit";
+    button.textContent = "儲存名稱";
+    box.append(img, title, where, label, button);
+    box.addEventListener("submit", event => {
+      event.preventDefault();
+      action("house/rename", { houseId: house.id, name: input.value }, "已更新住宅名稱。");
+    });
+    listing.append(box);
+  }
+  updateHouseQuote();
 }
 
 function renderTowns() {
@@ -258,6 +373,7 @@ function render() {
   text("residents", state.residents.length ? state.residents.join("、") : "目前沒有其他玩家在這個城鎮。");
   renderTowns();
   renderTownMap();
+  renderHouses();
   renderTraining();
   renderJobs();
 }
@@ -273,6 +389,8 @@ async function action(path, data, message) {
       if (result.leveledUp) messages.push("職業等級提升至 " + result.jobLevel + " 級。");
       if (result.mastered) messages.push("已精通目前職業，開放相關進階職業。");
       notify(messages.join(" "));
+    } else if (path === "house/build") {
+      notify("住宅建造完成，費用：" + money(state.houseResult.quote.total) + "。");
     } else if (path === "train") {
       const result = state.trainingResult;
       const gains = Object.entries(result.gained)
@@ -333,6 +451,18 @@ el("bank-form").addEventListener("submit", event => {
 el("logout").addEventListener("click", async () => {
   try { await api("logout", {}); state = await api("state"); render(); notify("已登出"); }
   catch (error) { notify(error.message, true); }
+});
+el("house-design").addEventListener("change", updateHouseQuote);
+el("house-interior").addEventListener("change", updateHouseQuote);
+el("house-payment").addEventListener("change", updateHouseQuote);
+el("house-form").addEventListener("submit", event => {
+  event.preventDefault();
+  if (!selectedHouseSpot) return notify("請先在地圖點選空地。", true);
+  const d = formValues(event.currentTarget);
+  action("house/build", {
+    row: selectedHouseSpot.row, column: selectedHouseSpot.column,
+    image: d.image, interiorRank: Number(d.interiorRank), payment: d.payment
+  });
 });
 el("map-edit-toggle").addEventListener("change", () => {
   el("map-palette").disabled = !el("map-edit-toggle").checked;
