@@ -12,7 +12,7 @@ function createDb() {
   db.exec([
     "PRAGMA foreign_keys=ON;",
     "CREATE TABLE users(id INTEGER PRIMARY KEY,username TEXT NOT NULL);",
-    "CREATE TABLE characters(id INTEGER PRIMARY KEY,user_id INTEGER UNIQUE NOT NULL REFERENCES users(id),health_index INTEGER NOT NULL DEFAULT 50,last_event_day TEXT NOT NULL DEFAULT '',money INTEGER NOT NULL DEFAULT 100000,weight REAL NOT NULL DEFAULT 60,height INTEGER NOT NULL DEFAULT 165,bmi REAL NOT NULL DEFAULT 22,stats_json TEXT NOT NULL DEFAULT '{}');",
+    "CREATE TABLE characters(id INTEGER PRIMARY KEY,user_id INTEGER UNIQUE NOT NULL REFERENCES users(id),health_index INTEGER NOT NULL DEFAULT 50,last_event_day TEXT NOT NULL DEFAULT '',money INTEGER NOT NULL DEFAULT 100000,weight REAL NOT NULL DEFAULT 60,height INTEGER NOT NULL DEFAULT 165,bmi REAL NOT NULL DEFAULT 22,body_energy INTEGER NOT NULL DEFAULT 20,brain_energy INTEGER NOT NULL DEFAULT 20,job_experience INTEGER NOT NULL DEFAULT 0,recovered_at INTEGER NOT NULL DEFAULT 1000,stats_json TEXT NOT NULL DEFAULT '{}');",
     "INSERT INTO users(id,username) VALUES(1,'owner'),(2,'other');",
     "INSERT INTO characters(user_id,health_index) VALUES(1,50),(2,-25);"
   ].join("\n"));
