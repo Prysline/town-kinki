@@ -97,6 +97,9 @@
             <div><dt>目前職業等級</dt><dd id="job-level"></dd></div>
             <div><dt>精通職業</dt><dd id="mastered-job"></dd></div>
             <div><dt>身高／體重</dt><dd id="measurements"></dd></div>
+            <div><dt>飽足度</dt><dd id="hunger-status"></dd></div>
+            <div><dt>體型</dt><dd id="physique-status"></dd></div>
+            <div><dt>目前狀態</dt><dd id="condition-status"></dd></div>
           </dl>
           <button id="work" class="primary" type="button">前往工作</button>
           <p id="cooldown" class="small"></p>
@@ -240,6 +243,19 @@
             </form>
           </div>
         </section>
+        <section class="card" id="dining-panel">
+          <div class="heading">
+            <div><div class="eyebrow">日常生活</div><h2>中央食堂</h2></div>
+            <span class="muted" id="meal-status">每次用餐間隔 60 分鐘</span>
+          </div>
+          <p class="small">依原版食堂餐點資料計算價格、能力提升與體重變化。實際收費為原始標價的三倍。菜單目前固定列示，原版每日抽選與共用庫存尚未移植。</p>
+          <label for="meal-menu">查看菜單來源</label>
+          <select id="meal-menu">
+            <option value="main">中央食堂</option>
+            <option value="second">第二食堂</option>
+          </select>
+          <div id="meal-list" class="training-grid"></div>
+        </section>
         <section class="card">
           <div class="heading">
             <div><div class="eyebrow">能力培養</div><h2><img class="facility-icon" src="/legacy-assets/school.gif" alt="">學校</h2></div>
@@ -265,7 +281,7 @@
             <select id="job-filter"><option value="available">目前可選</option><option value="all">全部職業</option></select>
           </div>
           <div id="jobs" class="jobs"></div>
-          <p class="small">未翻譯的職業會暫時顯示原始日文。職業經驗與精通已支援，但健康、飽足度等完整原版判定尚未移植。</p>
+          <p class="small">未翻譯的職業會暫時顯示原始日文。職業經驗與精通、用餐飽足度與體型對工作狀態的影響已接入；疾病治療與事件仍待移植。</p>
         </section>
       </div>
     </div>
