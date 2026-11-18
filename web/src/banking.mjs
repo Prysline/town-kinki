@@ -47,6 +47,17 @@ export function initBankTables(db) {
     "CREATE INDEX IF NOT EXISTS bank_ledger_user_idx ON bank_ledger(user_id,id);"
   ].join("\n"));
   db.exec([
+    "CREATE TABLE IF NOT EXISTS bank_loans(",
+    "user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,",
+    "principal INTEGER NOT NULL CHECK(principal>=0),",
+    "daily_payment INTEGER NOT NULL CHECK(daily_payment>=0),",
+    "remaining_payments INTEGER NOT NULL CHECK(remaining_payments>=0),",
+    "original_payments INTEGER NOT NULL CHECK(original_payments>=0),",
+    "missed_attempts INTEGER NOT NULL DEFAULT 0 CHECK(missed_attempts>=0),",
+    "last_attempt_day TEXT NOT NULL,",
+    "borrowed_at INTEGER NOT NULL);"
+  ].join("\n"));
+  db.exec([
     "CREATE TABLE IF NOT EXISTS bank_transfers(",
     "id INTEGER PRIMARY KEY AUTOINCREMENT,",
     "sender_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,",
@@ -99,7 +110,8 @@ function applyInterest(db, userId, today, now) {
     .run(termBalance,today,userId);
   if (ordinaryInterest) recordBankEntry(db,userId,"ordinary","普通存款利息",0,ordinaryInterest,ordinaryBalance,now);
   if (termInterest) recordBankEntry(db,userId,"term","超級定期利息",0,termInterest,termBalance,now);
-  return { ordinary:ordinaryInterest, term:termInterest, applied:true };
+  const repayment = applyDailyLoanRepayment(db,userId,today,now);
+  return { ordinary:ordinaryInterest, term:termInterest, applied:true, repayment };
 }
 export function settleBankInterest(db,userId,today,now=Date.now()) {
   db.exec("BEGIN IMMEDIATE");
@@ -239,6 +251,125 @@ export function transferToPlayer(db, senderId, recipientName, amount, today,
     db.exec("ROLLBACK");
     throw error;
   }
+}
+
+// 取自 basic.cgi loan：薪資 × (職業經驗/50) × (工作次數/50)
+// 加上普通存款 × 2、超級定期存款 × 2.5；下取整至萬元並限制三億元。
+export const LOAN_LIMIT = 300000000;
+export const LOAN_TERMS = Object.freeze([12,24,36,48,60,72,84,96,108,120]);
+export function quoteBankLoan({salary,experience,workCount,bank,termBalance}) {
+  const nums=[salary,experience,workCount,bank,termBalance];
+  if (nums.some(x=>!Number.isSafeInteger(x)||x<0)) throw new Error("貸款評估資料不正確");
+  const [sal,exp,count,ordinary,term]=nums.map(BigInt);
+  const weighted = (2n*sal*exp*count + 10000n*ordinary + 12500n*term)/5000n;
+  const maximum = Number((weighted > BigInt(LOAN_LIMIT) ? BigInt(LOAN_LIMIT) : weighted)/10000n*10000n);
+  const plans=LOAN_TERMS.map((payments,index)=>{
+    const interestPercent=index+5;
+    const dailyPayment=Number(BigInt(maximum)*BigInt(100+interestPercent)/
+      (100n*BigInt(payments)));
+    return {payments,interestPercent,dailyPayment,
+      totalRepayment:dailyPayment*payments};
+  });
+  return {maxPrincipal:maximum,plans};
+}
+function currentLoan(db,userId) {
+  return db.prepare("SELECT * FROM bank_loans WHERE user_id=?").get(userId) ?? null;
+}
+export function bankLoanOverview(db,userId,job=null) {
+  const char=db.prepare(
+    "SELECT bank,job_experience,job_work_count FROM characters WHERE user_id=?"
+  ).get(userId);
+  if (!char) return null;
+  const acc=db.prepare("SELECT term_balance FROM bank_accounts WHERE user_id=?").get(userId);
+  const quote=quoteBankLoan({
+    salary:job?.salary ?? 0,
+    experience:char.job_experience ?? 0,
+    workCount:char.job_work_count ?? 0,
+    bank:char.bank,
+    termBalance:acc?.term_balance ?? 0
+  });
+  const row=currentLoan(db,userId);
+  const hasLoan=Boolean(row?.remaining_payments);
+  return { ...quote, active:hasLoan, originalPrincipal:hasLoan?row.principal:0,
+    dailyPayment:hasLoan?row.daily_payment:0,
+    remainingPayments:hasLoan?row.remaining_payments:0,
+    totalOutstanding:hasLoan?row.remaining_payments*row.daily_payment:0,
+    missedAttempts:hasLoan?row.missed_attempts:0,
+    lastAttemptDay:hasLoan?row.last_attempt_day:null };
+}
+function applyDailyLoanRepayment(db,userId,today,now) {
+  const loan=currentLoan(db,userId);
+  if (!loan || !loan.remaining_payments || loan.last_attempt_day>=today) return null;
+  const record=db.prepare("SELECT bank FROM characters WHERE user_id=?").get(userId);
+  if (!record) throw new Error("貸款角色不存在");
+  if (record.bank<loan.daily_payment) {
+    // 原 CGI 允許扣至負存款；Web 版不允許負數，未足額則保留剩餘期數並登記欠繳。
+    db.prepare(
+      "UPDATE bank_loans SET last_attempt_day=?,missed_attempts=missed_attempts+1 WHERE user_id=?"
+    ).run(today,userId);
+    return {paid:false,amount:0,missed:true};
+  }
+  const remaining=loan.remaining_payments-1;
+  const balance=record.bank-loan.daily_payment;
+  db.prepare("UPDATE characters SET bank=? WHERE user_id=?").run(balance,userId);
+  db.prepare("UPDATE bank_loans SET remaining_payments=?,last_attempt_day=? WHERE user_id=?")
+    .run(remaining,today,userId);
+  recordBankEntry(db,userId,"ordinary","住宅貸款每日還款",
+    loan.daily_payment,0,balance,now);
+  return {paid:true,amount:loan.daily_payment,remainingPayments:remaining};
+}
+export function borrowBankLoan(db,userId,job,termCount,today,now=Date.now()) {
+  if (!LOAN_TERMS.includes(termCount)) throw new Error("貸款期數不符合可選方案");
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    const character=db.prepare(
+      "SELECT bank,job_experience,job_work_count FROM characters WHERE user_id=?"
+    ).get(userId);
+    if (!character) throw new Error("請先建立角色");
+    applyInterest(db,userId,today,now);
+    const loan=currentLoan(db,userId);
+    if (loan?.remaining_payments>0) throw new Error("尚有未清償貸款，不可再次借款");
+    const acc=db.prepare("SELECT term_balance FROM bank_accounts WHERE user_id=?").get(userId);
+    const currentBank=db.prepare("SELECT bank FROM characters WHERE user_id=?").get(userId).bank;
+    const quote=quoteBankLoan({
+      salary:job?.salary??0,experience:character.job_experience??0,
+      workCount:character.job_work_count??0,bank:currentBank,
+      termBalance:acc?.term_balance??0
+    });
+    if (quote.maxPrincipal<=0) throw new Error("目前沒有可借款額度");
+    const plan=quote.plans.find(p=>p.payments===termCount);
+    if (plan.dailyPayment<=0) throw new Error("貸款每日還款金額無效");
+    const newBank=safeSum(currentBank,quote.maxPrincipal);
+    db.prepare(
+      "INSERT INTO bank_loans(user_id,principal,daily_payment,remaining_payments,original_payments,missed_attempts,last_attempt_day,borrowed_at) VALUES(?,?,?,?,?,0,?,?) "+
+      "ON CONFLICT(user_id) DO UPDATE SET principal=excluded.principal,daily_payment=excluded.daily_payment,remaining_payments=excluded.remaining_payments,original_payments=excluded.original_payments,missed_attempts=0,last_attempt_day=excluded.last_attempt_day,borrowed_at=excluded.borrowed_at"
+    ).run(userId,quote.maxPrincipal,plan.dailyPayment,termCount,termCount,today,now);
+    db.prepare("UPDATE characters SET bank=? WHERE user_id=?").run(newBank,userId);
+    recordBankEntry(db,userId,"ordinary","住宅貸款撥款",0,quote.maxPrincipal,newBank,now);
+    db.exec("COMMIT");
+    return {principal:quote.maxPrincipal,...plan,totalOutstanding:plan.totalRepayment,bank:newBank};
+  } catch(error) { db.exec("ROLLBACK"); throw error; }
+}
+export function payoffBankLoan(db,userId,today,now=Date.now()) {
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    const character=db.prepare("SELECT bank FROM characters WHERE user_id=?").get(userId);
+    if (!character) throw new Error("請先建立角色");
+    applyInterest(db,userId,today,now);
+    const loan=currentLoan(db,userId);
+    if (!loan?.remaining_payments) throw new Error("目前沒有待清償的貸款");
+    const bank=db.prepare("SELECT bank FROM characters WHERE user_id=?").get(userId).bank;
+    const due=loan.daily_payment*loan.remaining_payments;
+    if (!Number.isSafeInteger(due)||due<0) throw new Error("貸款餘額超出支援範圍");
+    if (bank<due) throw new Error("普通存款不足以一次清償貸款");
+    const balance=bank-due;
+    db.prepare("UPDATE characters SET bank=? WHERE user_id=?").run(balance,userId);
+    db.prepare("UPDATE bank_loans SET remaining_payments=0,daily_payment=0,last_attempt_day=? WHERE user_id=?")
+      .run(today,userId);
+    recordBankEntry(db,userId,"ordinary","住宅貸款一次清償",due,0,balance,now);
+    db.exec("COMMIT");
+    return {paid:due,bank:balance};
+  } catch(error) { db.exec("ROLLBACK"); throw error; }
 }
 
 export function bankOverview(db,userId) {
