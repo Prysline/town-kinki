@@ -1316,3 +1316,108 @@ test("多人：疾病事件紀錄限本人查閱，角色事件檢查日期獨�
     assert.equal((await api(srv.url,"hospital/treat",{})).status,401);
   }finally{await srv.stop();}
 });
+
+
+test("單機：原版健康保險購買、同請求防重、醫院三分之一折扣及到期後恢復原價",async()=>{
+  const srv=await start("solo");
+  try{
+    const created=await api(srv.url,"character",{
+      name:"單機保險居民",gender:"other",stats:defaultStats()
+    });
+    assert.equal(created.status,200);
+    assert.equal(created.result.hospital.price,10000);
+    assert.equal(created.result.insurance.active,false);
+    assert.equal(created.result.insurance.price,10000);
+    assert.equal(created.result.insurance.durationDays,30);
+    assert.deepEqual(created.result.insurancePurchases,[]);
+    const first=await api(srv.url,"inventory/insurance/buy",{
+      quantity:1,requestId:"single-insurance-001"
+    });
+    assert.equal(first.status,200);
+    assert.equal(first.result.insuranceResult.paid,10000);
+    assert.equal(first.result.insuranceResult.replayed,false);
+    assert.equal(first.result.character.money,90000);
+    assert.equal(first.result.insurance.active,true);
+    assert.equal(first.result.hospital.hasInsurance,true);
+    assert.equal(first.result.hospital.price,3333);
+    const duplicate=await api(srv.url,"inventory/insurance/buy",{
+      quantity:1,requestId:"single-insurance-001"
+    });
+    assert.equal(duplicate.status,200);
+    assert.equal(duplicate.result.insuranceResult.replayed,true);
+    assert.equal(duplicate.result.character.money,90000);
+    assert.equal(duplicate.result.insurancePurchases.length,1);
+    assert.equal((await api(srv.url,"inventory/insurance/buy",{
+      quantity:2,requestId:"single-insurance-001"
+    })).status,400);
+    const treated=await api(srv.url,"hospital/treat",{insured:false,discount:0});
+    assert.equal(treated.status,200);
+    assert.equal(treated.result.hospitalResult.paid,3333);
+    assert.equal(treated.result.character.money,86667);
+    assert.equal(treated.result.insurance.active,true);
+    const db=new DatabaseSync(join(srv.directory,"solo.sqlite"));
+    try{
+      db.prepare("UPDATE inventory_items SET active_until=1 WHERE item_key='health-insurance'").run();
+    }finally{db.close();}
+    const expired=await api(srv.url,"state");
+    assert.equal(expired.status,200);
+    assert.equal(expired.result.insurance.active,false);
+    assert.equal(expired.result.hospital.hasInsurance,false);
+    assert.equal(expired.result.hospital.price,10000);
+    assert.equal(expired.result.insurancePurchases.length,1);
+    const afterExpiry=await api(srv.url,"hospital/treat",{insured:true,insurance:true});
+    assert.equal(afterExpiry.status,200);
+    assert.equal(afterExpiry.result.hospitalResult.paid,10000);
+    assert.equal(afterExpiry.result.character.money,76667);
+  }finally{await srv.stop();}
+});
+
+test("多人：健康保險只能由本人購買使用，對方不可藉請求參數冒用折扣",async()=>{
+  const srv=await start("multi");
+  try {
+    const a=await api(srv.url,"register",{
+      username:"insurancePlayerA",password:"insurance-player-A-secret"
+    });
+    const b=await api(srv.url,"register",{
+      username:"insurancePlayerB",password:"insurance-player-B-secret"
+    });
+    assert.equal(a.status,200);
+    assert.equal(b.status,200);
+    await api(srv.url,"character",{
+      name:"保險居民甲",gender:"male",stats:defaultStats()
+    },a.cookie);
+    await api(srv.url,"character",{
+      name:"保險居民乙",gender:"female",stats:defaultStats()
+    },b.cookie);
+    assert.equal((await api(srv.url,"inventory/insurance/buy",{
+      quantity:1,requestId:"unauth-insurance-001"
+    })).status,401);
+    const bought=await api(srv.url,"inventory/insurance/buy",{
+      quantity:2,requestId:"multi-insurance-001"
+    },a.cookie);
+    assert.equal(bought.status,200);
+    assert.equal(bought.result.character.money,80000);
+    assert.equal(bought.result.insurance.active,true);
+    assert.equal(bought.result.insurance.remainingDays,60);
+    assert.equal(bought.result.hospital.price,3333);
+    const other=await api(srv.url,"state",undefined,b.cookie);
+    assert.equal(other.result.character.money,100000);
+    assert.equal(other.result.hospital.price,10000);
+    assert.equal(other.result.insurance.active,false);
+    assert.equal(other.result.insurancePurchases.length,0);
+    const spoofed=await api(srv.url,"hospital/treat",{
+      insured:true,hasInsurance:true,userId:1,discount:99
+    },b.cookie);
+    assert.equal(spoofed.status,200);
+    assert.equal(spoofed.result.hospitalResult.paid,10000);
+    assert.equal(spoofed.result.character.money,90000);
+    const first=await api(srv.url,"hospital/treat",{},a.cookie);
+    assert.equal(first.status,200);
+    assert.equal(first.result.hospitalResult.paid,3333);
+    assert.equal(first.result.character.money,76667);
+    assert.equal(first.result.insurancePurchases.length,1);
+    const otherAgain=await api(srv.url,"state",undefined,b.cookie);
+    assert.equal(otherAgain.result.character.money,90000);
+    assert.equal(otherAgain.result.insurancePurchases.length,0);
+  }finally{await srv.stop();}
+});
