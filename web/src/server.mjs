@@ -13,7 +13,7 @@ import { parseLegacySchool, parseLegacyGym, calendarDay, trainingAvailability, p
 import { initTownMapTable, bootstrapLegacyTownMaps, publicTownMap, editTownTile } from "./town-storage.mjs";
 import { parseHouseCatalog, initHousingTables, listHouses, publicHouseCatalog, buildHouse, renameHouse, sellHouse, getHouseSaleQuote, listHouseEvents, remodelHouse, listHouseRemodelEvents } from "./housing.mjs";
 import { initRoomsTables, ROOM_TYPES, setRoomSlots, viewRoom, addRoomPost, deleteRoomPost } from "./rooms.mjs";
-import { initBankTables, settleBankInterest, bankOperation, bankOverview, bankLedger, transferToPlayer, BANK_TRANSFER_LIMIT, NEW_MEMBER_DAYS, NEW_MEMBER_TRANSFER_LIMIT } from "./banking.mjs";
+import { initBankTables, settleBankInterest, bankOperation, bankOverview, bankLedger, transferToPlayer, BANK_TRANSFER_LIMIT, NEW_MEMBER_DAYS, NEW_MEMBER_TRANSFER_LIMIT, bankLoanOverview, borrowBankLoan, payoffBankLoan } from "./banking.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const REPO_ROOT = resolve(ROOT, "..");
@@ -198,6 +198,7 @@ function snapshot(user) {
     user: user ? { username: MODE === "solo" ? "單機玩家" : user.username } : null,
     character: updated,
     bankAccount: updated ? bankOverview(db,user.id) : null,
+    bankLoan: updated ? bankLoanOverview(db,user.id,currentJob) : null,
     bankLedger: updated ? bankLedger(db,user.id) : [],
     bankTransferRules: MODE === "multi" && updated ? {
       maxAmount: BANK_TRANSFER_LIMIT, newMemberDays: NEW_MEMBER_DAYS,
@@ -420,6 +421,23 @@ async function handle(req, res) {
           calendarDay(Date.now(),GAME_TIMEZONE),data.requestId);
       } catch(error) { throw new HttpError(400,error.message); }
       return sendJson(res,200,{ ...snapshot(user),transferResult:result });
+    }
+
+    if (path === "/api/bank/loan/borrow" || path === "/api/bank/loan/payoff") {
+      const now = Date.now();
+      const today = calendarDay(now,GAME_TIMEZONE);
+      let result;
+      try {
+        if (path === "/api/bank/loan/borrow") {
+          const character = getCharacter(user.id);
+          if (!character) throw new Error("請先建立角色");
+          const job = jobsByKey.get(character.jobId);
+          result = borrowBankLoan(db,user.id,job,data.payments,today,now);
+        } else {
+          result = payoffBankLoan(db,user.id,today,now);
+        }
+      } catch (error) { throw new HttpError(400,error.message); }
+      return sendJson(res,200,{ ...snapshot(user),loanResult:result });
     }
 
     if (path === "/api/house/room/config") {
