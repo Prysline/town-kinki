@@ -11,6 +11,7 @@ import {
 } from "./engine.mjs";
 import { parseLegacySchool, parseLegacyGym, calendarDay, trainingAvailability, performTraining } from "./training.mjs";
 import { initTownMapTable, bootstrapLegacyTownMaps, publicTownMap, editTownTile } from "./town-storage.mjs";
+import { parseHouseCatalog, initHousingTables, listHouses, publicHouseCatalog, buildHouse, renameHouse } from "./housing.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const REPO_ROOT = resolve(ROOT, "..");
@@ -50,6 +51,11 @@ for (const [column, definition] of [
 }
 
 initTownMapTable(db);
+initHousingTables(db);
+const houseCatalog = parseHouseCatalog(
+  decodeLegacyText(readFileSync(resolve(REPO_ROOT, "town_ini.cgi"))),
+  decodeLegacyText(readFileSync(resolve(REPO_ROOT, "command.pl")))
+);
 const importedTownIds = bootstrapLegacyTownMaps(db, REPO_ROOT);
 
 const jobPath = resolve(REPO_ROOT, "dat_dir", "job.cgi");
@@ -163,6 +169,18 @@ function snapshot(user) {
   const updated = character ? recoverEnergy(character, now) : null;
   if (character && updated.recoveredAt !== character.recoveredAt) saveCharacter(user.id, updated);
   const currentJob = updated?.jobId ? jobsByKey.get(updated.jobId) : null;
+  const ownedHouses = updated ? listHouses(db, user.id) : [];
+  const townHouses = updated ? listHouses(db).filter(h => h.townId === updated.townId) : [];
+  const map = updated ? publicTownMap(db, updated.townId, MODE === "solo") : null;
+  if (map) for (const house of townHouses) {
+    const cell = map.cells[house.row * 16 + house.column];
+    if (cell && cell.raw === "webhouse_" + house.id + "=" + house.originalPlot) {
+      cell.label = house.name + "（屋主：" + house.ownerName + "）";
+      cell.image = house.image;
+      cell.category = "house";
+      cell.houseId = house.id;
+    }
+  }
   const residents = updated
     ? db.prepare("SELECT name FROM characters WHERE town_id=? AND user_id<>? ORDER BY name LIMIT 50")
       .all(updated.townId, user.id).map(row => row.name)
@@ -176,7 +194,10 @@ function snapshot(user) {
     maxBrainEnergy: updated ? maxBrainEnergy(updated.stats) : null,
     jobLevel: updated ? Math.floor(updated.jobExperience / 100) : 0,
     towns: TOWNS,
-    map: updated ? publicTownMap(db, updated.townId, MODE === "solo") : null,
+    map,
+    houses: ownedHouses,
+    townHouses,
+    houseCatalog: updated ? publicHouseCatalog(houseCatalog, updated.townId, ownedHouses.length) : null,
     residents,
     workCooldownMs: updated ? (updated.lastWorkAt === 0 ? 0 : Math.max(0, WORK_COOLDOWN_MS - (now - updated.lastWorkAt))) : 0,
     schoolRemainingToday: updated ? updated.lastSchoolDay === today : false,
@@ -355,6 +376,24 @@ async function handle(req, res) {
         catch (error) { throw new HttpError(400, error.message); }
         return { character: next };
       });
+      return sendJson(res, 200, snapshot(user));
+    }
+
+    if (path === "/api/house/build") {
+      let result;
+      try {
+        result = buildHouse(db, houseCatalog, user.id,
+          { row: data.row, column: data.column },
+          { image: data.image, interiorRank: data.interiorRank, payment: data.payment });
+      } catch (error) {
+        throw new HttpError(400, error.message);
+      }
+      return sendJson(res, 200, { ...snapshot(user), houseResult: result });
+    }
+
+    if (path === "/api/house/rename") {
+      try { renameHouse(db, user.id, data.houseId, data.name); }
+      catch (error) { throw new HttpError(400, error.message); }
       return sendJson(res, 200, snapshot(user));
     }
 
