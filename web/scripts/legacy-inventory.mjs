@@ -53,6 +53,11 @@ function backup(bytes,path,mode) {
 try{
   const options=argsFrom(process.argv.slice(2));
   const source=resolve(options["--file"]);
+  const folderId=basename(dirname(source));
+  // 原始 mono.cgi 沒有角色 ID 欄位，至少拒絕與典型 member/<ID> 路徑矛盾的輸入。
+  if(basename(source)==="mono.cgi"&&/^\d+$/.test(folderId)&&
+      folderId!==options["--id"])
+    throw new Error("來源 member/<ID>/mono.cgi 資料夾編號與 --id 不符，拒絕匯入");
   const bytes=readFileSync(source);
   if(bytes.length>4*1024*1024)throw new Error("原始物品檔案超出 4 MiB 限制");
   const hash=createHash("sha256").update(bytes).digest("hex");
@@ -67,7 +72,7 @@ try{
     })),
     insuranceExpiry:parsed.insurance?.active?
       new Date(parsed.insurance.expiresAt).toISOString():null,
-    warnings:parsed.warnings
+    warnings:[...parsed.warnings,"mono.cgi 本身不包含角色 ID，請自行確認來源檔案屬於指定的原版角色"]
   };
   console.log(JSON.stringify(preview,null,2));
   if(options["--preview"])console.log("預覽完成，沒有建立或修改資料庫、沒有備份來源檔案。");
