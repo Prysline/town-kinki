@@ -1538,7 +1538,7 @@ test("單機：原版藥品使用、原始耐久保存、二次請求防重、�
     const before=await api(srv.url,"state");
     assert.equal(before.status,200);
     assert.equal(before.result.legacyInventory.length,3);
-    assert.deepEqual(before.result.legacyItemActions.map(x=>x.sourceLine),[1,2]);
+    assert.deepEqual(before.result.legacyItemActions.map(x=>x.sourceLine),[1,2,3]);
     assert.equal(before.result.legacyItemHistory.length,0);
     const first=await api(srv.url,"inventory/legacy/use",{
       sourceLine:1,requestId:"test-consume-cold-001"
@@ -1570,11 +1570,21 @@ test("單機：原版藥品使用、原始耐久保存、二次請求防重、�
     assert.equal((await api(srv.url,"meal/eat",{
       key:before.result.meals[0].key
     })).status,400);
-    assert.equal((await api(srv.url,"inventory/legacy/use",{
-      sourceLine:3,requestId:"test-consume-unsupported-001"
-    })).status,400);
+    const universal=await api(srv.url,"inventory/legacy/use",{
+      sourceLine:3,requestId:"test-consume-universal-001"
+    });
+    assert.equal(universal.status,200);
+    assert.equal(universal.result.itemUseResult.changes.healthIndex,15);
+    assert.equal(universal.result.character.healthIndex,12);
+    assert.equal(universal.result.legacyItemActions[2].remaining,1);
+    const replay=await api(srv.url,"inventory/legacy/use",{
+      sourceLine:3,requestId:"test-consume-universal-001"
+    });
+    assert.equal(replay.status,200);
+    assert.equal(replay.result.itemUseResult.replayed,true);
+    assert.equal(replay.result.character.healthIndex,12);
     const persisted=await api(srv.url,"state");
-    assert.equal(persisted.result.legacyItemHistory.length,2);
+    assert.equal(persisted.result.legacyItemHistory.length,3);
     assert.equal(persisted.result.legacyInventory[0].durability,2);
     const savedDb=new DatabaseSync(join(srv.directory,"solo.sqlite"));
     try{
