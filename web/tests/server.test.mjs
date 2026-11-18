@@ -821,3 +821,112 @@ test("多人：普通帳戶與定期獨立保存，同一帳號並行請求不�
     assert.equal((await api(srv.url,"bank/term",{action:"deposit",units:1})).status,401);
   } finally {await srv.stop();}
 });
+
+
+test("單機：玩家間銀行轉帳不可用，原有單機銀行功能不受影響", async () => {
+  const srv=await start("solo");
+  try {
+    await api(srv.url,"character",{name:"單機銀行玩家",gender:"other",stats:defaultStats()});
+    const result=await api(srv.url,"bank/transfer",{
+      recipientName:"其他角色",amount:100,requestId:"transfer-solo-attempt-0001"
+    });
+    assert.equal(result.status,403);
+    assert.equal((await api(srv.url,"state")).result.bankTransferRules,null);
+    assert.equal((await api(srv.url,"bank",{action:"deposit",amount:1000})).status,200);
+    assert.equal((await api(srv.url,"state")).result.character.bank,1000);
+  } finally {await srv.stop();}
+});
+
+test("多人：收款角色名稱轉帳、匯款雙方帳簿與重複請求的安全性", async () => {
+  const srv=await start("multi");
+  try {
+    const a=await api(srv.url,"register",{
+      username:"senderPlayerAccount",password:"sender-password-safe-123"
+    });
+    const b=await api(srv.url,"register",{
+      username:"receiverPlayerAccount",password:"receiver-password-safe-123"
+    });
+    assert.equal(a.status,200);assert.equal(b.status,200);
+    await api(srv.url,"character",{name:"匯款居民甲",gender:"male",stats:defaultStats()},a.cookie);
+    await api(srv.url,"character",{name:"收款居民乙",gender:"female",stats:defaultStats()},b.cookie);
+    const db=new DatabaseSync(join(srv.directory,"multi.sqlite"));
+    try {
+      db.prepare("UPDATE characters SET bank=5000000 WHERE name='匯款居民甲'").run();
+      db.prepare("UPDATE users SET created_at=? WHERE username='receiverPlayerAccount'")
+        .run(Date.now()-8*86400000);
+    } finally {db.close();}
+    const request={
+      recipientName:"收款居民乙",amount:1250000,requestId:"transfer-http-001-2026"
+    };
+    assert.equal((await api(srv.url,"bank/transfer",request)).status,401);
+    assert.equal((await api(srv.url,"bank/transfer",{
+      ...request,recipientName:"匯款居民甲"
+    },a.cookie)).status,400);
+    const done=await api(srv.url,"bank/transfer",request,a.cookie);
+    assert.equal(done.status,200);
+    assert.equal(done.result.transferResult.amount,1250000);
+    assert.equal(done.result.transferResult.duplicate,false);
+    assert.equal(done.result.character.bank,3750000);
+    assert.equal(done.result.bankLedger[0].debit,1250000);
+    assert.equal(done.result.bankLedger[0].action,"轉帳給：收款居民乙");
+    const receiver=await api(srv.url,"state",undefined,b.cookie);
+    assert.equal(receiver.result.character.bank,1250000);
+    assert.equal(receiver.result.bankLedger[0].credit,1250000);
+    assert.equal(receiver.result.bankLedger[0].action,"收到轉帳：匯款居民甲");
+    const replay=await api(srv.url,"bank/transfer",request,a.cookie);
+    assert.equal(replay.status,200);
+    assert.equal(replay.result.transferResult.duplicate,true);
+    assert.equal(replay.result.character.bank,3750000);
+    assert.equal(replay.result.bankLedger.length,1);
+    assert.equal((await api(srv.url,"state",undefined,b.cookie)).result.bankLedger.length,1);
+    assert.equal((await api(srv.url,"bank/transfer",{
+      ...request,amount:100
+    },a.cookie)).status,400);
+    assert.equal((await api(srv.url,"bank/transfer",{
+      ...request,recipientName:"不存在的人",requestId:"transfer-http-002-2026"
+    },a.cookie)).status,400);
+    const finalDb=new DatabaseSync(join(srv.directory,"multi.sqlite"));
+    try {
+      assert.equal(finalDb.prepare("SELECT COUNT(*) AS n FROM bank_transfers").get().n,1);
+      assert.equal(finalDb.prepare("SELECT SUM(amount) AS total FROM bank_transfers").get().total,1250000);
+    } finally {finalDb.close();}
+  } finally {await srv.stop();}
+});
+
+test("多人：新註冊收款人與並行轉帳的金額安全限制",async()=>{
+  const srv=await start("multi");
+  try {
+    const a=await api(srv.url,"register",{username:"transferSender",password:"strong-sender-pass-123"});
+    const b=await api(srv.url,"register",{username:"transferNewRecipient",password:"strong-receiver-pass-123"});
+    await api(srv.url,"character",{name:"付款玩家",gender:"male",stats:defaultStats()},a.cookie);
+    await api(srv.url,"character",{name:"新加入玩家",gender:"female",stats:defaultStats()},b.cookie);
+    const db=new DatabaseSync(join(srv.directory,"multi.sqlite"));
+    try {db.prepare("UPDATE characters SET bank=1000000 WHERE name='付款玩家'").run();}
+    finally {db.close();}
+    assert.equal((await api(srv.url,"bank/transfer",{
+      recipientName:"新加入玩家",amount:1000000,requestId:"transfer-new-user-0001"
+    },a.cookie)).status,400);
+    assert.equal((await api(srv.url,"state",undefined,a.cookie)).result.character.bank,1000000);
+    const outcome=await Promise.all([
+      api(srv.url,"bank/transfer",{
+        recipientName:"新加入玩家",amount:800000,requestId:"transfer-concurrent-0001"
+      },a.cookie),
+      api(srv.url,"bank/transfer",{
+        recipientName:"新加入玩家",amount:800000,requestId:"transfer-concurrent-0002"
+      },a.cookie)
+    ]);
+    assert.deepEqual(outcome.map(x=>x.status).sort((x,y)=>x-y),[200,400]);
+    const sender=await api(srv.url,"state",undefined,a.cookie);
+    const receiver=await api(srv.url,"state",undefined,b.cookie);
+    assert.equal(sender.result.character.bank,200000);
+    assert.equal(receiver.result.character.bank,800000);
+    assert.equal(sender.result.bankLedger.length,1);
+    assert.equal(receiver.result.bankLedger.length,1);
+    assert.equal(sender.result.bankTransferRules.maxAmount,1000000000000);
+    assert.equal(sender.result.bankTransferRules.newMemberDays,7);
+    assert.equal(sender.result.bankTransferRules.newMemberMaxExclusive,1000000);
+    const saved=new DatabaseSync(join(srv.directory,"multi.sqlite"));
+    try {assert.equal(saved.prepare("SELECT COUNT(*) AS n FROM bank_transfers").get().n,1);}
+    finally {saved.close();}
+  } finally {await srv.stop();}
+});
