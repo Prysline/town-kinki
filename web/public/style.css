@@ -83,3 +83,13 @@
 .house-remodel-form select{max-width:100%}
 .house-remodel-preview{display:block;object-fit:contain;image-rendering:pixelated;border:1px solid #d7e0d4;border-radius:4px;background:#fff}
 .owned-house .house-remodel-form button{width:100%}
+
+/* 銀行：超級定期與原版格式交易明細 */
+.bank-term,.bank-passbook{border-top:1px solid #d8e2d7;padding-top:.7rem;margin-top:.95rem}
+.bank-term h3,.bank-passbook h3{margin:.4rem 0}
+.bank-term label{display:block;margin:.4rem 0}
+.bank-term #term-cancel{margin-top:.45rem}
+.bank-balance{font-weight:600;margin:.45rem 0}
+.bank-passbook select{width:100%;margin:.3rem 0}
+.bank-ledger-list{padding-left:1.2rem;max-height:260px;overflow:auto;font-size:.85rem;overflow-wrap:anywhere}
+.bank-ledger-list li{padding:.5rem 0;border-bottom:1px solid #e2ebe3}
