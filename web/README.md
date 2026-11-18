@@ -391,7 +391,7 @@ node scripts/legacy-inventory.mjs --file ../member/00042/mono.cgi --id 00042 --m
 node scripts/legacy-inventory.mjs --file ../member/00042/mono.cgi --id 00042 --mode multi --apply --accept-partial
 ```
 
-命令中的 `00042` 只是示例，必須換成角色匯入時實際使用的原版 ID，前導零也要完全相同。`--accept-partial` 表示同意目前只有健康保險的效果可以執行，其餘道具僅封存。來源檔案限 4 MiB、最多 2000 筆物品，欄位結構不合格時直接拒絕匯入，不擅自猜測欄位、略過錯誤行或自動修復。原始 bytes 以 SHA-256 摘要與唯讀的原始備份分開保存到 `web/data/legacy-backups/`；支援 UTF-8 與 Shift_JIS 的讀取，不會把敏感備份推送到 GitHub。正式匯入在 SQLite 交易中寫入封存物品與匯入稽核，失敗時不留部分新資料或覆蓋角色。
+命令中的 `00042` 只是示例，必須換成角色匯入時實際使用的原版 ID，前導零也要完全相同。 `mono.cgi` 本身沒有角色 ID 欄位，工具會拒絕標準 `member/數字ID/mono.cgi` 路徑與 `--id` 不一致的情況；從其他備份路徑匯入時仍需由操作人員核對來源身分。`--accept-partial` 表示同意目前只有健康保險的效果可以執行，其餘道具僅封存。來源檔案限 4 MiB、最多 2000 筆物品，欄位結構不合格時直接拒絕匯入，不擅自猜測欄位、略過錯誤行或自動修復。原始 bytes 以 SHA-256 摘要與存取權限受限制的原始備份分開保存到 `web/data/legacy-backups/`；支援 UTF-8 與 Shift_JIS 的讀取，不會把敏感備份推送到 GitHub。正式匯入在 SQLite 交易中寫入封存物品與匯入稽核，失敗時不留部分新資料或覆蓋角色。
 
 在 Web 版「健康保險與個人物品」區塊新增「原版物品存檔」唯讀清單，供本人查看原始種類、名稱、耐久及來源行號，最多列出前 50 筆；即使物品列了「效果」，**不會開放未實作的道具使用、交易、出售、裝備或傳送功能**。資料庫 `legacy_inventory_items.raw_fields_json` 保存每筆原始 33 欄，`legacy_inventory_imports` 保存原版 ID、對應玩家、來源摘要、檔名、筆數與匯入時間；同一個原版 ID 或目標玩家只允許一次，避免重複領取同批物品。這兩張表屬額外新增，不覆蓋第十八階段的 Web 原生保險交易紀錄。
 
