@@ -591,3 +591,123 @@ test("多人：訪客可留言但不可改設定，屋主公告與自訂網址�
     assert.equal((await api(srv.url,visit)).status,401);
   } finally { await srv.stop(); }
 });
+
+
+test("單機：改裝保留住宅位置與留言，室內降級隱藏額外欄位，升級後恢復", async () => {
+  const srv=await start("solo");
+  try {
+    await api(srv.url,"character",{name:"改裝玩家",gender:"other",stats:defaultStats()});
+    await api(srv.url,"move",{townId:3});
+    await api(srv.url,"map/tile",{row:0,column:0,symbol:"空地"});
+    const db=new DatabaseSync(join(srv.directory,"solo.sqlite"));
+    try {db.prepare("UPDATE characters SET money=90000000 WHERE name='改裝玩家'").run();}
+    finally {db.close();}
+    const built=await api(srv.url,"house/build",{
+      row:0,column:0,image:"house/kamakura.gif",interiorRank:3,payment:"cash"
+    });
+    assert.equal(built.status,200);
+    const houseId=built.result.houses[0].id;
+    assert.equal((await api(srv.url,"house/room/config",{
+      houseId,slots:[{type:"0",title:"常用留言"}]
+    })).status,200);
+    assert.equal((await api(srv.url,"house/room/post",{
+      houseId,slotIndex:0,body:"改裝前留言"
+    })).status,200);
+    const improved=await api(srv.url,"house/remodel",{
+      houseId,image:"house/house_1.gif",interiorRank:0,total:1,payment:"bank"
+    });
+    assert.equal(improved.status,200);
+    assert.equal(improved.result.houseRemodelResult.quote.total,13600000);
+    assert.equal(improved.result.houses[0].image,"house/house_1.gif");
+    assert.equal(improved.result.houses[0].interiorRank,0);
+    assert.equal(improved.result.character.money,90000000-6500000-13600000);
+    assert.equal(improved.result.map.cells[0].image,"house/house_1.gif");
+    assert.equal(improved.result.map.cells[0].raw,"webhouse_"+houseId+"=空地");
+    assert.equal(improved.result.houseRemodelEvents[0].amount,13600000);
+    assert.equal(improved.result.houses[0].purchasePrice,6500000);
+    const first=await api(srv.url,"house/visit?houseId="+houseId);
+    assert.equal(first.result.capacity,4);
+    assert.equal(first.result.posts[0].body,"改裝前留言");
+    assert.equal((await api(srv.url,"house/room/config",{
+      houseId,slots:[
+        {type:"0",title:"常用留言"},
+        {type:"3",title:"公告區"},
+        {type:"2",title:"房屋網站",url:"https://example.com/"},
+        {type:"0",title:"第四區"}
+      ]
+    })).status,200);
+    const reduced=await api(srv.url,"house/remodel",{
+      houseId,image:null,interiorRank:3
+    });
+    assert.equal(reduced.status,200);
+    assert.equal(reduced.result.houseRemodelResult.quote.total,1000000);
+    assert.equal(reduced.result.houses[0].interiorRank,3);
+    const one=await api(srv.url,"house/visit?houseId="+houseId);
+    assert.equal(one.result.capacity,1);
+    assert.equal(one.result.available.length,1);
+    assert.equal((await api(srv.url,"house/visit?houseId="+houseId+"&slot=2")).status,400);
+    const again=await api(srv.url,"house/remodel",{
+      houseId,image:null,interiorRank:0
+    });
+    assert.equal(again.status,200);
+    const restored=await api(srv.url,"house/visit?houseId="+houseId+"&slot=2");
+    assert.equal(restored.status,200);
+    assert.equal(restored.result.selected.title,"房屋網站");
+    assert.equal(restored.result.selected.url,"https://example.com/");
+    const firstAgain=await api(srv.url,"house/visit?houseId="+houseId+"&slot=0");
+    assert.equal(firstAgain.result.posts[0].body,"改裝前留言");
+    assert.equal(again.result.houseRemodelEvents.length,3);
+  } finally {await srv.stop();}
+});
+
+test("多人：非屋主無法改裝，同時改裝依伺服器餘額只扣一次", async () => {
+  const seed=directory => {
+    const db=new DatabaseSync(join(directory,"multi.sqlite"));
+    db.exec("CREATE TABLE town_maps(town_id INTEGER PRIMARY KEY, original_name TEXT NOT NULL DEFAULT '', original_record TEXT NOT NULL DEFAULT '',source TEXT NOT NULL,tiles_json TEXT NOT NULL,updated_at INTEGER NOT NULL)");
+    const tiles=Array(192).fill("");
+    tiles[0]="空地";
+    db.prepare("INSERT INTO town_maps(town_id,original_name,source,tiles_json,updated_at) VALUES(?,?,?,?,?)")
+      .run(3,"和歌山アイランド","legacy-import",JSON.stringify(tiles),Date.now());
+    db.close();
+  };
+  const srv=await start("multi",seed);
+  try {
+    const a=await api(srv.url,"register",{username:"remodelOwner",password:"secure-remodel-owner"});
+    const b=await api(srv.url,"register",{username:"remodelGuest",password:"secure-remodel-guest"});
+    assert.equal(a.status,200);assert.equal(b.status,200);
+    await api(srv.url,"character",{name:"房主",gender:"other",stats:defaultStats()},a.cookie);
+    await api(srv.url,"character",{name:"其他居民",gender:"other",stats:defaultStats()},b.cookie);
+    await api(srv.url,"move",{townId:3},a.cookie);
+    await api(srv.url,"move",{townId:3},b.cookie);
+    const db=new DatabaseSync(join(srv.directory,"multi.sqlite"));
+    try {db.prepare("UPDATE characters SET bank=10000000").run();}
+    finally {db.close();}
+    const house=await api(srv.url,"house/build",{
+      row:0,column:0,image:"house/kamakura.gif",interiorRank:3,payment:"bank"
+    },a.cookie);
+    assert.equal(house.status,200);
+    const houseId=house.result.houses[0].id;
+    const db2=new DatabaseSync(join(srv.directory,"multi.sqlite"));
+    try {db2.prepare("UPDATE characters SET money=2000000 WHERE name='房主'").run();}
+    finally {db2.close();}
+    const options={houseId,image:"house/house_1.gif",interiorRank:null,price:1};
+    assert.equal((await api(srv.url,"house/remodel",options,b.cookie)).status,400);
+    assert.equal((await api(srv.url,"house/remodel",{...options,interiorRank:99},a.cookie)).status,400);
+    const result=await Promise.all([
+      api(srv.url,"house/remodel",options,a.cookie),
+      api(srv.url,"house/remodel",options,a.cookie)
+    ]);
+    assert.deepEqual(result.map(r=>r.status).sort((x,y)=>x-y),[200,400]);
+    const stateA=await api(srv.url,"state",undefined,a.cookie);
+    const stateB=await api(srv.url,"state",undefined,b.cookie);
+    assert.equal(stateA.result.character.money,400000);
+    assert.equal(stateA.result.character.bank,3500000);
+    assert.equal(stateA.result.houseRemodelEvents.length,1);
+    assert.equal(stateB.result.houseRemodelEvents.length,0);
+    assert.equal(stateA.result.townHouses[0].image,"house/house_1.gif");
+    assert.equal(stateB.result.map.cells[0].image,"house/house_1.gif");
+    assert.equal((await api(srv.url,"house/remodel",{houseId,image:null,interiorRank:null},a.cookie)).status,400);
+    assert.equal((await api(srv.url,"house/remodel",options)).status,401);
+    assert.equal((await api(srv.url,"house/remodel",{...options,houseId:999},a.cookie)).status,400);
+  } finally {await srv.stop();}
+});
