@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
-import { readFileSync, writeFileSync, mkdtempSync, rmSync, readdirSync, statSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdtempSync, mkdirSync, rmSync, readdirSync, statSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { resolve, join, dirname } from "node:path";
@@ -188,4 +188,22 @@ test("CLI 預覽不寫檔，正式匯入建立私有原始備份且原始檔不�
     assert.notEqual(repeated.status,0);
     assert.match(repeated.stderr,/已匯入/);
   }finally{rmSync(dir,{recursive:true,force:true});}
+});
+
+
+test("CLI 阻擋 member 數字資料夾與 --id 不符，以免指向其他角色的物品檔",()=>{
+  const dir=mkdtempSync(join(tmpdir(),"town-mono-source-id-"));
+  try{
+    const folder=join(dir,"member","00043");
+    mkdirSync(folder,{recursive:true});
+    const file=join(folder,"mono.cgi");
+    writeFileSync(file,item(),"utf8");
+    const processResult=spawnSync(process.execPath,[
+      join(here,"scripts","legacy-inventory.mjs"),
+      "--file",file,"--id","00042","--preview"
+    ],{encoding:"utf8",env:{...process.env,DATA_DIR:dir}});
+    assert.notEqual(processResult.status,0);
+    assert.match(processResult.stderr,/與 --id 不符/);
+    assert.equal(readdirSync(dir).sort().join(","),"member");
+  } finally {rmSync(dir,{recursive:true,force:true});}
 });
