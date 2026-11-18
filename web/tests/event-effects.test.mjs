@@ -182,3 +182,92 @@ test("已存在的舊版疾病事件資料表可非破壞升級動態敘述與�
     assert.equal(listCharacterEvents(db,1).length,2);
   }finally{db.close();}
 });
+
+
+test("第 26 號街頭衝突：五種等機率分支，兩種無傷且按整數向下取整扣能量",()=>{
+  for(const [rand,body,brain] of [
+    [0,14,20],[.2,20,14],[.4,15,15],[.6,20,20],[.99,20,20]
+  ]){
+    const event=resolveNonItemEvent(26,row(),rng(rand));
+    assert.equal(event.event.key,"streetFight");
+    assert.equal(event.changes.body_energy??20,body);
+    assert.equal(event.changes.brain_energy??20,brain);
+    if(rand>=.6)assert.deepEqual(event.effects,{});
+  }
+  const low=resolveNonItemEvent(26,row({body_energy:2}),rng(0));
+  assert.equal(low.changes.body_energy,2);
+  assert.equal(low.effects.bodyEnergy,0);
+});
+
+test("第 27 號溫泉事件：原版增加兩種能量 1000，Web 版不突破目前能力上限",()=>{
+  const event=resolveNonItemEvent(27,row({body_energy:10,brain_energy:20}));
+  assert.equal(event.event.key,"hotspring");
+  assert.equal(event.changes.body_energy,25);
+  assert.equal(event.changes.brain_energy,35);
+  assert.deepEqual(event.effects,{bodyEnergy:15,brainEnergy:15});
+  const full=resolveNonItemEvent(27,row({body_energy:25,brain_energy:35}));
+  assert.equal(full.effects.bodyEnergy,0);
+  assert.equal(full.effects.brainEnergy,0);
+  assert.match(full.event.description,/0、0/);
+  assert.throws(()=>resolveNonItemEvent(27,row({body_energy:-1})),/能量/);
+});
+
+test("第 33 號地方偶遇：藝人 +3 有趣度、鹿損失三分之一、溺水損失一半及五萬元",()=>{
+  const performer=resolveNonItemEvent(33,row(),rng(0));
+  assert.equal(performer.event.key,"localEncounter");
+  assert.equal(performer.effects.stats.unique,3);
+  assert.equal(JSON.parse(performer.changes.stats_json).unique,23);
+  const deer=resolveNonItemEvent(33,row(),rng(.4));
+  assert.equal(deer.effects.bodyEnergy,-6);
+  assert.equal(deer.changes.body_energy,14);
+  assert.equal(deer.changes.money,undefined);
+  const drowning=resolveNonItemEvent(33,row(),rng(.99));
+  assert.equal(drowning.effects.bodyEnergy,-10);
+  assert.equal(drowning.effects.money,-50000);
+  assert.equal(drowning.changes.money,50000);
+  const poor=resolveNonItemEvent(33,row({money:150}),rng(.9));
+  assert.equal(poor.changes.money,0);
+  assert.equal(poor.effects.money,-150);
+});
+
+test("第 39 號工作專注：身體與頭腦能量皆至少 500 時經驗 +10，否則 -5",()=>{
+  const boost=resolveNonItemEvent(39,row({body_energy:500,brain_energy:500,job_experience:12}));
+  assert.equal(boost.changes.job_experience,22);
+  assert.equal(boost.effects.jobExperience,10);
+  const exhausted=resolveNonItemEvent(39,row({body_energy:500,brain_energy:499,job_experience:12}));
+  assert.equal(exhausted.changes.job_experience,7);
+  assert.equal(exhausted.effects.jobExperience,-5);
+  const min=resolveNonItemEvent(39,row({body_energy:0,brain_energy:0,job_experience:2}));
+  assert.equal(min.changes.job_experience,0);
+  assert.equal(min.effects.jobExperience,-2);
+  assert.throws(()=>resolveNonItemEvent(39,row({
+    body_energy:500,brain_energy:500,job_experience:Number.MAX_SAFE_INTEGER
+  })),/安全範圍/);
+});
+
+test("新能量事件與職業經驗變化以同一交易寫入，更新恢復時間與事件紀錄，無法同日重抽",()=>{
+  const db=dbSetup();
+  try {
+    settleDailyIllnessEvent(db,1,"2026-11-18",1000);
+    const first=trigger(db,26,[0],"2026-11-19");
+    assert.equal(first.event.key,"streetFight");
+    let current=db.prepare("SELECT body_energy,brain_energy,job_experience,recovered_at FROM characters WHERE user_id=1").get();
+    assert.deepEqual(current,{body_energy:14,brain_energy:20,job_experience:60,recovered_at:100000});
+    assert.equal(settleDailyIllnessEvent(db,1,"2026-11-19",100001,()=>{throw Error("不可重抽");}).checked,false);
+    assert.equal(trigger(db,27,[],"2026-11-20").event.key,"hotspring");
+    current=db.prepare("SELECT body_energy,brain_energy,recovered_at FROM characters WHERE user_id=1").get();
+    assert.deepEqual(current,{body_energy:25,brain_energy:35,recovered_at:100000});
+    assert.equal(trigger(db,39,[],"2026-11-21").event.key,"workFocus");
+    assert.equal(db.prepare("SELECT job_experience FROM characters WHERE user_id=1").get().job_experience,55);
+    assert.equal(trigger(db,33,[.99],"2026-11-22").event.key,"localEncounter");
+    current=db.prepare("SELECT body_energy,money FROM characters WHERE user_id=1").get();
+    assert.deepEqual(current,{body_energy:13,money:50000});
+    const events=listCharacterEvents(db,1);
+    assert.deepEqual(events.map(e=>e.originalId),[33,39,27,26]);
+    assert.equal(events[0].effects.money,-50000);
+    assert.equal(events[1].effects.jobExperience,-5);
+    assert.deepEqual(events[2].effects,{bodyEnergy:11,brainEnergy:15});
+    assert.equal(events[3].effects.bodyEnergy,-6);
+    assert.equal(listCharacterEvents(db,2).length,0);
+  }finally{db.close();}
+});
