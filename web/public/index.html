@@ -170,6 +170,23 @@
           <h3>住宅交易紀錄</h3>
           <div id="house-events" class="house-events"></div>
         </section>
+        <section class="card" id="room-panel" hidden>
+          <div class="heading">
+            <div><div class="eyebrow">住宅內部</div><h2 id="room-title">住宅參訪</h2></div>
+            <button id="room-close" class="secondary" type="button">離開住宅</button>
+          </div>
+          <p id="room-owner" class="small"></p>
+          <div id="room-nav" class="room-nav" aria-label="住宅內容選單"></div>
+          <div id="room-body"></div>
+          <div id="room-settings" hidden>
+            <h3>室內內容設定</h3>
+            <p class="small">依原版室內等級，最多配置四個內容欄位。一般留言板與屋主公告板可使用；商店尚待移植，自訂網址僅供連結，不會在網站內載入外部內容。設定會在出售後保留。</p>
+            <form id="room-config-form">
+              <div id="room-slot-inputs"></div>
+              <button type="submit">儲存室內配置</button>
+            </form>
+          </div>
+        </section>
         <section class="card">
           <div class="heading">
             <div><div class="eyebrow">能力培養</div><h2><img class="facility-icon" src="/legacy-assets/school.gif" alt="">學校</h2></div>
