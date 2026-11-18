@@ -66,7 +66,7 @@ function readRows(db,userId){
     "SELECT i.*,u.remaining AS web_remaining,u.last_used_at_ms",
     "FROM legacy_inventory_items i LEFT JOIN legacy_item_usage u",
     "ON u.user_id=i.user_id AND u.source_line=i.source_line",
-    "WHERE i.user_id=? ORDER BY i.source_line LIMIT 100"
+    "WHERE i.user_id=? ORDER BY i.source_line LIMIT 50"
   ].join(" ")).all(userId);
 }
 function status(item,character,remaining,lastUsedAt,now){
