@@ -104,7 +104,9 @@ export function initLegacyItemUseTables(db){
 export function listLegacyItemActions(db,userId,character,now=Date.now()){
   if(!Number.isSafeInteger(userId)||userId<=0)throw new Error("無效的玩家帳號");
   return readRows(db,userId).flatMap(row=>{
-    const item=parseArchivedItem(row);
+    let item;
+    try{item=parseArchivedItem(row);}
+    catch{return [];} // 損壞或未辨識的原始檔仍可唯讀封存，不中斷角色狀態。
     if(!item)return [];
     const remaining=row.web_remaining??item.originalRemaining;
     const lastUsedAt=row.last_used_at_ms??item.originalLastUsedAt;
