@@ -628,8 +628,19 @@ function renderDining() {
   text("hunger-status",status?.label ?? "未知");
   text("physique-status",(state.physique?.label ?? "未知") +
     "（BMI " + (state.physique?.bmi ?? "?") + "）");
-  text("condition-status",state.condition?.label +
+  text("condition-status",(state.condition?.label ?? "未知") +
     (state.condition?.provisional ? "（缺少用餐紀錄，暫定）" : ""));
+  const health=state.health;
+  text("health-status",(health?.name ?? "未知") +
+    (health ? "（指數 "+health.index+"）" : ""));
+  text("hospital-diagnosis","目前診斷：" + (health?.name ?? "未知") +
+    (health?.lastSettledDay ? "；最近結算日：" + health.lastSettledDay : ""));
+  const quote=state.hospital;
+  text("hospital-cost",quote?.disease.key==="healthy" ?
+    "目前沒有診斷疾病。原版仍提供 " + money(quote.price) + " 的預防性注射。" :
+    "治療「" + (quote?.disease.name ?? "未知") + "」需支付現金 " +
+      money(quote?.price??0) + "。");
+  el("hospital-treat").disabled=!quote || (state.character.money<quote.price);
   const wait=state.mealCooldownMs ?? 0;
   text("meal-status",wait>0 ?
     "距離下次用餐還有 " + Math.ceil(wait/60000) + " 分鐘" :
@@ -829,7 +840,8 @@ function render() {
   text("mastered-job", c.masteredJob || "無");
   text("measurements", c.height + " 公分／" + c.weight + " 公斤");
   renderDining();
-  const ready = Boolean(state.currentJob) && state.workCooldownMs === 0;
+  const ready = Boolean(state.currentJob) && state.workCooldownMs === 0 &&
+    state.condition?.baseExperience !== null;
   el("work").disabled = !ready;
   text("cooldown", !state.currentJob ? "請先前往職業介紹所選擇工作。" :
     state.workCooldownMs > 0 ? "距離下次工作約 " + Math.ceil(state.workCooldownMs / 1000) + " 秒。" :
@@ -867,6 +879,9 @@ async function action(path, data, message) {
     } else if (path === "house/sell") {
       closeRoom();
       notify("住宅已出售，土地地價退還 " + money(state.houseSaleResult.refund) + " 至現金。");
+    } else if (path === "hospital/treat") {
+      notify("已完成醫院治療，原診斷：" + state.hospitalResult.previousDisease +
+        "，支付 " + money(state.hospitalResult.paid) + "，疾病指數已恢復為 50。");
     } else if (path === "meal/eat") {
       const result=state.mealResult;
       const gains=Object.entries(result.gained).filter(([,value])=>value>0)
@@ -966,6 +981,13 @@ el("bank-transfer-form").addEventListener("submit", async event => {
     notify(error.message, true);
   } finally {
     submit.disabled = false;
+  }
+});
+el("hospital-treat").addEventListener("click",()=>{
+  const quote=state?.hospital;
+  if(!quote) return;
+  if(window.confirm("確定支付 " + money(quote.price) + " 接受醫院治療嗎？")) {
+    action("hospital/treat",{});
   }
 });
 el("loan-plan").addEventListener("change", updateLoanQuote);
