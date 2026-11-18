@@ -646,7 +646,7 @@ function renderDining() {
   if (!(state.healthEvents?.length)) {
     const empty=document.createElement("p");
     empty.className="small";
-    empty.textContent="目前沒有疾病隨機事件紀錄。";
+    empty.textContent="目前沒有已實作的隨機事件紀錄。";
     events.append(empty);
   } else {
     const list=document.createElement("ol");
@@ -654,7 +654,8 @@ function renderDining() {
     for (const event of state.healthEvents) {
       const item=document.createElement("li");
       item.textContent=event.day+"｜"+event.title+"："+event.description+
-        "（疾病指數 "+event.oldHealthIndex+" → "+event.newHealthIndex+"）";
+        (event.oldHealthIndex!==event.newHealthIndex?
+          "（疾病指數 "+event.oldHealthIndex+" → "+event.newHealthIndex+"）":"");
       list.append(item);
     }
     events.append(list);
