@@ -13,6 +13,7 @@ import { parseLegacySchool, parseLegacyGym, calendarDay, trainingAvailability, p
 import { initTownMapTable, bootstrapLegacyTownMaps, publicTownMap, editTownTile } from "./town-storage.mjs";
 import { parseHouseCatalog, initHousingTables, listHouses, publicHouseCatalog, buildHouse, renameHouse, sellHouse, getHouseSaleQuote, listHouseEvents, remodelHouse, listHouseRemodelEvents } from "./housing.mjs";
 import { initRoomsTables, ROOM_TYPES, setRoomSlots, viewRoom, addRoomPost, deleteRoomPost } from "./rooms.mjs";
+import { parseLegacyMeals, eatMeal, deriveCondition, hungerStatus, physiqueStatus, MEAL_COOLDOWN_MS } from "./dining.mjs";
 import { initBankTables, settleBankInterest, bankOperation, bankOverview, bankLedger, transferToPlayer, BANK_TRANSFER_LIMIT, NEW_MEMBER_DAYS, NEW_MEMBER_TRANSFER_LIMIT, bankLoanOverview, borrowBankLoan, payoffBankLoan } from "./banking.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -45,7 +46,8 @@ for (const [column, definition] of [
   ["last_school_day", "TEXT NOT NULL DEFAULT ''"],
   ["last_gym_at", "INTEGER NOT NULL DEFAULT 0"],
   ["gym_ready_at", "INTEGER NOT NULL DEFAULT 0"],
-  ["created_at", "INTEGER NOT NULL DEFAULT 0"]
+  ["created_at", "INTEGER NOT NULL DEFAULT 0"],
+  ["last_meal_at", "INTEGER NOT NULL DEFAULT 0"]
 ]) {
   const currentColumns = db.prepare("PRAGMA table_info(characters)").all();
   if (!currentColumns.some(info => info.name === column)) {
@@ -73,6 +75,11 @@ const trainingLessons = [
   ...parseLegacyGym(decodeLegacyText(readFileSync(resolve(REPO_ROOT, "dat_dir", "gym.cgi"))))
 ];
 const trainingByKey = new Map(trainingLessons.map(lesson => [lesson.key, lesson]));
+const meals = [
+  ...parseLegacyMeals(decodeLegacyText(readFileSync(resolve(REPO_ROOT,"dat_dir","syouhin.cgi"))),"main"),
+  ...parseLegacyMeals(decodeLegacyText(readFileSync(resolve(REPO_ROOT,"dat_dir","syokudou2.cgi"))),"second")
+];
+const mealsByKey = new Map(meals.map(meal => [meal.key,meal]));
 
 const sessionHash = token => createHash("sha256").update(token).digest("hex");
 const passwordHash = (password, salt) => scryptSync(password, salt, 64).toString("hex");
@@ -128,7 +135,7 @@ function characterFromRow(row) {
     jobExperience: row.job_experience, jobWorkCount: row.job_work_count,
     masteredJob: row.mastered_job, stats: JSON.parse(row.stats_json),
     lastSchoolDay: row.last_school_day, lastGymAt: row.last_gym_at,
-    gymReadyAt: row.gym_ready_at
+    gymReadyAt: row.gym_ready_at, lastMealAt: row.last_meal_at
   };
 }
 
@@ -137,19 +144,19 @@ function getCharacter(userId) {
 }
 
 function saveCharacter(userId, c) {
-  db.prepare("UPDATE characters SET town_id=?,money=?,bank=?,body_energy=?,brain_energy=?,recovered_at=?,job_id=?,work_progress=?,last_work_at=?,work_count=?,height=?,bmi=?,stats_json=?,weight=?,job_experience=?,job_work_count=?,mastered_job=?,last_school_day=?,last_gym_at=?,gym_ready_at=? WHERE user_id=?")
+  db.prepare("UPDATE characters SET town_id=?,money=?,bank=?,body_energy=?,brain_energy=?,recovered_at=?,job_id=?,work_progress=?,last_work_at=?,work_count=?,height=?,bmi=?,stats_json=?,weight=?,job_experience=?,job_work_count=?,mastered_job=?,last_school_day=?,last_gym_at=?,gym_ready_at=?,last_meal_at=? WHERE user_id=?")
     .run(c.townId, c.money, c.bank, c.bodyEnergy, c.brainEnergy, c.recoveredAt,
       c.jobId, c.workProgress, c.lastWorkAt, c.workCount, c.height, c.bmi,
       JSON.stringify(c.stats), c.weight, c.jobExperience, c.jobWorkCount, c.masteredJob,
-      c.lastSchoolDay, c.lastGymAt, c.gymReadyAt, userId);
+      c.lastSchoolDay, c.lastGymAt, c.gymReadyAt, c.lastMealAt ?? 0, userId);
 }
 
 function addCharacter(userId, c) {
-  db.prepare("INSERT INTO characters(user_id,name,gender,town_id,money,bank,body_energy,brain_energy,recovered_at,job_id,work_progress,last_work_at,work_count,height,bmi,stats_json,weight,job_experience,job_work_count,mastered_job,last_school_day,last_gym_at,gym_ready_at,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+  db.prepare("INSERT INTO characters(user_id,name,gender,town_id,money,bank,body_energy,brain_energy,recovered_at,job_id,work_progress,last_work_at,work_count,height,bmi,stats_json,weight,job_experience,job_work_count,mastered_job,last_school_day,last_gym_at,gym_ready_at,created_at,last_meal_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
     .run(userId,c.name,c.gender,c.townId,c.money,c.bank,c.bodyEnergy,c.brainEnergy,
       c.recoveredAt,c.jobId,c.workProgress,c.lastWorkAt,c.workCount,c.height,
       c.bmi,JSON.stringify(c.stats),c.weight,c.jobExperience,c.jobWorkCount,c.masteredJob,
-      c.lastSchoolDay,c.lastGymAt,c.gymReadyAt,c.recoveredAt);
+      c.lastSchoolDay,c.lastGymAt,c.gymReadyAt,c.recoveredAt,c.lastMealAt ?? 0);
 }
 
 function mutateCharacter(userId, callback) {
@@ -205,6 +212,19 @@ function snapshot(user) {
       newMemberMaxExclusive: NEW_MEMBER_TRANSFER_LIMIT
     } : null,
     currentJob: currentJob ? { key: currentJob.key, name: currentJob.name, salary: currentJob.salary, payEvery: currentJob.payEvery } : null,
+    condition: updated ? deriveCondition(updated,maxBodyEnergy(updated.stats),
+      maxBrainEnergy(updated.stats),now) : null,
+    hunger: updated ? hungerStatus(updated.lastMealAt,now) : null,
+    physique: updated ? physiqueStatus(updated.height,updated.weight) : null,
+    mealCooldownMs: updated && updated.lastMealAt ?
+      Math.max(0,MEAL_COOLDOWN_MS-(now-updated.lastMealAt)) : 0,
+    meals: updated ? meals.map(meal=>({
+      key:meal.key,name:meal.name,menu:meal.menu,
+      price:meal.price,calories:meal.calories,gains:meal.gains,
+      reason:updated.lastMealAt && now-updated.lastMealAt<MEAL_COOLDOWN_MS
+        ? "用餐後需間隔 60 分鐘" :
+        updated.money<meal.price ? "現金不足" : null
+    })) : [],
     maxBodyEnergy: updated ? maxBodyEnergy(updated.stats) : null,
     maxBrainEnergy: updated ? maxBrainEnergy(updated.stats) : null,
     jobLevel: updated ? Math.floor(updated.jobExperience / 100) : 0,
@@ -377,9 +397,24 @@ async function handle(req, res) {
       const result = mutateCharacter(user.id, old => performWork(old, jobsByKey.get(old.jobId)));
       return sendJson(res, 200, { ...snapshot(user), result: {
         paid: result.paid, pending: result.pending,
-        experienceGain: result.experienceGain, jobLevel: result.jobLevel,
+        experienceGain: result.experienceGain, condition:result.condition,
+        jobLevel: result.jobLevel,
         leveledUp: result.leveledUp, bonus: result.bonus, mastered: result.mastered
       } });
+    }
+
+    if (path === "/api/meal/eat") {
+      const meal=mealsByKey.get(data.key);
+      if (!meal) throw new HttpError(404,"找不到食堂餐點");
+      const now=Date.now();
+      const result=mutateCharacter(user.id,old=>{
+        try {return eatMeal(recoverEnergy(old,now),meal,now);}
+        catch(error){throw new HttpError(400,error.message);}
+      });
+      return sendJson(res,200,{...snapshot(user),mealResult:{
+        name:result.meal,paid:result.paid,gained:result.gained,
+        weightGain:result.weightGain
+      }});
     }
 
     if (path === "/api/train") {
