@@ -42,6 +42,7 @@ function addRow(parent, key, value) {
 let selectedMapCell = null;
 let selectedHouseSpot = null;
 let selectedMapTown = null;
+let activeRoom = null;
 
 function renderTownMap() {
   const map = state.map;
@@ -123,12 +124,188 @@ function renderTownMap() {
           action("map/tile", { row, column: col, symbol: el("map-palette").value },
             name + " 的街區內容已儲存。");
         } else {
+          if (cell.houseId) openRoom(cell.houseId);
           board.querySelectorAll(".map-cell.selected").forEach(node => node.classList.remove("selected"));
           button.classList.add("selected");
         }
       });
       board.append(button);
     }
+  }
+}
+
+function closeRoom() {
+  activeRoom = null;
+  el("room-panel").hidden = true;
+}
+async function openRoom(houseId, slot = null, scroll = true) {
+  try {
+    const search = "houseId=" + encodeURIComponent(houseId) +
+      (slot === null ? "" : "&slot=" + encodeURIComponent(slot));
+    activeRoom = await api("house/visit?" + search);
+    renderRoom();
+    if (scroll) el("room-panel").scrollIntoView({ behavior:"smooth", block:"start" });
+  } catch (error) {
+    closeRoom();
+    notify(error.message, true);
+  }
+}
+async function roomAction(path, data, successText, resetSlot = false) {
+  if (!activeRoom) return;
+  const houseId = activeRoom.houseId;
+  const slot = resetSlot ? null : activeRoom.selectedIndex;
+  try {
+    state = await api(path, data);
+    render();
+    notify(successText);
+    await openRoom(houseId, slot, false);
+  } catch(error) { notify(error.message, true); }
+}
+function renderRoom() {
+  const view = activeRoom;
+  const panel = el("room-panel");
+  if (!view || !state?.character ||
+    !state.townHouses.some(house => house.id === view.houseId)) {
+    panel.hidden = true;
+    return;
+  }
+  panel.hidden = false;
+  text("room-title", view.houseName);
+  text("room-owner", "屋主：" + view.ownerName + "｜室內最多 " + view.capacity + " 個內容欄位");
+  const nav = el("room-nav");
+  nav.replaceChildren();
+  for (const slot of view.available) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = view.selectedIndex === slot.index ? "primary" : "secondary";
+    button.textContent = slot.title || (slot.type === "0" ? "一般留言板" :
+      slot.type === "3" ? "屋主公告板" : "自訂網址");
+    button.addEventListener("click", () => openRoom(view.houseId, slot.index, false));
+    nav.append(button);
+  }
+  const body = el("room-body");
+  body.replaceChildren();
+  const current = view.selected;
+  if (!current) {
+    const empty = document.createElement("p");
+    empty.className = "small";
+    empty.textContent = view.owner ?
+      "尚未公開任何室內內容，請先設定下方欄位。" : "尚無可觀看的內容。";
+    body.append(empty);
+  } else if (current.type === "2") {
+    const note = document.createElement("p");
+    note.className = "small";
+    note.textContent = "此內容是屋主提供的外部連結，將在新分頁開啟。";
+    const link = document.createElement("a");
+    link.href = current.url;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer nofollow";
+    link.textContent = current.title || "前往外部網頁";
+    body.append(note, link);
+  } else {
+    const list = document.createElement("div");
+    list.className = "room-posts";
+    if (!view.posts.length) {
+      const empty = document.createElement("p");
+      empty.className = "small";
+      empty.textContent = "目前沒有留言。";
+      list.append(empty);
+    }
+    for (const post of view.posts) {
+      const item = document.createElement("article");
+      item.className = "room-post";
+      const meta = document.createElement("p");
+      meta.className = "small";
+      meta.textContent = post.authorName + "｜" + new Date(post.createdAt).toLocaleString("zh-TW");
+      const message = document.createElement("p");
+      message.className = "room-post-text";
+      message.textContent = post.body;
+      item.append(meta, message);
+      if (post.canDelete) {
+        const remove = document.createElement("button");
+        remove.className = "secondary";
+        remove.type = "button";
+        remove.textContent = "刪除";
+        remove.addEventListener("click", () => {
+          if (window.confirm("確定刪除這篇留言嗎？"))
+            roomAction("house/room/delete",
+              { houseId:view.houseId, postId:post.id }, "留言已刪除。");
+        });
+        item.append(remove);
+      }
+      list.append(item);
+    }
+    body.append(list);
+    if (view.canPost) {
+      const form = document.createElement("form");
+      form.className = "room-post-form";
+      const label = document.createElement("label");
+      label.textContent = current.type === "3" ? "發布屋主公告" : "新增留言";
+      const textarea = document.createElement("textarea");
+      textarea.name = "body";
+      textarea.rows = 3;
+      textarea.maxLength = 250;
+      textarea.required = true;
+      label.append(textarea);
+      const button = document.createElement("button");
+      button.type = "submit";
+      button.textContent = "送出";
+      form.append(label, button);
+      form.addEventListener("submit", event => {
+        event.preventDefault();
+        roomAction("house/room/post", {
+          houseId: view.houseId, slotIndex: view.selectedIndex, body: textarea.value
+        }, "內容已送出。");
+      });
+      body.append(form);
+    }
+  }
+  const settings = el("room-settings");
+  settings.hidden = !view.owner;
+  const slotArea = el("room-slot-inputs");
+  slotArea.replaceChildren();
+  if (!view.owner) return;
+  for (let i = 0; i < view.capacity; i++) {
+    const previous = view.editableSlots[i] || {type:"",title:"",url:""};
+    const fieldset = document.createElement("fieldset");
+    fieldset.className = "room-slot-editor";
+    const legend = document.createElement("legend");
+    legend.textContent = "欄位 " + (i + 1);
+    const labelType = document.createElement("label");
+    labelType.textContent = "內容類型";
+    const select = document.createElement("select");
+    select.className = "room-slot-type";
+    for (const type of state.roomTypes || []) {
+      const option = document.createElement("option");
+      option.value = type.type;
+      option.textContent = type.label;
+      select.append(option);
+    }
+    select.value = previous.type;
+    labelType.append(select);
+    const labelTitle = document.createElement("label");
+    labelTitle.textContent = "顯示標題（最多 32 字）";
+    const title = document.createElement("input");
+    title.className = "room-slot-title";
+    title.maxLength = 32;
+    title.value = previous.title;
+    labelTitle.append(title);
+    const labelUrl = document.createElement("label");
+    labelUrl.textContent = "自訂 HTTPS 網址";
+    const url = document.createElement("input");
+    url.className = "room-slot-url";
+    url.type = "url";
+    url.maxLength = 500;
+    url.value = previous.url;
+    labelUrl.append(url);
+    const update = () => {
+      url.disabled = select.value !== "2";
+      labelUrl.hidden = url.disabled;
+    };
+    select.addEventListener("change", update);
+    update();
+    fieldset.append(legend, labelType, labelTitle, labelUrl);
+    slotArea.append(fieldset);
   }
 }
 
@@ -241,7 +418,12 @@ function renderHouses() {
       );
       if (confirmed) action("house/sell", { houseId: house.id });
     });
-    box.append(img, title, where, label, button, saleInfo, sellButton);
+    const visit = document.createElement("button");
+    visit.type = "button";
+    visit.className = "secondary";
+    visit.textContent = "進入室內／設定";
+    visit.addEventListener("click", () => openRoom(house.id));
+    box.append(img, title, where, visit, label, button, saleInfo, sellButton);
     box.addEventListener("submit", event => {
       event.preventDefault();
       action("house/rename", { houseId: house.id, name: input.value }, "已更新住宅名稱。");
@@ -409,6 +591,8 @@ function render() {
   renderTowns();
   renderTownMap();
   renderHouses();
+  if (activeRoom && !state.townHouses.some(house => house.id === activeRoom.houseId))
+    closeRoom();
   renderTraining();
   renderJobs();
 }
@@ -427,6 +611,7 @@ async function action(path, data, message) {
     } else if (path === "house/build") {
       notify("住宅建造完成，費用：" + money(state.houseResult.quote.total) + "。");
     } else if (path === "house/sell") {
+      closeRoom();
       notify("住宅已出售，土地地價退還 " + money(state.houseSaleResult.refund) + " 至現金。");
     } else if (path === "train") {
       const result = state.trainingResult;
@@ -488,6 +673,19 @@ el("bank-form").addEventListener("submit", event => {
 el("logout").addEventListener("click", async () => {
   try { await api("logout", {}); state = await api("state"); render(); notify("已登出"); }
   catch (error) { notify(error.message, true); }
+});
+el("room-close").addEventListener("click", closeRoom);
+el("room-config-form").addEventListener("submit", event => {
+  event.preventDefault();
+  if (!activeRoom?.owner) return;
+  const slots = [...el("room-slot-inputs").querySelectorAll(".room-slot-editor")]
+    .map(block => ({
+      type: block.querySelector(".room-slot-type").value,
+      title: block.querySelector(".room-slot-title").value,
+      url: block.querySelector(".room-slot-url").value
+    }));
+  roomAction("house/room/config",
+    { houseId:activeRoom.houseId, slots }, "室內配置已儲存。", true);
 });
 el("house-design").addEventListener("change", updateHouseQuote);
 el("house-interior").addEventListener("change", updateHouseQuote);
