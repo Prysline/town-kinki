@@ -146,3 +146,36 @@ test("命令列可對舊城鎮檔案匯入及輸出，不會默默覆蓋地圖",
     assert.deepEqual(parseLegacyTown(readFileSync(exported, "utf8")).tiles, parseLegacyTown(source()).tiles);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+
+
+test("CLI 避免覆蓋已登記的房屋，Web 住宅未完成舊版轉檔前不得匯出", () => {
+  const dir = mkdtempSync(join(tmpdir(), "town-house-export-"));
+  try {
+    const original = join(dir, "original.cgi");
+    writeFileSync(original, source(), "utf8");
+    const script = resolve(root, "scripts", "town-map.mjs");
+    const args = ["--town", "0", "--mode", "multi"];
+    const run = options => spawnSync(process.execPath, [script, ...args, ...options], {
+      cwd: root, env: { ...process.env, DATA_DIR: dir }, encoding: "utf8"
+    });
+    assert.equal(run(["--import", original]).status, 0);
+    const db = new DatabaseSync(join(dir, "multi.sqlite"));
+    try {
+      db.exec("CREATE TABLE houses(town_id INTEGER NOT NULL)");
+      db.prepare("INSERT INTO houses(town_id) VALUES(0)").run();
+    } finally { db.close(); }
+    const blocked = run(["--import", original, "--replace"]);
+    assert.notEqual(blocked.status, 0);
+    assert.match(blocked.stderr, /已有 Web 版住宅/);
+    const otherDb = new DatabaseSync(join(dir, "multi.sqlite"));
+    try {
+      const record = otherDb.prepare("SELECT tiles_json FROM town_maps WHERE town_id=0").get();
+      const tiles = JSON.parse(record.tiles_json);
+      tiles[0] = "webhouse_1=空地";
+      otherDb.prepare("UPDATE town_maps SET tiles_json=? WHERE town_id=0").run(JSON.stringify(tiles));
+    } finally { otherDb.close(); }
+    const exportResult = run(["--export", join(dir, "unsafe.cgi")]);
+    assert.notEqual(exportResult.status, 0);
+    assert.match(exportResult.stderr, /原版房屋紀錄尚未同步/);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
