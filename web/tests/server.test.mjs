@@ -390,6 +390,8 @@ test("單機：出售住宅僅退地價、保留交易紀錄並可重新建屋",
     assert.equal(second.status,200);
     assert.equal(second.result.houses.length,1);
     assert.equal(second.result.houses[0].location,"A2");
+    assert.notEqual(second.result.houses[0].id,id);
+    assert.equal((await api(srv.url,"house/sell",{houseId:id})).status,400);
     assert.equal(second.result.houseEvents.length,3);
     assert.equal(second.result.character.money,12000000);
   } finally { await srv.stop(); }
