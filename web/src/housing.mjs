@@ -209,11 +209,16 @@ export function buildHouse(db, catalog, userId, position, options, now = Date.no
     const balance = available - quote.total;
     if (!Number.isSafeInteger(balance)) throw new Error("金額超出可處理範圍");
     const name = character.name + "的家";
-    const inserted = db.prepare(
-      "INSERT INTO houses(owner_user_id,town_id,row_num,column_num,name,image,interior_rank,purchase_price,original_plot,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)"
-    ).run(userId, character.town_id, position.row, position.column, name,
+    // 不重用已出售房屋編號，避免延遲送達的舊出售請求誤傷新屋。
+    // 相容舊版 houses(id INTEGER PRIMARY KEY) 的既有 SQLite 資料庫。
+    const houseId = db.prepare(
+      "SELECT MAX(COALESCE((SELECT MAX(id) FROM houses),0),COALESCE((SELECT MAX(house_id) FROM house_events),0))+1 AS id"
+    ).get().id;
+    if (!Number.isSafeInteger(houseId) || houseId < 1) throw new Error("住宅編號已超出支援範圍");
+    db.prepare(
+      "INSERT INTO houses(id,owner_user_id,town_id,row_num,column_num,name,image,interior_rank,purchase_price,original_plot,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)"
+    ).run(houseId, userId, character.town_id, position.row, position.column, name,
       quote.image, quote.interiorRank, quote.total, raw, now);
-    const houseId = Number(inserted.lastInsertRowid);
     // 使用明確的 Web 識別碼，避免誤認與原版居民 ID 相同。
     const updatedTiles = [...map.tiles];
     updatedTiles[offset] = "webhouse_" + houseId + "=" + raw;
