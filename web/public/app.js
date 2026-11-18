@@ -622,6 +622,45 @@ function renderJobs() {
   }
 }
 
+function renderInsurance() {
+  const item=state?.insurance;
+  if (!item||!state.character) return;
+  text("insurance-status",item.active?
+    "健康保險生效中，剩餘約 "+item.remainingDays+" 天，到期時間："+
+      new Date(item.activeUntil).toLocaleString("zh-TW")+"。" :
+    "目前沒有有效的健康保險。");
+  const quantity=Number(el("insurance-quantity").value);
+  const total=item.price*quantity;
+  const capacity=item.maxQuantity*item.durationDays*86400000;
+  const allowed=Number.isSafeInteger(quantity)&&quantity>=1&&
+    quantity<=item.maxQuantity&&
+    item.remainingMs+quantity*item.durationDays*86400000<=capacity;
+  const enough=state.character.money>=total;
+  text("insurance-quote","原始基準價："+money(item.price)+"／份，合計 "+
+    money(total)+"。"+(!allowed?"有效耐久不可超過五份。":
+      !enough?"現金不足。":"購買後會延長保險有效期限。"));
+  el("insurance-buy").disabled=!allowed||!enough;
+  const target=el("insurance-purchases");
+  target.replaceChildren();
+  if (!state.insurancePurchases?.length) {
+    const note=document.createElement("p");
+    note.className="small";
+    note.textContent="尚無購買紀錄。";
+    target.append(note);
+    return;
+  }
+  const list=document.createElement("ol");
+  list.className="health-event-list";
+  for (const purchase of state.insurancePurchases) {
+    const item=document.createElement("li");
+    item.textContent=new Date(purchase.created_at).toLocaleString("zh-TW")+
+      "｜"+purchase.quantity+" 份｜支付 "+money(purchase.paid)+
+      "｜有效期累加至 "+new Date(purchase.active_until).toLocaleString("zh-TW");
+    list.append(item);
+  }
+  target.append(list);
+}
+
 function renderDining() {
   if (!state?.character) return;
   const status=state.hunger;
@@ -636,10 +675,11 @@ function renderDining() {
   text("hospital-diagnosis","目前診斷：" + (health?.name ?? "未知") +
     (health?.lastSettledDay ? "；最近結算日：" + health.lastSettledDay : ""));
   const quote=state.hospital;
-  text("hospital-cost",quote?.disease.key==="healthy" ?
+  text("hospital-cost",(quote?.hasInsurance?"已套用健康保險折抵。":"")+
+    (quote?.disease.key==="healthy" ?
     "目前沒有診斷疾病。原版仍提供 " + money(quote.price) + " 的預防性注射。" :
     "治療「" + (quote?.disease.name ?? "未知") + "」需支付現金 " +
-      money(quote?.price??0) + "。");
+      money(quote?.price??0) + "。"));
   el("hospital-treat").disabled=!quote || (state.character.money<quote.price);
   const events=el("health-event-history");
   events.replaceChildren();
@@ -859,6 +899,7 @@ function render() {
   text("mastered-job", c.masteredJob || "無");
   text("measurements", c.height + " 公分／" + c.weight + " 公斤");
   renderDining();
+  renderInsurance();
   const ready = Boolean(state.currentJob) && state.workCooldownMs === 0 &&
     state.condition?.baseExperience !== null;
   el("work").disabled = !ready;
@@ -1001,6 +1042,32 @@ el("bank-transfer-form").addEventListener("submit", async event => {
   } finally {
     submit.disabled = false;
   }
+});
+let pendingInsurancePurchase=null;
+el("insurance-quantity").addEventListener("change",renderInsurance);
+el("insurance-buy-form").addEventListener("submit",async event=>{
+  event.preventDefault();
+  const quantity=Number(el("insurance-quantity").value);
+  const item=state?.insurance;
+  if(!item||!Number.isSafeInteger(quantity)||quantity<1||quantity>item.maxQuantity)
+    return notify("健康保險份數不正確。",true);
+  const total=quantity*item.price;
+  if(!window.confirm("確定支付 "+money(total)+" 購買健康保險 "+
+    quantity+" 份嗎？本入口使用 Web 版暫行基準價。"))return;
+  if(!pendingInsurancePurchase||pendingInsurancePurchase.quantity!==quantity)
+    pendingInsurancePurchase={quantity,requestId:crypto.randomUUID()};
+  const submit=el("insurance-buy");
+  submit.disabled=true;
+  try {
+    state=await api("inventory/insurance/buy",pendingInsurancePurchase);
+    render();
+    const result=state.insuranceResult;
+    notify(result.replayed?"同一筆保險購買已處理，沒有重複扣款。":
+      "已支付 "+money(result.paid)+" 購買 "+result.quantity+
+      " 份健康保險，醫院費用立即套用折抵。");
+    pendingInsurancePurchase=null;
+  }catch(error){notify(error.message,true);}
+  finally{renderInsurance();}
 });
 el("hospital-treat").addEventListener("click",()=>{
   const quote=state?.hospital;
