@@ -671,10 +671,57 @@ function actionTraining(key) {
   action("train", { key });
 }
 
+function updateLoanQuote() {
+  const loan=state?.bankLoan;
+  const selection=el("loan-plan");
+  const chosen=loan?.plans.find(p=>String(p.payments)===selection.value);
+  const submit=el("loan-borrow");
+  if (!loan || loan.active || !loan.maxPrincipal || !chosen) {
+    submit.disabled=true;
+    text("loan-quote",loan?.active ?
+      "必須先清償目前的貸款，才能再次借款。" :
+      "目前沒有可借款額度，請先累積存款與工作經驗。");
+    return;
+  }
+  submit.disabled=false;
+  text("loan-quote","借款額度：" + money(loan.maxPrincipal) +
+    "，每日還款：" + money(chosen.dailyPayment) +
+    "，全部 " + chosen.payments + " 期總計：" + money(chosen.totalRepayment) + "。");
+}
+function renderLoan() {
+  const loan=state?.bankLoan;
+  const select=el("loan-plan");
+  const previous=select.value;
+  select.replaceChildren();
+  for(const plan of loan?.plans ?? []){
+    const option=document.createElement("option");
+    option.value=String(plan.payments);
+    option.textContent=plan.payments+" 日（利息 "+plan.interestPercent+"%）";
+    select.append(option);
+  }
+  if (loan?.plans.some(x=>String(x.payments)===previous)) select.value=previous;
+  const form=el("loan-borrow-form");
+  form.hidden=Boolean(loan?.active);
+  const payoff=el("loan-payoff");
+  payoff.hidden=!loan?.active;
+  if (loan?.active) {
+    text("loan-status","原始借款：" + money(loan.originalPrincipal) +
+      "，每日還款：" + money(loan.dailyPayment) +
+      "，尚餘 " + loan.remainingPayments + " 期，待清償：" +
+      money(loan.totalOutstanding) +
+      (loan.missedAttempts ? "，歷史未繳次數：" + loan.missedAttempts : "") + "。");
+  } else {
+    text("loan-status","目前無未清償貸款。評估最高額度：" +
+      money(loan?.maxPrincipal ?? 0) + "。");
+  }
+  updateLoanQuote();
+}
+
 function renderBank() {
   el("bank-transfer-panel").hidden = state.mode !== "multi";
   const account = state.bankAccount;
   if (!account) return;
+  renderLoan();
   text("term-balance", "目前定期存款：" + money(account.termBalance));
   text("bank-interest-day", account.lastInterestDay
     ? "最近已計息日期：" + account.lastInterestDay
@@ -861,6 +908,24 @@ el("bank-transfer-form").addEventListener("submit", async event => {
   } finally {
     submit.disabled = false;
   }
+});
+el("loan-plan").addEventListener("change", updateLoanQuote);
+el("loan-borrow-form").addEventListener("submit", event=>{
+  event.preventDefault();
+  const plan=state?.bankLoan?.plans.find(x=>String(x.payments)===el("loan-plan").value);
+  if (!plan || state.bankLoan?.active || state.bankLoan?.maxPrincipal<=0) return;
+  if (!window.confirm("確定借入 " + money(state.bankLoan.maxPrincipal) +
+      "，選擇 " + plan.payments + " 期每日支付 " + money(plan.dailyPayment) +
+      " 嗎？未清償期間無法再次借款。")) return;
+  action("bank/loan/borrow",{payments:plan.payments},
+    "貸款已撥入普通帳戶。");
+});
+el("loan-payoff").addEventListener("click",()=>{
+  const amount=state?.bankLoan?.totalOutstanding ?? 0;
+  if (!state?.bankLoan?.active || amount<=0) return;
+  if (!window.confirm("確定從普通存款一次支付 " + money(amount) +
+      " 以清償貸款嗎？")) return;
+  action("bank/loan/payoff",{},"剩餘貸款已全額清償。");
 });
 el("bank-ledger-filter").addEventListener("change", renderBank);
 el("term-deposit-form").addEventListener("submit", event => {
