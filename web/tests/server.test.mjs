@@ -1244,3 +1244,74 @@ test("疾病跨日結算：首次建基準、每日僅一次且完整保存於�
     } finally {saved.close();}
   } finally {await srv.stop();}
 });
+
+
+test("單機：原版疾病事件每日最多抽選一次，舊角色首日不追補，重整不會重複抽",async()=>{
+  const srv=await start("solo");
+  try {
+    const created=await api(srv.url,"character",{
+      name:"隨機事件測試",gender:"other",stats:defaultStats()
+    });
+    assert.equal(created.status,200);
+    assert.equal(created.result.character.lastEventDay,created.result.health.lastSettledDay);
+    assert.deepEqual(created.result.healthEvents,[]);
+    const day=created.result.character.lastEventDay;
+    const database=new DatabaseSync(join(srv.directory,"solo.sqlite"));
+    try {
+      database.prepare("UPDATE characters SET last_event_day='2025-01-01',last_health_day=? WHERE name='隨機事件測試'")
+        .run(day);
+    }finally{database.close();}
+    const after=await api(srv.url,"state");
+    assert.equal(after.status,200);
+    assert.equal(after.result.character.lastEventDay,day);
+    assert.ok(after.result.healthEvents.length<=1);
+    const count=after.result.healthEvents.length;
+    const index=after.result.health.index;
+    if(count){
+      assert.ok([4,15].includes(after.result.healthEvents[0].originalId));
+      assert.equal(index,after.result.healthEvents[0].newHealthIndex);
+    }
+    for(let i=0;i<4;i++){
+      const repeat=await api(srv.url,"state");
+      assert.equal(repeat.result.character.lastEventDay,day);
+      assert.equal(repeat.result.health.index,index);
+      assert.equal(repeat.result.healthEvents.length,count);
+    }
+  }finally{await srv.stop();}
+});
+
+test("多人：疾病事件紀錄限本人查閱，角色事件檢查日期獨立保存",async()=>{
+  const srv=await start("multi");
+  try {
+    const a=await api(srv.url,"register",{
+      username:"eventTesterA",password:"event-tester-password-A"
+    });
+    const b=await api(srv.url,"register",{
+      username:"eventTesterB",password:"event-tester-password-B"
+    });
+    assert.equal(a.status,200);
+    assert.equal(b.status,200);
+    await api(srv.url,"character",{
+      name:"疾病事件甲",gender:"male",stats:defaultStats()
+    },a.cookie);
+    await api(srv.url,"character",{
+      name:"疾病事件乙",gender:"female",stats:defaultStats()
+    },b.cookie);
+    const db=new DatabaseSync(join(srv.directory,"multi.sqlite"));
+    try {
+      const id=db.prepare("SELECT user_id FROM characters WHERE name='疾病事件甲'").get().user_id;
+      db.prepare(
+        "INSERT INTO character_events(user_id,day,event_key,original_id,old_health_index,new_health_index,created_at) VALUES(?,?,?,?,?,?,?)"
+      ).run(id,"2026-01-01","caughtCold",4,50,-15,1000);
+    }finally{db.close();}
+    const own=await api(srv.url,"state",undefined,a.cookie);
+    const other=await api(srv.url,"state",undefined,b.cookie);
+    assert.equal(own.status,200);
+    assert.equal(own.result.healthEvents.length,1);
+    assert.equal(own.result.healthEvents[0].originalId,4);
+    assert.equal(other.result.healthEvents.length,0);
+    assert.equal(own.result.character.lastEventDay,other.result.character.lastEventDay);
+    assert.equal((await api(srv.url,"state")).result.user,null);
+    assert.equal((await api(srv.url,"hospital/treat",{})).status,401);
+  }finally{await srv.stop();}
+});
