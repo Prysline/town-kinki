@@ -17,6 +17,7 @@ import { parseLegacyMeals, eatMeal, deriveCondition, hungerStatus, physiqueStatu
 import { healthStatus, settleDailyHealth, conditionWithIllness, getTreatmentQuote, treatAtHospital } from "./health.mjs";
 import { initCharacterEvents, settleDailyIllnessEvent, listCharacterEvents } from "./events.mjs";
 import { parseLegacyInsurance, initInventoryTables, inventoryOverview, hasActiveHealthInsurance, listInsurancePurchases, buyHealthInsurance } from "./inventory.mjs";
+import { listLegacyInventoryItems } from "./legacy-inventory.mjs";
 import { initBankTables, settleBankInterest, bankOperation, bankOverview, bankLedger, transferToPlayer, BANK_TRANSFER_LIMIT, NEW_MEMBER_DAYS, NEW_MEMBER_TRANSFER_LIMIT, bankLoanOverview, borrowBankLoan, payoffBankLoan } from "./banking.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -243,6 +244,7 @@ function snapshot(user) {
     hospital: updated ? getTreatmentQuote(updated,hasActiveHealthInsurance(db,user.id,insuranceItem,now)) : null,
     insurance: updated ? inventoryOverview(db,user.id,insuranceItem,now) : null,
     insurancePurchases: updated ? listInsurancePurchases(db,user.id) : [],
+    legacyInventory: updated ? listLegacyInventoryItems(db,user.id) : [],
     hunger: updated ? hungerStatus(updated.lastMealAt,now) : null,
     physique: updated ? physiqueStatus(updated.height,updated.weight) : null,
     mealCooldownMs: updated && updated.lastMealAt ?
