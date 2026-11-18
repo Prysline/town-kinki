@@ -4,9 +4,12 @@ import { DatabaseSync } from "node:sqlite";
 import { NON_ITEM_EVENT_IDS,resolveNonItemEvent } from "../src/event-effects.mjs";
 import { initCharacterEvents,settleDailyIllnessEvent,listCharacterEvents } from "../src/events.mjs";
 
-const BASE_STATS={kokugo:20,suugaku:20,rika:20,syakai:20,bijutu:20,love:20};
+const BASE_STATS={kokugo:20,suugaku:20,rika:20,syakai:20,bijutu:20,love:20,
+  eigo:20,ongaku:20,looks:20,tairyoku:20,kenkou:20,speed:20,power:20,
+  wanryoku:20,kyakuryoku:20,unique:20,etti:20};
 function row(overrides={}) {
   return {money:100000,weight:60,height:165,bmi:22,
+    body_energy:20,brain_energy:20,job_experience:60,recovered_at:1000,
     stats_json:JSON.stringify(BASE_STATS),...overrides};
 }
 function rng(...values) {
@@ -18,7 +21,7 @@ function dbSetup() {
   db.exec([
     "PRAGMA foreign_keys=ON;",
     "CREATE TABLE users(id INTEGER PRIMARY KEY);",
-    "CREATE TABLE characters(id INTEGER PRIMARY KEY,user_id INTEGER UNIQUE NOT NULL REFERENCES users(id),health_index INTEGER NOT NULL DEFAULT 50,last_event_day TEXT NOT NULL DEFAULT '',money INTEGER NOT NULL DEFAULT 100000,weight REAL NOT NULL DEFAULT 60,height INTEGER NOT NULL DEFAULT 165,bmi REAL NOT NULL DEFAULT 22,stats_json TEXT NOT NULL DEFAULT '{}');",
+    "CREATE TABLE characters(id INTEGER PRIMARY KEY,user_id INTEGER UNIQUE NOT NULL REFERENCES users(id),health_index INTEGER NOT NULL DEFAULT 50,last_event_day TEXT NOT NULL DEFAULT '',money INTEGER NOT NULL DEFAULT 100000,weight REAL NOT NULL DEFAULT 60,height INTEGER NOT NULL DEFAULT 165,bmi REAL NOT NULL DEFAULT 22,body_energy INTEGER NOT NULL DEFAULT 20,brain_energy INTEGER NOT NULL DEFAULT 20,job_experience INTEGER NOT NULL DEFAULT 60,recovered_at INTEGER NOT NULL DEFAULT 1000,stats_json TEXT NOT NULL DEFAULT '{}');",
     "INSERT INTO users(id) VALUES(1),(2);",
     "INSERT INTO characters(user_id,stats_json) VALUES(1,'"+JSON.stringify(BASE_STATS)+"'),(2,'"+JSON.stringify(BASE_STATS)+"');"
   ].join("\n"));
@@ -31,17 +34,17 @@ function trigger(db,id,randoms=[],day="2026-11-19",user=1) {
     rng(0,eventNumber(id),...randoms));
 }
 
-test("第十六階段只新增 15 個無道具事件，原版未完成事件仍不會觸發虛構效果",()=>{
-  assert.deepEqual(NON_ITEM_EVENT_IDS,[1,2,5,6,7,8,9,10,12,13,14,24,25,41,43]);
+test("原版無道具事件共 19 種，其他未移植事件不會觸發虛構效果",()=>{
+  assert.deepEqual(NON_ITEM_EVENT_IDS,[1,2,5,6,7,8,9,10,12,13,14,24,25,26,27,33,39,41,43]);
   for(const id of NON_ITEM_EVENT_IDS){
     const values={1:[.1,.9],2:[.1],7:[.1],8:[.1],9:[.1],
-      10:[.1],12:[.1],13:[.1],24:[.8]};
+      10:[.1],12:[.1],13:[.1],24:[.8],26:[0],33:[0]};
     const e=resolveNonItemEvent(id,row(),rng(...values[id]??[]));
     assert.ok(e);
     assert.equal(e.event.originalId,id);
     assert.ok(e.event.description);
   }
-  for(const id of [3,4,11,15,16,17,18,19,20,21,22,23,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,42,44])
+  for(const id of [3,4,11,15,16,17,18,19,20,21,22,23,28,29,30,31,32,34,35,36,37,38,40,42,44])
     assert.equal(resolveNonItemEvent(id,row()),null);
 });
 
