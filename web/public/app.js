@@ -826,6 +826,7 @@ el("bank-form").addEventListener("submit", event => {
   action("bank", { action: actionName, amount },
     (actionName === "deposit" ? "存款" : "提款") + "完成：" + money(amount));
 });
+let pendingTransfer = null;
 el("bank-transfer-form").addEventListener("submit", async event => {
   event.preventDefault();
   const form = event.currentTarget;
@@ -841,14 +842,19 @@ el("bank-transfer-form").addEventListener("submit", async event => {
       " 給「" + recipientName + "」嗎？請先確認收款人姓名。")) return;
   const submit = form.querySelector("button[type=submit]");
   submit.disabled = true;
-  // 瀏覽器產生唯一識別碼，重送相同識別碼時伺服器不會重複扣款。
-  const requestId = crypto.randomUUID();
+  // 回應遺失時，重試相同收款人與金額必須沿用同一識別碼。
+  if (!pendingTransfer || pendingTransfer.recipientName !== recipientName ||
+      pendingTransfer.amount !== amount) {
+    pendingTransfer = { recipientName, amount, requestId: crypto.randomUUID() };
+  }
+  const requestId = pendingTransfer.requestId;
   try {
     state = await api("bank/transfer", {recipientName,amount,requestId});
     render();
     notify(state.transferResult.duplicate ?
       "這筆轉帳已處理過，沒有重複扣款。" :
       "成功轉帳 " + money(amount) + " 給「" + recipientName + "」。");
+    pendingTransfer = null;
     form.reset();
   } catch(error) {
     notify(error.message, true);
@@ -874,7 +880,7 @@ el("term-cancel").addEventListener("click", () => {
   }
 });
 el("logout").addEventListener("click", async () => {
-  try { await api("logout", {}); closeRoom(); state = await api("state"); render(); notify("已登出"); }
+  try { await api("logout", {}); pendingTransfer = null; closeRoom(); state = await api("state"); render(); notify("已登出"); }
   catch (error) { notify(error.message, true); }
 });
 el("room-close").addEventListener("click", closeRoom);
