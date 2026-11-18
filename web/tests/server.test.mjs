@@ -711,3 +711,113 @@ test("多人：非屋主無法改裝，同時改裝依伺服器餘額只扣一�
     assert.equal((await api(srv.url,"house/remodel",{...options,houseId:999},a.cookie)).status,400);
   } finally {await srv.stop();}
 });
+
+
+test("單機：普通與定期存款每日計息一次，帳簿記錄與全額解約均能持久化", async () => {
+  const srv=await start("solo");
+  try {
+    const created=await api(srv.url,"character",{
+      name:"銀行測試居民",gender:"other",stats:defaultStats()
+    });
+    assert.equal(created.status,200);
+    assert.equal(created.result.bankAccount.termBalance,0);
+    assert.equal(created.result.bankLedger.length,0);
+    const db=new DatabaseSync(join(srv.directory,"solo.sqlite"));
+    try {
+      db.prepare("UPDATE characters SET money=5000000,bank=2000000 WHERE name='銀行測試居民'").run();
+      db.prepare("UPDATE bank_accounts SET term_balance=3000000,last_interest_day='2025-01-01'").run();
+    } finally {db.close();}
+    const first=await api(srv.url,"state");
+    assert.equal(first.status,200);
+    assert.equal(first.result.character.bank,2010000);
+    assert.equal(first.result.bankAccount.termBalance,3030000);
+    assert.deepEqual(first.result.bankLedger.map(x=>[x.action,x.credit]),[
+      ["超級定期利息",30000],["普通存款利息",10000]
+    ]);
+    const second=await api(srv.url,"state");
+    assert.equal(second.result.character.bank,2010000);
+    assert.equal(second.result.bankAccount.termBalance,3030000);
+    assert.equal(second.result.bankLedger.length,2);
+    assert.equal((await api(srv.url,"bank/term",{action:"deposit",units:0.5})).status,400);
+    assert.equal((await api(srv.url,"bank/term",{action:"deposit",units:10})).status,400);
+    const deposit=await api(srv.url,"bank/term",{action:"deposit",units:2});
+    assert.equal(deposit.status,200);
+    assert.equal(deposit.result.character.money,3000000);
+    assert.equal(deposit.result.bankAccount.termBalance,5030000);
+    assert.equal(deposit.result.bankLedger[0].credit,2000000);
+    assert.equal((await api(srv.url,"bank/term",{action:"cancel",amount:1})).status,400);
+    const canceled=await api(srv.url,"bank/term",{action:"cancel"});
+    assert.equal(canceled.status,200);
+    assert.equal(canceled.result.character.money,8030000);
+    assert.equal(canceled.result.bankAccount.termBalance,0);
+    assert.equal(canceled.result.bankLedger[0].debit,5030000);
+    assert.equal((await api(srv.url,"bank/term",{action:"cancel"})).status,400);
+    const ordinary=await api(srv.url,"bank",{action:"deposit",amount:1000000});
+    assert.equal(ordinary.status,200);
+    assert.equal(ordinary.result.character.money,7030000);
+    assert.equal(ordinary.result.character.bank,3010000);
+    assert.equal(ordinary.result.bankLedger[0].type,"ordinary");
+    assert.equal(ordinary.result.bankLedger[0].balance,3010000);
+    const latest=await api(srv.url,"state");
+    assert.equal(latest.result.bankLedger.length,5);
+    assert.equal(latest.result.bankAccount.termBalance,0);
+    assert.equal(latest.result.character.money,7030000);
+  } finally {await srv.stop();}
+});
+
+test("多人：普通帳戶與定期獨立保存，同一帳號並行請求不能超額扣款或重複解約",async()=>{
+  const srv=await start("multi");
+  try {
+    const a=await api(srv.url,"register",{
+      username:"bankAccountOwner",password:"bank-account-owner-pass"
+    });
+    const b=await api(srv.url,"register",{
+      username:"bankAccountGuest",password:"bank-account-guest-pass"
+    });
+    assert.equal(a.status,200);
+    assert.equal(b.status,200);
+    assert.equal((await api(srv.url,"character",{
+      name:"帳戶甲",gender:"male",stats:defaultStats()
+    },a.cookie)).status,200);
+    assert.equal((await api(srv.url,"character",{
+      name:"帳戶乙",gender:"female",stats:defaultStats()
+    },b.cookie)).status,200);
+    const db=new DatabaseSync(join(srv.directory,"multi.sqlite"));
+    try {
+      db.prepare("UPDATE characters SET money=5000000,bank=1000000 WHERE name='帳戶甲'").run();
+    } finally {db.close();}
+    const option={action:"deposit",units:4};
+    const two=await Promise.all([
+      api(srv.url,"bank/term",option,a.cookie),
+      api(srv.url,"bank/term",option,a.cookie)
+    ]);
+    assert.deepEqual(two.map(x=>x.status).sort((x,y)=>x-y),[200,400]);
+    const owner=await api(srv.url,"state",undefined,a.cookie);
+    const guest=await api(srv.url,"state",undefined,b.cookie);
+    assert.equal(owner.result.character.money,1000000);
+    assert.equal(owner.result.bankAccount.termBalance,4000000);
+    assert.equal(owner.result.bankLedger.length,1);
+    assert.equal(guest.result.bankAccount.termBalance,0);
+    assert.equal(guest.result.bankLedger.length,0);
+    const canceled=await Promise.all([
+      api(srv.url,"bank/term",{action:"cancel"},a.cookie),
+      api(srv.url,"bank/term",{action:"cancel"},a.cookie)
+    ]);
+    assert.deepEqual(canceled.map(x=>x.status).sort((x,y)=>x-y),[200,400]);
+    const after=await api(srv.url,"state",undefined,a.cookie);
+    assert.equal(after.result.character.money,5000000);
+    assert.equal(after.result.bankAccount.termBalance,0);
+    assert.equal(after.result.bankLedger.length,2);
+    const withdrawals=await Promise.all([
+      api(srv.url,"bank",{action:"withdraw",amount:750000},a.cookie),
+      api(srv.url,"bank",{action:"withdraw",amount:750000},a.cookie)
+    ]);
+    assert.deepEqual(withdrawals.map(x=>x.status).sort((x,y)=>x-y),[200,400]);
+    const end=await api(srv.url,"state",undefined,a.cookie);
+    assert.equal(end.result.character.bank,250000);
+    assert.equal(end.result.character.money,5750000);
+    assert.equal(end.result.bankLedger.length,3);
+    assert.equal((await api(srv.url,"state",undefined,b.cookie)).result.bankLedger.length,0);
+    assert.equal((await api(srv.url,"bank/term",{action:"deposit",units:1})).status,401);
+  } finally {await srv.stop();}
+});
