@@ -120,13 +120,14 @@ export function importLegacyInventory(db,parsed,{originalId,sourceFile,now=Date.
     throw new Error("原始物品解析結果不正確");
   if(typeof sourceFile!=="string"||!sourceFile.trim())
     throw new Error("來源檔案名稱不正確");
-  initInventoryTables(db);
-  // 必須由伺服器建立既有表後才能執行；拒絕對空資料庫或不相符帳號執行匯入。
+  // 必須先存在角色匯入對照，不允許將原始物品交給任意 Web 帳號。
   const mapping=db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='legacy_character_imports'").get();
   if(!mapping)throw new Error("請先使用原版角色轉檔工具匯入對應角色");
-  initLegacyInventoryTables(db);
   db.exec("BEGIN IMMEDIATE");
   try {
+    // DDL 與資料改動一起處於交易內，若匯入失敗，首次新建的表也會回滾。
+    initInventoryTables(db);
+    initLegacyInventoryTables(db);
     const mapped=db.prepare(
       "SELECT target_user_id FROM legacy_character_imports WHERE original_id=?"
     ).get(originalId);
