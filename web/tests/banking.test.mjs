@@ -13,7 +13,7 @@ function createDb() {
   db.exec([
     "PRAGMA foreign_keys=ON;",
     "CREATE TABLE users(id INTEGER PRIMARY KEY,username TEXT NOT NULL,created_at INTEGER NOT NULL DEFAULT 0);",
-    "CREATE TABLE characters(id INTEGER PRIMARY KEY,user_id INTEGER NOT NULL UNIQUE REFERENCES users(id),name TEXT UNIQUE NOT NULL,money INTEGER NOT NULL,bank INTEGER NOT NULL);",
+    "CREATE TABLE characters(id INTEGER PRIMARY KEY,user_id INTEGER NOT NULL UNIQUE REFERENCES users(id),name TEXT UNIQUE NOT NULL,money INTEGER NOT NULL,bank INTEGER NOT NULL,created_at INTEGER NOT NULL DEFAULT 0);",
     "INSERT INTO users(id,username) VALUES(1,'alice'),(2,'bob');",
     "INSERT INTO characters(user_id,name,money,bank) VALUES(1,'甲',5000000,1000000),(2,'乙',100000,50000);"
   ].join("\n"));
@@ -202,13 +202,13 @@ test("原版新註冊未滿七天不能收到單筆達百萬的轉帳，滿七�
   const db=createDb();
   try {
     const now=1770000000000;
-    db.prepare("UPDATE users SET created_at=? WHERE id=2").run(now-6*86400000);
+    db.prepare("UPDATE characters SET created_at=? WHERE user_id=2").run(now-6*86400000);
     db.prepare("UPDATE characters SET bank=3000000 WHERE user_id=1").run();
     assert.throws(() => transferToPlayer(db,1,"乙",1000000,"2026-11-18",transferKey(3),now),/未滿七天/);
     assert.equal(db.prepare("SELECT bank FROM characters WHERE user_id=1").get().bank,3000000);
     const small=transferToPlayer(db,1,"乙",999999,"2026-11-18",transferKey(4),now);
     assert.equal(small.amount,999999);
-    db.prepare("UPDATE users SET created_at=? WHERE id=2").run(now-7*86400000);
+    db.prepare("UPDATE characters SET created_at=? WHERE user_id=2").run(now-7*86400000);
     const big=transferToPlayer(db,1,"乙",1000000,"2026-11-18",transferKey(5),now);
     assert.equal(big.amount,1000000);
   } finally {db.close();}
