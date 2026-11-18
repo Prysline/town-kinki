@@ -408,7 +408,9 @@ async function handle(req, res) {
     }
 
     if (path === "/api/work") {
-      const result = mutateCharacter(user.id, old => performWork(old, jobsByKey.get(old.jobId)));
+      let result;
+      try { result = mutateCharacter(user.id,old=>performWork(old,jobsByKey.get(old.jobId))); }
+      catch(error){throw new HttpError(400,error.message);}
       return sendJson(res, 200, { ...snapshot(user), result: {
         paid: result.paid, pending: result.pending,
         experienceGain: result.experienceGain, condition:result.condition,
