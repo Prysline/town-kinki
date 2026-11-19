@@ -75,8 +75,8 @@ function renderSoloTime() {
 let publicPreview=null;
 let previewLoading=false;
 // 方案 B：一次顯示一組設施。原本的表單留在 DOM，既有事件和資料更新不受影響。
-const FACILITY_TAB_NAMES = Object.freeze(["house","dining","training","jobs","bank","hospital","inventory","events"]);
-const PROFILE_VIEWS = Object.freeze(["status","attributes"]);
+const FACILITY_TAB_NAMES = Object.freeze(["house","dining","training","jobs","bank","hospital","events"]);
+const PROFILE_VIEWS = Object.freeze(["status","inventory","attributes"]);
 let activeProfileView="status";
 function selectProfileView(name,{focus=false}={}) {
   if(!PROFILE_VIEWS.includes(name))return false;
@@ -86,7 +86,8 @@ function selectProfileView(name,{focus=false}={}) {
     const tab=el("profile-tab-"+key);
     tab.setAttribute("aria-selected",String(selected));
     tab.tabIndex=selected?0:-1;
-    el(key==="status"?"player-summary":"attributes-panel").hidden=!selected;
+    const panelId={status:"player-summary",inventory:"inventory-panel",attributes:"attributes-panel"}[key];
+    el(panelId).hidden=!selected;
   }
   if(focus)el("profile-tab-"+name).focus({preventScroll:true});
   return true;
@@ -186,6 +187,7 @@ function goToFacility(panelId) {
   if(!target||!state?.character)return;
   const pane=target.closest(".facility-pane");
   if(pane)selectFacilityTab(pane.id.slice("facility-pane-".length));
+  if(target.closest("#inventory-panel"))selectProfileView("inventory");
   target.scrollIntoView({behavior:"smooth",block:"start"});
   target.classList.add("facility-focused");
   target.setAttribute("tabindex","-1");
