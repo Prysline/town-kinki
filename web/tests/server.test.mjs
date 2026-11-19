@@ -1903,3 +1903,34 @@ test("正在進行的 20 秒蟑螂事件禁止快轉，避免錯過限時操作"
     assert.equal(state.result.gameTimeOffsetMs,0);
   }finally{await srv.stop();}
 });
+
+test("單機跨日快轉會重置學校每日限制並依既有規則計算銀行每日利息",async()=>{
+  const srv=await start("solo");
+  try{
+    const created=await api(srv.url,"character",{
+      name:"隔日居民",gender:"other",stats:defaultStats()
+    });
+    assert.equal(created.status,200);
+    const deposited=await api(srv.url,"bank",{action:"deposit",amount:10000});
+    assert.equal(deposited.status,200);
+    assert.equal(deposited.result.character.bank,10000);
+    const day=deposited.result.bankAccount.lastInterestDay;
+    const db=new DatabaseSync(join(srv.directory,"solo.sqlite"));
+    try{
+      db.prepare("UPDATE characters SET last_school_day=? WHERE name='隔日居民'").run(day);
+    }finally{db.close();}
+    const before=await api(srv.url,"state");
+    assert.equal(before.result.schoolRemainingToday,true);
+    const advanced=await api(srv.url,"solo/time/advance",{preset:"1d"});
+    assert.equal(advanced.status,200);
+    assert.equal(advanced.result.schoolRemainingToday,false);
+    assert.notEqual(advanced.result.bankAccount.lastInterestDay,day);
+    assert.equal(advanced.result.gameTimeOffsetMs,86400000);
+    const interest=advanced.result.bankLedger.find(item=>item.action==="普通存款利息");
+    assert.ok(interest,"跨日快照應寫入銀行普通存款利息");
+    assert.equal(interest.credit,50);
+    const repeat=await api(srv.url,"state");
+    assert.equal(repeat.result.bankAccount.lastInterestDay,advanced.result.bankAccount.lastInterestDay);
+    assert.equal(repeat.result.bankLedger.filter(item=>item.action==="普通存款利息").length,1);
+  }finally{await srv.stop();}
+});
