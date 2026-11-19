@@ -244,7 +244,12 @@ test("往下捲過地圖後顯示固定角色能量，返回上方、登出或�
   for(const id of ["compact-character-name","compact-body-energy","compact-brain-energy",
     "compact-body-bar","compact-brain-bar"])assert.match(html,new RegExp('id="'+id+'"'));
   assert.match(script,/function updateCompactVisibility\(\)/);
-  assert.match(script,/facility\.getBoundingClientRect\(\)\.top<85/);
+  assert.match(script,/shouldShowCompactEnergy\(\{/);
+  assert.match(script,/el\("body-energy"\)\.closest\("div"\)\.getBoundingClientRect\(\)\.bottom/);
+  assert.match(script,/el\("profile-view-tabs"\)\.getBoundingClientRect\(\)\.bottom/);
+  assert.match(script,/import \{ shouldShowCompactEnergy \} from "\.\/energy-visibility\.js"/);
+  assert.doesNotMatch(script,/facility\.getBoundingClientRect\(\)\.top<85/);
+  assert.match(script,/updateCompactVisibility\(\);\s*return true;/);
   assert.match(script,/Boolean\(state\?\.character\)&&!el\("game"\)\.hidden/);
   assert.match(script,/window\.addEventListener\("scroll",updateCompactVisibility,\{passive:true\}\)/);
   assert.match(script,/window\.addEventListener\("resize",updateCompactVisibility\)/);
