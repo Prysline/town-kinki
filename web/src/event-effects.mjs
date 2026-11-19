@@ -14,7 +14,7 @@ const STAT_EVENTS = Object.freeze({
     positive:"對藝術產生興趣",negative:"在美術課睡著了"}
 });
 export const NON_ITEM_EVENT_IDS = Object.freeze([
-  1,2,3,5,6,7,8,9,10,11,12,13,14,16,17,18,19,20,21,22,23,24,25,26,27,29,30,31,32,33,35,39,41,42,43,44
+  1,2,3,5,6,7,8,9,10,11,12,13,14,16,17,18,19,20,21,22,23,24,25,26,27,29,30,31,32,33,34,35,39,41,42,43,44
 ]);
 
 function draw(random,n) {
@@ -444,6 +444,31 @@ export function resolveNonItemEvent(originalId,character,random=Math.random,bonu
         const loss=-subtractEnergy("body_energy",2);
         const cost=-addMoney(-50000);
         event.description="在琵琶湖溺水，身體能量減少 "+loss+" 點，支付救援費 "+cost+" 元。";
+      }
+      break;
+    }
+    case 34:{
+      // event.pl #34：先抽 1/2 機率，再用 motimono_kensa_ev2 消耗一次聖誕人偶。
+      const choice=draw(random,2);
+      event.key="santaEncounter";event.title="聖誕老人事件";
+      if(bonusItem==="等身大サンタさん人形"){
+        usedItemName=bonusItem;
+        if(choice===1){
+          const earned=addMoney(int(character.money,"現金"));
+          event.description="聖誕老人收走等身大人偶，讓持有現金翻倍，增加 "+earned+" 元。";
+        }else{
+          const gained=grantEnergy(10000);
+          event.description="聖誕老人讓身體與頭腦能量分別恢復 "+gained.body+"、"+
+            gained.brain+" 點（依 Web 現有最大能量上限）。";
+        }
+      }else if(int(character.money,"現金")===0){
+        // 原版 money<=0 觸發德政令。Web 不允許負現金，因此僅涵蓋零現金。
+        event.description="聖誕老人沒有現身，但發生了德政令；現金維持 0 元。";
+      }else{
+        // 原版沒有娃娃而又有現金時，會開始與 #44 共用的 20 秒蟑螂。
+        event.description="聖誕老人沒有現身，蟑螂出現！20 秒內請立即拍打。";
+        cockroachChallenge=true;
+        effects.cockroach="pending";
       }
       break;
     }
