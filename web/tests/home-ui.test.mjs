@@ -75,10 +75,9 @@ const paneMap={
   jobs:["jobs-panel"],
   bank:["bank-panel"],
   hospital:["hospital-panel"],
-  inventory:["inventory-panel"],
   events:["event-panel"]
 };
-test("高密度主畫面：地圖摘要與八組可存取設施分頁，保留全部現有操作元件",()=>{
+test("高密度主畫面：地圖摘要與七組可存取設施分頁，保留全部現有操作元件",()=>{
   const main=html.slice(html.indexOf('id="game"'));
   assert.ok(main.indexOf('id="town-panel"')<main.indexOf('id="player-summary"'));
   assert.ok(main.indexOf('id="player-summary"')<main.indexOf('id="facility-tabs"'));
@@ -198,12 +197,23 @@ test("能力值位於右側角色資訊切換而非全寬設施分頁，三組�
   assert.ok(aside>0&&endAside>aside);
   assert.match(right,/id="profile-view-tabs" class="profile-view-tabs" role="tablist"/);
   assert.match(right,/id="profile-tab-status"[^>]*role="tab"/);
+  assert.match(right,/id="profile-tab-inventory"[^>]*role="tab"/);
   assert.match(right,/id="profile-tab-attributes"[^>]*role="tab"/);
+  const statusPos=right.indexOf('id="player-summary"');
+  const itemPos=right.indexOf('id="inventory-panel"');
+  const abilityPos=right.indexOf('id="attributes-panel"');
+  assert.ok(statusPos>0&&itemPos>statusPos&&abilityPos>itemPos);
   assert.match(right,/id="attributes-panel"[^>]*role="tabpanel"[^>]*hidden/);
   assert.match(right,/class="ability-groups" id="attributes"/);
   assert.equal((html.match(/id="attributes-panel"/g)||[]).length,1);
   assert.doesNotMatch(html,/id="facility-pane-stats"/);
   assert.doesNotMatch(html,/id="facility-tab-stats"/);
+  assert.doesNotMatch(html,/id="facility-tab-inventory"/);
+  assert.doesNotMatch(html,/id="facility-pane-inventory"/);
+  assert.match(right,/id="inventory-panel"[^>]*role="tabpanel"[^>]*hidden/);
+  for(const id of ["insurance-buy-form","insurance-quantity","insurance-buy","insurance-purchases",
+    "legacy-inventory-list","legacy-item-use-history"])
+    assert.match(right,new RegExp('id="'+id+'"'));
   assert.match(script,/const ABILITY_GROUPS =/);
   assert.match(script,/label:"頭腦"/);
   assert.match(script,/label:"身體"/);
@@ -243,4 +253,23 @@ test("往下捲過地圖後顯示固定角色能量，返回上方、登出或�
   assert.match(css,/\.compact-status\{position:fixed;left:50%;top:0/);
   assert.match(css,/body\.compact-status-active \.game-shell \.facility-tabs\{top:54px\}/);
   assert.match(css,/@media\(max-width:600px\)/);
+});
+
+
+test("原版右側物品頁籤保留保險、消耗品與使用紀錄，地圖物品快捷鍵可直接切換",()=>{
+  const main=html.slice(html.indexOf('id="game"'));
+  const right=main.slice(main.indexOf('class="sidebar game-status-column"'),main.indexOf('</aside>'));
+  assert.match(right,/id="profile-view-tabs"/);
+  assert.match(right,/data-profile-view="status"/);
+  assert.match(right,/data-profile-view="inventory"/);
+  assert.match(right,/data-profile-view="attributes"/);
+  assert.match(script,/const PROFILE_VIEWS = Object\.freeze\(\["status","inventory","attributes"\]\)/);
+  assert.match(script,/inventory:"inventory-panel"/);
+  assert.match(script,/if\(target\.closest\("#inventory-panel"\)\)selectProfileView\("inventory"\)/);
+  assert.match(html,/data-facility="inventory-panel"/);
+  assert.match(script,/el\("facility-shortcuts"\)\.addEventListener\("click"/);
+  assert.match(css,/\.profile-view-tabs\{display:grid;grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
+  assert.match(css,/\.inventory-panel\{min-width:0;width:100%;max-height:min\(65vh,540px\)/);
+  assert.match(css,/overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain/);
+  assert.match(script,/el\("insurance-buy-form"\)\.addEventListener/);
 });
