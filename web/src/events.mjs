@@ -72,7 +72,7 @@ export function getCouponBalance(db,userId) {
   return quantity;
 }
 function creditEventCoupons(db,userId,quantity){
-  if(!Number.isSafeInteger(quantity)||quantity<1||quantity>5)
+  if(!Number.isSafeInteger(quantity)||quantity<1||quantity>15)
     throw new Error("事件優惠券數量不正確");
   const newBalance=getCouponBalance(db,userId)+quantity;
   if(!Number.isSafeInteger(newBalance))
@@ -201,6 +201,7 @@ export function listCharacterEvents(db,userId,limit=15) {
         row.event_key==="tigersSupport"?"阪神虎隊應援":
         row.event_key==="cockroach"?"蟑螂挑戰":
         row.event_key==="couponGift"?"獲得優惠券":
+        row.event_key==="fourDimensionalBag"?"四次元福袋":
         row.event_key==="bookRoyalty"?"書籍版稅":
         row.event_key==="hulaHoopLuck"?"呼拉圈幸運事件":
         row.event_key==="trafficAccident"?"交通意外":
