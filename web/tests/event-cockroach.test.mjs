@@ -38,7 +38,7 @@ function setup(){
   return db;
 }
 function initialize(db,userId=1){
-  return settleDailyIllnessEvent(db,userId,"2026-11-18",START-86400000,
+  return settleDailyIllnessEvent(db,userId,"2026-11-18",1000,
     ()=>{throw new Error("初始化不應抽選");});
 }
 function spawn(db,userId=1,day="2026-11-19",now=START){
