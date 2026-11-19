@@ -2,7 +2,7 @@
 // 第十六階段加入 15 種不需額外道具的經濟、能力與體重事件。
 // 原 CGI 在進入主畫面時抽取，Web 版改為每個遊戲日最多抽取一次。
 import { resolveNonItemEvent } from "./event-effects.mjs";
-import { EVENT_BONUS_ITEMS,findEventBonusItem,consumeEventBonusItem } from "./event-item-bonus.mjs";
+import { EVENT_BONUS_ITEMS,EVENT_REQUIRED_SETS,findEventBonusItem,consumeEventBonusItem } from "./event-item-bonus.mjs";
 
 export const ORIGINAL_EVENT_COUNT = 44;
 export const ORIGINAL_EVENT_CHANCE = 3;
@@ -78,15 +78,25 @@ export function settleDailyIllnessEvent(db,userId,day,now=Date.now(),random=Math
     const result=rollOriginalIllnessEvent(random);
     const bonusItemName=EVENT_BONUS_ITEMS[result.originalId];
     const bonusItem=bonusItemName?findEventBonusItem(db,userId,bonusItemName):null;
+    const requiredNames=EVENT_REQUIRED_SETS[result.originalId];
+    const requiredItems=requiredNames?.map(name=>findEventBonusItem(db,userId,name))??null;
+    const completeSet=requiredItems?.every(Boolean)?requiredItems:null;
     const effect=result.event?
       {event:result.event,changes:{health_index:result.event.healthIndex},
         effects:{healthIndex:{from:old.health_index,to:result.event.healthIndex}}}:
-      (result.drawn ? resolveNonItemEvent(result.originalId,old,random,bonusItem?.name??null):null);
+      (result.drawn ? resolveNonItemEvent(result.originalId,old,random,
+        requiredNames?(completeSet?.map(item=>item.name)??null):(bonusItem?.name??null)):null);
     // 基礎事件先計算，再於同一筆交易內扣除確實觸發加成的原版物品耐久。
     if(effect?.usedItemName){
       if(!bonusItem||bonusItem.name!==effect.usedItemName)
         throw new Error("原版事件道具加成與持有資料不一致");
       effect.effects.item=consumeEventBonusItem(db,userId,bonusItem);
+    }
+    if(effect?.usedItemNames){
+      if(!completeSet||effect.usedItemNames.length!==completeSet.length||
+          effect.usedItemNames.some((name,i)=>name!==completeSet[i].name))
+        throw new Error("事件收藏套組與原始物品資料不一致");
+      effect.effects.items=completeSet.map(item=>consumeEventBonusItem(db,userId,item));
     }
     db.prepare("UPDATE characters SET last_event_day=? WHERE user_id=?")
       .run(day,userId);
@@ -136,6 +146,10 @@ export function listCharacterEvents(db,userId,limit=15) {
         row.event_key==="vendingChange"?"自動販賣機找零":
         row.event_key==="heartbreakWeightLoss"?"失戀消瘦":
         row.event_key==="kindFeeling"?"溫柔心情":
+        row.event_key==="earthquakeInsurance"?"地震與資產運用":
+        row.event_key==="gremlin"?"小妖精惡作劇":
+        row.event_key==="collectionQuest"?"收藏品檢查":
+        row.event_key==="tigersSupport"?"阪神虎隊應援":
         row.event_key==="bookRoyalty"?"書籍版稅":
         row.event_key==="hulaHoopLuck"?"呼拉圈幸運事件":
         row.event_key==="trafficAccident"?"交通意外":
