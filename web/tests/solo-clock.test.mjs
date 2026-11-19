@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   SOLO_TIME_STEPS,MAX_SOLO_OFFSET_MS,initSoloClock,
   soloOffset,gameTimestamp,advanceSoloClock
@@ -51,4 +54,23 @@ test("單機時鐘：超過十年安全上限會回滾；既有偏移可從資�
     assert.equal(soloOffset(db),MAX_SOLO_OFFSET_MS-1000);
     db.close();
   }catch(e){db.close();throw e;}
+});
+
+test("單機遊戲時鐘真正保存於 SQLite：關閉後重新建立連線仍保留偏移",()=>{
+  const directory=mkdtempSync(join(tmpdir(),"town-solo-clock-"));
+  const file=join(directory,"solo.sqlite");
+  try{
+    const first=new DatabaseSync(file);
+    initSoloClock(first);
+    const start=1780000000000;
+    advanceSoloClock(first,"5m",start);
+    advanceSoloClock(first,"1d",start);
+    first.close();
+    const restored=new DatabaseSync(file);
+    try{
+      initSoloClock(restored);
+      assert.equal(soloOffset(restored),86700000);
+      assert.equal(gameTimestamp(restored,start),start+86700000);
+    }finally{restored.close();}
+  }finally{rmSync(directory,{force:true,recursive:true});}
 });
