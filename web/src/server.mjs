@@ -22,6 +22,7 @@ import { listLegacyInventoryItems } from "./legacy-inventory.mjs";
 import { initLegacyItemUseTables, listLegacyItemActions, listLegacyItemUseHistory, useLegacyItem } from "./legacy-item-use.mjs";
 import { initBankTables, settleBankInterest, bankOperation, bankOverview, bankLedger, transferToPlayer, BANK_TRANSFER_LIMIT, NEW_MEMBER_DAYS, NEW_MEMBER_TRANSFER_LIMIT, bankLoanOverview, borrowBankLoan, payoffBankLoan } from "./banking.mjs";
 import { initSoloClock, gameTimestamp, advanceSoloClock, soloOffset } from "./solo-clock.mjs";
+import { deleteSoloCharacter } from "./solo-character.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const REPO_ROOT = resolve(ROOT, "..");
@@ -437,6 +438,19 @@ async function handle(req, res) {
 
     const user = getUser(req);
     if (!user) throw new HttpError(401, "請先登入");
+
+    if (path === "/api/solo/character/delete") {
+      if (MODE !== "solo") throw new HttpError(403, "只有單人模式可以刪除角色");
+      // 不接受玩家 ID、帳號名稱或任意 SQL；需重新輸入目前角色名稱，明確確認。
+      if (data.confirm !== true)
+        throw new HttpError(400, "請先確認已瞭解角色資料將永久刪除");
+      let deleted;
+      try { deleted=deleteSoloCharacter(db,user.id,data.characterName); }
+      catch(error) { throw new HttpError(400,error.message); }
+      // 本機自動建立新的專用使用者，但不重建角色；
+      // 保留 town_maps 和 solo_clock，回到建角流程。
+      return sendJson(res,200,{...snapshot(getSoloUser()),deletion:deleted});
+    }
 
     if (path === "/api/solo/time/advance") {
       // 伺服器決定快轉步長和遊戲時間；多人、未建角均不能改時鐘。
