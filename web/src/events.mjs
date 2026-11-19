@@ -2,6 +2,7 @@
 // 第十六階段加入 15 種不需額外道具的經濟、能力與體重事件。
 // 原 CGI 在進入主畫面時抽取，Web 版改為每個遊戲日最多抽取一次。
 import { resolveNonItemEvent } from "./event-effects.mjs";
+import { EVENT_BONUS_ITEMS,findEventBonusItem,consumeEventBonusItem } from "./event-item-bonus.mjs";
 
 export const ORIGINAL_EVENT_COUNT = 44;
 export const ORIGINAL_EVENT_CHANCE = 3;
@@ -75,10 +76,18 @@ export function settleDailyIllnessEvent(db,userId,day,now=Date.now(),random=Math
       return {checked:false,initial:true,event:null};
     }
     const result=rollOriginalIllnessEvent(random);
+    const bonusItemName=EVENT_BONUS_ITEMS[result.originalId];
+    const bonusItem=bonusItemName?findEventBonusItem(db,userId,bonusItemName):null;
     const effect=result.event?
       {event:result.event,changes:{health_index:result.event.healthIndex},
         effects:{healthIndex:{from:old.health_index,to:result.event.healthIndex}}}:
-      (result.drawn ? resolveNonItemEvent(result.originalId,old,random):null);
+      (result.drawn ? resolveNonItemEvent(result.originalId,old,random,bonusItem?.name??null):null);
+    // 基礎事件先計算，再於同一筆交易內扣除確實觸發加成的原版物品耐久。
+    if(effect?.usedItemName){
+      if(!bonusItem||bonusItem.name!==effect.usedItemName)
+        throw new Error("原版事件道具加成與持有資料不一致");
+      effect.effects.item=consumeEventBonusItem(db,userId,bonusItem);
+    }
     db.prepare("UPDATE characters SET last_event_day=? WHERE user_id=?")
       .run(day,userId);
     if(effect){
@@ -127,6 +136,8 @@ export function listCharacterEvents(db,userId,limit=15) {
         row.event_key==="vendingChange"?"自動販賣機找零":
         row.event_key==="heartbreakWeightLoss"?"失戀消瘦":
         row.event_key==="kindFeeling"?"溫柔心情":
+        row.event_key==="englishLesson"?"英語事件":
+        row.event_key==="musicLesson"?"音樂事件":
         row.event_key==="literature"?"國語事件":
         row.event_key==="mathematics"?"數學事件":
         row.event_key==="science"?"理科事件":

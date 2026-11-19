@@ -1,4 +1,4 @@
-// 從原版 event.pl::event_happen 移植不需額外道具與其他模組的事件分支。
+// 從原版 event.pl::event_happen 移植不需完整商店的事件分支。
 import { maxBodyEnergy, maxBrainEnergy } from "./engine.mjs";
 // 原 CGI 可產生負數金錢／能力；Web 版為保持既有非負值模型將扣除量限制在當前持有量。
 const STAT_EVENTS = Object.freeze({
@@ -14,7 +14,7 @@ const STAT_EVENTS = Object.freeze({
     positive:"對藝術產生興趣",negative:"在美術課睡著了"}
 });
 export const NON_ITEM_EVENT_IDS = Object.freeze([
-  1,2,5,6,7,8,9,10,12,13,14,24,25,26,27,33,39,41,43
+  1,2,3,5,6,7,8,9,10,11,12,13,14,24,25,26,27,33,39,41,43
 ]);
 
 function draw(random,n) {
@@ -52,13 +52,14 @@ function changeStat(old,key,delta) {
   if(!Number.isSafeInteger(next))throw new Error("事件能力值超出安全整數範圍");
   return {stats_json:JSON.stringify({...stats,[key]:next}),actualDelta:next-stats[key]};
 }
-export function resolveNonItemEvent(originalId,character,random=Math.random) {
+export function resolveNonItemEvent(originalId,character,random=Math.random,bonusItem=null) {
   if(!Number.isSafeInteger(originalId)||!NON_ITEM_EVENT_IDS.includes(originalId))
     return null;
   if(typeof random!=="function")throw new Error("事件亂數產生器不正確");
   const event={originalId, key:"",title:"",description:""};
   const changes={};
   let effects={};
+  let usedItemName=null;
   function addMoney(delta) {
     const computed=changeMoney(character.money,delta);
     changes.money=computed.money;
@@ -121,6 +122,21 @@ export function resolveNonItemEvent(originalId,character,random=Math.random) {
       event.description="在路上撿到錢包，將裡面的 "+amount+" 元據為己有。";
       break;
     }
+    case 3:{
+      event.key="englishLesson";event.title="英語事件";
+      const positive=draw(random,2)===1;
+      const bonus=positive&&bonusItem==="英文解釈教室"?5:0;
+      const updated=changeStat(character.stats_json,"eigo",(positive?3:-3)+bonus);
+      changes.stats_json=updated.stats_json;
+      effects.stats={eigo:updated.actualDelta};
+      event.description=positive?"遇見傳教士，對方親切地教導英語，英語能力增加 3 點。":
+        "被英語老師放棄指導，英語能力減少 3 點。";
+      if(bonus){
+        usedItemName="英文解釈教室";
+        event.description+=" 因持有《英文解釈教室》，再增加 5 點。";
+      }
+      break;
+    }
     case 5:{
       event.key="collectionFee";event.title="NHK 收費";
       const charged= -addMoney(-1000);
@@ -142,6 +158,22 @@ export function resolveNonItemEvent(originalId,character,random=Math.random) {
       effects.stats={[option.stat]:change.actualDelta};
       event.description=(positive?option.positive:option.negative)+"，"+
         option.label+(change.actualDelta>=0?"+":"")+change.actualDelta+"。";
+      break;
+    }
+    case 11:{
+      event.key="musicLesson";event.title="音樂事件";
+      const positive=draw(random,2)===1;
+      // 原版敘述寫「音樂5アップ」，但實際 Perl 程式碼是 $ongaku += 3。
+      const bonus=bonusItem==="成り上がり"?3:0;
+      const updated=changeStat(character.stats_json,"ongaku",(positive?3:-3)+bonus);
+      changes.stats_json=updated.stats_json;
+      effects.stats={ongaku:updated.actualDelta};
+      event.description=positive?"練習鋼琴，音樂能力增加 3 點。":
+        "聚會過度喧鬧，嗓子沙啞，音樂能力減少 3 點。";
+      if(bonus){
+        usedItemName="成り上がり";
+        event.description+=" 閱讀《成り上がり》後，音樂能力再增加 3 點。";
+      }
       break;
     }
     case 13:{
@@ -239,5 +271,5 @@ export function resolveNonItemEvent(originalId,character,random=Math.random) {
       break;
     }
   }
-  return {event,changes,effects};
+  return {event,changes,effects,usedItemName};
 }
