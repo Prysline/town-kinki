@@ -138,3 +138,100 @@ main{max-width:1280px}
   .town-home{order:0}
   .landing-actions{order:1}
 }
+
+/* 方案 B + 原版 C：單一設施工作區、像素地圖優先、較密集的 CGI 風格。
+   保留全部現有 34px 地圖格子及行動裝置可點擊面積。 */
+main{max-width:1100px;margin:.8rem auto;padding:0 .7rem;min-height:unset}
+.header{padding:.65rem max(.7rem,calc((100vw - 1100px)/2))}
+.identity h1{font-size:1.25rem}
+.identity p{margin-top:.15rem}
+.landing-layout{grid-template-columns:minmax(0,1fr) 300px;gap:.65rem}
+.landing-layout .card{padding:.85rem;border-radius:5px;box-shadow:none}
+.landing-actions .field-box{padding:.65rem;border-radius:3px}
+.landing-actions .columns,.landing-actions form{gap:.55rem}
+.game-shell.layout{display:block}
+.game-overview{display:grid;grid-template-columns:minmax(0,1fr) 290px;align-items:start;gap:.65rem}
+.game-overview .content,.game-overview .sidebar{min-width:0;gap:.65rem}
+.game-shell .card{padding:.8rem;border:1px solid #c3d7c2;border-radius:5px;box-shadow:none}
+.game-shell h2{font-size:1.1rem;margin:.15rem 0 .45rem}
+.game-shell h3{font-size:1rem;margin:.2rem 0 .45rem}
+.game-shell h4{margin:.55rem 0 .3rem}
+.game-shell .heading{gap:.4rem;align-items:center}
+.game-shell .eyebrow{letter-spacing:.06em;font-size:.69rem}
+.game-shell .small{line-height:1.4}
+.game-shell p.small{margin:.35rem 0}
+.game-shell .stats{margin:0 0 .35rem}
+.game-shell .stats>div{padding:.27rem 0;gap:.5rem;font-size:.87rem}
+.game-shell .stats dt{flex:0 0 auto}
+.game-shell .stats dd{min-width:0;overflow-wrap:anywhere}
+.game-shell button{border-radius:4px;padding:.42rem .65rem;min-height:36px}
+.game-shell input,.game-shell select{border-radius:3px;padding:.42rem}
+.game-shell label>input,.game-shell label>select{margin-top:.25rem}
+.game-shell form{gap:.5rem}
+.game-shell .towns{display:flex;flex-wrap:wrap;gap:.3rem;margin:.35rem 0}
+.game-shell .town{padding:.35rem .55rem;border-radius:3px;font-size:.8rem;min-height:34px}
+.game-shell .town small{display:none}
+.game-shell .town.active{background:#d1e9d5;border:2px solid #316444}
+.game-shell .town-main .map-scroll{margin:.35rem 0;padding:2px;border-radius:3px}
+.game-shell .town-main #map-source{margin:.3rem 0}
+.game-shell .town-main #map-selection{min-height:0}
+.game-shell .map-editor{padding:.55rem;margin:.5rem 0;border-radius:3px}
+.game-shell .town-shortcuts{gap:.3rem;margin:.45rem 0}
+.game-shell .town-shortcuts button{padding:.28rem .45rem;gap:.2rem;border-radius:3px;min-height:35px;font-size:.82rem}
+.game-shell .town-shortcuts button img{width:23px;height:23px}
+.game-shell .residents-line{display:flex;align-items:baseline;gap:.5rem;flex-wrap:wrap;border-top:1px solid #d5e4d5;padding-top:.35rem;font-size:.8rem}
+.game-shell .residents-line p{margin:0}
+.game-shell .player-summary h2{margin:.1rem 0 .35rem}
+.game-shell .player-summary .status-main>div{padding:.24rem 0}
+.game-shell .player-actions{display:grid;grid-template-columns:1fr 1fr;gap:.35rem;margin-top:.45rem}
+.game-shell .player-actions #cooldown{grid-column:1/-1;margin:.1rem 0 0}
+.game-shell .player-actions button{width:100%;padding:.4rem .3rem}
+.game-shell details{border-top:1px solid #d3e0d1;margin:.35rem 0;padding-top:.3rem}
+.game-shell details>summary{cursor:pointer;color:#316348;font-size:.8rem;font-weight:650;padding:.25rem 0;list-style-position:inside}
+.game-shell details[open]>summary{margin-bottom:.45rem}
+.game-shell details .small{margin:.3rem 0 .5rem}
+.game-shell .status-extra{margin-top:.25rem}
+.game-shell .event-alert{background:#b3482d;width:100%;color:#fff;font-size:.84rem;margin-top:.35rem;text-align:center;min-height:38px}
+.game-shell .event-alert:focus-visible{outline-color:#d8825e}
+.game-shell .facility-shell{margin-top:.65rem;padding:.75rem .85rem;border:1px solid #b4cbb5;background:#fff;border-radius:5px}
+.game-shell .facility-topline{display:flex;gap:.7rem;align-items:center;flex-wrap:wrap;margin-bottom:.4rem}
+.game-shell .facility-topline h2{margin:0}
+.game-shell .facility-topline .muted{font-size:.78rem}
+.game-shell .facility-tabs{display:flex;gap:2px;overflow-x:auto;scrollbar-width:thin;
+  border-bottom:2px solid #477858;background:#ecf3eb;padding:.3rem .3rem 0;position:sticky;top:0;z-index:3;scroll-margin-top:.6rem}
+.game-shell .facility-tabs button{flex:0 0 auto;min-height:39px;min-width:59px;white-space:nowrap;
+  background:#f8faf6;color:#31533a;border:1px solid #c4d4c4;border-radius:3px 3px 0 0;padding:.4rem .7rem}
+.game-shell .facility-tabs button[aria-selected="true"]{background:#32694b;color:#fff;border-color:#245d3b;font-weight:750}
+.game-shell .facility-tabs button:focus-visible{outline:2px solid #e6a84c;outline-offset:-3px}
+.game-shell .facility-pane{padding:.7rem .1rem .1rem;scroll-margin-top:4rem}
+.game-shell .facility-pane>.card{border:none;background:transparent;box-shadow:none;padding:0}
+.game-shell .facility-pane>.card+.card{border-top:1px solid #d3dfd2;margin-top:.75rem;padding-top:.8rem}
+.game-shell .facility-pane>.card:focus-visible{outline:2px solid #397c5a}
+.game-shell .training-grid{gap:.5rem;grid-template-columns:repeat(auto-fit,minmax(205px,1fr))}
+.game-shell .training-tile{padding:.65rem;gap:.35rem;border-radius:4px}
+.game-shell .training-tile p.small{margin:.1rem 0}
+.game-shell .housing-form{gap:.55rem;margin:.5rem 0 .8rem}
+.game-shell .owned-house{padding:.6rem;border-radius:4px}
+.game-shell .bank-term,.game-shell .bank-passbook{margin-top:.55rem;padding-top:.4rem}
+.game-shell .bank-advanced{margin-top:.7rem}
+.game-shell .history-details{margin:.7rem 0}
+.game-shell .filters{margin:.4rem 0 .55rem}
+.game-shell .jobs{gap:.35rem;max-height:380px}
+.game-shell .job{padding:.45rem;border-radius:4px}
+.game-shell .facility-focused{outline:2px solid #397c5a;outline-offset:2px;scroll-margin-top:4rem}
+@media(max-width:800px){
+  .game-overview,.landing-layout{grid-template-columns:minmax(0,1fr)}
+  .game-shell .facility-shell{padding:.65rem .55rem}
+  .game-shell .facility-topline .muted{display:none}
+  .game-shell .facility-tabs button{min-width:58px}
+}
+@media(max-width:450px){
+  .header{padding:.6rem}
+  .game-shell .card{padding:.6rem}
+  .game-shell .heading{flex-direction:row;align-items:center}
+  .game-shell .heading .muted{font-size:.72rem}
+  .game-shell .facility-shell{padding:.55rem .45rem}
+  .game-shell .towns{flex-wrap:wrap}
+  .game-shell .town{flex:0 1 auto}
+  .game-shell .training-grid{grid-template-columns:1fr}
+}
