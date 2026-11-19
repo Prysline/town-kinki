@@ -55,6 +55,8 @@ test("未登入亦有唯讀街區預覽與登入區，手機及桌機版均為�
   assert.ok(main.indexOf('class="content"')<main.indexOf('class="sidebar"'));
   assert.ok(main.indexOf('id="town-panel"')<main.indexOf('id="housing-panel"'));
   assert.match(html,/id="facility-shortcuts"/);
+  assert.match(html,/id="home-work" data-action="work"/);
+  assert.match(script,/el\("home-work"\)\.disabled = !ready/);
   assert.match(script,/townCellAction\(cell\)/);
   assert.match(css,/@media\(max-width:800px\)/);
   assert.match(css,/\.landing-layout\{display:grid/);
