@@ -1269,8 +1269,10 @@ test("單機：原版疾病事件每日最多抽選一次，舊角色首日不�
     const count=after.result.healthEvents.length;
     const index=after.result.health.index;
     if(count){
-      assert.ok([1,2,4,5,6,7,8,9,10,12,13,14,15,24,25,26,27,33,39,41,43]
-        .includes(after.result.healthEvents[0].originalId));
+      // 原始共有 44 號，實作會隨階段擴增；不綁死早期只完成的事件清單。
+      assert.ok(Number.isInteger(after.result.healthEvents[0].originalId));
+      assert.ok(after.result.healthEvents[0].originalId>=1);
+      assert.ok(after.result.healthEvents[0].originalId<=44);
       assert.equal(index,after.result.healthEvents[0].newHealthIndex);
     }
     for(let i=0;i<4;i++){
@@ -1745,5 +1747,332 @@ test("多人 HTTP：其他登入者不能搶領 #44，逾期操作亦不會發�
     assert.equal(expired.result.character.money,100000);
     assert.equal(expired.result.healthEvents[0].effects.cockroach,"escaped");
     assert.equal((await api(srv.url,"state",undefined,second.cookie)).result.character.kpoint,0);
+  }finally{await srv.stop();}
+});
+
+
+test("未登入首頁：四座原版城鎮唯讀預覽，空地圖保留空白、不可編輯且不洩漏玩家資訊",async()=>{
+  const srv=await start("multi");
+  try{
+    const initial=await api(srv.url,"state");
+    assert.equal(initial.result.user,null);
+    const preview=await api(srv.url,"town/preview");
+    assert.equal(preview.status,200);
+    assert.equal(preview.result.towns.length,4);
+    assert.equal(preview.result.map.townId,0);
+    assert.equal(preview.result.map.configured,false);
+    assert.equal(preview.result.map.background,"keihansin.gif");
+    assert.equal(preview.result.map.cells.length,192);
+    assert.ok(preview.result.map.cells.every(cell=>cell.category==="empty"&&cell.image===null));
+    assert.equal(Object.hasOwn(preview.result.map,"palette"),false);
+    assert.equal(Object.hasOwn(preview.result.map,"editable"),false);
+    assert.equal(Object.hasOwn(preview.result,"user"),false);
+    for(const cell of preview.result.map.cells){
+      assert.equal(Object.hasOwn(cell,"raw"),false);
+      assert.equal(Object.hasOwn(cell,"key"),false);
+      assert.equal(Object.hasOwn(cell,"houseId"),false);
+    }
+    for(const id of [0,1,2,3]){
+      const result=await api(srv.url,"town/preview?townId="+id);
+      assert.equal(result.status,200);
+      assert.equal(result.result.map.townId,id);
+      assert.equal(result.result.map.cells.length,192);
+    }
+    for(const bad of ["-1","4","01","1.1","foo","%3Cscript%3E",""]){
+      assert.equal((await api(srv.url,"town/preview?townId="+bad)).status,400);
+    }
+  }finally{await srv.stop();}
+});
+
+test("未登入預覽可顯示實際儲存的建築，但不暴露原始代碼或未知舊玩家 ID",async()=>{
+  const srv=await start("multi");
+  try{
+    const db=new DatabaseSync(join(srv.directory,"multi.sqlite"));
+    try{
+      const tiles=Array(192).fill("");
+      tiles[0]="銀行";
+      tiles[1]="993_4=空地"; // 原版個人住宅代碼：不應暴露身分或原始欄位
+      tiles[2]="legacy-secret-code"; // 未知符號：不應逐字對外回傳
+      db.prepare([
+        "INSERT INTO town_maps(town_id,original_name,original_record,source,tiles_json,updated_at)",
+        "VALUES(?,?,?,?,?,?)"
+      ].join(" ")).run(0,"測試城鎮","","web",JSON.stringify(tiles),Date.now());
+    }finally{db.close();}
+    const response=await api(srv.url,"town/preview?townId=0");
+    assert.equal(response.status,200);
+    assert.equal(response.result.map.configured,true);
+    assert.equal(response.result.map.cells[0].label,"銀行");
+    assert.equal(response.result.map.cells[0].image,"bank.gif");
+    assert.equal(response.result.map.cells[1].label,"原版居民建築（待匯入房屋資料）");
+    assert.equal(response.result.map.cells[2].label,"未識別的街區符號");
+    const body=JSON.stringify(response.result);
+    assert.doesNotMatch(body,/993_4|legacy-secret-code|tiles_json|original_record/);
+    assert.equal(response.result.map.cells.length,192);
+  }finally{await srv.stop();}
+});
+
+test("單機快轉：5 分鐘解鎖工作、半小時累加、1 小時用餐，並將日期推進一天",async()=>{
+  const srv=await start("solo");
+  try{
+    assert.equal((await api(srv.url,"solo/time/advance",{preset:"5m"})).status,409);
+    const created=await api(srv.url,"character",{name:"時光居民",gender:"other",stats:defaultStats()});
+    assert.equal(created.status,200);
+    assert.equal(created.result.mode,"solo");
+    assert.equal(created.result.gameTimeOffsetMs,0);
+    assert.equal((await api(srv.url,"job",{key:"legacy-2"})).status,200);
+    const work=await api(srv.url,"work",{});
+    assert.equal(work.status,200);
+    assert.ok(work.result.workCooldownMs>0);
+    assert.equal((await api(srv.url,"work",{})).status,400);
+
+    const jumped=await api(srv.url,"solo/time/advance",{preset:"5m"});
+    assert.equal(jumped.status,200);
+    assert.equal(jumped.result.timeAdvance.advancedMs,300000);
+    assert.equal(jumped.result.gameTimeOffsetMs,300000);
+    assert.equal(jumped.result.workCooldownMs,0);
+    assert.equal((await api(srv.url,"work",{})).status,200);
+
+    const mealKey=jumped.result.meals.find(meal=>meal.price<=jumped.result.character.money)?.key;
+    assert.ok(mealKey,"應有可負擔的食堂餐點");
+    assert.equal((await api(srv.url,"meal/eat",{key:mealKey})).status,200);
+    const eaten=await api(srv.url,"state");
+    assert.ok(eaten.result.mealCooldownMs>0);
+    const half=await api(srv.url,"solo/time/advance",{preset:"30m"});
+    assert.equal(half.status,200);
+    assert.equal(half.result.gameTimeOffsetMs,2100000);
+    assert.ok(half.result.mealCooldownMs>0);
+    assert.equal((await api(srv.url,"meal/eat",{key:mealKey})).status,400);
+    const hour=await api(srv.url,"solo/time/advance",{preset:"30m"});
+    assert.equal(hour.status,200);
+    assert.equal(hour.result.mealCooldownMs,0);
+    assert.equal((await api(srv.url,"meal/eat",{key:mealKey})).status,200);
+    const oneHour=await api(srv.url,"solo/time/advance",{preset:"1h"});
+    assert.equal(oneHour.status,200);
+    assert.equal(oneHour.result.timeAdvance.advancedMs,3600000);
+    assert.equal(oneHour.result.gameTimeOffsetMs,7500000);
+    const next=await api(srv.url,"solo/time/advance",{preset:"1d"});
+    assert.equal(next.status,200);
+    assert.equal(next.result.timeAdvance.advancedMs,86400000);
+    assert.equal(next.result.gameTimeOffsetMs,93900000);
+    assert.equal(next.result.gameTimeMs>=created.result.gameTimeMs+93900000,true);
+    const db=new DatabaseSync(join(srv.directory,"solo.sqlite"));
+    try{
+      assert.equal(db.prepare("SELECT offset_ms FROM solo_clock WHERE id=1").get().offset_ms,93900000);
+    }finally{db.close();}
+  }finally{await srv.stop();}
+});
+
+test("快轉只限單人：多人帳號不能修改世界時間，原本登出依然失效工作階段",async()=>{
+  const srv=await start("multi");
+  try{
+    assert.equal((await api(srv.url,"solo/time/advance",{preset:"5m"})).status,401);
+    const registered=await api(srv.url,"register",{
+      username:"clock_denied",password:"secure-clock-test-123"
+    });
+    assert.equal(registered.status,200);
+    const cookie=registered.cookie;
+    assert.ok(cookie);
+    const denied=await api(srv.url,"solo/time/advance",{preset:"5m"},cookie);
+    assert.equal(denied.status,403);
+    const state=await api(srv.url,"state",undefined,cookie);
+    assert.equal(state.result.mode,"multi");
+    assert.equal(state.result.gameTimeOffsetMs,0);
+    assert.equal((await api(srv.url,"logout",{},cookie)).status,200);
+    assert.equal((await api(srv.url,"state",undefined,cookie)).result.user,null);
+  }finally{await srv.stop();}
+});
+
+test("正在進行的 20 秒蟑螂事件禁止快轉，避免錯過限時操作",async()=>{
+  const srv=await start("solo");
+  try{
+    assert.equal((await api(srv.url,"character",{name:"限時居民",gender:"other",stats:defaultStats()})).status,200);
+    const db=new DatabaseSync(join(srv.directory,"solo.sqlite"));
+    try{
+      const now=Date.now(),uid=db.prepare("SELECT id FROM users WHERE username='__local_player__'").get().id;
+      const entry=db.prepare(
+        "INSERT INTO character_events(user_id,day,event_key,original_id,old_health_index,new_health_index,created_at,description,effects_json) VALUES(?,?,?,?,?,?,?,?,?)"
+      ).run(uid,"2026-11-19","cockroach",44,50,50,now,"蟑螂事件","{}");
+      db.prepare(
+        "INSERT INTO character_cockroach_challenges(event_id,user_id,started_at,expires_at,status) VALUES(?,?,?,?,'pending')"
+      ).run(Number(entry.lastInsertRowid),uid,now,now+20000);
+    }finally{db.close();}
+    const denied=await api(srv.url,"solo/time/advance",{preset:"5m"});
+    assert.equal(denied.status,409);
+    assert.match(denied.result.error,/限時事件/);
+    const state=await api(srv.url,"state");
+    assert.equal(state.result.gameTimeOffsetMs,0);
+  }finally{await srv.stop();}
+});
+
+test("單機跨日快轉會重置學校每日限制並依既有規則計算銀行每日利息",async()=>{
+  const srv=await start("solo");
+  try{
+    const created=await api(srv.url,"character",{
+      name:"隔日居民",gender:"other",stats:defaultStats()
+    });
+    assert.equal(created.status,200);
+    const deposited=await api(srv.url,"bank",{action:"deposit",amount:10000});
+    assert.equal(deposited.status,200);
+    assert.equal(deposited.result.character.bank,10000);
+    const day=deposited.result.bankAccount.lastInterestDay;
+    const db=new DatabaseSync(join(srv.directory,"solo.sqlite"));
+    try{
+      db.prepare("UPDATE characters SET last_school_day=? WHERE name='隔日居民'").run(day);
+    }finally{db.close();}
+    const before=await api(srv.url,"state");
+    assert.equal(before.result.schoolRemainingToday,true);
+    const advanced=await api(srv.url,"solo/time/advance",{preset:"1d"});
+    assert.equal(advanced.status,200);
+    assert.equal(advanced.result.schoolRemainingToday,false);
+    assert.notEqual(advanced.result.bankAccount.lastInterestDay,day);
+    assert.equal(advanced.result.gameTimeOffsetMs,86400000);
+    const interest=advanced.result.bankLedger.find(item=>item.action==="普通存款利息");
+    assert.ok(interest,"跨日快照應寫入銀行普通存款利息");
+    assert.equal(interest.credit,50);
+    const repeat=await api(srv.url,"state");
+    assert.equal(repeat.result.bankAccount.lastInterestDay,advanced.result.bankAccount.lastInterestDay);
+    assert.equal(repeat.result.bankLedger.filter(item=>item.action==="普通存款利息").length,1);
+  }finally{await srv.stop();}
+});
+
+test("單機刪除角色：輸入名稱與確認皆必要，住宅還原空地，清除私人物品和紀錄但保留地圖與快轉時間",async()=>{
+  const srv=await start("solo");
+  try{
+    assert.equal((await api(srv.url,"solo/character/delete",{characterName:"尚無角色",confirm:true})).status,400);
+    const created=await api(srv.url,"character",{name:"重建居民甲",gender:"other",stats:defaultStats()});
+    assert.equal(created.status,200);
+    assert.equal((await api(srv.url,"move",{townId:3})).status,200);
+    assert.equal((await api(srv.url,"map/tile",{row:0,column:0,symbol:"空地"})).status,200);
+    assert.equal((await api(srv.url,"map/tile",{row:0,column:1,symbol:"銀行"})).status,200);
+    const db=new DatabaseSync(join(srv.directory,"solo.sqlite"));
+    try{ db.prepare("UPDATE characters SET money=20000000 WHERE name='重建居民甲'").run(); }
+    finally{db.close();}
+    const built=await api(srv.url,"house/build",{
+      row:0,column:0,image:"house/kamakura.gif",interiorRank:3,payment:"cash"
+    });
+    assert.equal(built.status,200);
+    const houseId=built.result.houses[0].id;
+    assert.equal((await api(srv.url,"house/room/config",{
+      houseId,slots:[{type:"0",title:"我的留言板"}]
+    })).status,200);
+    assert.equal((await api(srv.url,"house/room/post",{
+      houseId,slotIndex:0,body:"刪除後不應存在"
+    })).status,200);
+    assert.equal((await api(srv.url,"bank",{action:"deposit",amount:2000})).status,200);
+    const before=await api(srv.url,"solo/time/advance",{preset:"5m"});
+    assert.equal(before.status,200);
+    assert.equal(before.result.gameTimeOffsetMs,300000);
+    const originalUserId=new DatabaseSync(join(srv.directory,"solo.sqlite"));
+    try {
+      const uid=originalUserId.prepare("SELECT id FROM users WHERE username='__local_player__'").get().id;
+      originalUserId.prepare(
+        "INSERT INTO inventory_items(user_id,item_key,active_until,last_purchased_at) VALUES(?,?,?,?)"
+      ).run(uid,"health-insurance",before.result.gameTimeMs+86400000,before.result.gameTimeMs);
+      originalUserId.prepare(
+        "INSERT INTO character_coupons(user_id,quantity) VALUES(?,?)"
+      ).run(uid,3);
+      originalUserId.prepare(
+        "INSERT INTO character_events(user_id,day,event_key,original_id,old_health_index,new_health_index,created_at,description,effects_json) VALUES(?,?,?,?,?,?,?,?,?)"
+      ).run(uid,"2026-11-19","testevent",4,50,50,before.result.gameTimeMs,"個人事件","{}");
+      assert.equal(originalUserId.prepare("SELECT COUNT(*) n FROM room_posts").get().n,1);
+      assert.equal(originalUserId.prepare("SELECT COUNT(*) n FROM bank_ledger").get().n>=1,true);
+    }finally{originalUserId.close();}
+    const noConfirm=await api(srv.url,"solo/character/delete",{characterName:"重建居民甲",confirm:false});
+    assert.equal(noConfirm.status,400);
+    const wrong=await api(srv.url,"solo/character/delete",{characterName:"別人的角色",confirm:true});
+    assert.equal(wrong.status,400);
+    assert.match(wrong.result.error,/名稱不符/);
+    const unchanged=await api(srv.url,"state");
+    assert.equal(unchanged.result.character.name,"重建居民甲");
+    assert.equal(unchanged.result.houses.length,1);
+    assert.equal(unchanged.result.gameTimeOffsetMs,300000);
+
+    const deleted=await api(srv.url,"solo/character/delete",{characterName:"重建居民甲",confirm:true});
+    assert.equal(deleted.status,200);
+    assert.equal(deleted.result.character,null);
+    assert.equal(deleted.result.deletion.deletedCharacter,"重建居民甲");
+    assert.equal(deleted.result.deletion.restoredHouses,1);
+    assert.equal(deleted.result.gameTimeOffsetMs,300000);
+    const after=await api(srv.url,"state");
+    assert.equal(after.result.character,null);
+    assert.equal(after.result.mode,"solo");
+    const check=new DatabaseSync(join(srv.directory,"solo.sqlite"));
+    try{
+      const tables=["characters","houses","house_events","room_settings","room_posts",
+        "bank_accounts","bank_ledger","inventory_items","character_coupons",
+        "character_events","legacy_item_use_history","legacy_inventory_items"];
+      for(const name of tables)
+        assert.equal(check.prepare("SELECT COUNT(*) AS n FROM "+name).get().n,0,
+          name+" 應在刪除後沒有殘留的玩家資料");
+      const maps=check.prepare("SELECT tiles_json FROM town_maps WHERE town_id=3").get();
+      assert.ok(maps);
+      const tiles=JSON.parse(maps.tiles_json);
+      assert.equal(tiles[0],"空地","個人房屋還原為原始建地");
+      assert.equal(tiles[1],"銀行","其它原先編輯的地圖內容應保留");
+      assert.equal(check.prepare("SELECT offset_ms FROM solo_clock WHERE id=1").get().offset_ms,300000);
+      assert.deepEqual(check.prepare("PRAGMA foreign_key_check").all(),[]);
+    }finally{check.close();}
+    const again=await api(srv.url,"character",{
+      name:"重建居民甲",gender:"female",stats:defaultStats()
+    });
+    assert.equal(again.status,200,"刪除後可使用原本的角色名稱重新建立");
+    assert.equal(again.result.houses.length,0);
+    assert.equal(again.result.bankLedger.length,0);
+    assert.equal(again.result.gameTimeOffsetMs,300000);
+    const sameTown=await api(srv.url,"move",{townId:3});
+    assert.equal(sameTown.status,200);
+    assert.equal(sameTown.result.map.cells[0].category,"lot");
+    assert.equal(sameTown.result.map.cells[1].label,"銀行");
+  }finally{await srv.stop();}
+});
+
+test("單機刪除角色：地圖住宅占用資料不一致時回滾，不刪角色也不覆蓋其它地圖",async()=>{
+  const srv=await start("solo");
+  try{
+    assert.equal((await api(srv.url,"character",{
+      name:"防誤刪居民",gender:"other",stats:defaultStats()
+    })).status,200);
+    assert.equal((await api(srv.url,"move",{townId:3})).status,200);
+    assert.equal((await api(srv.url,"map/tile",{row:0,column:0,symbol:"空地2"})).status,200);
+    const db=new DatabaseSync(join(srv.directory,"solo.sqlite"));
+    try{ db.prepare("UPDATE characters SET money=20000000 WHERE name='防誤刪居民'").run(); }
+    finally{db.close();}
+    const built=await api(srv.url,"house/build",{
+      row:0,column:0,image:"house/kamakura.gif",interiorRank:3,payment:"cash"
+    });
+    assert.equal(built.status,200);
+    const broken=new DatabaseSync(join(srv.directory,"solo.sqlite"));
+    try{
+      const record=broken.prepare("SELECT tiles_json FROM town_maps WHERE town_id=3").get();
+      const cells=JSON.parse(record.tiles_json);
+      cells[0]="銀行";
+      broken.prepare("UPDATE town_maps SET tiles_json=? WHERE town_id=3").run(JSON.stringify(cells));
+    }finally{broken.close();}
+    const refused=await api(srv.url,"solo/character/delete",{characterName:"防誤刪居民",confirm:true});
+    assert.equal(refused.status,400);
+    assert.match(refused.result.error,/街區地圖不一致/);
+    const still=await api(srv.url,"state");
+    assert.equal(still.result.character.name,"防誤刪居民");
+    assert.equal(still.result.houses.length,1);
+    assert.equal(still.result.map.cells[0].key,"銀行");
+  }finally{await srv.stop();}
+});
+
+test("多人模式無法呼叫刪除單人角色 API，包含已登入的使用者",async()=>{
+  const srv=await start("multi");
+  try{
+    assert.equal((await api(srv.url,"solo/character/delete",{characterName:"任何人",confirm:true})).status,401);
+    const registered=await api(srv.url,"register",{username:"nodelete",password:"password_for_delete_test"});
+    assert.equal(registered.status,200);
+    const cookie=registered.cookie;
+    assert.equal((await api(srv.url,"character",{
+      name:"多人不刪",gender:"other",stats:defaultStats()
+    },cookie)).status,200);
+    const denied=await api(srv.url,"solo/character/delete",{
+      characterName:"多人不刪",confirm:true
+    },cookie);
+    assert.equal(denied.status,403);
+    const after=await api(srv.url,"state",undefined,cookie);
+    assert.equal(after.result.character.name,"多人不刪");
   }finally{await srv.stop();}
 });

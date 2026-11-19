@@ -21,6 +21,8 @@ import { parseLegacyInsurance, initInventoryTables, inventoryOverview, hasActive
 import { listLegacyInventoryItems } from "./legacy-inventory.mjs";
 import { initLegacyItemUseTables, listLegacyItemActions, listLegacyItemUseHistory, useLegacyItem } from "./legacy-item-use.mjs";
 import { initBankTables, settleBankInterest, bankOperation, bankOverview, bankLedger, transferToPlayer, BANK_TRANSFER_LIMIT, NEW_MEMBER_DAYS, NEW_MEMBER_TRANSFER_LIMIT, bankLoanOverview, borrowBankLoan, payoffBankLoan } from "./banking.mjs";
+import { initSoloClock, gameTimestamp, advanceSoloClock, soloOffset } from "./solo-clock.mjs";
+import { deleteSoloCharacter } from "./solo-character.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const REPO_ROOT = resolve(ROOT, "..");
@@ -35,6 +37,8 @@ const DATA_DIR = resolve(process.env.DATA_DIR || resolve(ROOT, "data"));
 const GAME_TIMEZONE = process.env.GAME_TIMEZONE || "Asia/Taipei";
 mkdirSync(DATA_DIR, { recursive: true });
 const db = new DatabaseSync(resolve(DATA_DIR, MODE + ".sqlite"));
+if (MODE === "solo") initSoloClock(db);
+const gameNow = () => MODE === "solo" ? gameTimestamp(db) : Date.now();
 db.exec([
   "PRAGMA journal_mode=WAL;",
   "PRAGMA foreign_keys=ON;",
@@ -183,7 +187,7 @@ function mutateCharacter(userId, callback) {
   try {
     const old = getCharacter(userId);
     if (!old) throw new HttpError(409, "請先建立角色");
-    const result = callback(recoverEnergy(old));
+    const result = callback(recoverEnergy(old,gameNow()));
     saveCharacter(userId, result.character);
     db.exec("COMMIT");
     return result;
@@ -194,7 +198,7 @@ function mutateCharacter(userId, callback) {
 }
 
 function snapshot(user) {
-  const now = Date.now();
+  const now = gameNow();
   const today = calendarDay(now, GAME_TIMEZONE);
   if (user) settleBankInterest(db,user.id,today,now);
   const character = user ? getCharacter(user.id) : null;
@@ -232,6 +236,9 @@ function snapshot(user) {
     : [];
   return {
     mode: MODE,
+    gameTimeMs: now,
+    gameTimeZone: GAME_TIMEZONE,
+    gameTimeOffsetMs: MODE === "solo" ? soloOffset(db) : 0,
     user: user ? { username: MODE === "solo" ? "單機玩家" : user.username } : null,
     character: updated,
     bankAccount: updated ? bankOverview(db,user.id) : null,
@@ -358,6 +365,24 @@ async function handle(req, res) {
     if (req.method === "GET" && path.startsWith("/static/")) return safeFile(res, STATIC_ROOT, path, "/static/");
     if (req.method === "GET" && path.startsWith("/legacy-assets/")) return safeFile(res, IMG_ROOT, path, "/legacy-assets/");
     if (req.method === "GET" && path === "/api/state") return sendJson(res, 200, snapshot(getUser(req)));
+    if (req.method === "GET" && path === "/api/town/preview") {
+      const param=url.searchParams.get("townId");
+      if(param!==null&&!/^[0-3]$/.test(param))
+        throw new HttpError(400,"不存在的城鎮");
+      const townId=param===null?0:Number(param);
+      const map=publicTownMap(db,townId,false);
+      // 未登入只取得允許的顯示欄位：不含 raw、調色盤、私人角色資料。
+      return sendJson(res,200,{
+        towns:TOWNS.map(({id,name})=>({id,name})),
+        map:{
+          townId,configured:map.configured,background:map.background,
+          cells:map.cells.map(({index,row,column,label,image,category})=>({
+            index,row,column,label:category==="unknown"?"未識別的街區符號":label,
+            image,category
+          }))
+        }
+      });
+    }
     if (req.method === "GET" && path === "/api/house/visit") {
       const visitor = getUser(req);
       if (!visitor) throw new HttpError(401, "請先登入");
@@ -414,13 +439,40 @@ async function handle(req, res) {
     const user = getUser(req);
     if (!user) throw new HttpError(401, "請先登入");
 
+    if (path === "/api/solo/character/delete") {
+      if (MODE !== "solo") throw new HttpError(403, "只有單人模式可以刪除角色");
+      // 不接受玩家 ID、帳號名稱或任意 SQL；需重新輸入目前角色名稱，明確確認。
+      if (data.confirm !== true)
+        throw new HttpError(400, "請先確認已瞭解角色資料將永久刪除");
+      let deleted;
+      try { deleted=deleteSoloCharacter(db,user.id,data.characterName); }
+      catch(error) { throw new HttpError(400,error.message); }
+      // 本機自動建立新的專用使用者，但不重建角色；
+      // 保留 town_maps 和 solo_clock，回到建角流程。
+      return sendJson(res,200,{...snapshot(getSoloUser()),deletion:deleted});
+    }
+
+    if (path === "/api/solo/time/advance") {
+      // 伺服器決定快轉步長和遊戲時間；多人、未建角均不能改時鐘。
+      if (MODE !== "solo") throw new HttpError(403, "只有單機模式可以快轉時間");
+      if (!getCharacter(user.id)) throw new HttpError(409,"請先建立角色");
+      const before=gameNow();
+      const challenge=getCockroachChallenge(db,user.id,before);
+      if (challenge?.status === "active")
+        throw new HttpError(409,"限時事件進行中，請先處理或等待結束再快轉");
+      let advanced;
+      try { advanced=advanceSoloClock(db,data.preset); }
+      catch(error){throw new HttpError(400,error.message);}
+      return sendJson(res,200,{...snapshot(user),timeAdvance:advanced});
+    }
+
     if (path === "/api/character") {
       if (!safeCharacterName(data.name) || !["male","female","other"].includes(data.gender)) {
         throw new HttpError(400, "角色名稱或性別不符合格式");
       }
       if (getCharacter(user.id)) throw new HttpError(409, "此帳號已有角色");
       let character;
-      try { character = createCharacterData(data.name.trim(), data.gender, Date.now(), data.stats); }
+      try { character = createCharacterData(data.name.trim(), data.gender, gameNow(), data.stats); }
       catch (error) { throw new HttpError(400, error.message); }
       addCharacter(user.id, character);
       return sendJson(res, 200, snapshot(user));
@@ -428,7 +480,7 @@ async function handle(req, res) {
 
     if (path === "/api/events/cockroach/claim") {
       let result;
-      try { result=claimCockroach(db,user.id,Date.now()); }
+      try { result=claimCockroach(db,user.id,gameNow()); }
       catch(error){throw new HttpError(400,error.message);}
       return sendJson(res,200,{...snapshot(user),cockroachResult:result});
     }
@@ -442,7 +494,7 @@ async function handle(req, res) {
 
     if (path === "/api/work") {
       let result;
-      try { result = mutateCharacter(user.id,old=>performWork(old,jobsByKey.get(old.jobId))); }
+      try { result = mutateCharacter(user.id,old=>performWork(old,jobsByKey.get(old.jobId),gameNow())); }
       catch(error){throw new HttpError(400,error.message);}
       return sendJson(res, 200, { ...snapshot(user), result: {
         paid: result.paid, pending: result.pending,
@@ -453,7 +505,7 @@ async function handle(req, res) {
     }
 
     if (path === "/api/hospital/treat") {
-      const now=Date.now();
+      const now=gameNow();
       const result=mutateCharacter(user.id,old=>{
         try {return treatAtHospital(old,now,
           hasActiveHealthInsurance(db,user.id,insuranceItem,now));}
@@ -467,7 +519,7 @@ async function handle(req, res) {
     if (path === "/api/inventory/legacy/use") {
       let result;
       try {
-        result=useLegacyItem(db,user.id,data.sourceLine,data.requestId,Date.now());
+        result=useLegacyItem(db,user.id,data.sourceLine,data.requestId,gameNow());
       }catch(error){throw new HttpError(400,error.message);}
       return sendJson(res,200,{...snapshot(user),itemUseResult:result});
     }
@@ -476,7 +528,7 @@ async function handle(req, res) {
       let result;
       try {
         result=buyHealthInsurance(db,user.id,insuranceItem,
-          data.quantity,data.requestId,Date.now());
+          data.quantity,data.requestId,gameNow());
       } catch(error) {throw new HttpError(400,error.message);}
       return sendJson(res,200,{...snapshot(user),insuranceResult:result});
     }
@@ -484,7 +536,7 @@ async function handle(req, res) {
     if (path === "/api/meal/eat") {
       const meal=mealsByKey.get(data.key);
       if (!meal) throw new HttpError(404,"找不到食堂餐點");
-      const now=Date.now();
+      const now=gameNow();
       const result=mutateCharacter(user.id,old=>{
         try {return eatMeal(recoverEnergy(old,now),meal,now);}
         catch(error){throw new HttpError(400,error.message);}
@@ -498,7 +550,7 @@ async function handle(req, res) {
     if (path === "/api/train") {
       const lesson = trainingByKey.get(data.key);
       if (!lesson) throw new HttpError(404, "找不到訓練課程");
-      const now = Date.now();
+      const now=gameNow();
       const today = calendarDay(now, GAME_TIMEZONE);
       const result = mutateCharacter(user.id, old => {
         try { return performTraining(old, lesson, now, today); }
@@ -510,7 +562,7 @@ async function handle(req, res) {
     }
 
     if (path === "/api/bank" || path === "/api/bank/term") {
-      const now = Date.now();
+      const now=gameNow();
       const today = calendarDay(now,GAME_TIMEZONE);
       let result;
       try {
@@ -531,13 +583,13 @@ async function handle(req, res) {
       let result;
       try {
         result = transferToPlayer(db,user.id,data.recipientName,data.amount,
-          calendarDay(Date.now(),GAME_TIMEZONE),data.requestId);
+          calendarDay(gameNow(),GAME_TIMEZONE),data.requestId);
       } catch(error) { throw new HttpError(400,error.message); }
       return sendJson(res,200,{ ...snapshot(user),transferResult:result });
     }
 
     if (path === "/api/bank/loan/borrow" || path === "/api/bank/loan/payoff") {
-      const now = Date.now();
+      const now=gameNow();
       const today = calendarDay(now,GAME_TIMEZONE);
       let result;
       try {
@@ -555,14 +607,14 @@ async function handle(req, res) {
 
     if (path === "/api/house/room/config") {
       let result;
-      try { result = setRoomSlots(db, user.id, data.houseId, data.slots); }
+      try { result = setRoomSlots(db, user.id, data.houseId, data.slots, gameNow()); }
       catch (error) { throw new HttpError(400, error.message); }
       return sendJson(res, 200, { ...snapshot(user), roomResult: result });
     }
 
     if (path === "/api/house/room/post") {
       let result;
-      try { result = addRoomPost(db, user.id, data.houseId, data.slotIndex, data.body); }
+      try { result = addRoomPost(db, user.id, data.houseId, data.slotIndex, data.body, gameNow()); }
       catch (error) { throw new HttpError(400, error.message); }
       return sendJson(res, 200, { ...snapshot(user), roomResult: result });
     }
@@ -579,7 +631,7 @@ async function handle(req, res) {
       try {
         result = buildHouse(db, houseCatalog, user.id,
           { row: data.row, column: data.column },
-          { image: data.image, interiorRank: data.interiorRank, payment: data.payment });
+          { image: data.image, interiorRank: data.interiorRank, payment: data.payment },gameNow());
       } catch (error) {
         throw new HttpError(400, error.message);
       }
@@ -590,14 +642,14 @@ async function handle(req, res) {
       let result;
       try {
         result = remodelHouse(db, houseCatalog, user.id, data.houseId,
-          { image: data.image, interiorRank: data.interiorRank });
+          { image: data.image, interiorRank: data.interiorRank },gameNow());
       } catch(error) { throw new HttpError(400, error.message); }
       return sendJson(res, 200, { ...snapshot(user), houseRemodelResult: result });
     }
 
     if (path === "/api/house/sell") {
       let result;
-      try { result = sellHouse(db, houseCatalog, user.id, data.houseId); }
+      try { result = sellHouse(db, houseCatalog, user.id, data.houseId,gameNow()); }
       catch (error) { throw new HttpError(400, error.message); }
       return sendJson(res, 200, { ...snapshot(user), houseSaleResult: result });
     }

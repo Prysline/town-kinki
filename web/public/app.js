@@ -1,3 +1,5 @@
+import { townCellAction } from "./town-home.js";
+import { shouldShowCompactEnergy } from "./energy-visibility.js";
 const el = id => document.getElementById(id);
 let state = null;
 const labels = {
@@ -43,7 +45,215 @@ let selectedMapCell = null;
 let selectedHouseSpot = null;
 let selectedMapTown = null;
 let activeRoom = null;
+// 單機不需要帳號，所謂「離開遊戲」只回到首頁，不移除存檔。
+let soloAtHome=false;
+try { soloAtHome=sessionStorage.getItem("town-solo-at-home")==="1"; } catch {}
+let syncedGameMs=Date.now();
+let syncedAtRealMs=Date.now();
+const browserGameNow=()=>syncedGameMs+Math.max(0,Date.now()-syncedAtRealMs);
+let timeAdvanceBusy=false;
+function renderSoloTime() {
+  const panel=el("solo-time-panel");
+  panel.hidden=state?.mode!=="solo" || !state?.character;
+  if(panel.hidden)return;
+  const format=new Intl.DateTimeFormat("zh-TW",{
+    timeZone:state.gameTimeZone||"Asia/Taipei",year:"numeric",month:"2-digit",
+    day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false
+  });
+  text("solo-game-time","遊戲時間："+format.format(new Date(browserGameNow())));
+  const remain=[];
+  if(state.workCooldownMs>0)remain.push("工作還需約 "+Math.ceil(state.workCooldownMs/60000)+" 分鐘");
+  if(state.gymCooldownMs>0)remain.push("健身房還需約 "+Math.ceil(state.gymCooldownMs/60000)+" 分鐘");
+  if(state.mealCooldownMs>0)remain.push("用餐還需約 "+Math.ceil(state.mealCooldownMs/60000)+" 分鐘");
+  if(state.schoolRemainingToday)remain.push("學校須隔日才可再上課");
+  text("solo-wait-hints",remain.length?remain.join("；")+"。":"目前沒有主要冷卻等待。");
+  const blocked=timeAdvanceBusy || (
+    state.cockroachChallenge?.status==="active" &&
+    state.cockroachChallenge.expiresAt>browserGameNow()
+  );
+  for(const button of panel.querySelectorAll("button[data-advance]"))button.disabled=blocked;
+}
+let publicPreview=null;
+let previewLoading=false;
+// 方案 B：一次顯示一組設施。原本的表單留在 DOM，既有事件和資料更新不受影響。
+const FACILITY_TAB_NAMES = Object.freeze(["house","dining","training","jobs","bank","hospital","events"]);
+const PROFILE_VIEWS = Object.freeze(["status","inventory","attributes"]);
+let activeProfileView="status";
+function selectProfileView(name,{focus=false}={}) {
+  if(!PROFILE_VIEWS.includes(name))return false;
+  activeProfileView=name;
+  for(const key of PROFILE_VIEWS){
+    const selected=key===name;
+    const tab=el("profile-tab-"+key);
+    tab.setAttribute("aria-selected",String(selected));
+    tab.tabIndex=selected?0:-1;
+    const panelId={status:"player-summary",inventory:"inventory-panel",attributes:"attributes-panel"}[key];
+    el(panelId).hidden=!selected;
+  }
+  if(focus)el("profile-tab-"+name).focus({preventScroll:true});
+  updateCompactVisibility();
+  return true;
+}
 
+const ABILITY_GROUPS = [
+  {label:"頭腦", keys:["kokugo","suugaku","rika","syakai","eigo","ongaku","bijutu"]},
+  {label:"身體", keys:["looks","tairyoku","kenkou","speed","power","wanryoku","kyakuryoku"]},
+  {label:"其他", keys:["love","unique","etti"]}
+];
+function renderAbilities(stats){
+  const root=el("attributes");
+  root.replaceChildren();
+  // 原版為分組黃條。正規化到目前最高能力，固定在側欄寬度內，不再用整行 flex 撐開。
+  const maximum=Math.max(1,...Object.keys(labels).map(k=>Math.max(0,Number(stats[k])||0)));
+  for(const group of ABILITY_GROUPS){
+    const section=document.createElement("section");
+    section.className="ability-group";
+    const heading=document.createElement("h4");
+    heading.textContent=group.label;
+    section.append(heading);
+    const list=document.createElement("div");
+    list.className="ability-group-rows";
+    for(const key of group.keys){
+      const value=Number(stats[key])||0;
+      const row=document.createElement("div");
+      row.className="ability-row";
+      const line=document.createElement("div");
+      line.className="ability-row-line";
+      const label=document.createElement("span");
+      label.textContent=labels[key];
+      const amount=document.createElement("strong");
+      amount.textContent=String(value);
+      const track=document.createElement("div");
+      track.className="ability-track";
+      track.setAttribute("aria-hidden","true");
+      const fill=document.createElement("span");
+      fill.style.width=Math.min(100,Math.max(0,value)/maximum*100).toFixed(2)+"%";
+      track.append(fill);
+      line.append(label,amount);
+      row.append(line,track);
+      list.append(row);
+    }
+    section.append(list);
+    root.append(section);
+  }
+}
+function updateCompactVisibility(){
+  const statusView=activeProfileView==="status";
+  const show=shouldShowCompactEnergy({
+    gameVisible:!el("game").hidden,
+    hasCharacter:Boolean(state?.character),
+    statusView,
+    bodyRowBottom:statusView?el("body-energy").closest("div").getBoundingClientRect().bottom:Infinity,
+    profileTabsBottom:!statusView?el("profile-view-tabs").getBoundingClientRect().bottom:Infinity
+  });
+  el("compact-status").hidden=!show;
+  document.body.classList.toggle("compact-status-active",show);
+}
+function renderCompactStatus(character){
+  text("compact-character-name",character.name);
+  text("compact-body-energy",character.bodyEnergy+" / "+state.maxBodyEnergy);
+  text("compact-brain-energy",character.brainEnergy+" / "+state.maxBrainEnergy);
+  el("compact-body-bar").value=state.maxBodyEnergy>0?
+    Math.max(0,Math.min(100,character.bodyEnergy/state.maxBodyEnergy*100)):0;
+  el("compact-brain-bar").value=state.maxBrainEnergy>0?
+    Math.max(0,Math.min(100,character.brainEnergy/state.maxBrainEnergy*100)):0;
+  updateCompactVisibility();
+}
+window.addEventListener("scroll",updateCompactVisibility,{passive:true});
+window.addEventListener("resize",updateCompactVisibility);
+
+let activeFacilityTab="jobs";
+let dismissedEventKey=null;
+try{ dismissedEventKey=sessionStorage.getItem("town-dismissed-event")||null; }catch{}
+function dismissEventPopup(){
+  const popup=el("event-popup");
+  dismissedEventKey=popup.dataset.key||null;
+  try{
+    if(dismissedEventKey)sessionStorage.setItem("town-dismissed-event",dismissedEventKey);
+  }catch{}
+  popup.hidden=true;
+}
+function selectFacilityTab(name,{focusTab=false,scroll=false}={}) {
+  if(!FACILITY_TAB_NAMES.includes(name))return false;
+  activeFacilityTab=name;
+  for(const key of FACILITY_TAB_NAMES){
+    const tab=el("facility-tab-"+key);
+    const pane=el("facility-pane-"+key);
+    const selected=key===name;
+    tab.setAttribute("aria-selected",String(selected));
+    tab.tabIndex=selected?0:-1;
+    pane.hidden=!selected;
+  }
+  const active=el("facility-tab-"+name);
+  if(focusTab)active.focus({preventScroll:true});
+  if(scroll)el("facility-tabs").scrollIntoView({behavior:"smooth",block:"start"});
+  return true;
+}
+function goToFacility(panelId) {
+  const target=el(panelId);
+  if(!target||!state?.character)return;
+  const pane=target.closest(".facility-pane");
+  if(pane)selectFacilityTab(pane.id.slice("facility-pane-".length));
+  if(target.closest("#inventory-panel"))selectProfileView("inventory");
+  target.scrollIntoView({behavior:"smooth",block:"start"});
+  target.classList.add("facility-focused");
+  target.setAttribute("tabindex","-1");
+  target.focus({preventScroll:true});
+  target.addEventListener("blur",()=>target.classList.remove("facility-focused"),{once:true});
+}
+function renderPublicPreview() {
+  if(!publicPreview)return;
+  const {towns,map}=publicPreview;
+  const select=el("preview-town");
+  select.replaceChildren();
+  for(const town of towns){
+    const opt=document.createElement("option");
+    opt.value=String(town.id);
+    opt.textContent=town.name;
+    select.append(opt);
+  }
+  select.value=String(map.townId);
+  text("preview-map-status",map.configured?
+    "顯示已保存的城鎮街區（唯讀）。":
+    "此城鎮沒有原始街區配置，依原版保留 12×16 空白街區。");
+  const board=el("preview-map");
+  board.replaceChildren();
+  board.style.backgroundImage="url('/legacy-assets/"+map.background+"')";
+  const corner=document.createElement("span");
+  corner.className="map-axis";board.append(corner);
+  for(let c=1;c<=16;c++){
+    const axis=document.createElement("span");
+    axis.className="map-axis";axis.textContent=String(c);board.append(axis);
+  }
+  for(let row=0;row<12;row++){
+    const axis=document.createElement("span");
+    axis.className="map-axis";axis.textContent="ABCDEFGHIJKL"[row];
+    board.append(axis);
+    for(let col=0;col<16;col++){
+      const cell=map.cells[row*16+col];
+      const tile=document.createElement("span");
+      tile.className="map-cell preview-cell map-"+cell.category;
+      tile.title="ABCDEFGHIJKL"[row]+(col+1)+"："+cell.label;
+      if(cell.image){
+        const img=document.createElement("img");
+        img.src="/legacy-assets/"+cell.image;
+        img.alt="";img.loading="lazy";
+        tile.append(img);
+      }else if(cell.category==="unknown")tile.textContent="?";
+      board.append(tile);
+    }
+  }
+}
+async function loadPublicPreview(townId=0){
+  if(previewLoading)return;
+  previewLoading=true;
+  try{
+    const loaded=await api("town/preview?townId="+encodeURIComponent(townId));
+    publicPreview=loaded;
+    renderPublicPreview();
+  }catch(error){text("preview-map-status","無法讀取城鎮預覽："+error.message);}
+  finally{previewLoading=false;}
+}
 function renderTownMap() {
   const map = state.map;
   const board = el("town-map");
@@ -113,20 +323,26 @@ function renderTownMap() {
         button.append(unknown);
       }
       button.addEventListener("click", () => {
-        selectedMapCell = name;
-        if (!el("map-edit-toggle").checked) {
-          selectedHouseSpot = { row, column: col };
+        selectedMapCell=name;
+        const editing=map.editable&&el("map-edit-toggle").checked;
+        const destination=townCellAction(cell);
+        if(!editing){
+          selectedHouseSpot=destination.kind==="build"?{row,column:col}:null;
           updateHouseQuote();
         }
-        text("map-selection", name + "：" + cell.label +
-          (cell.raw && cell.category === "unknown" ? "（" + cell.raw + "）" : ""));
-        if (map.editable && el("map-edit-toggle").checked) {
-          action("map/tile", { row, column: col, symbol: el("map-palette").value },
-            name + " 的街區內容已儲存。");
-        } else {
-          if (cell.houseId) openRoom(cell.houseId);
-          board.querySelectorAll(".map-cell.selected").forEach(node => node.classList.remove("selected"));
+        text("map-selection",name+"："+cell.label+
+          (cell.raw&&cell.category==="unknown"?"（"+cell.raw+"）":""));
+        if(editing){
+          action("map/tile",{row,column:col,symbol:el("map-palette").value},
+            name+" 的街區內容已儲存。");
+        }else{
+          board.querySelectorAll(".map-cell.selected").forEach(node=>node.classList.remove("selected"));
           button.classList.add("selected");
+          if(destination.kind==="house")openRoom(destination.houseId);
+          else if(destination.kind==="build"||destination.kind==="facility")
+            goToFacility(destination.panelId);
+          else if(destination.kind==="unavailable")
+            notify(name+"："+cell.label+" 尚未移植或尚無對應 Web 入口。");
         }
       });
       board.append(button);
@@ -144,6 +360,8 @@ async function openRoom(houseId, slot = null, scroll = true) {
       (slot === null ? "" : "&slot=" + encodeURIComponent(slot));
     activeRoom = await api("house/visit?" + search);
     renderRoom();
+    // 房屋室內可能從地圖或玩家住宅捷徑開啟；先打開所屬分頁。
+    selectFacilityTab("house");
     if (scroll) el("room-panel").scrollIntoView({ behavior:"smooth", block:"start" });
   } catch (error) {
     closeRoom();
@@ -748,13 +966,32 @@ function renderLegacyItems() {
 function updateCockroachCountdown() {
   const challenge=state?.cockroachChallenge;
   const panel=el("cockroach-challenge");
+  const popup=el("event-popup");
   panel.hidden=!challenge;
-  if(!challenge)return;
-  const remaining=Math.max(0,challenge.expiresAt-Date.now());
-  text("cockroach-remaining",remaining>0 ?
-    "蟑螂出現！剩餘 "+(remaining/1000).toFixed(1)+" 秒。" :
-    "蟑螂已逃走，期限已過，沒有獎勵。");
-  el("cockroach-claim").disabled=remaining<=0;
+  const remaining=challenge?Math.max(0,challenge.expiresAt-browserGameNow()):0;
+  if(challenge){
+    text("cockroach-remaining",remaining>0 ?
+      "蟑螂出現！剩餘 "+(remaining/1000).toFixed(1)+" 秒。" :
+      "蟑螂已逃走，期限已過，沒有獎勵。");
+    el("cockroach-claim").disabled=remaining<=0;
+  }
+  const active=Boolean(challenge)&&challenge.status==="active"&&remaining>0;
+  const event=state?.healthEvents?.[0];
+  const recent=event?.day===state?.character?.lastEventDay?event:null;
+  const key=state?.character?.name+":"+
+    (active?"cockroach-"+challenge.eventId:recent?"event-"+recent.id:"none");
+  const visible=Boolean(state?.character)&&!el("game").hidden&&
+    (active||recent)&&dismissedEventKey!==key;
+  popup.hidden=!visible;
+  if(!visible)return;
+  popup.dataset.key=key;
+  text("event-popup-title",active?"⚠ 限時事件：蟑螂！":"事件發生！");
+  text("event-popup-body",active?
+    "剩餘 "+(remaining/1000).toFixed(1)+" 秒，請立即處理。" :
+    recent.title+"："+recent.description);
+  el("event-popup-claim").hidden=!active;
+  el("event-alert").hidden=false;
+  el("event-alert").textContent=active?"查看事件詳情":"查看事件紀錄";
 }
 function renderDining() {
   if (!state?.character) return;
@@ -976,13 +1213,26 @@ function renderBank() {
 function render() {
   if (!state) return;
   const solo = state.mode === "solo";
+  syncedGameMs=state.gameTimeMs??Date.now();
+  syncedAtRealMs=Date.now();
   text("mode", solo ? "單機模式" : "多人模式");
+  const lobby=solo && Boolean(state.character) && soloAtHome;
   el("auth").hidden = solo || Boolean(state.user);
   el("create").hidden = !state.user || Boolean(state.character);
-  el("game").hidden = !state.character;
-  el("logout").hidden = solo || !state.user;
-  if (!state.character) return;
+  el("solo-lobby").hidden=!lobby;
+  if(lobby)text("solo-character-name",state.character.name);
+  el("landing").hidden=Boolean(state.character)&&!lobby;
+  el("game").hidden = !state.character || lobby;
+  el("logout").hidden = !state.user || lobby || (solo && !state.character);
+  el("logout").textContent=solo?"離開遊戲":"登出";
+  if (!state.character || lobby) {
+    if(!publicPreview&&!previewLoading)loadPublicPreview();
+    updateCompactVisibility();
+    el("event-popup").hidden=true;
+    return;
+  }
   const c = state.character;
+  renderSoloTime();
   text("character-name", c.name);
   text("current-town", state.towns.find(t => t.id === c.townId)?.name || "未知");
   text("money", money(c.money));
@@ -990,6 +1240,8 @@ function render() {
   renderBank();
   text("body-energy", c.bodyEnergy + " / " + state.maxBodyEnergy);
   text("brain-energy", c.brainEnergy + " / " + state.maxBrainEnergy);
+  renderCompactStatus(c);
+  selectProfileView(activeProfileView);
   text("current-job", state.currentJob?.name || "尚未就職");
   text("work-count", c.workCount + " 次（目前職業 " + c.jobWorkCount + " 次）");
   text("job-experience", c.jobExperience + " 點");
@@ -1001,12 +1253,13 @@ function render() {
   const ready = Boolean(state.currentJob) && state.workCooldownMs === 0 &&
     state.condition?.baseExperience !== null;
   el("work").disabled = !ready;
+  el("home-work").disabled = !ready;
   text("cooldown", !state.currentJob ? "請先前往職業介紹所選擇工作。" :
     state.workCooldownMs > 0 ? "距離下次工作約 " + Math.ceil(state.workCooldownMs / 1000) + " 秒。" :
       "工作冷卻時間已結束。");
   const attrs = el("attributes");
   attrs.replaceChildren();
-  for (const [key, label] of Object.entries(labels)) addRow(attrs, label, c.stats[key] ?? 0);
+  renderAbilities(c.stats);
   text("residents", state.residents.length ? state.residents.join("、") : "目前沒有其他玩家在這個城鎮。");
   renderTowns();
   renderTownMap();
@@ -1219,9 +1472,83 @@ el("term-cancel").addEventListener("click", () => {
   }
 });
 el("logout").addEventListener("click", async () => {
-  try { await api("logout", {}); pendingTransfer = null; closeRoom(); state = await api("state"); render(); notify("已登出"); }
-  catch (error) { notify(error.message, true); }
+  if(state?.mode==="solo"){
+    soloAtHome=true;
+    try{sessionStorage.setItem("town-solo-at-home","1");}catch{}
+    closeRoom();
+    render();
+    notify("已返回單機首頁，角色及遊戲進度均已保留。");
+    return;
+  }
+  try {
+    await api("logout",{});
+    pendingTransfer=null;
+    closeRoom();
+    state=await api("state");
+    render();
+    notify("已登出多人模式帳號");
+  }catch(error){notify(error.message,true);}
 });
+el("solo-continue").addEventListener("click",()=>{
+  soloAtHome=false;
+  try{sessionStorage.removeItem("town-solo-at-home");}catch{}
+  render();
+  notify("已繼續單機遊戲。");
+});
+let soloDeleteBusy=false;
+el("solo-delete-form").addEventListener("submit",async event=>{
+  event.preventDefault();
+  if(soloDeleteBusy||state?.mode!=="solo"||!soloAtHome||!state?.character)return;
+  const entered=el("solo-delete-name").value;
+  if(entered!==state.character.name){
+    notify("角色名稱不符，沒有刪除任何資料。",true);
+    return;
+  }
+  if(!el("solo-delete-ack").checked)return;
+  const confirmed=window.confirm("確定永久刪除「"+entered+"」的角色進度、住宅、物品及所有相關紀錄嗎？\n\n此操作不可復原；城鎮地圖與單機時間會保留。");
+  if(!confirmed)return;
+  soloDeleteBusy=true;
+  el("solo-delete-submit").disabled=true;
+  try{
+    state=await api("solo/character/delete",{characterName:entered,confirm:true});
+    // 刪除後回建角畫面；已保存的城鎮與單機虛擬時鐘繼續沿用。
+    soloAtHome=false;
+    try{sessionStorage.removeItem("town-solo-at-home");}catch{}
+    closeRoom();
+    selectedMapCell=null;
+    selectedHouseSpot=null;
+    activeFacilityTab="jobs";
+    dismissedEventKey=null;
+    try{sessionStorage.removeItem("town-dismissed-event");}catch{}
+    el("solo-delete-form").reset();
+    el("solo-delete-details").open=false;
+    render();
+    notify("已刪除角色及相關資料，可以建立新角色。城鎮地圖與單機時間已保留。");
+  }catch(error){notify(error.message,true);}
+  finally{
+    soloDeleteBusy=false;
+    el("solo-delete-submit").disabled=false;
+  }
+});
+el("solo-time-panel").addEventListener("click",async event=>{
+  const target=event.target.closest("button[data-advance]");
+  if(!target||state?.mode!=="solo"||timeAdvanceBusy)return;
+  const preset=target.dataset.advance;
+  if(!["5m","30m","1h","1d"].includes(preset))return;
+  timeAdvanceBusy=true;
+  renderSoloTime();
+  try{
+    state=await api("solo/time/advance",{preset});
+    render();
+    const amount={"5m":"5 分鐘","30m":"30 分鐘","1h":"1 小時","1d":"1 天"}[preset];
+    notify("已將單機遊戲時間快轉 "+amount+"，冷卻及每日結算已更新。");
+  }catch(error){notify(error.message,true);}
+  finally{timeAdvanceBusy=false;renderSoloTime();}
+});
+setInterval(()=>{
+  if(state?.mode==="solo"&&state?.character&&!soloAtHome)
+    renderSoloTime(); // 同步顯示遊戲時鐘，限時事件結束後也恢復快轉按鈕
+},1000);
 el("room-close").addEventListener("click", closeRoom);
 el("room-config-form").addEventListener("submit", event => {
   event.preventDefault();
@@ -1247,6 +1574,51 @@ el("house-form").addEventListener("submit", event => {
     image: d.image, interiorRank: Number(d.interiorRank), payment: d.payment
   });
 });
+el("preview-town").addEventListener("change",event=>{
+  const townId=Number(event.currentTarget.value);
+  if(Number.isSafeInteger(townId)&&townId>=0&&townId<=3)
+    loadPublicPreview(townId);
+});
+el("facility-tabs").addEventListener("click",event=>{
+  const tab=event.target.closest('button[role="tab"][data-pane]');
+  if(tab)selectFacilityTab(tab.dataset.pane);
+});
+el("facility-tabs").addEventListener("keydown",event=>{
+  if(!["ArrowRight","ArrowLeft","Home","End"].includes(event.key))return;
+  const index=FACILITY_TAB_NAMES.indexOf(activeFacilityTab);
+  const next=event.key==="Home"?0:event.key==="End"?FACILITY_TAB_NAMES.length-1:
+    (index+(event.key==="ArrowRight"?1:-1)+FACILITY_TAB_NAMES.length)%FACILITY_TAB_NAMES.length;
+  event.preventDefault();
+  selectFacilityTab(FACILITY_TAB_NAMES[next],{focusTab:true});
+});
+el("event-alert").addEventListener("click",()=>{
+  dismissEventPopup();
+  goToFacility("event-panel");
+});
+el("event-popup-claim").addEventListener("click",()=>{
+  if(state?.cockroachChallenge?.status==="active")
+    action("events/cockroach/claim",{});
+});
+el("event-popup-close").addEventListener("click",dismissEventPopup);
+el("profile-view-tabs").addEventListener("click",event=>{
+  const button=event.target.closest("button[data-profile-view]");
+  if(button)selectProfileView(button.dataset.profileView);
+});
+el("profile-view-tabs").addEventListener("keydown",event=>{
+  if(!["ArrowRight","ArrowLeft","Home","End"].includes(event.key))return;
+  const index=PROFILE_VIEWS.indexOf(activeProfileView);
+  const next=event.key==="Home"?0:event.key==="End"?PROFILE_VIEWS.length-1:
+    (index+(event.key==="ArrowRight"?1:-1)+PROFILE_VIEWS.length)%PROFILE_VIEWS.length;
+  event.preventDefault();
+  selectProfileView(PROFILE_VIEWS[next],{focus:true});
+});
+el("facility-shortcuts").addEventListener("click",event=>{
+  if(event.target.closest('button[data-action="work"]')){
+    action("work",{});return;
+  }
+  const button=event.target.closest("button[data-facility]");
+  if(button)goToFacility(button.dataset.facility);
+});
 el("map-edit-toggle").addEventListener("change", () => {
   el("map-palette").disabled = !el("map-edit-toggle").checked;
   text("map-selection", el("map-edit-toggle").checked
@@ -1258,6 +1630,7 @@ el("refresh").addEventListener("click", async () => {
   catch (error) { notify(error.message, true); }
 });
 el("work").addEventListener("click", () => action("work", {}));
+selectFacilityTab(activeFacilityTab);
 el("job-search").addEventListener("input", renderJobs);
 el("job-filter").addEventListener("change", renderJobs);
 (async () => {

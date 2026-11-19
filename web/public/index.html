@@ -18,80 +18,178 @@
   </header>
   <main>
     <div id="notice" role="status" aria-live="polite" hidden></div>
-    <section id="auth" class="intro card" hidden>
-      <h2>登入城鎮</h2>
-      <p>多人模式可使用不同帳號建立角色，共享同一座城鎮。</p>
-      <div class="columns">
-        <form id="login-form" class="field-box">
-          <h3>登入</h3>
-          <label>帳號<input name="username" required autocomplete="username"></label>
-          <label>密碼<input name="password" type="password" required autocomplete="current-password"></label>
-          <button type="submit">登入</button>
+    <div id="landing" class="landing-layout" hidden>
+      <section class="card town-home" aria-labelledby="preview-heading">
+        <div class="eyebrow">城鎮入口 · 原版街區預覽</div>
+        <h2 id="preview-heading">探索 TOWN 城鎮</h2>
+        <p class="small">沿用原始 12×16 地圖與像素素材。登入後可探索設施與使用已移植功能。</p>
+        <label class="preview-label" for="preview-town">預覽城鎮</label>
+        <select id="preview-town" aria-label="預覽城鎮"></select>
+        <p id="preview-map-status" class="small" role="status">讀取城鎮地圖中。</p>
+        <div class="map-scroll" tabindex="0" aria-label="唯讀城鎮地圖預覽，可水平捲動">
+          <div id="preview-map" class="town-map" aria-label="城鎮街區預覽（12 列 16 欄）"></div>
+        </div>
+        <p class="small">預覽不提供編輯或遊戲操作；未取得原版街區配置時，保留空白格而不虛構建築。</p>
+      </section>
+      <div class="landing-actions">
+      <section id="solo-lobby" class="intro card" hidden>
+        <h2>返回城鎮</h2>
+        <p>單人模式的角色已儲存在本機遊戲資料庫。離開遊戲只會返回這個首頁，不會刪除進度；單人模式不使用帳號登入。</p>
+        <p class="solo-current-character">目前角色：<strong id="solo-character-name"></strong></p>
+        <button id="solo-continue" type="button">繼續遊戲</button>
+        <details class="solo-delete-box" id="solo-delete-details">
+          <summary>刪除角色並重新開始</summary>
+          <p class="small">此操作無法復原，將永久刪除角色的金錢、能力、職業、房屋、物品、銀行、留言及事件紀錄。你建造的住宅會還原成原本的空地；其他城鎮地圖編輯與單機遊戲時間不會被清除。</p>
+          <form id="solo-delete-form">
+            <label for="solo-delete-name">輸入目前角色的完整名稱以確認
+              <input id="solo-delete-name" name="characterName" required autocomplete="off" spellcheck="false" maxlength="100">
+            </label>
+            <label class="solo-delete-confirm"><input id="solo-delete-ack" type="checkbox" required> 我瞭解角色進度與相關資料將永久刪除</label>
+            <button type="submit" id="solo-delete-submit" class="danger-action">永久刪除角色</button>
+          </form>
+        </details>
+      </section>
+      <section id="auth" class="intro card" hidden>
+        <h2>登入城鎮</h2>
+        <p>多人模式可使用不同帳號建立角色，共享同一座城鎮。</p>
+        <div class="columns">
+          <form id="login-form" class="field-box">
+            <h3>登入</h3>
+            <label>帳號<input name="username" required autocomplete="username"></label>
+            <label>密碼<input name="password" type="password" required autocomplete="current-password"></label>
+            <button type="submit">登入</button>
+          </form>
+          <form id="register-form" class="field-box">
+            <h3>建立帳號</h3>
+            <label>帳號<input name="username" minlength="2" maxlength="24" required autocomplete="username"></label>
+            <label>密碼<input name="password" type="password" minlength="8" maxlength="128" required autocomplete="new-password"></label>
+            <button type="submit">註冊</button>
+          </form>
+        </div>
+      </section>
+      <section id="create" class="intro card" hidden>
+        <h2>建立角色</h2>
+        <p>依照原版的初始能力配點限制，頭腦與身體各最多 200 點，其他能力最多 100 點，每項至少 1 點。</p>
+        <form id="create-form" class="new-char">
+          <label>角色名稱<input name="name" minlength="1" maxlength="18" required></label>
+          <label>角色性別
+            <select name="gender" required>
+              <option value="other">未指定</option><option value="male">男性</option><option value="female">女性</option>
+            </select>
+          </label>
+          <fieldset class="stat-group" data-group="brain">
+            <legend>頭腦能力 <strong id="sum-brain">140 / 200</strong></legend>
+            <div class="ability-inputs">
+              <label>國語<input name="kokugo" type="number" min="1" max="200" step="1" value="20" required></label>
+              <label>數學<input name="suugaku" type="number" min="1" max="200" step="1" value="20" required></label>
+              <label>理科<input name="rika" type="number" min="1" max="200" step="1" value="20" required></label>
+              <label>社會<input name="syakai" type="number" min="1" max="200" step="1" value="20" required></label>
+              <label>英語<input name="eigo" type="number" min="1" max="200" step="1" value="20" required></label>
+              <label>音樂<input name="ongaku" type="number" min="1" max="200" step="1" value="20" required></label>
+              <label>美術<input name="bijutu" type="number" min="1" max="200" step="1" value="20" required></label>
+            </div>
+          </fieldset>
+          <fieldset class="stat-group" data-group="body">
+            <legend>身體能力 <strong id="sum-body">140 / 200</strong></legend>
+            <div class="ability-inputs">
+              <label>外貌<input name="looks" type="number" min="1" max="200" step="1" value="20" required></label>
+              <label>體力<input name="tairyoku" type="number" min="1" max="200" step="1" value="20" required></label>
+              <label>健康<input name="kenkou" type="number" min="1" max="200" step="1" value="20" required></label>
+              <label>速度<input name="speed" type="number" min="1" max="200" step="1" value="20" required></label>
+              <label>力量<input name="power" type="number" min="1" max="200" step="1" value="20" required></label>
+              <label>臂力<input name="wanryoku" type="number" min="1" max="200" step="1" value="20" required></label>
+              <label>腿力<input name="kyakuryoku" type="number" min="1" max="200" step="1" value="20" required></label>
+            </div>
+          </fieldset>
+          <fieldset class="stat-group" data-group="other">
+            <legend>其他能力 <strong id="sum-other">60 / 100</strong></legend>
+            <div class="ability-inputs">
+              <label>LOVE<input name="love" type="number" min="1" max="100" step="1" value="20" required></label>
+              <label>有趣度<input name="unique" type="number" min="1" max="100" step="1" value="20" required></label>
+              <label>情色度<input name="etti" type="number" min="1" max="100" step="1" value="20" required></label>
+            </div>
+          </fieldset>
+          <button id="create-submit" type="submit">開始人生</button>
         </form>
-        <form id="register-form" class="field-box">
-          <h3>建立帳號</h3>
-          <label>帳號<input name="username" minlength="2" maxlength="24" required autocomplete="username"></label>
-          <label>密碼<input name="password" type="password" minlength="8" maxlength="128" required autocomplete="new-password"></label>
-          <button type="submit">註冊</button>
-        </form>
+      </section>
       </div>
-    </section>
-    <section id="create" class="intro card" hidden>
-      <h2>建立角色</h2>
-      <p>依照原版的初始能力配點限制，頭腦與身體各最多 200 點，其他能力最多 100 點，每項至少 1 點。</p>
-      <form id="create-form" class="new-char">
-        <label>角色名稱<input name="name" minlength="1" maxlength="18" required></label>
-        <label>角色性別
-          <select name="gender" required>
-            <option value="other">未指定</option><option value="male">男性</option><option value="female">女性</option>
-          </select>
-        </label>
-        <fieldset class="stat-group" data-group="brain">
-          <legend>頭腦能力 <strong id="sum-brain">140 / 200</strong></legend>
-          <div class="ability-inputs">
-            <label>國語<input name="kokugo" type="number" min="1" max="200" step="1" value="20" required></label>
-            <label>數學<input name="suugaku" type="number" min="1" max="200" step="1" value="20" required></label>
-            <label>理科<input name="rika" type="number" min="1" max="200" step="1" value="20" required></label>
-            <label>社會<input name="syakai" type="number" min="1" max="200" step="1" value="20" required></label>
-            <label>英語<input name="eigo" type="number" min="1" max="200" step="1" value="20" required></label>
-            <label>音樂<input name="ongaku" type="number" min="1" max="200" step="1" value="20" required></label>
-            <label>美術<input name="bijutu" type="number" min="1" max="200" step="1" value="20" required></label>
+    </div>
+
+    <div id="game" class="layout game-shell" hidden>
+      <div id="compact-status" class="compact-status" hidden aria-label="固定角色能量資訊">
+        <strong id="compact-character-name" class="compact-name"></strong>
+        <div class="compact-energy">
+          <span class="compact-energy-label">身體能量 <b id="compact-body-energy"></b></span>
+          <progress id="compact-body-bar" max="100" value="0" aria-label="身體能量比例"></progress>
+        </div>
+        <div class="compact-energy">
+          <span class="compact-energy-label">頭腦能量 <b id="compact-brain-energy"></b></span>
+          <progress id="compact-brain-bar" max="100" value="0" aria-label="頭腦能量比例"></progress>
+        </div>
+      </div>
+      <aside id="event-popup" class="event-popup" aria-label="原版事件通知" hidden>
+        <div class="event-popup-heading">
+          <strong id="event-popup-title">事件發生！</strong>
+          <button id="event-popup-close" type="button" class="secondary" aria-label="關閉事件通知">×</button>
+        </div>
+        <p id="event-popup-body" class="small"></p>
+        <div class="event-popup-actions">
+          <button id="event-popup-claim" type="button" hidden>立即拍打蟑螂</button>
+          <button id="event-alert" type="button" class="secondary" hidden>查看事件紀錄</button>
+        </div>
+      </aside>
+      <div class="game-overview">
+        <div class="content game-map-column">
+          <section class="card town-main" id="town-panel">
+          <div class="heading"><div><div class="eyebrow">城鎮</div><h2>探索附近地區</h2></div><span class="muted">原版 12×16 街區</span></div>
+          
+          
+          <div class="towns" id="towns"></div>
+          <p class="small" id="map-source"></p>
+          <details class="explain"><summary>地圖操作說明</summary><p class="small">點擊已配置的建築圖示可開啟已支援設施；尚未移植的設施只顯示說明，不會產生虛構操作。</p></details>
+          
+          <div class="map-scroll" tabindex="0" aria-label="城鎮街區地圖，可水平捲動">
+            <div id="town-map" class="town-map" role="grid" aria-label="12 列 16 欄街區"></div>
           </div>
-        </fieldset>
-        <fieldset class="stat-group" data-group="body">
-          <legend>身體能力 <strong id="sum-body">140 / 200</strong></legend>
-          <div class="ability-inputs">
-            <label>外貌<input name="looks" type="number" min="1" max="200" step="1" value="20" required></label>
-            <label>體力<input name="tairyoku" type="number" min="1" max="200" step="1" value="20" required></label>
-            <label>健康<input name="kenkou" type="number" min="1" max="200" step="1" value="20" required></label>
-            <label>速度<input name="speed" type="number" min="1" max="200" step="1" value="20" required></label>
-            <label>力量<input name="power" type="number" min="1" max="200" step="1" value="20" required></label>
-            <label>臂力<input name="wanryoku" type="number" min="1" max="200" step="1" value="20" required></label>
-            <label>腿力<input name="kyakuryoku" type="number" min="1" max="200" step="1" value="20" required></label>
+          <p class="small" id="map-selection" role="status"></p>
+          <nav id="facility-shortcuts" class="town-shortcuts" aria-label="城鎮常用操作">
+            <button type="button" id="home-work" data-action="work"><img src="/legacy-assets/button/go_work.png" alt="">工作</button>
+            <button type="button" data-facility="inventory-panel"><img src="/legacy-assets/button/item.png" alt="">物品</button>
+            <button type="button" data-facility="bank-panel"><img src="/legacy-assets/bank.gif" alt="">銀行</button>
+            <button type="button" data-facility="hospital-panel"><img src="/legacy-assets/hospital.gif" alt="">醫院</button>
+            <button type="button" data-facility="dining-panel"><img src="/legacy-assets/syokudou.gif" alt="">食堂</button>
+            <button type="button" data-facility="housing-panel"><img src="/legacy-assets/house/house_1.gif" alt="">住宅</button>
+            <button type="button" data-facility="school-panel"><img src="/legacy-assets/school.gif" alt="">學校</button>
+            <button type="button" data-facility="gym-panel"><img src="/legacy-assets/gym.gif" alt="">健身房</button>
+          </nav>
+          <div class="map-editor" id="map-editor" hidden>
+            <label class="map-editor-switch">
+              <input type="checkbox" id="map-edit-toggle"> 開啟單機街區編輯模式
+            </label>
+            <label for="map-palette">選擇格子設施</label>
+            <select id="map-palette" disabled></select>
+            <p class="small">啟用後，點選地圖格子即可儲存選定設施。修改只寫入 Web 資料庫，不會覆蓋原版 CGI。</p>
           </div>
-        </fieldset>
-        <fieldset class="stat-group" data-group="other">
-          <legend>其他能力 <strong id="sum-other">60 / 100</strong></legend>
-          <div class="ability-inputs">
-            <label>LOVE<input name="love" type="number" min="1" max="100" step="1" value="20" required></label>
-            <label>有趣度<input name="unique" type="number" min="1" max="100" step="1" value="20" required></label>
-            <label>情色度<input name="etti" type="number" min="1" max="100" step="1" value="20" required></label>
+          <div class="residents-line"><strong>同城居民</strong><p class="small" id="residents"></p></div>
+        </section>
+        </div>
+        <aside class="sidebar game-status-column" aria-label="居民與能力資料">
+          <div id="profile-view-tabs" class="profile-view-tabs" role="tablist" aria-label="原版角色資訊切換">
+            <button type="button" id="profile-tab-status" role="tab" aria-controls="player-summary" aria-selected="true" tabindex="0" data-profile-view="status">狀態</button>
+            <button type="button" id="profile-tab-inventory" role="tab" aria-controls="inventory-panel" aria-selected="false" tabindex="-1" data-profile-view="inventory">物品</button>
+            <button type="button" id="profile-tab-attributes" role="tab" aria-controls="attributes-panel" aria-selected="false" tabindex="-1" data-profile-view="attributes">能力值</button>
           </div>
-        </fieldset>
-        <button id="create-submit" type="submit">開始人生</button>
-      </form>
-    </section>
-    <div id="game" class="layout" hidden>
-      <aside class="sidebar">
-        <section class="card">
+          <section class="card player-summary" id="player-summary" role="tabpanel" aria-labelledby="profile-tab-status">
           <div class="eyebrow">居民資料</div><h2 id="character-name"></h2>
-          <dl class="stats">
+          <dl class="stats status-main">
             <div><dt>所在地</dt><dd id="current-town"></dd></div>
             <div><dt>現金</dt><dd id="money"></dd></div>
             <div><dt>銀行存款</dt><dd id="bank"></dd></div>
             <div><dt>身體能量</dt><dd id="body-energy"></dd></div>
             <div><dt>頭腦能量</dt><dd id="brain-energy"></dd></div>
             <div><dt>目前職業</dt><dd id="current-job"></dd></div>
+          </dl>
+          <details class="status-details"><summary>更多角色資訊</summary><dl class="stats status-extra">
             <div><dt>工作次數</dt><dd id="work-count"></dd></div>
             <div><dt>目前職業經驗</dt><dd id="job-experience"></dd></div>
             <div><dt>目前職業等級</dt><dd id="job-level"></dd></div>
@@ -101,24 +199,33 @@
             <div><dt>體型</dt><dd id="physique-status"></dd></div>
             <div><dt>目前狀態</dt><dd id="condition-status"></dd></div>
             <div><dt>疾病</dt><dd id="health-status"></dd></div>
-          </dl>
-          <button id="work" class="primary" type="button">前往工作</button>
-          <p id="cooldown" class="small"></p>
-          <button id="refresh" class="secondary full" type="button">更新狀態</button>
+          </dl></details>
+          
+          <div id="solo-time-panel" class="solo-time-panel" hidden>
+            <strong>單人模式 · 時間快轉</strong>
+            <p class="small" id="solo-game-time" aria-live="off">讀取遊戲時間中</p>
+            <div class="solo-time-buttons" aria-label="單機時間快轉">
+              <button type="button" class="secondary" data-advance="5m">＋5 分鐘</button>
+              <button type="button" class="secondary" data-advance="30m">＋30 分鐘</button>
+              <button type="button" class="secondary" data-advance="1h">＋1 小時</button>
+              <button type="button" class="secondary" data-advance="1d">＋1 天</button>
+            </div>
+            <p class="small" id="solo-wait-hints"></p>
+            <details class="explain"><summary>快轉規則</summary>
+              <p class="small">工作需等 5 分鐘、餐點 60 分鐘；健身房依課程，學校每天一次。快轉會真的推進遊戲判定、恢復能量及每日結算，不是只改畫面倒數。＋1 天為 24 小時，不會模擬每個跳過日的所有事件。限時事件期間不可快轉。</p>
+            </details>
+          </div>
+          <div class="player-actions">
+            <button id="work" class="primary" type="button">前往工作</button>
+            <button id="refresh" class="secondary full" type="button">更新狀態</button>
+            <p id="cooldown" class="small"></p>
+          </div>
         </section>
-        <section class="card" id="hospital-panel">
-          <div class="eyebrow">健康管理</div>
-          <h3>醫院</h3>
-          <p id="hospital-diagnosis" class="small"></p>
-          <p id="hospital-cost" class="small"></p>
-          <button id="hospital-treat" type="button">接受治療</button>
-          <p class="small">治療會將疾病指數恢復為 50。有效的健康保險可將醫療費降為三分之一，折抵金額由伺服器依持有物判定。</p>
-        </section>
-        <section class="card" id="inventory-panel">
+          <section class="card inventory-panel" id="inventory-panel" role="tabpanel" aria-labelledby="profile-tab-inventory" hidden>
           <div class="eyebrow">持有物</div>
           <h3>健康保險與個人物品</h3>
           <p id="insurance-status" class="small"></p>
-          <p class="small">原始「日用品／健康保険」標價 10,000 元，有效 30 天。Web 版暫用原始基準價直接購買，正式百貨、每日上架、玩家商店價格與庫存仍未移植。</p>
+          <details class="explain"><summary>玩法與限制說明</summary><p class="small">原始「日用品／健康保険」標價 10,000 元，有效 30 天。Web 版暫用原始基準價直接購買，正式百貨、每日上架、玩家商店價格與庫存仍未移植。</p></details>
           <form id="insurance-buy-form">
             <label>購買份數
               <select id="insurance-quantity" name="quantity">
@@ -140,21 +247,135 @@
           <h4>最近的道具使用紀錄</h4>
           <div id="legacy-item-use-history"></div>
         </section>
-        <section class="card" id="event-panel">
-          <div class="eyebrow">日常生活</div>
-          <h3>最近的隨機事件</h3>
-          <p class="small">沿用原版三分之一機率抽選，再從 44 種事件中挑選，目前已實作 37 種。Web 版每天最多抽選一次。</p>
-          <p class="small" id="event-coupon-count">Web 事件所得優惠券：0 張（兌換所尚未移植）</p>
-          <p class="small" id="event-kpoint">Web K 點數：0</p>
-          <div id="cockroach-challenge" hidden>
-            <p id="cockroach-remaining" role="status">蟑螂出現！</p>
-            <button type="button" id="cockroach-claim">拍打蟑螂（20 秒內）</button>
+          <section class="card attributes-panel" id="attributes-panel" role="tabpanel" aria-labelledby="profile-tab-attributes" hidden>
+            <h3>能力值</h3>
+            <p class="small ability-caption">延續原版頭腦／身體／其他三組黃色能力條。長度僅比較目前能力的相對大小。</p>
+            <div class="ability-groups" id="attributes"></div>
+          </section>
+        </aside>
+      </div>
+      <section class="facility-shell" aria-labelledby="facilities-title">
+        <div class="facility-topline">
+          <h2 id="facilities-title">設施操作</h2>
+          <span class="muted">選擇一項功能，不必捲過全部表單</span>
+        </div>
+        <div id="facility-tabs" class="facility-tabs" role="tablist" aria-label="城鎮設施分頁">
+          <button id="facility-tab-house" type="button" role="tab" data-pane="house" aria-controls="facility-pane-house" aria-selected="false" tabindex="-1">住宅</button>
+        <button id="facility-tab-dining" type="button" role="tab" data-pane="dining" aria-controls="facility-pane-dining" aria-selected="false" tabindex="-1">食堂</button>
+        <button id="facility-tab-training" type="button" role="tab" data-pane="training" aria-controls="facility-pane-training" aria-selected="false" tabindex="-1">學習</button>
+        <button id="facility-tab-jobs" type="button" role="tab" data-pane="jobs" aria-controls="facility-pane-jobs" aria-selected="true" tabindex="0">工作</button>
+        <button id="facility-tab-bank" type="button" role="tab" data-pane="bank" aria-controls="facility-pane-bank" aria-selected="false" tabindex="-1">銀行</button>
+        <button id="facility-tab-hospital" type="button" role="tab" data-pane="hospital" aria-controls="facility-pane-hospital" aria-selected="false" tabindex="-1">醫院</button>
+        <button id="facility-tab-events" type="button" role="tab" data-pane="events" aria-controls="facility-pane-events" aria-selected="false" tabindex="-1">事件</button>
+
+        </div>
+      <div id="facility-pane-house" class="facility-pane" role="tabpanel" aria-labelledby="facility-tab-house" tabindex="0" hidden>
+        <section class="card" id="housing-panel">
+          <div class="heading">
+            <div><div class="eyebrow">土地與住宅</div><h2>建築公司</h2></div>
+            <span id="house-count" class="muted"></span>
           </div>
-          <div id="health-event-history" class="health-event-history"></div>
+          <details class="explain"><summary>玩法與限制說明</summary><p class="small">請在上方街區點選「空地」或「空地（二）」等建地，再選擇房屋外觀、室內等級和付款方式。建造費依原版城鎮地價與外觀、室內價格計算。</p></details>
+          <p class="small" id="house-target">尚未選擇建築位置。</p>
+          <form id="house-form" class="housing-form">
+            <label>房屋外觀
+              <select id="house-design" name="image" required></select>
+            </label>
+            <div class="house-preview-row">
+              <img id="house-preview" src="/legacy-assets/house/house_1.gif" alt="目前選擇的房屋外觀" width="48" height="48">
+              <div id="house-design-cost" class="small"></div>
+            </div>
+            <label>室內等級
+              <select id="house-interior" name="interiorRank" required></select>
+            </label>
+            <label>付款方式
+              <select id="house-payment" name="payment">
+                <option value="cash">現金支付</option>
+                <option value="bank">銀行存款支付</option>
+              </select>
+            </label>
+            <dl id="house-quote" class="stats"></dl>
+            <button id="house-submit" type="submit" disabled>確認建造房屋</button>
+          </form>
+          <h3>我擁有的房屋</h3>
+          <div id="owned-houses" class="owned-houses"></div>
+          <p class="small">出售房屋時，依原版只退還該城鎮的土地地價，不退外觀與室內費用。出售後原空地會復原，可以再購買其他地點。本階段只支援一筆一般住宅；分店、公司、商店仍待移植。</p>
+          <details class="history-details">
+          <summary>查看住宅交易及改裝紀錄</summary>
+          <h3>住宅交易紀錄</h3>
+          <div id="house-events" class="house-events"></div>
+          <h3>房屋改裝紀錄</h3>
+          <div id="house-remodel-events" class="house-events"></div>
+        </details>
         </section>
-        <section class="card">
+        <section class="card" id="room-panel" hidden>
+          <div class="heading">
+            <div><div class="eyebrow">住宅內部</div><h2 id="room-title">住宅參訪</h2></div>
+            <button id="room-close" class="secondary" type="button">離開住宅</button>
+          </div>
+          <p id="room-owner" class="small"></p>
+          <div id="room-nav" class="room-nav" aria-label="住宅內容選單"></div>
+          <div id="room-body"></div>
+          <div id="room-settings" hidden>
+            <h3>室內內容設定</h3>
+            <p class="small">依原版室內等級，最多配置四個內容欄位。一般留言板與屋主公告板可使用；商店尚待移植，自訂網址僅供連結，不會在網站內載入外部內容。設定會在出售後保留。可使用「更新室內內容」取得最新留言。</p>
+            <form id="room-config-form">
+              <div id="room-slot-inputs"></div>
+              <button type="submit">儲存室內配置</button>
+            </form>
+          </div>
+        </section>
+      </div>
+      <div id="facility-pane-dining" class="facility-pane" role="tabpanel" aria-labelledby="facility-tab-dining" tabindex="0" hidden>
+        <section class="card" id="dining-panel">
+          <div class="heading">
+            <div><div class="eyebrow">日常生活</div><h2>中央食堂</h2></div>
+            <span class="muted" id="meal-status">每次用餐間隔 60 分鐘</span>
+          </div>
+          <details class="explain"><summary>玩法與限制說明</summary><p class="small">依原版食堂餐點資料計算價格、能力提升與體重變化。實際收費為原始標價的三倍。菜單目前固定列示，原版每日抽選與共用庫存尚未移植。</p></details>
+          <label for="meal-menu">查看菜單來源</label>
+          <select id="meal-menu">
+            <option value="main">中央食堂</option>
+            <option value="second">第二食堂</option>
+          </select>
+          <div id="meal-list" class="training-grid"></div>
+        </section>
+      </div>
+      <div id="facility-pane-training" class="facility-pane" role="tabpanel" aria-labelledby="facility-tab-training" tabindex="0" hidden>
+        <section class="card" id="school-panel">
+          <div class="heading">
+            <div><div class="eyebrow">能力培養</div><h2><img class="facility-icon" src="/legacy-assets/school.gif" alt="">學校</h2></div>
+            <span id="school-status" class="muted">每日一堂課</span>
+          </div>
+          <details class="explain"><summary>玩法與限制說明</summary><p class="small">沿用原始課程的能力增幅、費用和頭腦能量消耗；每天最多一堂。</p></details>
+          <div id="school-lessons" class="training-grid"></div>
+        </section>
+        <section class="card" id="gym-panel">
+          <div class="heading">
+            <div><div class="eyebrow">能力培養</div><h2><img class="facility-icon" src="/legacy-assets/gym.gif" alt="">健身房</h2></div>
+            <span id="gym-status" class="muted">等待狀態</span>
+          </div>
+          <details class="explain"><summary>玩法與限制說明</summary><p class="small">沿用原始訓練項目、能力增幅、費用和體力消耗。時間間隔暫依原始資料欄位計算。</p></details>
+          <div id="gym-lessons" class="training-grid"></div>
+        </section>
+      </div>
+      <div id="facility-pane-jobs" class="facility-pane" role="tabpanel" aria-labelledby="facility-tab-jobs" tabindex="0">
+        <section class="card" id="jobs-panel">
+          <div class="heading"><div><div class="eyebrow">職業介紹所</div><h2>選擇工作</h2></div><span id="job-count" class="muted"></span></div>
+          <div class="filters">
+            <label class="sr-only" for="job-search">搜尋職業</label>
+            <input id="job-search" placeholder="搜尋職業名稱">
+            <label class="sr-only" for="job-filter">職業篩選</label>
+            <select id="job-filter"><option value="available">目前可選</option><option value="all">全部職業</option></select>
+          </div>
+          <div id="jobs" class="jobs"></div>
+          <details class="explain"><summary>玩法與限制說明</summary><p class="small">未翻譯的職業會暫時顯示原始日文。職業經驗與精通、用餐飽足度與體型對工作狀態的影響已接入；疾病治療與事件仍待移植。</p></details>
+        </section>
+      </div>
+      <div id="facility-pane-bank" class="facility-pane" role="tabpanel" aria-labelledby="facility-tab-bank" tabindex="0" hidden>
+        <section class="card" id="bank-panel">
           <h3>銀行</h3>
-          <p class="small">普通存款每日利息 0.5%，超級定期每日利息 1%。Web 版於每日第一次讀取狀態時計息一次，不會補發未讀取期間的多日利息。</p>
+          <details class="explain"><summary>玩法與限制說明</summary><p class="small">普通存款每日利息 0.5%，超級定期每日利息 1%。Web 版於每日第一次讀取狀態時計息一次，不會補發未讀取期間的多日利息。</p></details>
           <p class="small" id="bank-interest-day"></p>
           <form id="bank-form">
             <label>普通帳戶金額（元）<input name="amount" type="number" min="1" step="1" required></label>
@@ -163,6 +384,8 @@
               <button type="submit" name="action" value="withdraw" class="secondary">提款</button>
             </div>
           </form>
+          <details class="bank-advanced">
+          <summary>轉帳、定期存款、貸款及交易明細</summary>
           <div class="bank-transfer" id="bank-transfer-panel" hidden>
             <h3>轉帳給其他玩家</h3>
             <p class="small">從普通存款轉入對方的普通存款。單筆與每日同一收款人的上限均為 1 兆元，超額會直接拒絕。收款人註冊未滿七天時，單筆不得達 100 萬元。</p>
@@ -213,124 +436,35 @@
             <p class="small">普通與定期合計保存最近 100 筆明細，較舊的紀錄會被移除。</p>
             <div id="bank-ledger-list"></div>
           </div>
-        </section>
-        <section class="card">
-          <h3>能力值</h3><dl class="stats" id="attributes"></dl>
-        </section>
-      </aside>
-      <div class="content">
-        <section class="card">
-          <div class="heading"><div><div class="eyebrow">城鎮</div><h2>探索附近地區</h2></div><span class="muted">原版 12×16 街區</span></div>
-          <div class="towns" id="towns"></div>
-          <h3>街區地圖</h3>
-          <p class="small" id="map-source"></p>
-          <div class="map-editor" id="map-editor" hidden>
-            <label class="map-editor-switch">
-              <input type="checkbox" id="map-edit-toggle"> 開啟單機街區編輯模式
-            </label>
-            <label for="map-palette">選擇格子設施</label>
-            <select id="map-palette" disabled></select>
-            <p class="small">啟用後，點選地圖格子即可儲存選定設施。修改只寫入 Web 資料庫，不會覆蓋原版 CGI。</p>
-          </div>
-          <div class="map-scroll" tabindex="0" aria-label="城鎮街區地圖，可水平捲動">
-            <div id="town-map" class="town-map" role="grid" aria-label="12 列 16 欄街區"></div>
-          </div>
-          <p class="small" id="map-selection" role="status"></p>
-          <h3>同城居民</h3><p class="small" id="residents"></p>
-        </section>
-        <section class="card" id="housing-panel">
-          <div class="heading">
-            <div><div class="eyebrow">土地與住宅</div><h2>建築公司</h2></div>
-            <span id="house-count" class="muted"></span>
-          </div>
-          <p class="small">請在上方街區點選「空地」或「空地（二）」等建地，再選擇房屋外觀、室內等級和付款方式。建造費依原版城鎮地價與外觀、室內價格計算。</p>
-          <p class="small" id="house-target">尚未選擇建築位置。</p>
-          <form id="house-form" class="housing-form">
-            <label>房屋外觀
-              <select id="house-design" name="image" required></select>
-            </label>
-            <div class="house-preview-row">
-              <img id="house-preview" src="/legacy-assets/house/house_1.gif" alt="目前選擇的房屋外觀" width="48" height="48">
-              <div id="house-design-cost" class="small"></div>
-            </div>
-            <label>室內等級
-              <select id="house-interior" name="interiorRank" required></select>
-            </label>
-            <label>付款方式
-              <select id="house-payment" name="payment">
-                <option value="cash">現金支付</option>
-                <option value="bank">銀行存款支付</option>
-              </select>
-            </label>
-            <dl id="house-quote" class="stats"></dl>
-            <button id="house-submit" type="submit" disabled>確認建造房屋</button>
-          </form>
-          <h3>我擁有的房屋</h3>
-          <div id="owned-houses" class="owned-houses"></div>
-          <p class="small">出售房屋時，依原版只退還該城鎮的土地地價，不退外觀與室內費用。出售後原空地會復原，可以再購買其他地點。本階段只支援一筆一般住宅；分店、公司、商店仍待移植。</p>
-          <h3>住宅交易紀錄</h3>
-          <div id="house-events" class="house-events"></div>
-          <h3>房屋改裝紀錄</h3>
-          <div id="house-remodel-events" class="house-events"></div>
-        </section>
-        <section class="card" id="room-panel" hidden>
-          <div class="heading">
-            <div><div class="eyebrow">住宅內部</div><h2 id="room-title">住宅參訪</h2></div>
-            <button id="room-close" class="secondary" type="button">離開住宅</button>
-          </div>
-          <p id="room-owner" class="small"></p>
-          <div id="room-nav" class="room-nav" aria-label="住宅內容選單"></div>
-          <div id="room-body"></div>
-          <div id="room-settings" hidden>
-            <h3>室內內容設定</h3>
-            <p class="small">依原版室內等級，最多配置四個內容欄位。一般留言板與屋主公告板可使用；商店尚待移植，自訂網址僅供連結，不會在網站內載入外部內容。設定會在出售後保留。可使用「更新室內內容」取得最新留言。</p>
-            <form id="room-config-form">
-              <div id="room-slot-inputs"></div>
-              <button type="submit">儲存室內配置</button>
-            </form>
-          </div>
-        </section>
-        <section class="card" id="dining-panel">
-          <div class="heading">
-            <div><div class="eyebrow">日常生活</div><h2>中央食堂</h2></div>
-            <span class="muted" id="meal-status">每次用餐間隔 60 分鐘</span>
-          </div>
-          <p class="small">依原版食堂餐點資料計算價格、能力提升與體重變化。實際收費為原始標價的三倍。菜單目前固定列示，原版每日抽選與共用庫存尚未移植。</p>
-          <label for="meal-menu">查看菜單來源</label>
-          <select id="meal-menu">
-            <option value="main">中央食堂</option>
-            <option value="second">第二食堂</option>
-          </select>
-          <div id="meal-list" class="training-grid"></div>
-        </section>
-        <section class="card">
-          <div class="heading">
-            <div><div class="eyebrow">能力培養</div><h2><img class="facility-icon" src="/legacy-assets/school.gif" alt="">學校</h2></div>
-            <span id="school-status" class="muted">每日一堂課</span>
-          </div>
-          <p class="small">沿用原始課程的能力增幅、費用和頭腦能量消耗；每天最多一堂。</p>
-          <div id="school-lessons" class="training-grid"></div>
-        </section>
-        <section class="card">
-          <div class="heading">
-            <div><div class="eyebrow">能力培養</div><h2><img class="facility-icon" src="/legacy-assets/gym.gif" alt="">健身房</h2></div>
-            <span id="gym-status" class="muted">等待狀態</span>
-          </div>
-          <p class="small">沿用原始訓練項目、能力增幅、費用和體力消耗。時間間隔暫依原始資料欄位計算。</p>
-          <div id="gym-lessons" class="training-grid"></div>
-        </section>
-        <section class="card">
-          <div class="heading"><div><div class="eyebrow">職業介紹所</div><h2>選擇工作</h2></div><span id="job-count" class="muted"></span></div>
-          <div class="filters">
-            <label class="sr-only" for="job-search">搜尋職業</label>
-            <input id="job-search" placeholder="搜尋職業名稱">
-            <label class="sr-only" for="job-filter">職業篩選</label>
-            <select id="job-filter"><option value="available">目前可選</option><option value="all">全部職業</option></select>
-          </div>
-          <div id="jobs" class="jobs"></div>
-          <p class="small">未翻譯的職業會暫時顯示原始日文。職業經驗與精通、用餐飽足度與體型對工作狀態的影響已接入；疾病治療與事件仍待移植。</p>
+        </details>
         </section>
       </div>
+      <div id="facility-pane-hospital" class="facility-pane" role="tabpanel" aria-labelledby="facility-tab-hospital" tabindex="0" hidden>
+        <section class="card" id="hospital-panel">
+          <div class="eyebrow">健康管理</div>
+          <h3>醫院</h3>
+          <p id="hospital-diagnosis" class="small"></p>
+          <p id="hospital-cost" class="small"></p>
+          <button id="hospital-treat" type="button">接受治療</button>
+          <details class="explain"><summary>玩法與限制說明</summary><p class="small">治療會將疾病指數恢復為 50。有效的健康保險可將醫療費降為三分之一，折抵金額由伺服器依持有物判定。</p></details>
+        </section>
+      </div>
+      <div id="facility-pane-events" class="facility-pane" role="tabpanel" aria-labelledby="facility-tab-events" tabindex="0" hidden>
+        <section class="card" id="event-panel">
+          <div class="eyebrow">日常生活</div>
+          <h3>最近的隨機事件</h3>
+          <details class="explain"><summary>玩法與限制說明</summary><p class="small">沿用原版三分之一機率抽選，再從 44 種事件中挑選，目前已實作 37 種。Web 版每天最多抽選一次。</p></details>
+          <p class="small" id="event-coupon-count">Web 事件所得優惠券：0 張（兌換所尚未移植）</p>
+          <p class="small" id="event-kpoint">Web K 點數：0</p>
+          <div id="cockroach-challenge" hidden>
+            <p id="cockroach-remaining" role="status">蟑螂出現！</p>
+            <button type="button" id="cockroach-claim">拍打蟑螂（20 秒內）</button>
+          </div>
+          <div id="health-event-history" class="health-event-history"></div>
+        </section>
+      </div>
+
+      </section>
     </div>
   </main>
   <footer>本頁為移植中的測試版本，原始 CGI 程式及遊戲素材保留在原始儲存庫。</footer>
