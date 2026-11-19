@@ -195,7 +195,7 @@ test("第 32 號三件收藏品缺一不可；成功時三種耐久與封存保�
     trigger(db,32,{day:"2026-11-20"});
     assert.deepEqual(names.map((_,i)=>usage(db,10+i).remaining),[0,0,0]);
     trigger(db,32,{day:"2026-11-21"});
-    assert.equal(money(db),900000); // 前兩次各十萬，第三次無套組 +50 萬
+    assert.equal(money(db),800000); // 初始 10 萬 + 前兩次各 10 萬 + 第三次 50 萬
     assert.equal(listCharacterEvents(db,1)[0].effects.items,undefined);
   }finally{db.close();}
 });
