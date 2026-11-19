@@ -1075,6 +1075,7 @@ function render() {
   const ready = Boolean(state.currentJob) && state.workCooldownMs === 0 &&
     state.condition?.baseExperience !== null;
   el("work").disabled = !ready;
+  el("home-work").disabled = !ready;
   text("cooldown", !state.currentJob ? "請先前往職業介紹所選擇工作。" :
     state.workCooldownMs > 0 ? "距離下次工作約 " + Math.ceil(state.workCooldownMs / 1000) + " 秒。" :
       "工作冷卻時間已結束。");
@@ -1327,6 +1328,9 @@ el("preview-town").addEventListener("change",event=>{
     loadPublicPreview(townId);
 });
 el("facility-shortcuts").addEventListener("click",event=>{
+  if(event.target.closest('button[data-action="work"]')){
+    action("work",{});return;
+  }
   const button=event.target.closest("button[data-facility]");
   if(button)goToFacility(button.dataset.facility);
 });
