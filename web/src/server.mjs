@@ -369,8 +369,8 @@ async function handle(req, res) {
         towns:TOWNS.map(({id,name})=>({id,name})),
         map:{
           townId,configured:map.configured,background:map.background,
-          cells:map.cells.map(({index,row,column,key,label,image,category})=>({
-            index,row,column,key,label,image,category
+          cells:map.cells.map(({index,row,column,label,image,category})=>({
+            index,row,column,label,image,category
           }))
         }
       });
