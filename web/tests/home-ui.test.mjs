@@ -156,3 +156,24 @@ test("單機介面：只有單機可看到四種實際等待快轉，倒數與�
   assert.match(css,/\.game-shell \.solo-time-panel/);
   assert.match(css,/\.game-shell \.solo-time-panel \.solo-time-buttons/);
 });
+
+
+test("單人角色管理：只在返回單人首頁時顯示刪除入口，必須名稱＋二次確認，刪後進建角",()=>{
+  assert.match(html,/id="solo-lobby" class="intro card" hidden/);
+  assert.match(html,/id="solo-character-name"/);
+  assert.match(html,/id="solo-delete-details"/);
+  assert.match(html,/id="solo-delete-form"/);
+  assert.match(html,/id="solo-delete-name"/);
+  assert.match(html,/id="solo-delete-ack" type="checkbox" required/);
+  assert.match(html,/id="solo-delete-submit"/);
+  assert.match(html,/城鎮地圖編輯與單機遊戲時間不會被清除/);
+  assert.match(script,/const lobby=solo && Boolean\(state\.character\) && soloAtHome/);
+  assert.match(script,/if\(lobby\)text\("solo-character-name",state\.character\.name\)/);
+  assert.match(script,/if\(entered!==state\.character\.name\)/);
+  assert.match(script,/window\.confirm\("確定永久刪除/);
+  assert.match(script,/api\("solo\/character\/delete",\{characterName:entered,confirm:true\}\)/);
+  assert.match(script,/el\("solo-delete-form"\)\.reset\(\)/);
+  assert.match(script,/sessionStorage\.removeItem\("town-solo-at-home"\)/);
+  assert.match(css,/#solo-lobby \.solo-delete-box/);
+  assert.match(css,/#solo-lobby \.danger-action/);
+});
