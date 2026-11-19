@@ -1,14 +1,18 @@
-// event.pl::motimono_kensa_ev、motimono_kensa_ev2：只支援已匯入的「回」耐久道具。
+// event.pl::motimono_kensa_ev、motimono_kensa_ev2：一般只支援已匯入的「回」耐久；
+// 第 16、23 號事件額外驗證購入日期，才允許使用原版「日」耐久道具。
 // 原始 33 欄封存不變；事件扣除量與手動使用共用 legacy_item_usage。
+import { DAY_MS } from "./inventory.mjs";
 export const EVENT_BONUS_ITEMS = Object.freeze({
   3: "英文解釈教室",
   11: "成り上がり",
+  16: "防犯カメラ",
   17: "おばあちゃんの知恵袋",
   18: "フラフープ",
   19: "谷保天満宮のお守り",
   20: "幸せを呼ぶ香水",
   21: "バイアグラ",
   22: "損害保険",
+  23: "ブラタンメンバーズカード",
   29: "幸せの星砂",
   31: "ミグ25",
   42: "阪神タイガースの公式チケット"
@@ -29,7 +33,7 @@ function hasTable(db,name) {
   ).get(name));
 }
 
-export function findEventBonusItem(db,userId,name) {
+export function findEventBonusItem(db,userId,name,{allowDay=false,now=Date.now()}={}) {
   if (!Number.isSafeInteger(userId)||userId<=0||!ALLOWED_EVENT_ITEMS.has(name))
     return null;
   // 測試與早期舊 Web 存檔可能還沒有物品表；沒有物品時仍照常抽基本事件。
@@ -37,7 +41,7 @@ export function findEventBonusItem(db,userId,name) {
     return null;
   const rows=db.prepare([
     "SELECT i.source_line,i.category,i.original_name,i.durability,i.durability_unit,",
-    "i.last_used_at,i.raw_fields_json,u.remaining AS web_remaining,",
+    "i.purchased_at,i.last_used_at,i.raw_fields_json,u.remaining AS web_remaining,",
     "u.last_used_at_ms FROM legacy_inventory_items i",
     "LEFT JOIN legacy_item_usage u ON u.user_id=i.user_id AND u.source_line=i.source_line",
     "WHERE i.user_id=? AND i.original_name=? ORDER BY i.source_line"
@@ -48,12 +52,21 @@ export function findEventBonusItem(db,userId,name) {
     try { raw=JSON.parse(row.raw_fields_json); } catch { continue; }
     if (!Array.isArray(raw)||raw.length!==33||raw.some(x=>typeof x!=="string")||
         raw[0]!==row.category||raw[1]!==name||raw[21]!==String(row.durability)||
-        raw[22]!=="回"||row.durability_unit!=="回"||row.category==="ギフト")
+        raw[22]!==row.durability_unit||row.category==="ギフト")
       continue;
     const remaining=row.web_remaining??row.durability;
     const lastUsedAt=row.last_used_at_ms??((row.last_used_at??0)*1000);
     if (!Number.isSafeInteger(remaining)||remaining<=0||
         !Number.isSafeInteger(lastUsedAt)||lastUsedAt<0) continue;
+    if(row.durability_unit==="日"){
+      // 只開放有明確原始購入時間的日耐久道具；過期或未定時的封存不加成。
+      if(!allowDay||!Number.isSafeInteger(now)||now<0||
+          !Number.isSafeInteger(row.purchased_at)||row.purchased_at<=0)continue;
+      const purchasedAtMs=row.purchased_at*1000;
+      const validUntil=purchasedAtMs+remaining*DAY_MS;
+      if(!Number.isSafeInteger(purchasedAtMs)||!Number.isSafeInteger(validUntil)||
+          purchasedAtMs>now||validUntil<=now)continue;
+    }else if(row.durability_unit!=="回")continue;
     return {sourceLine:row.source_line,name,remaining,lastUsedAt};
   }
   return null;

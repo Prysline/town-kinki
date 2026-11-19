@@ -2,6 +2,7 @@
 // 第十六階段加入 15 種不需額外道具的經濟、能力與體重事件。
 // 原 CGI 在進入主畫面時抽取，Web 版改為每個遊戲日最多抽取一次。
 import { resolveNonItemEvent } from "./event-effects.mjs";
+import { recordBankEntry } from "./banking.mjs";
 import { EVENT_BONUS_ITEMS,EVENT_REQUIRED_SETS,findEventBonusItem,consumeEventBonusItem } from "./event-item-bonus.mjs";
 
 export const ORIGINAL_EVENT_COUNT = 44;
@@ -60,9 +61,7 @@ export function settleDailyIllnessEvent(db,userId,day,now=Date.now(),random=Math
     throw new Error("無效的事件日期或時間");
   db.exec("BEGIN IMMEDIATE");
   try {
-    const old=db.prepare(
-      "SELECT health_index,last_event_day,money,weight,height,bmi,stats_json,body_energy,brain_energy,job_experience,recovered_at FROM characters WHERE user_id=?"
-    ).get(userId);
+    const old=db.prepare("SELECT * FROM characters WHERE user_id=?").get(userId);
     if(!old) throw new Error("請先建立角色");
     if(old.last_event_day>=day) {
       db.exec("COMMIT");
@@ -77,7 +76,9 @@ export function settleDailyIllnessEvent(db,userId,day,now=Date.now(),random=Math
     }
     const result=rollOriginalIllnessEvent(random);
     const bonusItemName=EVENT_BONUS_ITEMS[result.originalId];
-    const bonusItem=bonusItemName?findEventBonusItem(db,userId,bonusItemName):null;
+    const eventCanUseDayItem=[16,23].includes(result.originalId);
+    const bonusItem=bonusItemName?findEventBonusItem(db,userId,bonusItemName,
+      {allowDay:eventCanUseDayItem,now}):null;
     const requiredNames=EVENT_REQUIRED_SETS[result.originalId];
     const requiredItems=requiredNames?.map(name=>findEventBonusItem(db,userId,name))??null;
     const completeSet=requiredItems?.every(Boolean)?requiredItems:null;
@@ -92,6 +93,11 @@ export function settleDailyIllnessEvent(db,userId,day,now=Date.now(),random=Math
         throw new Error("原版事件道具加成與持有資料不一致");
       effect.effects.item=consumeEventBonusItem(db,userId,bonusItem);
     }
+    if(effect?.extraItemUseName){
+      // 第 16 號原作會先消耗一次攝影機，再試著額外消耗一件；可能用盡或轉用下一件。
+      const extra=findEventBonusItem(db,userId,effect.extraItemUseName,{allowDay:true,now});
+      if(extra)effect.effects.extraItem=consumeEventBonusItem(db,userId,extra);
+    }
     if(effect?.usedItemNames){
       if(!completeSet||effect.usedItemNames.length!==completeSet.length||
           effect.usedItemNames.some((name,i)=>name!==completeSet[i].name))
@@ -101,7 +107,7 @@ export function settleDailyIllnessEvent(db,userId,day,now=Date.now(),random=Math
     db.prepare("UPDATE characters SET last_event_day=? WHERE user_id=?")
       .run(day,userId);
     if(effect){
-      const allowed=["health_index","money","weight","bmi","stats_json",
+      const allowed=["health_index","money","bank","town_id","weight","bmi","stats_json",
         "body_energy","brain_energy","job_experience","recovered_at"];
       // 身體／頭腦能量變動以當下重新起算每十秒的恢復計時。
       if(effect.changes.body_energy!==undefined ||
@@ -112,6 +118,11 @@ export function settleDailyIllnessEvent(db,userId,day,now=Date.now(),random=Math
       if(fields.length){
         db.prepare("UPDATE characters SET "+fields.map(([key])=>key+"=?").join(",")+
           " WHERE user_id=?").run(...fields.map(([,value])=>value),userId);
+      }
+      if(effect.changes.bank!==undefined){
+        const loss=old.bank-effect.changes.bank;
+        if(!Number.isSafeInteger(loss)||loss<0)throw new Error("事件銀行扣款不正確");
+        if(loss>0)recordBankEntry(db,userId,"ordinary","空屋竊盜",loss,0,effect.changes.bank,now);
       }
       db.prepare(
         "INSERT INTO character_events(user_id,day,event_key,original_id,old_health_index,new_health_index,created_at,description,effects_json) VALUES(?,?,?,?,?,?,?,?,?)"
@@ -146,6 +157,8 @@ export function listCharacterEvents(db,userId,limit=15) {
         row.event_key==="vendingChange"?"自動販賣機找零":
         row.event_key==="heartbreakWeightLoss"?"失戀消瘦":
         row.event_key==="kindFeeling"?"溫柔心情":
+        row.event_key==="bankBurglary"?"銀行存款竊盜":
+        row.event_key==="ufoMembership"?"會員卡抽獎或 UFO 綁架":
         row.event_key==="earthquakeInsurance"?"地震與資產運用":
         row.event_key==="gremlin"?"小妖精惡作劇":
         row.event_key==="collectionQuest"?"收藏品檢查":
