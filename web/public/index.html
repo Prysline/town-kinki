@@ -97,10 +97,22 @@
       </section>
       </div>
     </div>
-    <div id="game" class="layout" hidden>
-      <div class="content">
-        <section class="card town-main" id="town-panel">
+
+    <div id="game" class="layout game-shell" hidden>
+      <div class="game-overview">
+        <div class="content game-map-column">
+          <section class="card town-main" id="town-panel">
           <div class="heading"><div><div class="eyebrow">城鎮</div><h2>探索附近地區</h2></div><span class="muted">原版 12×16 街區</span></div>
+          
+          
+          <div class="towns" id="towns"></div>
+          <p class="small" id="map-source"></p>
+          <details class="explain"><summary>地圖操作說明</summary><p class="small">點擊已配置的建築圖示可開啟已支援設施；尚未移植的設施只顯示說明，不會產生虛構操作。</p></details>
+          
+          <div class="map-scroll" tabindex="0" aria-label="城鎮街區地圖，可水平捲動">
+            <div id="town-map" class="town-map" role="grid" aria-label="12 列 16 欄街區"></div>
+          </div>
+          <p class="small" id="map-selection" role="status"></p>
           <nav id="facility-shortcuts" class="town-shortcuts" aria-label="城鎮常用操作">
             <button type="button" id="home-work" data-action="work"><img src="/legacy-assets/button/go_work.png" alt="">工作</button>
             <button type="button" data-facility="inventory-panel"><img src="/legacy-assets/button/item.png" alt="">物品</button>
@@ -111,10 +123,6 @@
             <button type="button" data-facility="school-panel"><img src="/legacy-assets/school.gif" alt="">學校</button>
             <button type="button" data-facility="gym-panel"><img src="/legacy-assets/gym.gif" alt="">健身房</button>
           </nav>
-          <div class="towns" id="towns"></div>
-          <h3>街區地圖</h3>
-          <p class="small" id="map-source"></p>
-          <p class="small">點擊已配置的建築圖示可開啟已支援設施；尚未移植的設施只顯示說明，不會產生虛構操作。</p>
           <div class="map-editor" id="map-editor" hidden>
             <label class="map-editor-switch">
               <input type="checkbox" id="map-edit-toggle"> 開啟單機街區編輯模式
@@ -123,18 +131,63 @@
             <select id="map-palette" disabled></select>
             <p class="small">啟用後，點選地圖格子即可儲存選定設施。修改只寫入 Web 資料庫，不會覆蓋原版 CGI。</p>
           </div>
-          <div class="map-scroll" tabindex="0" aria-label="城鎮街區地圖，可水平捲動">
-            <div id="town-map" class="town-map" role="grid" aria-label="12 列 16 欄街區"></div>
-          </div>
-          <p class="small" id="map-selection" role="status"></p>
-          <h3>同城居民</h3><p class="small" id="residents"></p>
+          <div class="residents-line"><strong>同城居民</strong><p class="small" id="residents"></p></div>
         </section>
+        </div>
+        <aside class="sidebar game-status-column" aria-label="居民摘要">
+          <section class="card player-summary" id="player-summary">
+          <div class="eyebrow">居民資料</div><h2 id="character-name"></h2>
+          <dl class="stats status-main">
+            <div><dt>所在地</dt><dd id="current-town"></dd></div>
+            <div><dt>現金</dt><dd id="money"></dd></div>
+            <div><dt>銀行存款</dt><dd id="bank"></dd></div>
+            <div><dt>身體能量</dt><dd id="body-energy"></dd></div>
+            <div><dt>頭腦能量</dt><dd id="brain-energy"></dd></div>
+            <div><dt>目前職業</dt><dd id="current-job"></dd></div>
+          </dl>
+          <details class="status-details"><summary>更多角色資訊</summary><dl class="stats status-extra">
+            <div><dt>工作次數</dt><dd id="work-count"></dd></div>
+            <div><dt>目前職業經驗</dt><dd id="job-experience"></dd></div>
+            <div><dt>目前職業等級</dt><dd id="job-level"></dd></div>
+            <div><dt>精通職業</dt><dd id="mastered-job"></dd></div>
+            <div><dt>身高／體重</dt><dd id="measurements"></dd></div>
+            <div><dt>飽足度</dt><dd id="hunger-status"></dd></div>
+            <div><dt>體型</dt><dd id="physique-status"></dd></div>
+            <div><dt>目前狀態</dt><dd id="condition-status"></dd></div>
+            <div><dt>疾病</dt><dd id="health-status"></dd></div>
+          </dl></details>
+          <button id="event-alert" class="event-alert" type="button" hidden>限時事件：立即查看</button>
+          <div class="player-actions">
+            <button id="work" class="primary" type="button">前往工作</button>
+            <button id="refresh" class="secondary full" type="button">更新狀態</button>
+            <p id="cooldown" class="small"></p>
+          </div>
+        </section>
+        </aside>
+      </div>
+      <section class="facility-shell" aria-labelledby="facilities-title">
+        <div class="facility-topline">
+          <h2 id="facilities-title">設施操作</h2>
+          <span class="muted">選擇一項功能，不必捲過全部表單</span>
+        </div>
+        <div id="facility-tabs" class="facility-tabs" role="tablist" aria-label="城鎮設施分頁">
+          <button id="facility-tab-house" type="button" role="tab" data-pane="house" aria-controls="facility-pane-house" aria-selected="false" tabindex="-1">住宅</button>
+        <button id="facility-tab-dining" type="button" role="tab" data-pane="dining" aria-controls="facility-pane-dining" aria-selected="false" tabindex="-1">食堂</button>
+        <button id="facility-tab-training" type="button" role="tab" data-pane="training" aria-controls="facility-pane-training" aria-selected="false" tabindex="-1">學習</button>
+        <button id="facility-tab-jobs" type="button" role="tab" data-pane="jobs" aria-controls="facility-pane-jobs" aria-selected="true" tabindex="0">工作</button>
+        <button id="facility-tab-bank" type="button" role="tab" data-pane="bank" aria-controls="facility-pane-bank" aria-selected="false" tabindex="-1">銀行</button>
+        <button id="facility-tab-hospital" type="button" role="tab" data-pane="hospital" aria-controls="facility-pane-hospital" aria-selected="false" tabindex="-1">醫院</button>
+        <button id="facility-tab-inventory" type="button" role="tab" data-pane="inventory" aria-controls="facility-pane-inventory" aria-selected="false" tabindex="-1">物品</button>
+        <button id="facility-tab-events" type="button" role="tab" data-pane="events" aria-controls="facility-pane-events" aria-selected="false" tabindex="-1">事件</button>
+        <button id="facility-tab-stats" type="button" role="tab" data-pane="stats" aria-controls="facility-pane-stats" aria-selected="false" tabindex="-1">能力</button>
+        </div>
+      <div id="facility-pane-house" class="facility-pane" role="tabpanel" aria-labelledby="facility-tab-house" tabindex="0" hidden>
         <section class="card" id="housing-panel">
           <div class="heading">
             <div><div class="eyebrow">土地與住宅</div><h2>建築公司</h2></div>
             <span id="house-count" class="muted"></span>
           </div>
-          <p class="small">請在上方街區點選「空地」或「空地（二）」等建地，再選擇房屋外觀、室內等級和付款方式。建造費依原版城鎮地價與外觀、室內價格計算。</p>
+          <details class="explain"><summary>玩法與限制說明</summary><p class="small">請在上方街區點選「空地」或「空地（二）」等建地，再選擇房屋外觀、室內等級和付款方式。建造費依原版城鎮地價與外觀、室內價格計算。</p></details>
           <p class="small" id="house-target">尚未選擇建築位置。</p>
           <form id="house-form" class="housing-form">
             <label>房屋外觀
@@ -159,10 +212,13 @@
           <h3>我擁有的房屋</h3>
           <div id="owned-houses" class="owned-houses"></div>
           <p class="small">出售房屋時，依原版只退還該城鎮的土地地價，不退外觀與室內費用。出售後原空地會復原，可以再購買其他地點。本階段只支援一筆一般住宅；分店、公司、商店仍待移植。</p>
+          <details class="history-details">
+          <summary>查看住宅交易及改裝紀錄</summary>
           <h3>住宅交易紀錄</h3>
           <div id="house-events" class="house-events"></div>
           <h3>房屋改裝紀錄</h3>
           <div id="house-remodel-events" class="house-events"></div>
+        </details>
         </section>
         <section class="card" id="room-panel" hidden>
           <div class="heading">
@@ -181,12 +237,14 @@
             </form>
           </div>
         </section>
+      </div>
+      <div id="facility-pane-dining" class="facility-pane" role="tabpanel" aria-labelledby="facility-tab-dining" tabindex="0" hidden>
         <section class="card" id="dining-panel">
           <div class="heading">
             <div><div class="eyebrow">日常生活</div><h2>中央食堂</h2></div>
             <span class="muted" id="meal-status">每次用餐間隔 60 分鐘</span>
           </div>
-          <p class="small">依原版食堂餐點資料計算價格、能力提升與體重變化。實際收費為原始標價的三倍。菜單目前固定列示，原版每日抽選與共用庫存尚未移植。</p>
+          <details class="explain"><summary>玩法與限制說明</summary><p class="small">依原版食堂餐點資料計算價格、能力提升與體重變化。實際收費為原始標價的三倍。菜單目前固定列示，原版每日抽選與共用庫存尚未移植。</p></details>
           <label for="meal-menu">查看菜單來源</label>
           <select id="meal-menu">
             <option value="main">中央食堂</option>
@@ -194,12 +252,14 @@
           </select>
           <div id="meal-list" class="training-grid"></div>
         </section>
+      </div>
+      <div id="facility-pane-training" class="facility-pane" role="tabpanel" aria-labelledby="facility-tab-training" tabindex="0" hidden>
         <section class="card" id="school-panel">
           <div class="heading">
             <div><div class="eyebrow">能力培養</div><h2><img class="facility-icon" src="/legacy-assets/school.gif" alt="">學校</h2></div>
             <span id="school-status" class="muted">每日一堂課</span>
           </div>
-          <p class="small">沿用原始課程的能力增幅、費用和頭腦能量消耗；每天最多一堂。</p>
+          <details class="explain"><summary>玩法與限制說明</summary><p class="small">沿用原始課程的能力增幅、費用和頭腦能量消耗；每天最多一堂。</p></details>
           <div id="school-lessons" class="training-grid"></div>
         </section>
         <section class="card" id="gym-panel">
@@ -207,9 +267,11 @@
             <div><div class="eyebrow">能力培養</div><h2><img class="facility-icon" src="/legacy-assets/gym.gif" alt="">健身房</h2></div>
             <span id="gym-status" class="muted">等待狀態</span>
           </div>
-          <p class="small">沿用原始訓練項目、能力增幅、費用和體力消耗。時間間隔暫依原始資料欄位計算。</p>
+          <details class="explain"><summary>玩法與限制說明</summary><p class="small">沿用原始訓練項目、能力增幅、費用和體力消耗。時間間隔暫依原始資料欄位計算。</p></details>
           <div id="gym-lessons" class="training-grid"></div>
         </section>
+      </div>
+      <div id="facility-pane-jobs" class="facility-pane" role="tabpanel" aria-labelledby="facility-tab-jobs" tabindex="0">
         <section class="card" id="jobs-panel">
           <div class="heading"><div><div class="eyebrow">職業介紹所</div><h2>選擇工作</h2></div><span id="job-count" class="muted"></span></div>
           <div class="filters">
@@ -219,82 +281,13 @@
             <select id="job-filter"><option value="available">目前可選</option><option value="all">全部職業</option></select>
           </div>
           <div id="jobs" class="jobs"></div>
-          <p class="small">未翻譯的職業會暫時顯示原始日文。職業經驗與精通、用餐飽足度與體型對工作狀態的影響已接入；疾病治療與事件仍待移植。</p>
+          <details class="explain"><summary>玩法與限制說明</summary><p class="small">未翻譯的職業會暫時顯示原始日文。職業經驗與精通、用餐飽足度與體型對工作狀態的影響已接入；疾病治療與事件仍待移植。</p></details>
         </section>
       </div>
-      <aside class="sidebar">
-        <section class="card">
-          <div class="eyebrow">居民資料</div><h2 id="character-name"></h2>
-          <dl class="stats">
-            <div><dt>所在地</dt><dd id="current-town"></dd></div>
-            <div><dt>現金</dt><dd id="money"></dd></div>
-            <div><dt>銀行存款</dt><dd id="bank"></dd></div>
-            <div><dt>身體能量</dt><dd id="body-energy"></dd></div>
-            <div><dt>頭腦能量</dt><dd id="brain-energy"></dd></div>
-            <div><dt>目前職業</dt><dd id="current-job"></dd></div>
-            <div><dt>工作次數</dt><dd id="work-count"></dd></div>
-            <div><dt>目前職業經驗</dt><dd id="job-experience"></dd></div>
-            <div><dt>目前職業等級</dt><dd id="job-level"></dd></div>
-            <div><dt>精通職業</dt><dd id="mastered-job"></dd></div>
-            <div><dt>身高／體重</dt><dd id="measurements"></dd></div>
-            <div><dt>飽足度</dt><dd id="hunger-status"></dd></div>
-            <div><dt>體型</dt><dd id="physique-status"></dd></div>
-            <div><dt>目前狀態</dt><dd id="condition-status"></dd></div>
-            <div><dt>疾病</dt><dd id="health-status"></dd></div>
-          </dl>
-          <button id="work" class="primary" type="button">前往工作</button>
-          <p id="cooldown" class="small"></p>
-          <button id="refresh" class="secondary full" type="button">更新狀態</button>
-        </section>
-        <section class="card" id="hospital-panel">
-          <div class="eyebrow">健康管理</div>
-          <h3>醫院</h3>
-          <p id="hospital-diagnosis" class="small"></p>
-          <p id="hospital-cost" class="small"></p>
-          <button id="hospital-treat" type="button">接受治療</button>
-          <p class="small">治療會將疾病指數恢復為 50。有效的健康保險可將醫療費降為三分之一，折抵金額由伺服器依持有物判定。</p>
-        </section>
-        <section class="card" id="inventory-panel">
-          <div class="eyebrow">持有物</div>
-          <h3>健康保險與個人物品</h3>
-          <p id="insurance-status" class="small"></p>
-          <p class="small">原始「日用品／健康保険」標價 10,000 元，有效 30 天。Web 版暫用原始基準價直接購買，正式百貨、每日上架、玩家商店價格與庫存仍未移植。</p>
-          <form id="insurance-buy-form">
-            <label>購買份數
-              <select id="insurance-quantity" name="quantity">
-                <option value="1">1 份</option>
-                <option value="2">2 份</option>
-                <option value="3">3 份</option>
-                <option value="4">4 份</option>
-                <option value="5">5 份</option>
-              </select>
-            </label>
-            <p id="insurance-quote" class="small"></p>
-            <button type="submit" id="insurance-buy">購買健康保險</button>
-          </form>
-          <h4>近期購買紀錄</h4>
-          <div id="insurance-purchases"></div>
-          <h4>原版物品存檔與消耗品</h4>
-          <p class="small">從舊版 mono.cgi 匯入的物品中，已支援的「回」耐久消耗品可依原版能力與使用間隔操作；未支援的特殊效果、裝備、隨機物品及禮物仍只提供唯讀封存。完整商店及一般道具購買尚未移植。</p>
-          <div id="legacy-inventory-list"></div>
-          <h4>最近的道具使用紀錄</h4>
-          <div id="legacy-item-use-history"></div>
-        </section>
-        <section class="card" id="event-panel">
-          <div class="eyebrow">日常生活</div>
-          <h3>最近的隨機事件</h3>
-          <p class="small">沿用原版三分之一機率抽選，再從 44 種事件中挑選，目前已實作 37 種。Web 版每天最多抽選一次。</p>
-          <p class="small" id="event-coupon-count">Web 事件所得優惠券：0 張（兌換所尚未移植）</p>
-          <p class="small" id="event-kpoint">Web K 點數：0</p>
-          <div id="cockroach-challenge" hidden>
-            <p id="cockroach-remaining" role="status">蟑螂出現！</p>
-            <button type="button" id="cockroach-claim">拍打蟑螂（20 秒內）</button>
-          </div>
-          <div id="health-event-history" class="health-event-history"></div>
-        </section>
+      <div id="facility-pane-bank" class="facility-pane" role="tabpanel" aria-labelledby="facility-tab-bank" tabindex="0" hidden>
         <section class="card" id="bank-panel">
           <h3>銀行</h3>
-          <p class="small">普通存款每日利息 0.5%，超級定期每日利息 1%。Web 版於每日第一次讀取狀態時計息一次，不會補發未讀取期間的多日利息。</p>
+          <details class="explain"><summary>玩法與限制說明</summary><p class="small">普通存款每日利息 0.5%，超級定期每日利息 1%。Web 版於每日第一次讀取狀態時計息一次，不會補發未讀取期間的多日利息。</p></details>
           <p class="small" id="bank-interest-day"></p>
           <form id="bank-form">
             <label>普通帳戶金額（元）<input name="amount" type="number" min="1" step="1" required></label>
@@ -303,6 +296,8 @@
               <button type="submit" name="action" value="withdraw" class="secondary">提款</button>
             </div>
           </form>
+          <details class="bank-advanced">
+          <summary>轉帳、定期存款、貸款及交易明細</summary>
           <div class="bank-transfer" id="bank-transfer-panel" hidden>
             <h3>轉帳給其他玩家</h3>
             <p class="small">從普通存款轉入對方的普通存款。單筆與每日同一收款人的上限均為 1 兆元，超額會直接拒絕。收款人註冊未滿七天時，單筆不得達 100 萬元。</p>
@@ -353,11 +348,67 @@
             <p class="small">普通與定期合計保存最近 100 筆明細，較舊的紀錄會被移除。</p>
             <div id="bank-ledger-list"></div>
           </div>
+        </details>
         </section>
+      </div>
+      <div id="facility-pane-hospital" class="facility-pane" role="tabpanel" aria-labelledby="facility-tab-hospital" tabindex="0" hidden>
+        <section class="card" id="hospital-panel">
+          <div class="eyebrow">健康管理</div>
+          <h3>醫院</h3>
+          <p id="hospital-diagnosis" class="small"></p>
+          <p id="hospital-cost" class="small"></p>
+          <button id="hospital-treat" type="button">接受治療</button>
+          <details class="explain"><summary>玩法與限制說明</summary><p class="small">治療會將疾病指數恢復為 50。有效的健康保險可將醫療費降為三分之一，折抵金額由伺服器依持有物判定。</p></details>
+        </section>
+      </div>
+      <div id="facility-pane-inventory" class="facility-pane" role="tabpanel" aria-labelledby="facility-tab-inventory" tabindex="0" hidden>
+        <section class="card" id="inventory-panel">
+          <div class="eyebrow">持有物</div>
+          <h3>健康保險與個人物品</h3>
+          <p id="insurance-status" class="small"></p>
+          <details class="explain"><summary>玩法與限制說明</summary><p class="small">原始「日用品／健康保険」標價 10,000 元，有效 30 天。Web 版暫用原始基準價直接購買，正式百貨、每日上架、玩家商店價格與庫存仍未移植。</p></details>
+          <form id="insurance-buy-form">
+            <label>購買份數
+              <select id="insurance-quantity" name="quantity">
+                <option value="1">1 份</option>
+                <option value="2">2 份</option>
+                <option value="3">3 份</option>
+                <option value="4">4 份</option>
+                <option value="5">5 份</option>
+              </select>
+            </label>
+            <p id="insurance-quote" class="small"></p>
+            <button type="submit" id="insurance-buy">購買健康保險</button>
+          </form>
+          <h4>近期購買紀錄</h4>
+          <div id="insurance-purchases"></div>
+          <h4>原版物品存檔與消耗品</h4>
+          <p class="small">從舊版 mono.cgi 匯入的物品中，已支援的「回」耐久消耗品可依原版能力與使用間隔操作；未支援的特殊效果、裝備、隨機物品及禮物仍只提供唯讀封存。完整商店及一般道具購買尚未移植。</p>
+          <div id="legacy-inventory-list"></div>
+          <h4>最近的道具使用紀錄</h4>
+          <div id="legacy-item-use-history"></div>
+        </section>
+      </div>
+      <div id="facility-pane-events" class="facility-pane" role="tabpanel" aria-labelledby="facility-tab-events" tabindex="0" hidden>
+        <section class="card" id="event-panel">
+          <div class="eyebrow">日常生活</div>
+          <h3>最近的隨機事件</h3>
+          <details class="explain"><summary>玩法與限制說明</summary><p class="small">沿用原版三分之一機率抽選，再從 44 種事件中挑選，目前已實作 37 種。Web 版每天最多抽選一次。</p></details>
+          <p class="small" id="event-coupon-count">Web 事件所得優惠券：0 張（兌換所尚未移植）</p>
+          <p class="small" id="event-kpoint">Web K 點數：0</p>
+          <div id="cockroach-challenge" hidden>
+            <p id="cockroach-remaining" role="status">蟑螂出現！</p>
+            <button type="button" id="cockroach-claim">拍打蟑螂（20 秒內）</button>
+          </div>
+          <div id="health-event-history" class="health-event-history"></div>
+        </section>
+      </div>
+      <div id="facility-pane-stats" class="facility-pane" role="tabpanel" aria-labelledby="facility-tab-stats" tabindex="0" hidden>
         <section class="card" id="attributes-panel">
           <h3>能力值</h3><dl class="stats" id="attributes"></dl>
         </section>
-      </aside>
+      </div>
+      </section>
     </div>
   </main>
   <footer>本頁為移植中的測試版本，原始 CGI 程式及遊戲素材保留在原始儲存庫。</footer>
