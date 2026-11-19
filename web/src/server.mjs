@@ -15,7 +15,7 @@ import { parseHouseCatalog, initHousingTables, listHouses, publicHouseCatalog, b
 import { initRoomsTables, ROOM_TYPES, setRoomSlots, viewRoom, addRoomPost, deleteRoomPost } from "./rooms.mjs";
 import { parseLegacyMeals, eatMeal, deriveCondition, hungerStatus, physiqueStatus, MEAL_COOLDOWN_MS } from "./dining.mjs";
 import { healthStatus, settleDailyHealth, conditionWithIllness, getTreatmentQuote, treatAtHospital } from "./health.mjs";
-import { initCharacterEvents, settleDailyIllnessEvent, listCharacterEvents } from "./events.mjs";
+import { initCharacterEvents, settleDailyIllnessEvent, listCharacterEvents, getCouponBalance } from "./events.mjs";
 import { parseLegacyInsurance, initInventoryTables, inventoryOverview, hasActiveHealthInsurance, listInsurancePurchases, buyHealthInsurance } from "./inventory.mjs";
 import { listLegacyInventoryItems } from "./legacy-inventory.mjs";
 import { initLegacyItemUseTables, listLegacyItemActions, listLegacyItemUseHistory, useLegacyItem } from "./legacy-item-use.mjs";
@@ -243,6 +243,7 @@ function snapshot(user) {
       maxBodyEnergy(updated.stats),maxBrainEnergy(updated.stats),now),updated) : null,
     health: updated ? healthStatus(updated) : null,
     healthEvents: updated ? listCharacterEvents(db,user.id) : [],
+    couponBalance: updated ? getCouponBalance(db,user.id) : 0,
     hospital: updated ? getTreatmentQuote(updated,hasActiveHealthInsurance(db,user.id,insuranceItem,now)) : null,
     insurance: updated ? inventoryOverview(db,user.id,insuranceItem,now) : null,
     insurancePurchases: updated ? listInsurancePurchases(db,user.id) : [],

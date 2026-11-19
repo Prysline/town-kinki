@@ -14,7 +14,7 @@ const STAT_EVENTS = Object.freeze({
     positive:"對藝術產生興趣",negative:"在美術課睡著了"}
 });
 export const NON_ITEM_EVENT_IDS = Object.freeze([
-  1,2,3,5,6,7,8,9,10,11,12,13,14,16,17,18,19,20,21,22,23,24,25,26,27,29,31,32,33,39,41,42,43
+  1,2,3,5,6,7,8,9,10,11,12,13,14,16,17,18,19,20,21,22,23,24,25,26,27,29,30,31,32,33,39,41,42,43
 ]);
 
 function draw(random,n) {
@@ -62,6 +62,7 @@ export function resolveNonItemEvent(originalId,character,random=Math.random,bonu
   let usedItemName=null;
   let usedItemNames=null;
   let extraItemUseName=null;
+  let couponAward=null;
   function addMoney(delta) {
     const computed=changeMoney(character.money,delta);
     changes.money=computed.money;
@@ -393,6 +394,14 @@ export function resolveNonItemEvent(originalId,character,random=Math.random,bonu
       }
       break;
     }
+    case 30:{
+      // event.pl::event_happen：int(rand(5))+1 後呼叫 coupon_get 累加持有張數。
+      event.key="couponGift";event.title="獲得優惠券";
+      couponAward=draw(random,5);
+      effects.coupons=couponAward;
+      event.description="獲得優惠券 "+couponAward+" 張，已加入 Web 版優惠券餘額。";
+      break;
+    }
     case 31:{
       event.key="gremlin";event.title="小妖精惡作劇";
       if(bonusItem==="ミグ25"){
@@ -492,5 +501,5 @@ export function resolveNonItemEvent(originalId,character,random=Math.random,bonu
       break;
     }
   }
-  return {event,changes,effects,usedItemName,usedItemNames,extraItemUseName};
+  return {event,changes,effects,usedItemName,usedItemNames,extraItemUseName,couponAward};
 }

@@ -765,6 +765,7 @@ function renderDining() {
     "治療「" + (quote?.disease.name ?? "未知") + "」需支付現金 " +
       money(quote?.price??0) + "。"));
   el("hospital-treat").disabled=!quote || (state.character.money<quote.price);
+  text("event-coupon-count","Web 事件所得優惠券："+(state.couponBalance ?? 0)+" 張（兌換所尚未移植）");
   const events=el("health-event-history");
   events.replaceChildren();
   if (!(state.healthEvents?.length)) {
