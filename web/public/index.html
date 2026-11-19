@@ -176,6 +176,7 @@
         <aside class="sidebar game-status-column" aria-label="居民與能力資料">
           <div id="profile-view-tabs" class="profile-view-tabs" role="tablist" aria-label="原版角色資訊切換">
             <button type="button" id="profile-tab-status" role="tab" aria-controls="player-summary" aria-selected="true" tabindex="0" data-profile-view="status">狀態</button>
+            <button type="button" id="profile-tab-inventory" role="tab" aria-controls="inventory-panel" aria-selected="false" tabindex="-1" data-profile-view="inventory">物品</button>
             <button type="button" id="profile-tab-attributes" role="tab" aria-controls="attributes-panel" aria-selected="false" tabindex="-1" data-profile-view="attributes">能力值</button>
           </div>
           <section class="card player-summary" id="player-summary" role="tabpanel" aria-labelledby="profile-tab-status">
@@ -225,6 +226,32 @@
             <p class="small ability-caption">延續原版頭腦／身體／其他三組黃色能力條。長度僅比較目前能力的相對大小。</p>
             <div class="ability-groups" id="attributes"></div>
           </section>
+<section class="card inventory-panel" id="inventory-panel" role="tabpanel" aria-labelledby="profile-tab-inventory" hidden>
+          <div class="eyebrow">持有物</div>
+          <h3>健康保險與個人物品</h3>
+          <p id="insurance-status" class="small"></p>
+          <details class="explain"><summary>玩法與限制說明</summary><p class="small">原始「日用品／健康保険」標價 10,000 元，有效 30 天。Web 版暫用原始基準價直接購買，正式百貨、每日上架、玩家商店價格與庫存仍未移植。</p></details>
+          <form id="insurance-buy-form">
+            <label>購買份數
+              <select id="insurance-quantity" name="quantity">
+                <option value="1">1 份</option>
+                <option value="2">2 份</option>
+                <option value="3">3 份</option>
+                <option value="4">4 份</option>
+                <option value="5">5 份</option>
+              </select>
+            </label>
+            <p id="insurance-quote" class="small"></p>
+            <button type="submit" id="insurance-buy">購買健康保險</button>
+          </form>
+          <h4>近期購買紀錄</h4>
+          <div id="insurance-purchases"></div>
+          <h4>原版物品存檔與消耗品</h4>
+          <p class="small">從舊版 mono.cgi 匯入的物品中，已支援的「回」耐久消耗品可依原版能力與使用間隔操作；未支援的特殊效果、裝備、隨機物品及禮物仍只提供唯讀封存。完整商店及一般道具購買尚未移植。</p>
+          <div id="legacy-inventory-list"></div>
+          <h4>最近的道具使用紀錄</h4>
+          <div id="legacy-item-use-history"></div>
+        </section>
         </aside>
       </div>
       <section class="facility-shell" aria-labelledby="facilities-title">
@@ -239,7 +266,6 @@
         <button id="facility-tab-jobs" type="button" role="tab" data-pane="jobs" aria-controls="facility-pane-jobs" aria-selected="true" tabindex="0">工作</button>
         <button id="facility-tab-bank" type="button" role="tab" data-pane="bank" aria-controls="facility-pane-bank" aria-selected="false" tabindex="-1">銀行</button>
         <button id="facility-tab-hospital" type="button" role="tab" data-pane="hospital" aria-controls="facility-pane-hospital" aria-selected="false" tabindex="-1">醫院</button>
-        <button id="facility-tab-inventory" type="button" role="tab" data-pane="inventory" aria-controls="facility-pane-inventory" aria-selected="false" tabindex="-1">物品</button>
         <button id="facility-tab-events" type="button" role="tab" data-pane="events" aria-controls="facility-pane-events" aria-selected="false" tabindex="-1">事件</button>
 
         </div>
@@ -421,34 +447,6 @@
           <p id="hospital-cost" class="small"></p>
           <button id="hospital-treat" type="button">接受治療</button>
           <details class="explain"><summary>玩法與限制說明</summary><p class="small">治療會將疾病指數恢復為 50。有效的健康保險可將醫療費降為三分之一，折抵金額由伺服器依持有物判定。</p></details>
-        </section>
-      </div>
-      <div id="facility-pane-inventory" class="facility-pane" role="tabpanel" aria-labelledby="facility-tab-inventory" tabindex="0" hidden>
-        <section class="card" id="inventory-panel">
-          <div class="eyebrow">持有物</div>
-          <h3>健康保險與個人物品</h3>
-          <p id="insurance-status" class="small"></p>
-          <details class="explain"><summary>玩法與限制說明</summary><p class="small">原始「日用品／健康保険」標價 10,000 元，有效 30 天。Web 版暫用原始基準價直接購買，正式百貨、每日上架、玩家商店價格與庫存仍未移植。</p></details>
-          <form id="insurance-buy-form">
-            <label>購買份數
-              <select id="insurance-quantity" name="quantity">
-                <option value="1">1 份</option>
-                <option value="2">2 份</option>
-                <option value="3">3 份</option>
-                <option value="4">4 份</option>
-                <option value="5">5 份</option>
-              </select>
-            </label>
-            <p id="insurance-quote" class="small"></p>
-            <button type="submit" id="insurance-buy">購買健康保險</button>
-          </form>
-          <h4>近期購買紀錄</h4>
-          <div id="insurance-purchases"></div>
-          <h4>原版物品存檔與消耗品</h4>
-          <p class="small">從舊版 mono.cgi 匯入的物品中，已支援的「回」耐久消耗品可依原版能力與使用間隔操作；未支援的特殊效果、裝備、隨機物品及禮物仍只提供唯讀封存。完整商店及一般道具購買尚未移植。</p>
-          <div id="legacy-inventory-list"></div>
-          <h4>最近的道具使用紀錄</h4>
-          <div id="legacy-item-use-history"></div>
         </section>
       </div>
       <div id="facility-pane-events" class="facility-pane" role="tabpanel" aria-labelledby="facility-tab-events" tabindex="0" hidden>
