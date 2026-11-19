@@ -76,10 +76,9 @@ const paneMap={
   bank:["bank-panel"],
   hospital:["hospital-panel"],
   inventory:["inventory-panel"],
-  events:["event-panel"],
-  stats:["attributes-panel"]
+  events:["event-panel"]
 };
-test("高密度主畫面：地圖摘要與九組可存取設施分頁，保留全部現有操作元件",()=>{
+test("高密度主畫面：地圖摘要與八組可存取設施分頁，保留全部現有操作元件",()=>{
   const main=html.slice(html.indexOf('id="game"'));
   assert.ok(main.indexOf('id="town-panel"')<main.indexOf('id="player-summary"'));
   assert.ok(main.indexOf('id="player-summary"')<main.indexOf('id="facility-tabs"'));
@@ -118,7 +117,7 @@ test("分頁導覽保留原版地圖與角色內容，鍵盤操作及 20 秒蟑�
   assert.match(script,/const pane=target\.closest\("\.facility-pane"\)/);
   assert.match(script,/selectFacilityTab\("house"\)/);
   assert.match(script,/el\("event-alert"\)\.addEventListener\("click"/);
-  assert.match(script,/selectFacilityTab\("events",\{scroll:true\}\)/);
+  assert.match(script,/el\("event-popup-claim"\)\.addEventListener\("click"/);
   assert.match(css,/\.game-shell\.layout\{display:block\}/);
   assert.match(css,/\.game-overview\{display:grid;grid-template-columns:minmax\(0,1fr\) 290px/);
   assert.match(css,/\.facility-tabs\{display:flex;gap:2px;overflow-x:auto/);
@@ -176,4 +175,72 @@ test("單人角色管理：只在返回單人首頁時顯示刪除入口，必�
   assert.match(script,/sessionStorage\.removeItem\("town-solo-at-home"\)/);
   assert.match(css,/#solo-lobby \.solo-delete-box/);
   assert.match(css,/#solo-lobby \.danger-action/);
+});
+
+
+const originalTop=readFileSync(new URL("../../top.pl",import.meta.url),"latin1");
+const originalTown=readFileSync(new URL("../../town_maker.cgi",import.meta.url),"latin1");
+test("原版依據：事件在右上角獨立通知、能力值在右側狀態／物品並列切換",()=>{
+  assert.match(originalTop,/position:absolute;top:0;z-index:1;right:10/);
+  assert.match(originalTop,/event_close\(suuji\)/);
+  assert.match(originalTop,/event_open\(suuji\)/);
+  assert.match(originalTown,/id="nouryoku"/);
+  assert.match(originalTown,/menu\('nouryoku','stetas'\)/);
+  assert.match(originalTown,/menu\('nouryoku','item'\)/);
+  assert.match(originalTown,/\$nouryoku_bar\[6\]/);
+  assert.match(originalTown,/\$nouryoku_bar\[13\]/);
+  assert.match(originalTown,/\$nouryoku_bar\[20\]/);
+});
+test("能力值位於右側角色資訊切換而非全寬設施分頁，三組黃條不會拉長",()=>{
+  const aside=html.indexOf('class="sidebar game-status-column"');
+  const endAside=html.indexOf("</aside>",aside);
+  const right=html.slice(aside,endAside);
+  assert.ok(aside>0&&endAside>aside);
+  assert.match(right,/id="profile-view-tabs" class="profile-view-tabs" role="tablist"/);
+  assert.match(right,/id="profile-tab-status"[^>]*role="tab"/);
+  assert.match(right,/id="profile-tab-attributes"[^>]*role="tab"/);
+  assert.match(right,/id="attributes-panel"[^>]*role="tabpanel"[^>]*hidden/);
+  assert.match(right,/id="attributes" class="ability-groups"/);
+  assert.equal((html.match(/id="attributes-panel"/g)||[]).length,1);
+  assert.doesNotMatch(html,/id="facility-pane-stats"/);
+  assert.doesNotMatch(html,/id="facility-tab-stats"/);
+  assert.match(script,/const ABILITY_GROUPS =/);
+  assert.match(script,/label:"頭腦"/);
+  assert.match(script,/label:"身體"/);
+  assert.match(script,/label:"其他"/);
+  assert.match(script,/function renderAbilities\(stats\)/);
+  assert.match(script,/renderAbilities\(c\.stats\)/);
+  assert.match(script,/function selectProfileView\(/);
+  assert.match(script,/el\("profile-view-tabs"\)\.addEventListener\("keydown"/);
+  assert.match(css,/\.attributes-panel\{width:100%;min-width:0;overflow:hidden\}/);
+  assert.match(css,/\.ability-groups\{display:grid;grid-template-columns:minmax\(0,1fr\)/);
+  assert.match(css,/\.ability-track>span\{display:block;height:100%;background:#edc443/);
+});
+test("原版右上角事件通知：可關閉，限時事件直接拍打，不再強制捲動整頁",()=>{
+  assert.match(html,/id="event-popup"[^>]*hidden/);
+  assert.match(html,/id="event-popup-close"/);
+  assert.match(html,/id="event-popup-title"/);
+  assert.match(html,/id="event-popup-body"/);
+  assert.match(html,/id="event-popup-claim"/);
+  assert.match(script,/function dismissEventPopup\(/);
+  assert.match(script,/el\("event-popup-close"\)\.addEventListener\("click",dismissEventPopup\)/);
+  assert.match(script,/action\("events\/cockroach\/claim",\{\}\)/);
+  assert.match(script,/event\?\.day===state\?\.character\?\.lastEventDay/);
+  assert.doesNotMatch(script,/selectFacilityTab\("events",\{scroll:true\}\)/);
+  assert.match(css,/\.event-popup\{position:fixed;z-index:22;top:4\.8rem/);
+});
+test("往下捲過地圖後顯示固定角色能量，返回上方、登出或刪角則隱藏",()=>{
+  assert.match(html,/id="compact-status" class="compact-status" hidden/);
+  for(const id of ["compact-character-name","compact-body-energy","compact-brain-energy",
+    "compact-body-bar","compact-brain-bar"])assert.match(html,new RegExp('id="'+id+'"'));
+  assert.match(script,/function updateCompactVisibility\(\)/);
+  assert.match(script,/facility\.getBoundingClientRect\(\)\.top<85/);
+  assert.match(script,/Boolean\(state\?\.character\)&&!el\("game"\)\.hidden/);
+  assert.match(script,/window\.addEventListener\("scroll",updateCompactVisibility,\{passive:true\}\)/);
+  assert.match(script,/window\.addEventListener\("resize",updateCompactVisibility\)/);
+  assert.match(script,/renderCompactStatus\(c\)/);
+  assert.match(script,/document\.body\.classList\.toggle\("compact-status-active",show\)/);
+  assert.match(css,/\.compact-status\{position:fixed;left:50%;top:0/);
+  assert.match(css,/body\.compact-status-active \.game-shell \.facility-tabs\{top:54px\}/);
+  assert.match(css,/@media\(max-width:600px\)/);
 });
