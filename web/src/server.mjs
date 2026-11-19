@@ -16,6 +16,7 @@ import { initRoomsTables, ROOM_TYPES, setRoomSlots, viewRoom, addRoomPost, delet
 import { parseLegacyMeals, eatMeal, deriveCondition, hungerStatus, physiqueStatus, MEAL_COOLDOWN_MS } from "./dining.mjs";
 import { healthStatus, settleDailyHealth, conditionWithIllness, getTreatmentQuote, treatAtHospital } from "./health.mjs";
 import { initCharacterEvents, settleDailyIllnessEvent, listCharacterEvents, getCouponBalance } from "./events.mjs";
+import { getCockroachChallenge,claimCockroach } from "./event-cockroach.mjs";
 import { parseLegacyInsurance, initInventoryTables, inventoryOverview, hasActiveHealthInsurance, listInsurancePurchases, buyHealthInsurance } from "./inventory.mjs";
 import { listLegacyInventoryItems } from "./legacy-inventory.mjs";
 import { initLegacyItemUseTables, listLegacyItemActions, listLegacyItemUseHistory, useLegacyItem } from "./legacy-item-use.mjs";
@@ -55,7 +56,8 @@ for (const [column, definition] of [
   ["last_meal_at", "INTEGER NOT NULL DEFAULT 0"],
   ["health_index", "INTEGER NOT NULL DEFAULT 50"],
   ["last_health_day", "TEXT NOT NULL DEFAULT ''"],
-  ["last_event_day", "TEXT NOT NULL DEFAULT ''"]
+  ["last_event_day", "TEXT NOT NULL DEFAULT ''"],
+  ["kpoint", "INTEGER NOT NULL DEFAULT 0"]
 ]) {
   const currentColumns = db.prepare("PRAGMA table_info(characters)").all();
   if (!currentColumns.some(info => info.name === column)) {
@@ -149,7 +151,8 @@ function characterFromRow(row) {
     lastSchoolDay: row.last_school_day, lastGymAt: row.last_gym_at,
     gymReadyAt: row.gym_ready_at, lastMealAt: row.last_meal_at,
     healthIndex: row.health_index, lastHealthDay: row.last_health_day,
-    lastEventDay: row.last_event_day
+    lastEventDay: row.last_event_day,
+    kpoint: row.kpoint
   };
 }
 
@@ -244,6 +247,7 @@ function snapshot(user) {
     health: updated ? healthStatus(updated) : null,
     healthEvents: updated ? listCharacterEvents(db,user.id) : [],
     couponBalance: updated ? getCouponBalance(db,user.id) : 0,
+    cockroachChallenge: updated ? getCockroachChallenge(db,user.id,now) : null,
     hospital: updated ? getTreatmentQuote(updated,hasActiveHealthInsurance(db,user.id,insuranceItem,now)) : null,
     insurance: updated ? inventoryOverview(db,user.id,insuranceItem,now) : null,
     insurancePurchases: updated ? listInsurancePurchases(db,user.id) : [],
@@ -420,6 +424,13 @@ async function handle(req, res) {
       catch (error) { throw new HttpError(400, error.message); }
       addCharacter(user.id, character);
       return sendJson(res, 200, snapshot(user));
+    }
+
+    if (path === "/api/events/cockroach/claim") {
+      let result;
+      try { result=claimCockroach(db,user.id,Date.now()); }
+      catch(error){throw new HttpError(400,error.message);}
+      return sendJson(res,200,{...snapshot(user),cockroachResult:result});
     }
 
     if (path === "/api/job") {

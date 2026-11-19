@@ -14,7 +14,7 @@ const STAT_EVENTS = Object.freeze({
     positive:"對藝術產生興趣",negative:"在美術課睡著了"}
 });
 export const NON_ITEM_EVENT_IDS = Object.freeze([
-  1,2,3,5,6,7,8,9,10,11,12,13,14,16,17,18,19,20,21,22,23,24,25,26,27,29,30,31,32,33,39,41,42,43
+  1,2,3,5,6,7,8,9,10,11,12,13,14,16,17,18,19,20,21,22,23,24,25,26,27,29,30,31,32,33,39,41,42,43,44
 ]);
 
 function draw(random,n) {
@@ -63,6 +63,7 @@ export function resolveNonItemEvent(originalId,character,random=Math.random,bonu
   let usedItemNames=null;
   let extraItemUseName=null;
   let couponAward=null;
+  let cockroachChallenge=false;
   function addMoney(delta) {
     const computed=changeMoney(character.money,delta);
     changes.money=computed.money;
@@ -500,6 +501,14 @@ export function resolveNonItemEvent(originalId,character,random=Math.random,bonu
       event.description="失戀後吃不下東西，體重減少 "+loss+" 公斤。";
       break;
     }
+    case 44:{
+      // 原版隨機事件本身只建立 20 秒蟑螂挑戰，命中期限後才擲獎金。
+      event.key="cockroach";event.title="蟑螂挑戰";
+      event.description="蟑螂出現！請在 20 秒內按下拍打按鈕，逾時無獎勵。";
+      cockroachChallenge=true;
+      effects.cockroach="pending";
+      break;
+    }
   }
-  return {event,changes,effects,usedItemName,usedItemNames,extraItemUseName,couponAward};
+  return {event,changes,effects,usedItemName,usedItemNames,extraItemUseName,couponAward,cockroachChallenge};
 }
