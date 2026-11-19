@@ -1,6 +1,8 @@
-// 原始 event.pl 第 44 號：20 秒內拍死蟑螂可獲得 1～20000 元、K 點數 +3、外貌 -3。
+// 原始 event.pl 的第 34 號（無聖誕人偶且現金>0）與第 44 號共用 20 秒蟑螂。
+// 20 秒內拍死蟑螂可獲得 1～20000 元、K 點數 +3、外貌 -3。
 // Web 採伺服器時間與每帳號獨立的 SQLite 挑戰，不接受前端回傳開始時間或角色 ID。
 export const COCKROACH_WINDOW_MS=20000;
+export const COCKROACH_EVENT_IDS=Object.freeze([34,44]);
 function validateUser(userId){
   if(!Number.isSafeInteger(userId)||userId<1)throw new Error("無效的角色帳號");
 }
@@ -58,7 +60,7 @@ export function getCockroachChallenge(db,userId,now=Date.now()){
 }
 function updateHistory(db,eventId,userId,description,effects){
   const result=db.prepare(
-    "UPDATE character_events SET description=?,effects_json=? WHERE id=? AND user_id=? AND original_id=44"
+    "UPDATE character_events SET description=?,effects_json=? WHERE id=? AND user_id=? AND original_id IN (34,44)"
   ).run(description,JSON.stringify(effects),eventId,userId);
   if(result.changes!==1)throw new Error("蟑螂事件歷史不正確");
 }
@@ -73,7 +75,7 @@ export function claimCockroach(db,userId,now=Date.now(),random=Math.random){
       "WHERE c.user_id=? AND c.status='pending'",
       "ORDER BY c.event_id DESC LIMIT 1"
     ].join(" ")).get(userId);
-    if(!row||row.original_id!==44)throw new Error("沒有待處理的蟑螂事件");
+    if(!row||!COCKROACH_EVENT_IDS.includes(row.original_id))throw new Error("沒有待處理的蟑螂事件");
     if(!Number.isSafeInteger(row.started_at)||!Number.isSafeInteger(row.expires_at)||
         row.expires_at-row.started_at!==COCKROACH_WINDOW_MS)
       throw new Error("蟑螂事件計時資料不正確");
