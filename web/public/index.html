@@ -32,6 +32,11 @@
         <p class="small">預覽不提供編輯或遊戲操作；未取得原版街區配置時，保留空白格而不虛構建築。</p>
       </section>
       <div class="landing-actions">
+      <section id="solo-lobby" class="intro card" hidden>
+        <h2>返回城鎮</h2>
+        <p>單人模式的角色已儲存在本機遊戲資料庫。離開遊戲只會返回這個首頁，不會刪除進度；單人模式不使用帳號登入。</p>
+        <button id="solo-continue" type="button">繼續遊戲</button>
+      </section>
       <section id="auth" class="intro card" hidden>
         <h2>登入城鎮</h2>
         <p>多人模式可使用不同帳號建立角色，共享同一座城鎮。</p>
@@ -157,6 +162,20 @@
             <div><dt>疾病</dt><dd id="health-status"></dd></div>
           </dl></details>
           <button id="event-alert" class="event-alert" type="button" hidden>限時事件：立即查看</button>
+          <div id="solo-time-panel" class="solo-time-panel" hidden>
+            <strong>單人模式 · 時間快轉</strong>
+            <p class="small" id="solo-game-time" aria-live="off">讀取遊戲時間中</p>
+            <div class="solo-time-buttons" aria-label="單機時間快轉">
+              <button type="button" class="secondary" data-advance="5m">＋5 分鐘</button>
+              <button type="button" class="secondary" data-advance="30m">＋30 分鐘</button>
+              <button type="button" class="secondary" data-advance="1h">＋1 小時</button>
+              <button type="button" class="secondary" data-advance="1d">＋1 天</button>
+            </div>
+            <p class="small" id="solo-wait-hints"></p>
+            <details class="explain"><summary>快轉規則</summary>
+              <p class="small">工作需等 5 分鐘、餐點 60 分鐘；健身房依課程，學校每天一次。快轉會真的推進遊戲判定、恢復能量及每日結算，不是只改畫面倒數。＋1 天為 24 小時，不會模擬每個跳過日的所有事件。限時事件期間不可快轉。</p>
+            </details>
+          </div>
           <div class="player-actions">
             <button id="work" class="primary" type="button">前往工作</button>
             <button id="refresh" class="secondary full" type="button">更新狀態</button>
