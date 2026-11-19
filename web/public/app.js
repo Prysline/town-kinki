@@ -75,9 +75,96 @@ function renderSoloTime() {
 let publicPreview=null;
 let previewLoading=false;
 // 方案 B：一次顯示一組設施。原本的表單留在 DOM，既有事件和資料更新不受影響。
-const FACILITY_TAB_NAMES = Object.freeze(["house","dining","training","jobs","bank","hospital","inventory","events","stats"]);
+const FACILITY_TAB_NAMES = Object.freeze(["house","dining","training","jobs","bank","hospital","inventory","events"]);
+const PROFILE_VIEWS = Object.freeze(["status","attributes"]);
+let activeProfileView="status";
+function selectProfileView(name,{focus=false}={}) {
+  if(!PROFILE_VIEWS.includes(name))return false;
+  activeProfileView=name;
+  for(const key of PROFILE_VIEWS){
+    const selected=key===name;
+    const tab=el("profile-tab-"+key);
+    tab.setAttribute("aria-selected",String(selected));
+    tab.tabIndex=selected?0:-1;
+    el(key==="status"?"player-summary":"attributes-panel").hidden=!selected;
+  }
+  if(focus)el("profile-tab-"+name).focus({preventScroll:true});
+  return true;
+}
+
+const ABILITY_GROUPS = [
+  {label:"頭腦", keys:["kokugo","suugaku","rika","syakai","eigo","ongaku","bijutu"]},
+  {label:"身體", keys:["looks","tairyoku","kenkou","speed","power","wanryoku","kyakuryoku"]},
+  {label:"其他", keys:["love","unique","etti"]}
+];
+function renderAbilities(stats){
+  const root=el("attributes");
+  root.replaceChildren();
+  // 原版為分組黃條。正規化到目前最高能力，固定在側欄寬度內，不再用整行 flex 撐開。
+  const maximum=Math.max(1,...Object.keys(labels).map(k=>Math.max(0,Number(stats[k])||0)));
+  for(const group of ABILITY_GROUPS){
+    const section=document.createElement("section");
+    section.className="ability-group";
+    const heading=document.createElement("h4");
+    heading.textContent=group.label;
+    section.append(heading);
+    const list=document.createElement("div");
+    list.className="ability-group-rows";
+    for(const key of group.keys){
+      const value=Number(stats[key])||0;
+      const row=document.createElement("div");
+      row.className="ability-row";
+      const line=document.createElement("div");
+      line.className="ability-row-line";
+      const label=document.createElement("span");
+      label.textContent=labels[key];
+      const amount=document.createElement("strong");
+      amount.textContent=String(value);
+      const track=document.createElement("div");
+      track.className="ability-track";
+      track.setAttribute("aria-hidden","true");
+      const fill=document.createElement("span");
+      fill.style.width=Math.min(100,Math.max(0,value)/maximum*100).toFixed(2)+"%";
+      track.append(fill);
+      line.append(label,amount);
+      row.append(line,track);
+      list.append(row);
+    }
+    section.append(list);
+    root.append(section);
+  }
+}
+function updateCompactVisibility(){
+  const valid=Boolean(state?.character)&&!el("game").hidden;
+  const facility=el("facilities-title");
+  const show=valid&&facility.getBoundingClientRect().top<85;
+  el("compact-status").hidden=!show;
+  document.body.classList.toggle("compact-status-active",show);
+}
+function renderCompactStatus(character){
+  text("compact-character-name",character.name);
+  text("compact-body-energy",character.bodyEnergy+" / "+state.maxBodyEnergy);
+  text("compact-brain-energy",character.brainEnergy+" / "+state.maxBrainEnergy);
+  el("compact-body-bar").value=state.maxBodyEnergy>0?
+    Math.max(0,Math.min(100,character.bodyEnergy/state.maxBodyEnergy*100)):0;
+  el("compact-brain-bar").value=state.maxBrainEnergy>0?
+    Math.max(0,Math.min(100,character.brainEnergy/state.maxBrainEnergy*100)):0;
+  updateCompactVisibility();
+}
+window.addEventListener("scroll",updateCompactVisibility,{passive:true});
+window.addEventListener("resize",updateCompactVisibility);
+
 let activeFacilityTab="jobs";
-let lastAnnouncedChallenge=null;
+let dismissedEventKey=null;
+try{ dismissedEventKey=sessionStorage.getItem("town-dismissed-event")||null; }catch{}
+function dismissEventPopup(){
+  const popup=el("event-popup");
+  dismissedEventKey=popup.dataset.key||null;
+  try{
+    if(dismissedEventKey)sessionStorage.setItem("town-dismissed-event",dismissedEventKey);
+  }catch{}
+  popup.hidden=true;
+}
 function selectFacilityTab(name,{focusTab=false,scroll=false}={}) {
   if(!FACILITY_TAB_NAMES.includes(name))return false;
   activeFacilityTab=name;
@@ -870,26 +957,32 @@ function renderLegacyItems() {
 function updateCockroachCountdown() {
   const challenge=state?.cockroachChallenge;
   const panel=el("cockroach-challenge");
-  const alert=el("event-alert");
+  const popup=el("event-popup");
   panel.hidden=!challenge;
-  if(!challenge){
-    alert.hidden=true;
-    return;
+  const remaining=challenge?Math.max(0,challenge.expiresAt-browserGameNow()):0;
+  if(challenge){
+    text("cockroach-remaining",remaining>0 ?
+      "蟑螂出現！剩餘 "+(remaining/1000).toFixed(1)+" 秒。" :
+      "蟑螂已逃走，期限已過，沒有獎勵。");
+    el("cockroach-claim").disabled=remaining<=0;
   }
-  const remaining=Math.max(0,challenge.expiresAt-browserGameNow());
-  text("cockroach-remaining",remaining>0 ?
-    "蟑螂出現！剩餘 "+(remaining/1000).toFixed(1)+" 秒。" :
-    "蟑螂已逃走，期限已過，沒有獎勵。");
-  el("cockroach-claim").disabled=remaining<=0;
-  alert.hidden=remaining<=0;
-  if(remaining>0){
-    alert.textContent="⚠ 蟑螂！剩餘 "+(remaining/1000).toFixed(1)+" 秒，開啟事件";
-    if(lastAnnouncedChallenge!==challenge.expiresAt && state?.character){
-      lastAnnouncedChallenge=challenge.expiresAt;
-      // 不把僅有 20 秒的互動藏在不活躍分頁中。
-      selectFacilityTab("events",{scroll:true});
-    }
-  }
+  const active=Boolean(challenge)&&challenge.status==="active"&&remaining>0;
+  const event=state?.healthEvents?.[0];
+  const recent=event?.day===state?.character?.lastEventDay?event:null;
+  const key=state?.character?.name+":"+
+    (active?"cockroach-"+challenge.eventId:recent?"event-"+recent.id:"none");
+  const visible=Boolean(state?.character)&&!el("game").hidden&&
+    (active||recent)&&dismissedEventKey!==key;
+  popup.hidden=!visible;
+  if(!visible)return;
+  popup.dataset.key=key;
+  text("event-popup-title",active?"⚠ 限時事件：蟑螂！":"事件發生！");
+  text("event-popup-body",active?
+    "剩餘 "+(remaining/1000).toFixed(1)+" 秒，請立即處理。" :
+    recent.title+"："+recent.description);
+  el("event-popup-claim").hidden=!active;
+  el("event-alert").hidden=false;
+  el("event-alert").textContent=active?"查看事件詳情":"查看事件紀錄";
 }
 function renderDining() {
   if (!state?.character) return;
@@ -1125,6 +1218,8 @@ function render() {
   el("logout").textContent=solo?"離開遊戲":"登出";
   if (!state.character || lobby) {
     if(!publicPreview&&!previewLoading)loadPublicPreview();
+    updateCompactVisibility();
+    el("event-popup").hidden=true;
     return;
   }
   const c = state.character;
@@ -1136,6 +1231,8 @@ function render() {
   renderBank();
   text("body-energy", c.bodyEnergy + " / " + state.maxBodyEnergy);
   text("brain-energy", c.brainEnergy + " / " + state.maxBrainEnergy);
+  renderCompactStatus(c);
+  selectProfileView(activeProfileView);
   text("current-job", state.currentJob?.name || "尚未就職");
   text("work-count", c.workCount + " 次（目前職業 " + c.jobWorkCount + " 次）");
   text("job-experience", c.jobExperience + " 點");
@@ -1153,7 +1250,7 @@ function render() {
       "工作冷卻時間已結束。");
   const attrs = el("attributes");
   attrs.replaceChildren();
-  for (const [key, label] of Object.entries(labels)) addRow(attrs, label, c.stats[key] ?? 0);
+  renderAbilities(c.stats);
   text("residents", state.residents.length ? state.residents.join("、") : "目前沒有其他玩家在這個城鎮。");
   renderTowns();
   renderTownMap();
@@ -1412,7 +1509,8 @@ el("solo-delete-form").addEventListener("submit",async event=>{
     selectedMapCell=null;
     selectedHouseSpot=null;
     activeFacilityTab="jobs";
-    lastAnnouncedChallenge=null;
+    dismissedEventKey=null;
+    try{sessionStorage.removeItem("town-dismissed-event");}catch{}
     el("solo-delete-form").reset();
     el("solo-delete-details").open=false;
     render();
@@ -1484,7 +1582,27 @@ el("facility-tabs").addEventListener("keydown",event=>{
   event.preventDefault();
   selectFacilityTab(FACILITY_TAB_NAMES[next],{focusTab:true});
 });
-el("event-alert").addEventListener("click",()=>goToFacility("event-panel"));
+el("event-alert").addEventListener("click",()=>{
+  dismissEventPopup();
+  goToFacility("event-panel");
+});
+el("event-popup-claim").addEventListener("click",()=>{
+  if(state?.cockroachChallenge?.status==="active")
+    action("events/cockroach/claim",{});
+});
+el("event-popup-close").addEventListener("click",dismissEventPopup);
+el("profile-view-tabs").addEventListener("click",event=>{
+  const button=event.target.closest("button[data-profile-view]");
+  if(button)selectProfileView(button.dataset.profileView);
+});
+el("profile-view-tabs").addEventListener("keydown",event=>{
+  if(!["ArrowRight","ArrowLeft","Home","End"].includes(event.key))return;
+  const index=PROFILE_VIEWS.indexOf(activeProfileView);
+  const next=event.key==="Home"?0:event.key==="End"?PROFILE_VIEWS.length-1:
+    (index+(event.key==="ArrowRight"?1:-1)+PROFILE_VIEWS.length)%PROFILE_VIEWS.length;
+  event.preventDefault();
+  selectProfileView(PROFILE_VIEWS[next],{focus:true});
+});
 el("facility-shortcuts").addEventListener("click",event=>{
   if(event.target.closest('button[data-action="work"]')){
     action("work",{});return;
