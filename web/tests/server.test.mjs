@@ -1747,3 +1747,64 @@ test("多人 HTTP：其他登入者不能搶領 #44，逾期操作亦不會發�
     assert.equal((await api(srv.url,"state",undefined,second.cookie)).result.character.kpoint,0);
   }finally{await srv.stop();}
 });
+
+
+test("未登入首頁：四座原版城鎮唯讀預覽，空地圖保留空白、不可編輯且不洩漏玩家資訊",async()=>{
+  const srv=await start("multi");
+  try{
+    const initial=await api(srv.url,"state");
+    assert.equal(initial.result.user,null);
+    const preview=await api(srv.url,"town/preview");
+    assert.equal(preview.status,200);
+    assert.equal(preview.result.towns.length,4);
+    assert.equal(preview.result.map.townId,0);
+    assert.equal(preview.result.map.configured,false);
+    assert.equal(preview.result.map.background,"keihansin.gif");
+    assert.equal(preview.result.map.cells.length,192);
+    assert.ok(preview.result.map.cells.every(cell=>cell.category==="empty"&&cell.image===null));
+    assert.equal(Object.hasOwn(preview.result.map,"palette"),false);
+    assert.equal(Object.hasOwn(preview.result.map,"editable"),false);
+    assert.equal(Object.hasOwn(preview.result,"user"),false);
+    for(const cell of preview.result.map.cells){
+      assert.equal(Object.hasOwn(cell,"raw"),false);
+      assert.equal(Object.hasOwn(cell,"key"),false);
+      assert.equal(Object.hasOwn(cell,"houseId"),false);
+    }
+    for(const id of [0,1,2,3]){
+      const result=await api(srv.url,"town/preview?townId="+id);
+      assert.equal(result.status,200);
+      assert.equal(result.result.map.townId,id);
+      assert.equal(result.result.map.cells.length,192);
+    }
+    for(const bad of ["-1","4","01","1.1","foo","%3Cscript%3E",""]){
+      assert.equal((await api(srv.url,"town/preview?townId="+bad)).status,400);
+    }
+  }finally{await srv.stop();}
+});
+
+test("未登入預覽可顯示實際儲存的建築，但不暴露原始代碼或未知舊玩家 ID",async()=>{
+  const srv=await start("multi");
+  try{
+    const db=new DatabaseSync(join(srv.directory,"multi.sqlite"));
+    try{
+      const tiles=Array(192).fill("");
+      tiles[0]="銀行";
+      tiles[1]="993_4=空地"; // 原版個人住宅代碼：不應暴露身分或原始欄位
+      tiles[2]="legacy-secret-code"; // 未知符號：不應逐字對外回傳
+      db.prepare([
+        "INSERT INTO town_maps(town_id,original_name,original_record,source,tiles_json,updated_at)",
+        "VALUES(?,?,?,?,?,?)"
+      ].join(" ")).run(0,"測試城鎮","","web",JSON.stringify(tiles),Date.now());
+    }finally{db.close();}
+    const response=await api(srv.url,"town/preview?townId=0");
+    assert.equal(response.status,200);
+    assert.equal(response.result.map.configured,true);
+    assert.equal(response.result.map.cells[0].label,"銀行");
+    assert.equal(response.result.map.cells[0].image,"bank.gif");
+    assert.equal(response.result.map.cells[1].label,"原版居民建築（待匯入房屋資料）");
+    assert.equal(response.result.map.cells[2].label,"未識別的街區符號");
+    const body=JSON.stringify(response.result);
+    assert.doesNotMatch(body,/993_4|legacy-secret-code|tiles_json|original_record/);
+    assert.equal(response.result.map.cells.length,192);
+  }finally{await srv.stop();}
+});
