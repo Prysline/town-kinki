@@ -258,7 +258,8 @@ test("往下捲過地圖後顯示固定角色能量，返回上方、登出或�
 
 test("原版右側物品頁籤保留保險、消耗品與使用紀錄，地圖物品快捷鍵可直接切換",()=>{
   const main=html.slice(html.indexOf('id="game"'));
-  const right=main.slice(main.indexOf('class="sidebar game-status-column"'),main.indexOf('</aside>'));
+  const sidebarStart=main.indexOf('class="sidebar game-status-column"');
+  const right=main.slice(sidebarStart,main.indexOf('</aside>',sidebarStart));
   assert.match(right,/id="profile-view-tabs"/);
   assert.match(right,/data-profile-view="status"/);
   assert.match(right,/data-profile-view="inventory"/);
