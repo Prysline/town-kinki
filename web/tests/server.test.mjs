@@ -2019,8 +2019,10 @@ test("單機刪除角色：輸入名稱與確認皆必要，住宅還原空地�
     assert.equal(again.result.houses.length,0);
     assert.equal(again.result.bankLedger.length,0);
     assert.equal(again.result.gameTimeOffsetMs,300000);
-    assert.equal(again.result.map.cells[0].category,"lot");
-    assert.equal(again.result.map.cells[1].label,"銀行");
+    const sameTown=await api(srv.url,"move",{townId:3});
+    assert.equal(sameTown.status,200);
+    assert.equal(sameTown.result.map.cells[0].category,"lot");
+    assert.equal(sameTown.result.map.cells[1].label,"銀行");
   }finally{await srv.stop();}
 });
 
