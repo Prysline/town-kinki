@@ -58,8 +58,13 @@ export function initCharacterEvents(db) {
 // Web 版事件累加紀錄；不覆寫從原版 mono.cgi 匯入的 33 欄唯讀封存。
 export function getCouponBalance(db,userId) {
   if(!Number.isSafeInteger(userId)||userId<1)throw new Error("無效的角色帳號");
-  const quantity=db.prepare("SELECT quantity FROM character_coupons WHERE user_id=?")
-    .get(userId)?.quantity??0;
+  // SQLite 整數可能大於 JS 安全整數；先以文字讀取，避免驅動程式先擲出 RangeError。
+  const raw=db.prepare("SELECT CAST(quantity AS TEXT) AS quantity FROM character_coupons WHERE user_id=?")
+    .get(userId)?.quantity;
+  if(raw==null)return 0;
+  if(typeof raw!=="string"||!/^[0-9]+$/.test(raw))
+    throw new Error("優惠券餘額資料不正確");
+  const quantity=Number(raw);
   if(!Number.isSafeInteger(quantity)||quantity<0)
     throw new Error("優惠券餘額資料不正確");
   return quantity;
