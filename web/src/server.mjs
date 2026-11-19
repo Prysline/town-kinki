@@ -358,6 +358,23 @@ async function handle(req, res) {
     if (req.method === "GET" && path.startsWith("/static/")) return safeFile(res, STATIC_ROOT, path, "/static/");
     if (req.method === "GET" && path.startsWith("/legacy-assets/")) return safeFile(res, IMG_ROOT, path, "/legacy-assets/");
     if (req.method === "GET" && path === "/api/state") return sendJson(res, 200, snapshot(getUser(req)));
+    if (req.method === "GET" && path === "/api/town/preview") {
+      const param=url.searchParams.get("townId");
+      if(param!==null&&!/^[0-3]$/.test(param))
+        throw new HttpError(400,"不存在的城鎮");
+      const townId=param===null?0:Number(param);
+      const map=publicTownMap(db,townId,false);
+      // 未登入只取得允許的顯示欄位：不含 raw、調色盤、私人角色資料。
+      return sendJson(res,200,{
+        towns:TOWNS.map(({id,name})=>({id,name})),
+        map:{
+          townId,configured:map.configured,background:map.background,
+          cells:map.cells.map(({index,row,column,key,label,image,category})=>({
+            index,row,column,key,label,image,category
+          }))
+        }
+      });
+    }
     if (req.method === "GET" && path === "/api/house/visit") {
       const visitor = getUser(req);
       if (!visitor) throw new HttpError(401, "請先登入");
