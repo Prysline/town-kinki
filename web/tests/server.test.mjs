@@ -1641,3 +1641,24 @@ test("多人：道具使用限定本人，不能用其他玩家持有物行號�
     assert.equal(other.result.legacyInventory.length,0);
   }finally{await srv.stop();}
 });
+
+
+test("單機 HTTP 狀態只顯示本人 Web 事件獲得的優惠券餘額", async()=>{
+  const srv=await start("solo");
+  try{
+    assert.equal((await api(srv.url,"state")).result.couponBalance,0);
+    const created=await api(srv.url,"character",{
+      name:"優惠券驗證者",gender:"other",stats:defaultStats()
+    });
+    assert.equal(created.status,200);
+    assert.equal(created.result.couponBalance,0);
+    const data=new DatabaseSync(join(srv.directory,"solo.sqlite"));
+    try{
+      const userId=data.prepare("SELECT user_id FROM characters WHERE name=?")
+        .get("優惠券驗證者").user_id;
+      data.prepare("INSERT INTO character_coupons(user_id,quantity) VALUES(?,?)")
+        .run(userId,4);
+    }finally{data.close();}
+    assert.equal((await api(srv.url,"state")).result.couponBalance,4);
+  }finally{await srv.stop();}
+});

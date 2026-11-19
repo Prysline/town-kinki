@@ -44,7 +44,10 @@ export function initCharacterEvents(db) {
     "old_health_index INTEGER NOT NULL,",
     "new_health_index INTEGER NOT NULL,",
     "created_at INTEGER NOT NULL);",
-    "CREATE INDEX IF NOT EXISTS character_events_user_idx ON character_events(user_id,id);"
+    "CREATE INDEX IF NOT EXISTS character_events_user_idx ON character_events(user_id,id);",
+    "CREATE TABLE IF NOT EXISTS character_coupons(",
+    "user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,",
+    "quantity INTEGER NOT NULL DEFAULT 0 CHECK(quantity >= 0));"
   ].join("\n"));
   const columns=db.prepare("PRAGMA table_info(character_events)").all();
   if(!columns.some(c=>c.name==="description"))
@@ -52,6 +55,32 @@ export function initCharacterEvents(db) {
   if(!columns.some(c=>c.name==="effects_json"))
     db.exec("ALTER TABLE character_events ADD COLUMN effects_json TEXT NOT NULL DEFAULT '{}'");
 }
+// Web 版事件累加紀錄；不覆寫從原版 mono.cgi 匯入的 33 欄唯讀封存。
+export function getCouponBalance(db,userId) {
+  if(!Number.isSafeInteger(userId)||userId<1)throw new Error("無效的角色帳號");
+  // SQLite 整數可能大於 JS 安全整數；先以文字讀取，避免驅動程式先擲出 RangeError。
+  const raw=db.prepare("SELECT CAST(quantity AS TEXT) AS quantity FROM character_coupons WHERE user_id=?")
+    .get(userId)?.quantity;
+  if(raw==null)return 0;
+  if(typeof raw!=="string"||!/^[0-9]+$/.test(raw))
+    throw new Error("優惠券餘額資料不正確");
+  const quantity=Number(raw);
+  if(!Number.isSafeInteger(quantity)||quantity<0)
+    throw new Error("優惠券餘額資料不正確");
+  return quantity;
+}
+function creditEventCoupons(db,userId,quantity){
+  if(!Number.isSafeInteger(quantity)||quantity<1||quantity>5)
+    throw new Error("事件優惠券數量不正確");
+  const newBalance=getCouponBalance(db,userId)+quantity;
+  if(!Number.isSafeInteger(newBalance))
+    throw new Error("事件優惠券餘額超出安全整數範圍");
+  db.prepare([
+    "INSERT INTO character_coupons(user_id,quantity) VALUES(?,?)",
+    "ON CONFLICT(user_id) DO UPDATE SET quantity=excluded.quantity"
+  ].join(" ")).run(userId,newBalance);
+}
+
 function validDay(day) {
   return typeof day==="string"&&/^\d{4}-\d{2}-\d{2}$/.test(day);
 }
@@ -104,6 +133,9 @@ export function settleDailyIllnessEvent(db,userId,day,now=Date.now(),random=Math
         throw new Error("事件收藏套組與原始物品資料不一致");
       effect.effects.items=completeSet.map(item=>consumeEventBonusItem(db,userId,item));
     }
+    // 原版 coupon_get 將新券數加到既有數量；與抽選日、事件歷史一併提交。
+    if(effect?.couponAward!=null)
+      creditEventCoupons(db,userId,effect.couponAward);
     db.prepare("UPDATE characters SET last_event_day=? WHERE user_id=?")
       .run(day,userId);
     if(effect){
@@ -163,6 +195,7 @@ export function listCharacterEvents(db,userId,limit=15) {
         row.event_key==="gremlin"?"小妖精惡作劇":
         row.event_key==="collectionQuest"?"收藏品檢查":
         row.event_key==="tigersSupport"?"阪神虎隊應援":
+        row.event_key==="couponGift"?"獲得優惠券":
         row.event_key==="bookRoyalty"?"書籍版稅":
         row.event_key==="hulaHoopLuck"?"呼拉圈幸運事件":
         row.event_key==="trafficAccident"?"交通意外":
