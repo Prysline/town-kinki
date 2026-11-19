@@ -35,7 +35,19 @@
       <section id="solo-lobby" class="intro card" hidden>
         <h2>返回城鎮</h2>
         <p>單人模式的角色已儲存在本機遊戲資料庫。離開遊戲只會返回這個首頁，不會刪除進度；單人模式不使用帳號登入。</p>
+        <p class="solo-current-character">目前角色：<strong id="solo-character-name"></strong></p>
         <button id="solo-continue" type="button">繼續遊戲</button>
+        <details class="solo-delete-box" id="solo-delete-details">
+          <summary>刪除角色並重新開始</summary>
+          <p class="small">此操作無法復原，將永久刪除角色的金錢、能力、職業、房屋、物品、銀行、留言及事件紀錄。你建造的住宅會還原成原本的空地；其他城鎮地圖編輯與單機遊戲時間不會被清除。</p>
+          <form id="solo-delete-form">
+            <label for="solo-delete-name">輸入目前角色的完整名稱以確認
+              <input id="solo-delete-name" name="characterName" required autocomplete="off" spellcheck="false" maxlength="100">
+            </label>
+            <label class="solo-delete-confirm"><input id="solo-delete-ack" type="checkbox" required> 我瞭解角色進度與相關資料將永久刪除</label>
+            <button type="submit" id="solo-delete-submit" class="danger-action">永久刪除角色</button>
+          </form>
+        </details>
       </section>
       <section id="auth" class="intro card" hidden>
         <h2>登入城鎮</h2>
