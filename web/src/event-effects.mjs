@@ -1,5 +1,5 @@
 // 從原版 event.pl::event_happen 移植不需完整商店的事件分支。
-import { maxBodyEnergy, maxBrainEnergy } from "./engine.mjs";
+import { TOWNS, maxBodyEnergy, maxBrainEnergy } from "./engine.mjs";
 // 原 CGI 可產生負數金錢／能力；Web 版為保持既有非負值模型將扣除量限制在當前持有量。
 const STAT_EVENTS = Object.freeze({
   7:{key:"literature",title:"國語事件",stat:"kokugo",label:"國語",
@@ -14,7 +14,7 @@ const STAT_EVENTS = Object.freeze({
     positive:"對藝術產生興趣",negative:"在美術課睡著了"}
 });
 export const NON_ITEM_EVENT_IDS = Object.freeze([
-  1,2,3,5,6,7,8,9,10,11,12,13,14,17,18,19,20,21,22,24,25,26,27,29,31,32,33,39,41,42,43
+  1,2,3,5,6,7,8,9,10,11,12,13,14,16,17,18,19,20,21,22,23,24,25,26,27,29,31,32,33,39,41,42,43
 ]);
 
 function draw(random,n) {
@@ -61,6 +61,7 @@ export function resolveNonItemEvent(originalId,character,random=Math.random,bonu
   let effects={};
   let usedItemName=null;
   let usedItemNames=null;
+  let extraItemUseName=null;
   function addMoney(delta) {
     const computed=changeMoney(character.money,delta);
     changes.money=computed.money;
@@ -191,6 +192,34 @@ export function resolveNonItemEvent(originalId,character,random=Math.random,bonu
       event.description="突然充滿溫柔的感覺，LOVE +"+change.actualDelta+"。";
       break;
     }
+    case 16:{
+      event.key="bankBurglary";event.title="銀行存款竊盜";
+      const bank=int(character.bank,"銀行存款");
+      // 原版先檢查防犯カメラ並扣一次耐久，再檢查銀行是否有錢。
+      if(bonusItem==="防犯カメラ")usedItemName=bonusItem;
+      if(bank<=0){
+        event.description="竊賊入屋，但普通銀行帳戶沒有存款，因此空手離開。";
+      }else if(usedItemName){
+        if(draw(random,5)===1){
+          extraItemUseName=bonusItem; // 原版 camera 被破壞時第二次呼叫 motimono_kensa_ev2。
+          const stolen=Math.floor(bank/5);
+          changes.bank=bank-stolen;
+          effects.bank=-stolen;
+          event.description="竊賊破壞監視攝影機，普通銀行存款遭竊 "+stolen+" 元。";
+        }else{
+          const reward=addMoney(100000);
+          event.description="監視攝影機協助抓到竊賊，獲得謝禮 "+reward+" 元。";
+        }
+      }else if(draw(random,2)===1){
+        event.description="竊賊入屋，但被鄰居抓住，沒有損失存款。";
+      }else{
+        const stolen=Math.floor(bank/5);
+        changes.bank=bank-stolen;
+        effects.bank=-stolen;
+        event.description="竊賊偷走存摺，普通銀行存款遭竊 "+stolen+" 元。";
+      }
+      break;
+    }
     case 17:{
       event.key="bookRoyalty";event.title="書籍版稅";
       // 原版無論道具是否存在，皆先抽二分之一的普通結果。
@@ -288,6 +317,26 @@ export function resolveNonItemEvent(originalId,character,random=Math.random,bonu
       }else{
         const earned=addMoney(int(character.money,"現金"));
         event.description="資產運用成功，現金翻倍，增加 "+earned+" 元。";
+      }
+      break;
+    }
+    case 23:{
+      event.key="ufoMembership";event.title="會員卡抽獎或 UFO 綁架";
+      // 原作無論是否持有會員卡，均先抽 int(rand(4))+1。
+      const prize=draw(random,4);
+      if(bonusItem==="ブラタンメンバーズカード"){
+        usedItemName=bonusItem;
+        const amount=[10000,100000,500000,1000000][prize-1];
+        const earned=addMoney(amount);
+        event.description="會員卡特典抽獎，獲得現金 "+earned+" 元。";
+      }else{
+        // 原作 int(rand(3)) 只會送到 0、1、2 號城鎮，不含第 3 號。
+        const from=int(character.town_id,"城鎮");
+        if(!TOWNS.some(t=>t.id===from))throw new Error("角色城鎮資料不正確");
+        const to=draw(random,3)-1;
+        changes.town_id=to;
+        effects.townId={from,to};
+        event.description="被 UFO 綁架，送到"+TOWNS.find(t=>t.id===to).name+"。";
       }
       break;
     }
@@ -443,5 +492,5 @@ export function resolveNonItemEvent(originalId,character,random=Math.random,bonu
       break;
     }
   }
-  return {event,changes,effects,usedItemName,usedItemNames};
+  return {event,changes,effects,usedItemName,usedItemNames,extraItemUseName};
 }
