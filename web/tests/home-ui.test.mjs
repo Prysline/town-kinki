@@ -127,3 +127,32 @@ test("分頁導覽保留原版地圖與角色內容，鍵盤操作及 20 秒蟑�
   assert.match(css,/\.game-shell \.town-shortcuts\{/);
   assert.match(css,/\.game-shell \.training-grid\{gap:\.5rem/);
 });
+
+
+test("單機介面：可離開遊戲返回首頁、繼續進度；多人仍可真正登出",()=>{
+  assert.match(html,/id="logout"[^>]*>登出<\/button>/);
+  assert.match(html,/id="solo-lobby"[^>]*hidden/);
+  assert.match(html,/id="solo-continue"/);
+  assert.match(script,/soloAtHome=true/);
+  assert.match(script,/sessionStorage\.setItem\("town-solo-at-home","1"\)/);
+  assert.match(script,/sessionStorage\.removeItem\("town-solo-at-home"\)/);
+  assert.match(script,/el\("logout"\)\.textContent=solo\?"離開遊戲":"登出"/);
+  assert.match(script,/el\("game"\)\.hidden = !state\.character \|\| lobby/);
+  assert.match(script,/await api\("logout",\{\}\)/);
+});
+test("單機介面：只有單機可看到四種實際等待快轉，倒數與伺服器時間同步",()=>{
+  assert.match(html,/id="solo-time-panel"[^>]*hidden/);
+  assert.match(html,/id="solo-game-time"/);
+  assert.match(html,/data-advance="5m"/);
+  assert.match(html,/data-advance="30m"/);
+  assert.match(html,/data-advance="1h"/);
+  assert.match(html,/data-advance="1d"/);
+  assert.match(html,/id="solo-wait-hints"/);
+  assert.match(script,/panel\.hidden=state\?\.mode!=="solo" \|\| !state\?\.character/);
+  assert.match(script,/api\("solo\/time\/advance",\{preset\}\)/);
+  assert.match(script,/const browserGameNow=\(\)=>syncedGameMs\+/);
+  assert.match(script,/challenge\.expiresAt-browserGameNow\(\)/);
+  assert.match(script,/state\.cockroachChallenge\.expiresAt>browserGameNow\(\)/);
+  assert.match(css,/\.game-shell \.solo-time-panel/);
+  assert.match(css,/\.game-shell \.solo-time-panel \.solo-time-buttons/);
+});
