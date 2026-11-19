@@ -160,7 +160,8 @@ test("攝影機原版破壞結果會最多扣兩次耐久，剩下一次時僅�
     assert.equal(history.item.sourceLine,1);
     trigger(db,16,{choices:[0],day:"2026-11-20"});
     assert.equal(remaining(db,1).remaining,0);
-    trigger(db,16,{choices:[0],day:"2026-11-21"});
+    // 攝影機已耗盡；原版回到二分之一抽選，指定抽中銀行被偷。
+    trigger(db,16,{choices:[.99],day:"2026-11-21"});
     assert.equal(remaining(db,1).remaining,0);
     assert.equal(state(db).bank,51200); // 80000 → 64000 → 51200
   }finally{db.close();}
