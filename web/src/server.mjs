@@ -370,7 +370,8 @@ async function handle(req, res) {
         map:{
           townId,configured:map.configured,background:map.background,
           cells:map.cells.map(({index,row,column,label,image,category})=>({
-            index,row,column,label,image,category
+            index,row,column,label:category==="unknown"?"未識別的街區符號":label,
+            image,category
           }))
         }
       });
