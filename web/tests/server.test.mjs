@@ -1808,3 +1808,96 @@ test("未登入預覽可顯示實際儲存的建築，但不暴露原始代碼�
     assert.equal(response.result.map.cells.length,192);
   }finally{await srv.stop();}
 });
+
+test("單機快轉：5 分鐘解鎖工作、半小時累加、1 小時用餐，並將日期推進一天",async()=>{
+  const srv=await start("solo");
+  try{
+    assert.equal((await api(srv.url,"solo/time/advance",{preset:"5m"})).status,409);
+    const created=await api(srv.url,"character",{name:"時光居民",gender:"other",stats:defaultStats()});
+    assert.equal(created.status,200);
+    assert.equal(created.result.mode,"solo");
+    assert.equal(created.result.gameTimeOffsetMs,0);
+    assert.equal((await api(srv.url,"job",{key:"legacy-2"})).status,200);
+    const work=await api(srv.url,"work",{});
+    assert.equal(work.status,200);
+    assert.ok(work.result.workCooldownMs>0);
+    assert.equal((await api(srv.url,"work",{})).status,400);
+
+    const jumped=await api(srv.url,"solo/time/advance",{preset:"5m"});
+    assert.equal(jumped.status,200);
+    assert.equal(jumped.result.timeAdvance.advancedMs,300000);
+    assert.equal(jumped.result.gameTimeOffsetMs,300000);
+    assert.equal(jumped.result.workCooldownMs,0);
+    assert.equal((await api(srv.url,"work",{})).status,200);
+
+    const mealKey=jumped.result.meals.find(meal=>meal.price<=jumped.result.character.money)?.key;
+    assert.ok(mealKey,"應有可負擔的食堂餐點");
+    assert.equal((await api(srv.url,"meal/eat",{key:mealKey})).status,200);
+    const eaten=await api(srv.url,"state");
+    assert.ok(eaten.result.mealCooldownMs>0);
+    const half=await api(srv.url,"solo/time/advance",{preset:"30m"});
+    assert.equal(half.status,200);
+    assert.equal(half.result.gameTimeOffsetMs,2100000);
+    assert.ok(half.result.mealCooldownMs>0);
+    assert.equal((await api(srv.url,"meal/eat",{key:mealKey})).status,400);
+    const hour=await api(srv.url,"solo/time/advance",{preset:"30m"});
+    assert.equal(hour.status,200);
+    assert.equal(hour.result.mealCooldownMs,0);
+    assert.equal((await api(srv.url,"meal/eat",{key:mealKey})).status,200);
+    const oneHour=await api(srv.url,"solo/time/advance",{preset:"1h"});
+    assert.equal(oneHour.status,200);
+    assert.equal(oneHour.result.timeAdvance.advancedMs,3600000);
+    assert.equal(oneHour.result.gameTimeOffsetMs,7200000);
+    const next=await api(srv.url,"solo/time/advance",{preset:"1d"});
+    assert.equal(next.status,200);
+    assert.equal(next.result.timeAdvance.advancedMs,86400000);
+    assert.equal(next.result.gameTimeOffsetMs,93600000);
+    assert.equal(next.result.gameTimeMs>=created.result.gameTimeMs+93600000,true);
+    const db=new DatabaseSync(join(srv.directory,"solo.sqlite"));
+    try{
+      assert.equal(db.prepare("SELECT offset_ms FROM solo_clock WHERE id=1").get().offset_ms,93600000);
+    }finally{db.close();}
+  }finally{await srv.stop();}
+});
+
+test("快轉只限單人：多人帳號不能修改世界時間，原本登出依然失效工作階段",async()=>{
+  const srv=await start("multi");
+  try{
+    assert.equal((await api(srv.url,"solo/time/advance",{preset:"5m"})).status,401);
+    const registered=await api(srv.url,"register",{
+      username:"clock_denied",password:"secure-clock-test-123"
+    });
+    assert.equal(registered.status,200);
+    const cookie=registered.cookie;
+    assert.ok(cookie);
+    const denied=await api(srv.url,"solo/time/advance",{preset:"5m"},cookie);
+    assert.equal(denied.status,403);
+    const state=await api(srv.url,"state",undefined,cookie);
+    assert.equal(state.result.mode,"multi");
+    assert.equal(state.result.gameTimeOffsetMs,0);
+    assert.equal((await api(srv.url,"logout",{},cookie)).status,200);
+    assert.equal((await api(srv.url,"state",undefined,cookie)).result.user,null);
+  }finally{await srv.stop();}
+});
+
+test("正在進行的 20 秒蟑螂事件禁止快轉，避免錯過限時操作",async()=>{
+  const srv=await start("solo");
+  try{
+    assert.equal((await api(srv.url,"character",{name:"限時居民",gender:"other",stats:defaultStats()})).status,200);
+    const db=new DatabaseSync(join(srv.directory,"solo.sqlite"));
+    try{
+      const now=Date.now(),uid=db.prepare("SELECT id FROM users WHERE username='__local_player__'").get().id;
+      const entry=db.prepare(
+        "INSERT INTO character_events(user_id,day,event_key,original_id,old_health_index,new_health_index,created_at,description,effects_json) VALUES(?,?,?,?,?,?,?,?,?)"
+      ).run(uid,"2026-11-19","cockroach",44,50,50,now,"蟑螂事件","{}");
+      db.prepare(
+        "INSERT INTO character_cockroach_challenges(event_id,user_id,started_at,expires_at,status) VALUES(?,?,?,?,'pending')"
+      ).run(Number(entry.lastInsertRowid),uid,now,now+20000);
+    }finally{db.close();}
+    const denied=await api(srv.url,"solo/time/advance",{preset:"5m"});
+    assert.equal(denied.status,409);
+    assert.match(denied.result.error,/限時事件/);
+    const state=await api(srv.url,"state");
+    assert.equal(state.result.gameTimeOffsetMs,0);
+  }finally{await srv.stop();}
+});
