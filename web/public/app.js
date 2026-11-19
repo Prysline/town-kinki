@@ -44,6 +44,34 @@ let selectedMapCell = null;
 let selectedHouseSpot = null;
 let selectedMapTown = null;
 let activeRoom = null;
+// 單機不需要帳號，所謂「離開遊戲」只回到首頁，不移除存檔。
+let soloAtHome=false;
+try { soloAtHome=sessionStorage.getItem("town-solo-at-home")==="1"; } catch {}
+let syncedGameMs=Date.now();
+let syncedAtRealMs=Date.now();
+const browserGameNow=()=>syncedGameMs+Math.max(0,Date.now()-syncedAtRealMs);
+let timeAdvanceBusy=false;
+function renderSoloTime() {
+  const panel=el("solo-time-panel");
+  panel.hidden=state?.mode!=="solo" || !state?.character;
+  if(panel.hidden)return;
+  const format=new Intl.DateTimeFormat("zh-TW",{
+    timeZone:state.gameTimeZone||"Asia/Taipei",year:"numeric",month:"2-digit",
+    day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false
+  });
+  text("solo-game-time","遊戲時間："+format.format(new Date(browserGameNow())));
+  const remain=[];
+  if(state.workCooldownMs>0)remain.push("工作還需約 "+Math.ceil(state.workCooldownMs/60000)+" 分鐘");
+  if(state.gymCooldownMs>0)remain.push("健身房還需約 "+Math.ceil(state.gymCooldownMs/60000)+" 分鐘");
+  if(state.mealCooldownMs>0)remain.push("用餐還需約 "+Math.ceil(state.mealCooldownMs/60000)+" 分鐘");
+  if(state.schoolRemainingToday)remain.push("學校須隔日才可再上課");
+  text("solo-wait-hints",remain.length?remain.join("；")+"。":"目前沒有主要冷卻等待。");
+  const blocked=timeAdvanceBusy || (
+    state.cockroachChallenge?.status==="active" &&
+    state.cockroachChallenge.remainingMs>0
+  );
+  for(const button of panel.querySelectorAll("button[data-advance]"))button.disabled=blocked;
+}
 let publicPreview=null;
 let previewLoading=false;
 // 方案 B：一次顯示一組設施。原本的表單留在 DOM，既有事件和資料更新不受影響。
@@ -848,7 +876,7 @@ function updateCockroachCountdown() {
     alert.hidden=true;
     return;
   }
-  const remaining=Math.max(0,challenge.expiresAt-Date.now());
+  const remaining=Math.max(0,challenge.expiresAt-browserGameNow());
   text("cockroach-remaining",remaining>0 ?
     "蟑螂出現！剩餘 "+(remaining/1000).toFixed(1)+" 秒。" :
     "蟑螂已逃走，期限已過，沒有獎勵。");
@@ -1083,17 +1111,23 @@ function renderBank() {
 function render() {
   if (!state) return;
   const solo = state.mode === "solo";
+  syncedGameMs=state.gameTimeMs??Date.now();
+  syncedAtRealMs=Date.now();
   text("mode", solo ? "單機模式" : "多人模式");
+  const lobby=solo && Boolean(state.character) && soloAtHome;
   el("auth").hidden = solo || Boolean(state.user);
   el("create").hidden = !state.user || Boolean(state.character);
-  el("landing").hidden=Boolean(state.character);
-  el("game").hidden = !state.character;
-  el("logout").hidden = solo || !state.user;
-  if (!state.character) {
+  el("solo-lobby").hidden=!lobby;
+  el("landing").hidden=Boolean(state.character)&&!lobby;
+  el("game").hidden = !state.character || lobby;
+  el("logout").hidden = !state.user || lobby;
+  el("logout").textContent=solo?"離開遊戲":"登出";
+  if (!state.character || lobby) {
     if(!publicPreview&&!previewLoading)loadPublicPreview();
     return;
   }
   const c = state.character;
+  renderSoloTime();
   text("character-name", c.name);
   text("current-town", state.towns.find(t => t.id === c.townId)?.name || "未知");
   text("money", money(c.money));
@@ -1331,9 +1365,51 @@ el("term-cancel").addEventListener("click", () => {
   }
 });
 el("logout").addEventListener("click", async () => {
-  try { await api("logout", {}); pendingTransfer = null; closeRoom(); state = await api("state"); render(); notify("已登出"); }
-  catch (error) { notify(error.message, true); }
+  if(state?.mode==="solo"){
+    soloAtHome=true;
+    try{sessionStorage.setItem("town-solo-at-home","1");}catch{}
+    closeRoom();
+    render();
+    notify("已返回單機首頁，角色及遊戲進度均已保留。");
+    return;
+  }
+  try {
+    await api("logout",{});
+    pendingTransfer=null;
+    closeRoom();
+    state=await api("state");
+    render();
+    notify("已登出多人模式帳號");
+  }catch(error){notify(error.message,true);}
 });
+el("solo-continue").addEventListener("click",()=>{
+  soloAtHome=false;
+  try{sessionStorage.removeItem("town-solo-at-home");}catch{}
+  render();
+  notify("已繼續單機遊戲。");
+});
+el("solo-time-panel").addEventListener("click",async event=>{
+  const target=event.target.closest("button[data-advance]");
+  if(!target||state?.mode!=="solo"||timeAdvanceBusy)return;
+  const preset=target.dataset.advance;
+  if(!["5m","30m","1h","1d"].includes(preset))return;
+  timeAdvanceBusy=true;
+  renderSoloTime();
+  try{
+    state=await api("solo/time/advance",{preset});
+    render();
+    const amount={"5m":"5 分鐘","30m":"30 分鐘","1h":"1 小時","1d":"1 天"}[preset];
+    notify("已將單機遊戲時間快轉 "+amount+"，冷卻及每日結算已更新。");
+  }catch(error){notify(error.message,true);}
+  finally{timeAdvanceBusy=false;renderSoloTime();}
+});
+setInterval(()=>{
+  if(state?.mode==="solo"&&state?.character&&!soloAtHome)
+    text("solo-game-time","遊戲時間："+new Intl.DateTimeFormat("zh-TW",{
+      timeZone:state.gameTimeZone||"Asia/Taipei",year:"numeric",month:"2-digit",day:"2-digit",
+      hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false
+    }).format(new Date(browserGameNow())));
+},1000);
 el("room-close").addEventListener("click", closeRoom);
 el("room-config-form").addEventListener("submit", event => {
   event.preventDefault();
