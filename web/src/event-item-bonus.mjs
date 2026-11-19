@@ -1,4 +1,5 @@
-// event.pl::motimono_kensa_ev、motimono_kensa_ev2：只支援已匯入的「回」耐久道具。
+// event.pl::motimono_kensa_ev、motimono_kensa_ev2：一般只支援已匯入的「回」耐久；
+// 第 16、23 號事件額外驗證購入日期，才允許使用原版「日」耐久道具。
 // 原始 33 欄封存不變；事件扣除量與手動使用共用 legacy_item_usage。
 import { DAY_MS } from "./inventory.mjs";
 export const EVENT_BONUS_ITEMS = Object.freeze({
