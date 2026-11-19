@@ -200,7 +200,7 @@ test("能力值位於右側角色資訊切換而非全寬設施分頁，三組�
   assert.match(right,/id="profile-tab-status"[^>]*role="tab"/);
   assert.match(right,/id="profile-tab-attributes"[^>]*role="tab"/);
   assert.match(right,/id="attributes-panel"[^>]*role="tabpanel"[^>]*hidden/);
-  assert.match(right,/id="attributes" class="ability-groups"/);
+  assert.match(right,/class="ability-groups" id="attributes"/);
   assert.equal((html.match(/id="attributes-panel"/g)||[]).length,1);
   assert.doesNotMatch(html,/id="facility-pane-stats"/);
   assert.doesNotMatch(html,/id="facility-tab-stats"/);
