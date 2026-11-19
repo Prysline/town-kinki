@@ -14,7 +14,7 @@ const STAT_EVENTS = Object.freeze({
     positive:"對藝術產生興趣",negative:"在美術課睡著了"}
 });
 export const NON_ITEM_EVENT_IDS = Object.freeze([
-  1,2,3,5,6,7,8,9,10,11,12,13,14,17,18,19,20,21,24,25,26,27,29,33,39,41,43
+  1,2,3,5,6,7,8,9,10,11,12,13,14,17,18,19,20,21,22,24,25,26,27,29,31,32,33,39,41,42,43
 ]);
 
 function draw(random,n) {
@@ -60,6 +60,7 @@ export function resolveNonItemEvent(originalId,character,random=Math.random,bonu
   const changes={};
   let effects={};
   let usedItemName=null;
+  let usedItemNames=null;
   function addMoney(delta) {
     const computed=changeMoney(character.money,delta);
     changes.money=computed.money;
@@ -274,6 +275,22 @@ export function resolveNonItemEvent(originalId,character,random=Math.random,bonu
       }
       break;
     }
+    case 22:{
+      event.key="earthquakeInsurance";event.title="地震與資產運用";
+      if(bonusItem==="損害保険"){
+        usedItemName=bonusItem;
+        event.description="遭遇地震，但《損害保険》全額保障了持有的現金。";
+      }else if(draw(random,2)===1){
+        const money=int(character.money,"現金");
+        const remaining=Math.floor(money/3);
+        const loss=-addMoney(remaining-money);
+        event.description="遭遇地震，現金剩下原有的三分之一，實際損失 "+loss+" 元。";
+      }else{
+        const earned=addMoney(int(character.money,"現金"));
+        event.description="資產運用成功，現金翻倍，增加 "+earned+" 元。";
+      }
+      break;
+    }
     case 24:{
       event.key="lottery";event.title="樂透彩券";
       if(draw(random,10)===1) {
@@ -327,6 +344,32 @@ export function resolveNonItemEvent(originalId,character,random=Math.random,bonu
       }
       break;
     }
+    case 31:{
+      event.key="gremlin";event.title="小妖精惡作劇";
+      if(bonusItem==="ミグ25"){
+        usedItemName=bonusItem;
+        event.description="小妖精對《ミグ25》惡作劇，使道具耐久減少 1 次。";
+      }else{
+        const earned=addMoney(100);
+        event.description="在自動販賣機發現 "+earned+" 元。";
+      }
+      break;
+    }
+    case 32:{
+      event.key="collectionQuest";event.title="收藏品檢查";
+      const names=["小さな花束(ラン)","ルパン三世","ファイナルクエスト"];
+      // 原版 motimono_kensa_ev2 要求三種全部持有，不是任意一件。
+      if(Array.isArray(bonusItem)&&names.every(n=>bonusItem.includes(n))){
+        const earned=addMoney(100000);
+        usedItemNames=names;
+        event.description="收集了三件指定物品，獲得 "+earned+" 元。";
+      }else{
+        // 原版文字為「撿到 5000 円」，真正執行 $money += 500000。
+        const earned=addMoney(500000);
+        event.description="沒有集齊指定物品，在路上撿到 "+earned+" 元。";
+      }
+      break;
+    }
     case 33:{
       event.key="localEncounter";event.title="地方偶遇";
       const outcome=draw(random,3);
@@ -360,6 +403,39 @@ export function resolveNonItemEvent(originalId,character,random=Math.random,bonu
       event.description="發現自動販賣機忘了拿的找零，撿到 "+amount+" 元。";
       break;
     }
+    case 42:{
+      event.key="tigersSupport";event.title="阪神虎隊應援";
+      const choice=draw(random,2);
+      if(bonusItem==="阪神タイガースの公式チケット"){
+        usedItemName=bonusItem;
+        if(choice===1){
+          const delta=adjustEnergy("body_energy",-10000);
+          event.description="持票應援時與球迷發生衝突，身體能量減少 "+(-delta)+" 點。";
+        }else{
+          // Web 依其他事件慣例保護角色目前頭腦能量上限。
+          const stats=JSON.parse(character.stats_json);
+          const delta=adjustEnergy("brain_energy",100000,maxBrainEnergy(stats));
+          event.description="持票應援取得大勝，頭腦能量恢復 "+delta+" 點。";
+        }
+      }else if(choice===1){
+        const boosted=["tairyoku","kenkou","speed","power","wanryoku","kyakuryoku"];
+        let current=character.stats_json;
+        effects.stats={};
+        for(const key of boosted){
+          const update=changeStat(current,key,10);
+          current=update.stats_json;
+          effects.stats[key]=update.actualDelta;
+        }
+        changes.stats_json=current;
+        const delta=adjustEnergy("body_energy",-5000);
+        event.description="接受球員特訓，六項體能能力各提升 10 點，身體能量減少 "+(-delta)+" 點。";
+      }else{
+        const money=int(character.money,"現金");
+        const loss=-addMoney(Math.floor(money/2)-money);
+        event.description="跌倒時把一半現金掉進河裡，損失 "+loss+" 元。";
+      }
+      break;
+    }
     case 43:{
       event.key="heartbreakWeightLoss";event.title="失戀消瘦";
       const loss= -addWeight(-5);
@@ -367,5 +443,5 @@ export function resolveNonItemEvent(originalId,character,random=Math.random,bonu
       break;
     }
   }
-  return {event,changes,effects,usedItemName};
+  return {event,changes,effects,usedItemName,usedItemNames};
 }
