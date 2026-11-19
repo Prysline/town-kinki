@@ -1,4 +1,5 @@
 import { townCellAction } from "./town-home.js";
+import { shouldShowCompactEnergy } from "./energy-visibility.js";
 const el = id => document.getElementById(id);
 let state = null;
 const labels = {
@@ -90,6 +91,7 @@ function selectProfileView(name,{focus=false}={}) {
     el(panelId).hidden=!selected;
   }
   if(focus)el("profile-tab-"+name).focus({preventScroll:true});
+  updateCompactVisibility();
   return true;
 }
 
@@ -136,9 +138,14 @@ function renderAbilities(stats){
   }
 }
 function updateCompactVisibility(){
-  const valid=Boolean(state?.character)&&!el("game").hidden;
-  const facility=el("facilities-title");
-  const show=valid&&facility.getBoundingClientRect().top<85;
+  const statusView=activeProfileView==="status";
+  const show=shouldShowCompactEnergy({
+    gameVisible:!el("game").hidden,
+    hasCharacter:Boolean(state?.character),
+    statusView,
+    bodyRowBottom:statusView?el("body-energy").closest("div").getBoundingClientRect().bottom:Infinity,
+    profileTabsBottom:!statusView?el("profile-view-tabs").getBoundingClientRect().bottom:Infinity
+  });
   el("compact-status").hidden=!show;
   document.body.classList.toggle("compact-status-active",show);
 }
