@@ -10,7 +10,7 @@ import {
   initCharacterEvents,settleDailyIllnessEvent,listCharacterEvents,getCouponBalance
 } from "../src/events.mjs";
 
-const STAT_KEYS=["kokugo","suugaku","rika","syakai","eigo","ongaku","bijitu",
+const STAT_KEYS=["kokugo","suugaku","rika","syakai","eigo","ongaku",
   "bijutu","looks","tairyoku","kenkou","speed","power","wanryoku","kyakuryoku",
   "love","unique","etti"];
 const STATS=Object.fromEntries(STAT_KEYS.map(name=>[name,20]));
