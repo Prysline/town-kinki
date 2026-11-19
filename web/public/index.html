@@ -116,6 +116,28 @@
     </div>
 
     <div id="game" class="layout game-shell" hidden>
+      <div id="compact-status" class="compact-status" hidden aria-label="固定角色能量資訊">
+        <strong id="compact-character-name" class="compact-name"></strong>
+        <div class="compact-energy">
+          <span class="compact-energy-label">身體能量 <b id="compact-body-energy"></b></span>
+          <progress id="compact-body-bar" max="100" value="0" aria-label="身體能量比例"></progress>
+        </div>
+        <div class="compact-energy">
+          <span class="compact-energy-label">頭腦能量 <b id="compact-brain-energy"></b></span>
+          <progress id="compact-brain-bar" max="100" value="0" aria-label="頭腦能量比例"></progress>
+        </div>
+      </div>
+      <aside id="event-popup" class="event-popup" aria-label="原版事件通知" hidden>
+        <div class="event-popup-heading">
+          <strong id="event-popup-title">事件發生！</strong>
+          <button id="event-popup-close" type="button" class="secondary" aria-label="關閉事件通知">×</button>
+        </div>
+        <p id="event-popup-body" class="small"></p>
+        <div class="event-popup-actions">
+          <button id="event-popup-claim" type="button" hidden>立即拍打蟑螂</button>
+          <button id="event-alert" type="button" class="secondary" hidden>查看事件紀錄</button>
+        </div>
+      </aside>
       <div class="game-overview">
         <div class="content game-map-column">
           <section class="card town-main" id="town-panel">
@@ -151,8 +173,12 @@
           <div class="residents-line"><strong>同城居民</strong><p class="small" id="residents"></p></div>
         </section>
         </div>
-        <aside class="sidebar game-status-column" aria-label="居民摘要">
-          <section class="card player-summary" id="player-summary">
+        <aside class="sidebar game-status-column" aria-label="居民與能力資料">
+          <div class="profile-view-tabs" role="tablist" aria-label="原版角色資訊切換">
+            <button type="button" id="profile-tab-status" role="tab" aria-controls="player-summary" aria-selected="true" tabindex="0" data-profile-view="status">狀態</button>
+            <button type="button" id="profile-tab-attributes" role="tab" aria-controls="attributes-panel" aria-selected="false" tabindex="-1" data-profile-view="attributes">能力值</button>
+          </div>
+          <section class="card player-summary" id="player-summary" role="tabpanel" aria-labelledby="profile-tab-status">
           <div class="eyebrow">居民資料</div><h2 id="character-name"></h2>
           <dl class="stats status-main">
             <div><dt>所在地</dt><dd id="current-town"></dd></div>
@@ -173,7 +199,7 @@
             <div><dt>目前狀態</dt><dd id="condition-status"></dd></div>
             <div><dt>疾病</dt><dd id="health-status"></dd></div>
           </dl></details>
-          <button id="event-alert" class="event-alert" type="button" hidden>限時事件：立即查看</button>
+          
           <div id="solo-time-panel" class="solo-time-panel" hidden>
             <strong>單人模式 · 時間快轉</strong>
             <p class="small" id="solo-game-time" aria-live="off">讀取遊戲時間中</p>
@@ -194,6 +220,11 @@
             <p id="cooldown" class="small"></p>
           </div>
         </section>
+          <section class="card attributes-panel" id="attributes-panel" role="tabpanel" aria-labelledby="profile-tab-attributes" hidden>
+            <h3>能力值</h3>
+            <p class="small ability-caption">延續原版頭腦／身體／其他三組黃色能力條。長度僅比較目前能力的相對大小。</p>
+            <div class="ability-groups" id="attributes"></div>
+          </section>
         </aside>
       </div>
       <section class="facility-shell" aria-labelledby="facilities-title">
@@ -210,7 +241,7 @@
         <button id="facility-tab-hospital" type="button" role="tab" data-pane="hospital" aria-controls="facility-pane-hospital" aria-selected="false" tabindex="-1">醫院</button>
         <button id="facility-tab-inventory" type="button" role="tab" data-pane="inventory" aria-controls="facility-pane-inventory" aria-selected="false" tabindex="-1">物品</button>
         <button id="facility-tab-events" type="button" role="tab" data-pane="events" aria-controls="facility-pane-events" aria-selected="false" tabindex="-1">事件</button>
-        <button id="facility-tab-stats" type="button" role="tab" data-pane="stats" aria-controls="facility-pane-stats" aria-selected="false" tabindex="-1">能力</button>
+
         </div>
       <div id="facility-pane-house" class="facility-pane" role="tabpanel" aria-labelledby="facility-tab-house" tabindex="0" hidden>
         <section class="card" id="housing-panel">
@@ -434,11 +465,7 @@
           <div id="health-event-history" class="health-event-history"></div>
         </section>
       </div>
-      <div id="facility-pane-stats" class="facility-pane" role="tabpanel" aria-labelledby="facility-tab-stats" tabindex="0" hidden>
-        <section class="card" id="attributes-panel">
-          <h3>能力值</h3><dl class="stats" id="attributes"></dl>
-        </section>
-      </div>
+
       </section>
     </div>
   </main>
