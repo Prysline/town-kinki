@@ -112,3 +112,29 @@
 /* 第十五階段：疾病隨機事件紀錄 */
 .health-event-list{padding-left:1.2rem;max-height:240px;overflow:auto;font-size:.86rem}
 .health-event-list li{padding:.45rem 0;border-bottom:1px solid #e2ebe3;overflow-wrap:anywhere}
+
+/* Phase 27: 原 CGI 地圖優先、右側玩家資訊，行動裝置仍先看到地圖。 */
+main{max-width:1280px}
+.landing-layout{display:grid;grid-template-columns:minmax(0,1fr) 320px;align-items:start;gap:1.1rem}
+.landing-actions{min-width:0;display:flex;flex-direction:column;gap:1.1rem}
+.landing-actions .intro{width:100%;max-width:none;margin:0}
+.landing-actions .columns{grid-template-columns:1fr}
+.town-home{min-width:0}
+.preview-label{margin-top:.4rem}
+#preview-town{max-width:330px;margin:.4rem 0 .7rem}
+.preview-cell{cursor:default;pointer-events:none}
+.preview-cell:hover{border:1px solid #1c492830;background:#ffffff50}
+.layout{grid-template-columns:minmax(0,1fr) 320px}
+.content,.sidebar{min-width:0}
+.town-main{order:-1}
+.town-shortcuts{display:flex;gap:.45rem;flex-wrap:wrap;margin:.85rem 0}
+.town-shortcuts button{display:inline-flex;align-items:center;justify-content:center;gap:.3rem;
+  background:#f7faf6;color:#254b36;border:1px solid #b7d1bc;padding:.45rem .65rem;min-height:40px}
+.town-shortcuts button img{width:27px;height:27px;object-fit:contain;image-rendering:pixelated}
+.facility-focused{outline:3px solid #397c5a;outline-offset:3px;scroll-margin-top:1rem}
+@media(max-width:800px){
+  .layout,.landing-layout{grid-template-columns:minmax(0,1fr)}
+  .content,.sidebar,.town-home,.landing-actions{min-width:0}
+  .town-home{order:0}
+  .landing-actions{order:1}
+}
