@@ -14,7 +14,7 @@ const STAT_EVENTS = Object.freeze({
     positive:"對藝術產生興趣",negative:"在美術課睡著了"}
 });
 export const NON_ITEM_EVENT_IDS = Object.freeze([
-  1,2,3,5,6,7,8,9,10,11,12,13,14,24,25,26,27,33,39,41,43
+  1,2,3,5,6,7,8,9,10,11,12,13,14,17,18,19,20,21,24,25,26,27,29,33,39,41,43
 ]);
 
 function draw(random,n) {
@@ -190,6 +190,90 @@ export function resolveNonItemEvent(originalId,character,random=Math.random,bonu
       event.description="突然充滿溫柔的感覺，LOVE +"+change.actualDelta+"。";
       break;
     }
+    case 17:{
+      event.key="bookRoyalty";event.title="書籍版稅";
+      // 原版無論道具是否存在，皆先抽二分之一的普通結果。
+      const choice=draw(random,2);
+      if(bonusItem==="おばあちゃんの知恵袋"){
+        const amount=addMoney(3000);
+        usedItemName=bonusItem;
+        event.description="持有《おばあちゃんの知恵袋》，收到出版版稅 "+amount+" 元。";
+      }else{
+        const amount=addMoney(choice===1?1000:500);
+        event.description="收到出版版稅 "+amount+" 元。";
+      }
+      break;
+    }
+    case 18:{
+      event.key="hulaHoopLuck";event.title="呼拉圈幸運事件";
+      const choice=draw(random,2);
+      if(bonusItem==="フラフープ"){
+        const amount=addMoney(77777);
+        usedItemName=bonusItem;
+        event.description="《フラフープ》帶來幸運，在家門前撿到 "+amount+" 元。";
+      }else if(choice===1){
+        const amount=addMoney(5000);
+        event.description="在家門前撿到 "+amount+" 元。";
+      }else{
+        const lost=-addMoney(-500);
+        event.description="過去私吞錢包的事被發現，賠償 "+lost+" 元。";
+      }
+      break;
+    }
+    case 19:{
+      event.key="trafficAccident";event.title="交通意外";
+      if(bonusItem==="谷保天満宮のお守り"){
+        const amount=addMoney(30000);
+        usedItemName=bonusItem;
+        event.description="《谷保天満宮のお守り》避開車禍，獲得賠償 "+amount+" 元。";
+      }else{
+        const stats=JSON.parse(character.stats_json);
+        if(int(stats?.speed,"速度")<=180){
+          const cost=-addMoney(-30000);
+          event.description="被汽車撞傷，支付醫療費 "+cost+" 元。";
+        }else{
+          event.description="靠敏捷的步伐避開了汽車，沒有受傷。";
+        }
+      }
+      break;
+    }
+    case 20:{
+      event.key="perfumeLuck";event.title="香水幸運事件";
+      const choice=draw(random,2);
+      if(bonusItem==="幸せを呼ぶ香水"){
+        const amount=addMoney(int(character.money,"現金"));
+        usedItemName=bonusItem;
+        event.description="《幸せを呼ぶ香水》讓現金翻倍，增加 "+amount+" 元。";
+      }else if(choice===1){
+        // event.pl 顯示「１万円」，實際執行是 $money=$money+100000。
+        const amount=addMoney(100000);
+        event.description="在家門前撿到 "+amount+" 元。";
+      }else{
+        const lost=-addMoney(-10000);
+        event.description="打柏青哥，輸掉 "+lost+" 元。";
+      }
+      break;
+    }
+    case 21:{
+      event.key="romanceBoost";event.title="愛情與魅力事件";
+      const choice=draw(random,2);
+      if(bonusItem==="バイアグラ"){
+        const love=changeStat(character.stats_json,"love",3);
+        const intimacy=changeStat(love.stats_json,"etti",3);
+        changes.stats_json=intimacy.stats_json;
+        effects.stats={love:love.actualDelta,etti:intimacy.actualDelta};
+        usedItemName=bonusItem;
+        event.description="使用《バイアグラ》，LOVE 與親密能力各增加 3 點。";
+      }else{
+        const delta=choice===1?3:-3;
+        const updated=changeStat(character.stats_json,"etti",delta);
+        changes.stats_json=updated.stats_json;
+        effects.stats={etti:updated.actualDelta};
+        event.description=choice===1?"朋友送來滋補品，親密能力增加 "+updated.actualDelta+" 點。":
+          "身體不適，親密能力減少 "+(-updated.actualDelta)+" 點。";
+      }
+      break;
+    }
     case 24:{
       event.key="lottery";event.title="樂透彩券";
       if(draw(random,10)===1) {
@@ -229,6 +313,18 @@ export function resolveNonItemEvent(originalId,character,random=Math.random,bonu
       event.key="hotspring";event.title="溫泉招待券";
       const gained=grantEnergy(1000);
       event.description="收到溫泉招待券，身體與頭腦能量分別恢復 "+gained.body+"、"+gained.brain+" 點。";
+      break;
+    }
+    case 29:{
+      event.key="luckyStarSand";event.title="幸運星砂";
+      if(bonusItem==="幸せの星砂"){
+        const amount=addMoney(int(character.money,"現金"));
+        usedItemName=bonusItem;
+        event.description="《幸せの星砂》讓現金翻倍，增加 "+amount+" 元。";
+      }else{
+        const amount=addMoney(10000);
+        event.description="在家門前撿到 "+amount+" 元。";
+      }
       break;
     }
     case 33:{
