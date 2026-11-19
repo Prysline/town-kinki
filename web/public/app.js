@@ -46,9 +46,31 @@ let selectedMapTown = null;
 let activeRoom = null;
 let publicPreview=null;
 let previewLoading=false;
+// 方案 B：一次顯示一組設施。原本的表單留在 DOM，既有事件和資料更新不受影響。
+const FACILITY_TAB_NAMES = Object.freeze(["house","dining","training","jobs","bank","hospital","inventory","events","stats"]);
+let activeFacilityTab="jobs";
+let lastAnnouncedChallenge=null;
+function selectFacilityTab(name,{focusTab=false,scroll=false}={}) {
+  if(!FACILITY_TAB_NAMES.includes(name))return false;
+  activeFacilityTab=name;
+  for(const key of FACILITY_TAB_NAMES){
+    const tab=el("facility-tab-"+key);
+    const pane=el("facility-pane-"+key);
+    const selected=key===name;
+    tab.setAttribute("aria-selected",String(selected));
+    tab.tabIndex=selected?0:-1;
+    pane.hidden=!selected;
+  }
+  const active=el("facility-tab-"+name);
+  if(focusTab)active.focus({preventScroll:true});
+  if(scroll)el("facility-tabs").scrollIntoView({behavior:"smooth",block:"start"});
+  return true;
+}
 function goToFacility(panelId) {
   const target=el(panelId);
   if(!target||!state?.character)return;
+  const pane=target.closest(".facility-pane");
+  if(pane)selectFacilityTab(pane.id.slice("facility-pane-".length));
   target.scrollIntoView({behavior:"smooth",block:"start"});
   target.classList.add("facility-focused");
   target.setAttribute("tabindex","-1");
@@ -214,6 +236,8 @@ async function openRoom(houseId, slot = null, scroll = true) {
       (slot === null ? "" : "&slot=" + encodeURIComponent(slot));
     activeRoom = await api("house/visit?" + search);
     renderRoom();
+    // 房屋室內可能從地圖或玩家住宅捷徑開啟；先打開所屬分頁。
+    selectFacilityTab("house");
     if (scroll) el("room-panel").scrollIntoView({ behavior:"smooth", block:"start" });
   } catch (error) {
     closeRoom();
@@ -818,13 +842,26 @@ function renderLegacyItems() {
 function updateCockroachCountdown() {
   const challenge=state?.cockroachChallenge;
   const panel=el("cockroach-challenge");
+  const alert=el("event-alert");
   panel.hidden=!challenge;
-  if(!challenge)return;
+  if(!challenge){
+    alert.hidden=true;
+    return;
+  }
   const remaining=Math.max(0,challenge.expiresAt-Date.now());
   text("cockroach-remaining",remaining>0 ?
     "蟑螂出現！剩餘 "+(remaining/1000).toFixed(1)+" 秒。" :
     "蟑螂已逃走，期限已過，沒有獎勵。");
   el("cockroach-claim").disabled=remaining<=0;
+  alert.hidden=remaining<=0;
+  if(remaining>0){
+    alert.textContent="⚠ 蟑螂！剩餘 "+(remaining/1000).toFixed(1)+" 秒，開啟事件";
+    if(lastAnnouncedChallenge!==challenge.expiresAt && state?.character){
+      lastAnnouncedChallenge=challenge.expiresAt;
+      // 不把僅有 20 秒的互動藏在不活躍分頁中。
+      selectFacilityTab("events",{scroll:true});
+    }
+  }
 }
 function renderDining() {
   if (!state?.character) return;
@@ -1327,6 +1364,19 @@ el("preview-town").addEventListener("change",event=>{
   if(Number.isSafeInteger(townId)&&townId>=0&&townId<=3)
     loadPublicPreview(townId);
 });
+el("facility-tabs").addEventListener("click",event=>{
+  const tab=event.target.closest('button[role="tab"][data-pane]');
+  if(tab)selectFacilityTab(tab.dataset.pane);
+});
+el("facility-tabs").addEventListener("keydown",event=>{
+  if(!["ArrowRight","ArrowLeft","Home","End"].includes(event.key))return;
+  const index=FACILITY_TAB_NAMES.indexOf(activeFacilityTab);
+  const next=event.key==="Home"?0:event.key==="End"?FACILITY_TAB_NAMES.length-1:
+    (index+(event.key==="ArrowRight"?1:-1)+FACILITY_TAB_NAMES.length)%FACILITY_TAB_NAMES.length;
+  event.preventDefault();
+  selectFacilityTab(FACILITY_TAB_NAMES[next],{focusTab:true});
+});
+el("event-alert").addEventListener("click",()=>goToFacility("event-panel"));
 el("facility-shortcuts").addEventListener("click",event=>{
   if(event.target.closest('button[data-action="work"]')){
     action("work",{});return;
@@ -1345,6 +1395,7 @@ el("refresh").addEventListener("click", async () => {
   catch (error) { notify(error.message, true); }
 });
 el("work").addEventListener("click", () => action("work", {}));
+selectFacilityTab(activeFacilityTab);
 el("job-search").addEventListener("input", renderJobs);
 el("job-filter").addEventListener("change", renderJobs);
 (async () => {
