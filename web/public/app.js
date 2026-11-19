@@ -1118,9 +1118,10 @@ function render() {
   el("auth").hidden = solo || Boolean(state.user);
   el("create").hidden = !state.user || Boolean(state.character);
   el("solo-lobby").hidden=!lobby;
+  if(lobby)text("solo-character-name",state.character.name);
   el("landing").hidden=Boolean(state.character)&&!lobby;
   el("game").hidden = !state.character || lobby;
-  el("logout").hidden = !state.user || lobby;
+  el("logout").hidden = !state.user || lobby || (solo && !state.character);
   el("logout").textContent=solo?"離開遊戲":"登出";
   if (!state.character || lobby) {
     if(!publicPreview&&!previewLoading)loadPublicPreview();
@@ -1387,6 +1388,40 @@ el("solo-continue").addEventListener("click",()=>{
   try{sessionStorage.removeItem("town-solo-at-home");}catch{}
   render();
   notify("已繼續單機遊戲。");
+});
+let soloDeleteBusy=false;
+el("solo-delete-form").addEventListener("submit",async event=>{
+  event.preventDefault();
+  if(soloDeleteBusy||state?.mode!=="solo"||!soloAtHome||!state?.character)return;
+  const entered=el("solo-delete-name").value;
+  if(entered!==state.character.name){
+    notify("角色名稱不符，沒有刪除任何資料。",true);
+    return;
+  }
+  if(!el("solo-delete-ack").checked)return;
+  const confirmed=window.confirm("確定永久刪除「"+entered+"」的角色進度、住宅、物品及所有相關紀錄嗎？\n\n此操作不可復原；城鎮地圖與單機時間會保留。");
+  if(!confirmed)return;
+  soloDeleteBusy=true;
+  el("solo-delete-submit").disabled=true;
+  try{
+    state=await api("solo/character/delete",{characterName:entered,confirm:true});
+    // 刪除後回建角畫面；已保存的城鎮與單機虛擬時鐘繼續沿用。
+    soloAtHome=false;
+    try{sessionStorage.removeItem("town-solo-at-home");}catch{}
+    closeRoom();
+    selectedMapCell=null;
+    selectedHouseSpot=null;
+    activeFacilityTab="jobs";
+    lastAnnouncedChallenge=null;
+    el("solo-delete-form").reset();
+    el("solo-delete-details").open=false;
+    render();
+    notify("已刪除角色及相關資料，可以建立新角色。城鎮地圖與單機時間已保留。");
+  }catch(error){notify(error.message,true);}
+  finally{
+    soloDeleteBusy=false;
+    el("solo-delete-submit").disabled=false;
+  }
 });
 el("solo-time-panel").addEventListener("click",async event=>{
   const target=event.target.closest("button[data-advance]");
