@@ -1,3 +1,4 @@
+import { townCellAction } from "./town-home.js";
 const el = id => document.getElementById(id);
 let state = null;
 const labels = {
@@ -43,7 +44,70 @@ let selectedMapCell = null;
 let selectedHouseSpot = null;
 let selectedMapTown = null;
 let activeRoom = null;
-
+let publicPreview=null;
+let previewLoading=false;
+function goToFacility(panelId) {
+  const target=el(panelId);
+  if(!target||!state?.character)return;
+  target.scrollIntoView({behavior:"smooth",block:"start"});
+  target.classList.add("facility-focused");
+  target.setAttribute("tabindex","-1");
+  target.focus({preventScroll:true});
+  target.addEventListener("blur",()=>target.classList.remove("facility-focused"),{once:true});
+}
+function renderPublicPreview() {
+  if(!publicPreview)return;
+  const {towns,map}=publicPreview;
+  const select=el("preview-town");
+  select.replaceChildren();
+  for(const town of towns){
+    const opt=document.createElement("option");
+    opt.value=String(town.id);
+    opt.textContent=town.name;
+    select.append(opt);
+  }
+  select.value=String(map.townId);
+  text("preview-map-status",map.configured?
+    "顯示已保存的城鎮街區（唯讀）。":
+    "此城鎮沒有原始街區配置，依原版保留 12×16 空白街區。");
+  const board=el("preview-map");
+  board.replaceChildren();
+  board.style.backgroundImage="url('/legacy-assets/"+map.background+"')";
+  const corner=document.createElement("span");
+  corner.className="map-axis";board.append(corner);
+  for(let c=1;c<=16;c++){
+    const axis=document.createElement("span");
+    axis.className="map-axis";axis.textContent=String(c);board.append(axis);
+  }
+  for(let row=0;row<12;row++){
+    const axis=document.createElement("span");
+    axis.className="map-axis";axis.textContent="ABCDEFGHIJKL"[row];
+    board.append(axis);
+    for(let col=0;col<16;col++){
+      const cell=map.cells[row*16+col];
+      const tile=document.createElement("span");
+      tile.className="map-cell preview-cell map-"+cell.category;
+      tile.title="ABCDEFGHIJKL"[row]+(col+1)+"："+cell.label;
+      if(cell.image){
+        const img=document.createElement("img");
+        img.src="/legacy-assets/"+cell.image;
+        img.alt="";img.loading="lazy";
+        tile.append(img);
+      }else if(cell.category==="unknown")tile.textContent="?";
+      board.append(tile);
+    }
+  }
+}
+async function loadPublicPreview(townId=0){
+  if(previewLoading)return;
+  previewLoading=true;
+  try{
+    const loaded=await api("town/preview?townId="+encodeURIComponent(townId));
+    publicPreview=loaded;
+    renderPublicPreview();
+  }catch(error){text("preview-map-status","無法讀取城鎮預覽："+error.message);}
+  finally{previewLoading=false;}
+}
 function renderTownMap() {
   const map = state.map;
   const board = el("town-map");
@@ -113,20 +177,26 @@ function renderTownMap() {
         button.append(unknown);
       }
       button.addEventListener("click", () => {
-        selectedMapCell = name;
-        if (!el("map-edit-toggle").checked) {
-          selectedHouseSpot = { row, column: col };
+        selectedMapCell=name;
+        const editing=map.editable&&el("map-edit-toggle").checked;
+        const destination=townCellAction(cell);
+        if(!editing){
+          selectedHouseSpot=destination.kind==="build"?{row,column:col}:null;
           updateHouseQuote();
         }
-        text("map-selection", name + "：" + cell.label +
-          (cell.raw && cell.category === "unknown" ? "（" + cell.raw + "）" : ""));
-        if (map.editable && el("map-edit-toggle").checked) {
-          action("map/tile", { row, column: col, symbol: el("map-palette").value },
-            name + " 的街區內容已儲存。");
-        } else {
-          if (cell.houseId) openRoom(cell.houseId);
-          board.querySelectorAll(".map-cell.selected").forEach(node => node.classList.remove("selected"));
+        text("map-selection",name+"："+cell.label+
+          (cell.raw&&cell.category==="unknown"?"（"+cell.raw+"）":""));
+        if(editing){
+          action("map/tile",{row,column:col,symbol:el("map-palette").value},
+            name+" 的街區內容已儲存。");
+        }else{
+          board.querySelectorAll(".map-cell.selected").forEach(node=>node.classList.remove("selected"));
           button.classList.add("selected");
+          if(destination.kind==="house")openRoom(destination.houseId);
+          else if(destination.kind==="build"||destination.kind==="facility")
+            goToFacility(destination.panelId);
+          else if(destination.kind==="unavailable")
+            notify(name+"："+cell.label+" 尚未移植或尚無對應 Web 入口。");
         }
       });
       board.append(button);
@@ -979,9 +1049,13 @@ function render() {
   text("mode", solo ? "單機模式" : "多人模式");
   el("auth").hidden = solo || Boolean(state.user);
   el("create").hidden = !state.user || Boolean(state.character);
+  el("landing").hidden=Boolean(state.character);
   el("game").hidden = !state.character;
   el("logout").hidden = solo || !state.user;
-  if (!state.character) return;
+  if (!state.character) {
+    if(!publicPreview&&!previewLoading)loadPublicPreview();
+    return;
+  }
   const c = state.character;
   text("character-name", c.name);
   text("current-town", state.towns.find(t => t.id === c.townId)?.name || "未知");
@@ -1246,6 +1320,15 @@ el("house-form").addEventListener("submit", event => {
     row: selectedHouseSpot.row, column: selectedHouseSpot.column,
     image: d.image, interiorRank: Number(d.interiorRank), payment: d.payment
   });
+});
+el("preview-town").addEventListener("change",event=>{
+  const townId=Number(event.currentTarget.value);
+  if(Number.isSafeInteger(townId)&&townId>=0&&townId<=3)
+    loadPublicPreview(townId);
+});
+el("facility-shortcuts").addEventListener("click",event=>{
+  const button=event.target.closest("button[data-facility]");
+  if(button)goToFacility(button.dataset.facility);
 });
 el("map-edit-toggle").addEventListener("change", () => {
   el("map-palette").disabled = !el("map-edit-toggle").checked;
