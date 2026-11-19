@@ -202,6 +202,7 @@ export function listCharacterEvents(db,userId,limit=15) {
         row.event_key==="cockroach"?"蟑螂挑戰":
         row.event_key==="couponGift"?"獲得優惠券":
         row.event_key==="fourDimensionalBag"?"四次元福袋":
+        row.event_key==="santaEncounter"?"聖誕老人事件":
         row.event_key==="bookRoyalty"?"書籍版稅":
         row.event_key==="hulaHoopLuck"?"呼拉圈幸運事件":
         row.event_key==="trafficAccident"?"交通意外":
