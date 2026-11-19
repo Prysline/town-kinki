@@ -136,6 +136,12 @@ export function listCharacterEvents(db,userId,limit=15) {
         row.event_key==="vendingChange"?"自動販賣機找零":
         row.event_key==="heartbreakWeightLoss"?"失戀消瘦":
         row.event_key==="kindFeeling"?"溫柔心情":
+        row.event_key==="bookRoyalty"?"書籍版稅":
+        row.event_key==="hulaHoopLuck"?"呼拉圈幸運事件":
+        row.event_key==="trafficAccident"?"交通意外":
+        row.event_key==="perfumeLuck"?"香水幸運事件":
+        row.event_key==="romanceBoost"?"愛情與魅力事件":
+        row.event_key==="luckyStarSand"?"幸運星砂":
         row.event_key==="englishLesson"?"英語事件":
         row.event_key==="musicLesson"?"音樂事件":
         row.event_key==="literature"?"國語事件":

@@ -34,17 +34,18 @@ function trigger(db,id,randoms=[],day="2026-11-19",user=1) {
     rng(0,eventNumber(id),...randoms));
 }
 
-test("已移植 21 種非疾病事件（含 2 種可選道具加成），其他未移植事件不產生虛構效果",()=>{
-  assert.deepEqual(NON_ITEM_EVENT_IDS,[1,2,3,5,6,7,8,9,10,11,12,13,14,24,25,26,27,33,39,41,43]);
+test("已移植 27 種非疾病事件（含 8 種可選道具加成），其他未移植事件不產生虛構效果",()=>{
+  assert.deepEqual(NON_ITEM_EVENT_IDS,[1,2,3,5,6,7,8,9,10,11,12,13,14,17,18,19,20,21,24,25,26,27,29,33,39,41,43]);
   for(const id of NON_ITEM_EVENT_IDS){
     const values={1:[.1,.9],2:[.1],3:[.1],7:[.1],8:[.1],9:[.1],
-      10:[.1],11:[.1],12:[.1],13:[.1],24:[.8],26:[0],33:[0]};
+      10:[.1],11:[.1],12:[.1],13:[.1],17:[.1],18:[.1],20:[.1],21:[.1],
+      24:[.8],26:[0],33:[0]};
     const e=resolveNonItemEvent(id,row(),rng(...values[id]??[]));
     assert.ok(e);
     assert.equal(e.event.originalId,id);
     assert.ok(e.event.description);
   }
-  for(const id of [4,15,16,17,18,19,20,21,22,23,28,29,30,31,32,34,35,36,37,38,40,42,44])
+  for(const id of [4,15,16,22,23,28,30,31,32,34,35,36,37,38,40,42,44])
     assert.equal(resolveNonItemEvent(id,row()),null);
 });
 
