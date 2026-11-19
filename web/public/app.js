@@ -68,7 +68,7 @@ function renderSoloTime() {
   text("solo-wait-hints",remain.length?remain.join("；")+"。":"目前沒有主要冷卻等待。");
   const blocked=timeAdvanceBusy || (
     state.cockroachChallenge?.status==="active" &&
-    state.cockroachChallenge.remainingMs>0
+    state.cockroachChallenge.expiresAt>browserGameNow()
   );
   for(const button of panel.querySelectorAll("button[data-advance]"))button.disabled=blocked;
 }
@@ -1405,10 +1405,7 @@ el("solo-time-panel").addEventListener("click",async event=>{
 });
 setInterval(()=>{
   if(state?.mode==="solo"&&state?.character&&!soloAtHome)
-    text("solo-game-time","遊戲時間："+new Intl.DateTimeFormat("zh-TW",{
-      timeZone:state.gameTimeZone||"Asia/Taipei",year:"numeric",month:"2-digit",day:"2-digit",
-      hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false
-    }).format(new Date(browserGameNow())));
+    renderSoloTime(); // 同步顯示遊戲時鐘，限時事件結束後也恢復快轉按鈕
 },1000);
 el("room-close").addEventListener("click", closeRoom);
 el("room-config-form").addEventListener("submit", event => {
