@@ -2,7 +2,13 @@
 // 原始 33 欄封存不變；事件扣除量與手動使用共用 legacy_item_usage。
 export const EVENT_BONUS_ITEMS = Object.freeze({
   3: "英文解釈教室",
-  11: "成り上がり"
+  11: "成り上がり",
+  17: "おばあちゃんの知恵袋",
+  18: "フラフープ",
+  19: "谷保天満宮のお守り",
+  20: "幸せを呼ぶ香水",
+  21: "バイアグラ",
+  29: "幸せの星砂"
 });
 
 function hasTable(db,name) {
