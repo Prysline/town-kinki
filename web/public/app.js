@@ -745,6 +745,17 @@ function renderLegacyItems() {
   }
 }
 
+function updateCockroachCountdown() {
+  const challenge=state?.cockroachChallenge;
+  const panel=el("cockroach-challenge");
+  panel.hidden=!challenge;
+  if(!challenge)return;
+  const remaining=Math.max(0,challenge.expiresAt-Date.now());
+  text("cockroach-remaining",remaining>0 ?
+    "蟑螂出現！剩餘 "+(remaining/1000).toFixed(1)+" 秒。" :
+    "蟑螂已逃走，期限已過，沒有獎勵。");
+  el("cockroach-claim").disabled=remaining<=0;
+}
 function renderDining() {
   if (!state?.character) return;
   const status=state.hunger;
@@ -766,6 +777,8 @@ function renderDining() {
       money(quote?.price??0) + "。"));
   el("hospital-treat").disabled=!quote || (state.character.money<quote.price);
   text("event-coupon-count","Web 事件所得優惠券："+(state.couponBalance ?? 0)+" 張（兌換所尚未移植）");
+  text("event-kpoint","Web K 點數："+(state.character?.kpoint??0));
+  updateCockroachCountdown();
   const events=el("health-event-history");
   events.replaceChildren();
   if (!(state.healthEvents?.length)) {
@@ -1024,6 +1037,12 @@ async function action(path, data, message) {
     } else if (path === "house/sell") {
       closeRoom();
       notify("住宅已出售，土地地價退還 " + money(state.houseSaleResult.refund) + " 至現金。");
+    } else if (path === "events/cockroach/claim") {
+      const result=state.cockroachResult;
+      notify(result.status==="caught"?
+        "已在期限內拍死蟑螂，得到 "+money(result.reward)+
+        " 與 K 點數 3，外貌變化 "+result.looks+"。" :
+        "蟑螂已逃走，沒有獲得獎勵。");
     } else if (path === "hospital/treat") {
       notify("已完成醫院治療，原診斷：" + state.hospitalResult.previousDisease +
         "，支付 " + money(state.hospitalResult.paid) + "，疾病指數已恢復為 50。");
@@ -1154,6 +1173,8 @@ el("insurance-buy-form").addEventListener("submit",async event=>{
   }catch(error){notify(error.message,true);}
   finally{renderInsurance();}
 });
+el("cockroach-claim").addEventListener("click",()=>action("events/cockroach/claim",{}));
+setInterval(updateCockroachCountdown,250);
 el("hospital-treat").addEventListener("click",()=>{
   const quote=state?.hospital;
   if(!quote) return;

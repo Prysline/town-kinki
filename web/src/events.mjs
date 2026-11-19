@@ -2,6 +2,7 @@
 // 第十六階段加入 15 種不需額外道具的經濟、能力與體重事件。
 // 原 CGI 在進入主畫面時抽取，Web 版改為每個遊戲日最多抽取一次。
 import { resolveNonItemEvent } from "./event-effects.mjs";
+import { initCockroachChallenges,openCockroachChallenge } from "./event-cockroach.mjs";
 import { recordBankEntry } from "./banking.mjs";
 import { EVENT_BONUS_ITEMS,EVENT_REQUIRED_SETS,findEventBonusItem,consumeEventBonusItem } from "./event-item-bonus.mjs";
 
@@ -54,6 +55,7 @@ export function initCharacterEvents(db) {
     db.exec("ALTER TABLE character_events ADD COLUMN description TEXT NOT NULL DEFAULT ''");
   if(!columns.some(c=>c.name==="effects_json"))
     db.exec("ALTER TABLE character_events ADD COLUMN effects_json TEXT NOT NULL DEFAULT '{}'");
+  initCockroachChallenges(db);
 }
 // Web 版事件累加紀錄；不覆寫從原版 mono.cgi 匯入的 33 欄唯讀封存。
 export function getCouponBalance(db,userId) {
@@ -156,11 +158,13 @@ export function settleDailyIllnessEvent(db,userId,day,now=Date.now(),random=Math
         if(!Number.isSafeInteger(loss)||loss<0)throw new Error("事件銀行扣款不正確");
         if(loss>0)recordBankEntry(db,userId,"ordinary","空屋竊盜",loss,0,effect.changes.bank,now);
       }
-      db.prepare(
+      const history=db.prepare(
         "INSERT INTO character_events(user_id,day,event_key,original_id,old_health_index,new_health_index,created_at,description,effects_json) VALUES(?,?,?,?,?,?,?,?,?)"
       ).run(userId,day,effect.event.key,result.originalId,
         old.health_index,effect.changes.health_index??old.health_index,now,
         effect.event.description,JSON.stringify(effect.effects));
+      if(effect.cockroachChallenge)
+        openCockroachChallenge(db,userId,Number(history.lastInsertRowid),now);
     }
     db.exec("COMMIT");
     return {checked:true,initial:false,event:effect?.event??null,
@@ -195,6 +199,7 @@ export function listCharacterEvents(db,userId,limit=15) {
         row.event_key==="gremlin"?"小妖精惡作劇":
         row.event_key==="collectionQuest"?"收藏品檢查":
         row.event_key==="tigersSupport"?"阪神虎隊應援":
+        row.event_key==="cockroach"?"蟑螂挑戰":
         row.event_key==="couponGift"?"獲得優惠券":
         row.event_key==="bookRoyalty"?"書籍版稅":
         row.event_key==="hulaHoopLuck"?"呼拉圈幸運事件":

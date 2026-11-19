@@ -143,8 +143,13 @@
         <section class="card" id="event-panel">
           <div class="eyebrow">日常生活</div>
           <h3>最近的隨機事件</h3>
-          <p class="small">沿用原版三分之一機率抽選，再從 44 種事件中挑選，目前已實作 36 種。Web 版每天最多抽選一次。</p>
+          <p class="small">沿用原版三分之一機率抽選，再從 44 種事件中挑選，目前已實作 37 種。Web 版每天最多抽選一次。</p>
           <p class="small" id="event-coupon-count">Web 事件所得優惠券：0 張（兌換所尚未移植）</p>
+          <p class="small" id="event-kpoint">Web K 點數：0</p>
+          <div id="cockroach-challenge" hidden>
+            <p id="cockroach-remaining" role="status">蟑螂出現！</p>
+            <button type="button" id="cockroach-claim">拍打蟑螂（20 秒內）</button>
+          </div>
           <div id="health-event-history" class="health-event-history"></div>
         </section>
         <section class="card">

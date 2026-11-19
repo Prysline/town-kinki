@@ -1662,3 +1662,88 @@ test("單機 HTTP 狀態只顯示本人 Web 事件獲得的優惠券餘額", asy
     assert.equal((await api(srv.url,"state")).result.couponBalance,4);
   }finally{await srv.stop();}
 });
+
+
+test("單機 HTTP：蟑螂 20 秒挑戰由伺服器驗證，K 點數與事件獎勵只發一次",async()=>{
+  const srv=await start("solo");
+  try{
+    const created=await api(srv.url,"character",{
+      name:"蟑螂挑戰測試者",gender:"other",stats:defaultStats()
+    });
+    assert.equal(created.status,200);
+    const db=new DatabaseSync(join(srv.directory,"solo.sqlite"));
+    try{
+      const userId=db.prepare("SELECT user_id FROM characters WHERE name=?")
+        .get("蟑螂挑戰測試者").user_id;
+      const now=Date.now();
+      const history=db.prepare([
+        "INSERT INTO character_events",
+        "(user_id,day,event_key,original_id,old_health_index,new_health_index,",
+        "created_at,description,effects_json) VALUES(?,?,?,?,?,?,?,?,?)"
+      ].join(" ")).run(userId,"2099-12-30","cockroach",44,50,50,
+        now,"蟑螂出現！","{\"cockroach\":\"pending\"}");
+      db.prepare([
+        "INSERT INTO character_cockroach_challenges",
+        "(event_id,user_id,started_at,expires_at,status)",
+        "VALUES(?,?,?,?,'pending')"
+      ].join(" ")).run(Number(history.lastInsertRowid),userId,now-1000,now+19000);
+    }finally{db.close();}
+    const before=await api(srv.url,"state");
+    assert.equal(before.result.cockroachChallenge.status,"active");
+    assert.equal(before.result.character.kpoint,0);
+    const claimed=await api(srv.url,"events/cockroach/claim",{userId:999,now:0});
+    assert.equal(claimed.status,200);
+    assert.equal(claimed.result.cockroachResult.status,"caught");
+    const reward=claimed.result.cockroachResult.reward;
+    assert.ok(reward>=1&&reward<=20000);
+    assert.equal(claimed.result.character.money,100000+reward);
+    assert.equal(claimed.result.character.kpoint,3);
+    assert.equal(claimed.result.character.stats.looks,17);
+    assert.equal(claimed.result.cockroachChallenge,null);
+    assert.equal(claimed.result.healthEvents[0].effects.cockroach,"caught");
+    const repeated=await api(srv.url,"events/cockroach/claim",{});
+    assert.equal(repeated.status,400);
+    assert.equal((await api(srv.url,"state")).result.character.kpoint,3);
+  }finally{await srv.stop();}
+});
+
+test("多人 HTTP：其他登入者不能搶領 #44，逾期操作亦不會發獎",async()=>{
+  const srv=await start("multi");
+  try{
+    const first=await api(srv.url,"register",{username:"hunter_a",password:"pass12345"});
+    const second=await api(srv.url,"register",{username:"hunter_b",password:"pass12345"});
+    assert.equal(first.status,200);
+    assert.equal(second.status,200);
+    assert.equal((await api(srv.url,"character",{
+      name:"挑戰者甲",gender:"other",stats:defaultStats()
+    },first.cookie)).status,200);
+    assert.equal((await api(srv.url,"character",{
+      name:"挑戰者乙",gender:"other",stats:defaultStats()
+    },second.cookie)).status,200);
+    const db=new DatabaseSync(join(srv.directory,"multi.sqlite"));
+    try{
+      const userId=db.prepare("SELECT user_id FROM characters WHERE name='挑戰者甲'").get().user_id;
+      const now=Date.now();
+      const history=db.prepare([
+        "INSERT INTO character_events",
+        "(user_id,day,event_key,original_id,old_health_index,new_health_index,",
+        "created_at,description,effects_json) VALUES(?,?,?,?,?,?,?,?,?)"
+      ].join(" ")).run(userId,"2099-12-30","cockroach",44,50,50,
+        now-30000,"蟑螂出現！","{\"cockroach\":\"pending\"}");
+      db.prepare([
+        "INSERT INTO character_cockroach_challenges",
+        "(event_id,user_id,started_at,expires_at,status)",
+        "VALUES(?,?,?,?,'pending')"
+      ].join(" ")).run(Number(history.lastInsertRowid),userId,now-30000,now-10000);
+    }finally{db.close();}
+    const blocked=await api(srv.url,"events/cockroach/claim",{userId:1},second.cookie);
+    assert.equal(blocked.status,400);
+    const expired=await api(srv.url,"events/cockroach/claim",{now:1},first.cookie);
+    assert.equal(expired.status,200);
+    assert.equal(expired.result.cockroachResult.status,"escaped");
+    assert.equal(expired.result.character.kpoint,0);
+    assert.equal(expired.result.character.money,100000);
+    assert.equal(expired.result.healthEvents[0].effects.cockroach,"escaped");
+    assert.equal((await api(srv.url,"state",undefined,second.cookie)).result.character.kpoint,0);
+  }finally{await srv.stop();}
+});
