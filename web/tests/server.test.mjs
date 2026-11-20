@@ -2636,3 +2636,63 @@ test("實體百貨健康保険透過 HTTP 購入後生效於醫院折扣與原�
     assert.equal(again.result.insurance.remainingDays,60);
   }finally{await srv.stop();}
 });
+
+
+test("原版自販機 HTTP：必須有地圖建築、使用原價、跨玩家共用貨架且重送不扣兩次",async()=>{
+  const srv=await start("solo");
+  try{
+    const created=await api(srv.url,"character",{
+      name:"自販機驗收玩家",gender:"other",stats:defaultStats()
+    });
+    assert.equal(created.status,200);
+    assert.equal(created.result.vendingAvailable,false);
+    assert.deepEqual(created.result.vendingGoods,[]);
+    const noBuilding=await api(srv.url,"retail/buy",{
+      shop:"vending",sku:"vending-2",quantity:1,requestId:"vending_http_no_building"
+    });
+    assert.equal(noBuilding.status,400);
+    assert.match(noBuilding.result.error,/自動販賣機/);
+    const placed=await api(srv.url,"map/tile",{
+      row:0,column:0,symbol:"自販機"
+    });
+    assert.equal(placed.status,200);
+    assert.equal(placed.result.vendingAvailable,true);
+    assert.equal(placed.result.retailAvailable.length,0);
+    assert.equal(placed.result.vendingGoods.length,10);
+    assert.ok(placed.result.vendingGoods.every(x=>x.shop==="vending"));
+    const product=placed.result.vendingGoods.find(x=>
+      x.price<=1000&&x.stock>=3);
+    assert.ok(product,"原版自販機飲料應能由初始現金購買");
+    const initial=placed.result.character.money;
+    const payload={shop:"vending",sku:product.sku,quantity:2,requestId:"vending_http_order_1"};
+    const bought=await api(srv.url,"retail/buy",payload);
+    assert.equal(bought.status,200);
+    assert.equal(bought.result.retailResult.paid,product.price*2);
+    assert.equal(bought.result.character.money,initial-product.price*2);
+    assert.equal(bought.result.vendingGoods.find(x=>x.sku===product.sku).stock,
+      product.stock-2);
+    const owned=bought.result.legacyInventory.find(x=>x.origin==="retail"&&x.name===product.name);
+    assert.ok(owned);
+    assert.equal(owned.durability,product.durability*2);
+    assert.equal(bought.result.retailPurchases[0].shop,"vending");
+    assert.equal(bought.result.retailGoods.length,0);
+    const replay=await api(srv.url,"retail/buy",payload);
+    assert.equal(replay.status,200);
+    assert.equal(replay.result.retailResult.replayed,true);
+    assert.equal(replay.result.character.money,initial-product.price*2);
+    assert.equal(replay.result.vendingGoods.find(x=>x.sku===product.sku).stock,
+      product.stock-2);
+    assert.equal((await api(srv.url,"retail/buy",{
+      ...payload,requestId:"vending_http_no_card",
+      payment:"bank",cardSourceLine:99999
+    })).status,400);
+    const changed=await api(srv.url,"map/tile",{
+      row:0,column:0,symbol:"空地"
+    });
+    assert.equal(changed.status,200);
+    assert.equal(changed.result.vendingAvailable,false);
+    assert.equal((await api(srv.url,"retail/buy",{
+      ...payload,requestId:"vending_http_building_removed"
+    })).status,400);
+  }finally{await srv.stop();}
+});

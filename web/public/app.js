@@ -388,6 +388,7 @@ function renderTownMap() {
               el("retail-shop-select").value=cell.key==="デパ2"?"depart2":"depart1";
             goToFacility(destination.panelId);
             if(cell.key==="デパ"||cell.key==="デパ2")renderRetail();
+            if(cell.key==="自販機")renderVending();
           }
           else if(destination.kind==="station"){
             el("station-heading").scrollIntoView({behavior:"smooth",block:"start"});
@@ -1322,7 +1323,7 @@ function renderRetail(){
   const receipts=el("retail-purchases");
   receipts.replaceChildren();
   const list=document.createElement("ol");list.className="health-event-list";
-  for(const purchase of state.retailPurchases??[]){
+  for(const purchase of (state.retailPurchases??[]).filter(x=>x.shop!=="vending")){
     const line=document.createElement("li");
     line.textContent=new Date(purchase.createdAt).toLocaleString("zh-TW")+
       "｜"+(purchase.shop==="depart2"?"百貨二":"百貨一")+"｜"+purchase.name+
@@ -1337,6 +1338,133 @@ function renderRetail(){
     empty.textContent="尚無百貨店購物紀錄。";
     receipts.append(empty);
   }else receipts.append(list);
+}
+
+
+let pendingVendingPurchase=null;
+async function submitVendingPurchase(item,quantity,payment,cardSourceLine){
+  const total=item.price*quantity;
+  const method=payment==="bank"?"普通銀行存款（有效信用卡）":"現金";
+  if(!window.confirm("確定在自動販賣機以"+method+"支付 "+money(total)+
+     "，購買「"+item.name+"」×"+quantity+" 嗎？"))return;
+  if(!pendingVendingPurchase||pendingVendingPurchase.sku!==item.sku||
+     pendingVendingPurchase.quantity!==quantity||
+     pendingVendingPurchase.payment!==payment||
+     pendingVendingPurchase.cardSourceLine!==cardSourceLine){
+    pendingVendingPurchase={shop:"vending",sku:item.sku,quantity,payment,
+      ...(payment==="bank"?{cardSourceLine}:{}),
+      requestId:crypto.randomUUID()};
+  }
+  try{
+    state=await api("retail/buy",pendingVendingPurchase);
+    const result=state.retailResult;
+    pendingVendingPurchase=null;
+    render();
+    notify(result.replayed?"自動販賣機的這筆購物已完成，沒有重複扣款。":
+      "已在自動販賣機買入「"+result.name+"」×"+result.quantity+
+      "，"+(payment==="bank"?"普通銀行存款":"現金")+"支付 "+money(result.paid)+
+      (result.merged?"；同品耐久已合併。":"；物品已入庫。"));
+  }catch(error){notify(error.message,true);}
+}
+function renderVending(){
+  if(!state?.character)return;
+  const available=state.vendingAvailable===true;
+  const goods=available?(state.vendingGoods??[]):[];
+  text("vending-status",!available?
+    "所在城鎮沒有原版自動販賣機。請在地圖中找到「自販機」，單機模式可先配置該建築。" :
+    "本期貨架："+(state.vendingPeriod??"尚未初始化")+
+    "（當地中午 12 點刷新）｜"+goods.length+
+    " 種飲料，均為自販機原始標價，不乘三。所有玩家共用庫存。");
+  const target=el("vending-items");
+  target.replaceChildren();
+  const cards=state.classroomCreditCards??[];
+  for(const item of goods){
+    const tile=document.createElement("div");
+    tile.className="training-tile";
+    const name=document.createElement("strong");
+    name.textContent=item.name;
+    const note=document.createElement("p");
+    note.className="small";
+    note.textContent=item.category+"｜單價 "+money(item.price)+
+      "｜耐久 "+item.durability+item.unit+"｜剩餘庫存 "+item.stock;
+    const qtyLabel=document.createElement("label");
+    qtyLabel.textContent="數量";
+    const qty=document.createElement("select");
+    qty.setAttribute("aria-label",item.name+"自販機購買數量");
+    for(let n=1;n<=5;n++){
+      const option=document.createElement("option");
+      option.value=String(n);
+      option.textContent=n+" 件";
+      option.disabled=n>item.stock;
+      qty.append(option);
+    }
+    qtyLabel.append(qty);
+    const paymentLabel=document.createElement("label");
+    paymentLabel.textContent="付款方式";
+    const pay=document.createElement("select");
+    pay.setAttribute("aria-label",item.name+"自販機付款方式");
+    const cash=document.createElement("option");
+    cash.value="cash";cash.textContent="現金";
+    pay.append(cash);
+    for(const card of cards){
+      const option=document.createElement("option");
+      option.value="card:"+card.sourceLine;
+      option.textContent="信用卡："+card.name;
+      pay.append(option);
+    }
+    paymentLabel.append(pay);
+    const quote=document.createElement("p");
+    quote.className="small";
+    const button=document.createElement("button");
+    button.type="button";
+    const update=()=>{
+      const quantity=Number(qty.value);
+      const total=quantity*item.price;
+      const credit=pay.value.startsWith("card:");
+      const balance=credit?state.character.bank:state.character.money;
+      const affordable=Number.isSafeInteger(total)&&total<=balance;
+      quote.textContent="合計 "+money(total)+"（"+(credit?"普通存款":"現金")+"）"+
+        (!affordable?"｜餘額不足":quantity>item.stock?"｜庫存不足":"");
+      button.disabled=item.stock<=0||quantity>item.stock||!affordable;
+      button.textContent=item.stock<=0?"本期售完":!affordable?"餘額不足":"購買";
+    };
+    qty.addEventListener("change",update);
+    pay.addEventListener("change",update);
+    button.addEventListener("click",()=>{
+      const credit=pay.value.startsWith("card:");
+      submitVendingPurchase(item,Number(qty.value),credit?"bank":"cash",
+        credit?Number(pay.value.slice(5)):undefined);
+    });
+    update();
+    tile.append(name,note,qtyLabel,paymentLabel,quote,button);
+    target.append(tile);
+  }
+  if(!goods.length){
+    const note=document.createElement("p");
+    note.className="small";
+    note.textContent=available?"本期沒有可售飲料。":"請先進入城鎮中的自動販賣機。";
+    target.append(note);
+  }
+  const history=el("vending-purchases");
+  history.replaceChildren();
+  const list=document.createElement("ol");
+  list.className="health-event-list";
+  for(const entry of (state.retailPurchases??[]).filter(x=>x.shop==="vending")){
+    const line=document.createElement("li");
+    line.textContent=new Date(entry.createdAt).toLocaleString("zh-TW")+
+      "｜"+entry.name+" ×"+entry.quantity+"｜"+
+      (entry.payment==="bank"?"信用卡／普通存款":"現金")+"支付 "+money(entry.paid)+
+      (entry.merged?"｜已合併耐久":"")+
+      "｜目前對應持有物耐久 "+(entry.remaining??"?")+(entry.unit??"");
+    list.append(line);
+  }
+  if(list.childElementCount)history.append(list);
+  else{
+    const note=document.createElement("p");
+    note.className="small";
+    note.textContent="尚無自動販賣機購物紀錄。";
+    history.append(note);
+  }
 }
 
 function renderTraining() {
@@ -1573,6 +1701,7 @@ function render() {
   text("measurements", c.height + " 公分／" + c.weight + " 公斤");
   renderDining();
   renderRetail();
+  renderVending();
   renderInsurance();
   const ready = Boolean(state.currentJob) && state.workCooldownMs === 0 &&
     state.condition?.baseExperience !== null;
