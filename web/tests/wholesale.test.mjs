@@ -111,7 +111,7 @@ test("沒有住宅、未在住宅開啟商店欄位、非屋主均不能建立�
     assert.equal(listMyShops(db,1).length,1);
     assert.throws(()=>buyWholesale(db,2,catalog,{
       sku:catalog[0].sku,quantity:1,...opts("wholesale_other_house")
-    }),/本人住宅商店/);
+    }),/必須先擁有並設定住宅商店/);
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM wholesale_transactions").get().n,0);
   }finally{db.close();}
 });
