@@ -1422,6 +1422,19 @@ function render() {
   text("work-count", c.workCount + " 次（目前職業 " + c.jobWorkCount + " 次）");
   text("job-experience", c.jobExperience + " 點");
   text("job-level", state.jobLevel + " 級");
+  // 原版 town_maker.cgi：每 100 經驗升一級，basic.cgi 達 15 級精通。
+  // 只呈現目前職業的進度；masteredJob 是先前已精通的職業，兩者不得混用。
+  const currentMasteryXp=state.currentJob?Math.max(0,c.jobExperience??0):0;
+  const masteryTargetXp=1500;
+  const masteryReached=Boolean(state.currentJob&&state.jobLevel>=15);
+  const masteryText=!state.currentJob?"尚未就職":
+    masteryReached?"已達精通門檻（15 級，"+currentMasteryXp+" 經驗）":
+    "目前 "+Math.min(currentMasteryXp,masteryTargetXp)+" / "+masteryTargetXp+
+      " 經驗（"+state.jobLevel+" / 15 級），距離精通還需 "+
+      (masteryTargetXp-currentMasteryXp)+" 經驗";
+  text("job-mastery-status",masteryText);
+  el("job-mastery-bar").value=Math.min(currentMasteryXp,masteryTargetXp);
+  text("jobs-mastery-status","目前職業精通進度："+masteryText+"。");
   text("mastered-job", c.masteredJob || "無");
   text("measurements", c.height + " 公分／" + c.weight + " 公斤");
   renderDining();
@@ -1429,7 +1442,8 @@ function render() {
   const ready = Boolean(state.currentJob) && state.workCooldownMs === 0 &&
     state.condition?.baseExperience !== null;
   el("work").disabled = !ready || savingSalaryPayment;
-  el("home-work").disabled = !ready || savingSalaryPayment;
+  // 地圖快捷「工作」僅是前往工作頁面，不執行工作，也不受出勤冷卻限制。
+  el("home-work").disabled = false;
   text("cooldown", !state.currentJob ? "請先前往職業介紹所選擇工作。" :
     state.workCooldownMs > 0 ? "距離下次工作約 " + Math.ceil(state.workCooldownMs / 1000) + " 秒。" :
       "工作冷卻時間已結束。");
@@ -1808,9 +1822,6 @@ el("profile-view-tabs").addEventListener("keydown",event=>{
   selectProfileView(PROFILE_VIEWS[next],{focus:true});
 });
 el("facility-shortcuts").addEventListener("click",event=>{
-  if(event.target.closest('button[data-action="work"]')){
-    action("work",{});return;
-  }
   const button=event.target.closest("button[data-facility]");
   if(button)goToFacility(button.dataset.facility);
 });
