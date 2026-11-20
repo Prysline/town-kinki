@@ -1045,7 +1045,9 @@ function jobRequirementsPanel(job) {
   const demanded=JOB_REQUIREMENT_KEYS.filter(key=>Number(job.requirements?.[key]??0)>0);
   const summary=document.createElement("summary");
   summary.textContent=demanded.length?
-    "檢視職業條件（"+demanded.length+" 項能力門檻）":"檢視職業條件與待遇";
+    "職業條件｜能力已達 "+demanded.filter(key=>
+      Number(state.character.stats[key]??0)>=Number(job.requirements[key])).length+
+    "/"+demanded.length+" 項（展開比較目前／要求）":"檢視職業條件與待遇";
   details.append(summary);
 
   const other=document.createElement("div");
@@ -1054,13 +1056,13 @@ function jobRequirementsPanel(job) {
   if(job.bmiMin||job.bmiMax){
     const bmi=(job.bmiMin||"不限")+"～"+(job.bmiMax||"不限");
     const current=state.physique?.bmi;
-    status.push(["BMI",bmi,
+    status.push(["BMI","目前 "+(Number.isFinite(current)?current:"未取得")+"／要求 "+bmi,
       (job.bmiMin&&current<job.bmiMin)||
       (job.bmiMax&&current>job.bmiMax)]);
   }
   if(job.minHeight>0)
-    status.push(["身高",job.minHeight+" cm 以上",
-      state.character.height<job.minHeight]);
+    status.push(["身高","目前 "+state.character.height+" cm／要求 "+
+      job.minHeight+" cm 以上",state.character.height<job.minHeight]);
   if(job.gender)
     status.push(["性別",job.gender==="male"?"男":"女",
       state.character.gender!==job.gender]);
@@ -1070,7 +1072,7 @@ function jobRequirementsPanel(job) {
   for(const [label,required,missing] of status){
     const row=document.createElement("div");
     row.className="job-condition"+(missing?" job-condition-missing":"");
-    row.textContent=label+"：要求 "+required;
+    row.textContent=label+"："+required;
     other.append(row);
   }
   if(status.length)details.append(other);
@@ -1089,8 +1091,10 @@ function jobRequirementsPanel(job) {
       const current=Number(state.character.stats[key]??0);
       const required=Number(job.requirements[key]);
       const row=document.createElement("div");
-      row.className="job-condition"+(current<required?" job-condition-missing":"");
-      row.textContent=labels[key]+"：要求 "+required;
+      const met=current>=required;
+      row.className="job-condition "+(met?"job-condition-met":"job-condition-missing");
+      row.textContent=labels[key]+"｜目前 "+current+" ／ 要求 "+required+
+        "｜"+(met?"已達標":"還差 "+(required-current));
       requirements.append(row);
     }
     details.append(requirements);
@@ -1407,6 +1411,59 @@ async function submitRetailPurchase(item,quantity,payment,cardSourceLine){
       (result.merged?"；耐久已合併至原持有物。":"；物品已加入本人清單。"));
   }catch(error){notify(error.message,true);}
 }
+function describeOriginalRetailEffect(code){
+  const names={
+    "万能":"疾病指數改善","風邪":"感冒時改善疾病指數",
+    "下痢":"腹瀉時改善疾病指數","肺炎":"肺炎時改善疾病指數",
+    "結核":"結核時改善疾病指數","ウエイトアップ":"增加體重",
+    "ダイエット":"減少體重","身長":"增加身高","縮み":"減少身高"
+  };
+  if(code==="無")return "原版標記「無」；仍須查看下方能力增減值";
+  const match=/^([^,]+),(\d+)$/.exec(code);
+  if(match&&names[match[1]]){
+    const unit=["身長","縮み"].includes(match[1])?" cm":
+      ["ウエイトアップ","ダイエット"].includes(match[1])?" kg":"";
+    return names[match[1]]+" "+match[2]+unit+"（原版："+code+"）";
+  }
+  return "原版特殊代碼："+code+"（尚未將此代碼解讀成確定效果）";
+}
+function retailEffectDetails(item){
+  const info=item.details??{};
+  const bonuses=Object.entries(info.effects??{})
+    .map(([key,value])=>(labels[key]??key)+(value>0?"+":"")+value);
+  const preview=document.createElement("p");
+  preview.className="small retail-effect-preview";
+  preview.textContent=bonuses.length?
+    "原版能力："+bonuses.slice(0,3).join("、")+
+      (bonuses.length>3?"，等 "+bonuses.length+" 項":""):
+    info.effectCode&&info.effectCode!=="無"?
+      "原版特殊效果："+info.effectCode:"原版未記載能力增減";
+  const details=document.createElement("details");
+  details.className="retail-item-effects";
+  const summary=document.createElement("summary");
+  summary.textContent="原版商品效果、備註與 Web 使用狀態";
+  details.append(summary);
+  const lines=[
+    "能力增減："+(bonuses.length?bonuses.join("、"):"原版欄位沒有非零能力增減"),
+    "特殊欄位："+describeOriginalRetailEffect(info.effectCode??"無"),
+    "熱量："+(info.calories??0)+" kcal｜使用間隔："+(info.intervalMinutes??0)+" 分鐘",
+    "身體能量消耗："+(info.bodyCost??0)+"（負數表示恢復）"+
+      "｜頭腦能量消耗："+(info.brainCost??0)+"（負數表示恢復）",
+    "原版備註："+(info.comment?.trim()||"沒有提供文字備註"),
+    "Web 生效狀態："+(
+      info.usage==="automatic"?"已支援：健康保險於醫院自動計算，不需手動使用":
+      info.usage==="payment"?"已支援：有效期內可於支援信用卡的商店從普通銀行付款":
+      info.usage==="gift"?"屬於禮品：可依禮品寄送規則操作，不是一般直接使用道具":
+      info.usage==="supported"?"已支援：購買後可在持有物執行使用（仍受冷卻、體力等條件限制）":
+      "目前尚未支援直接使用；顯示原始數值不代表效果已能執行")
+  ];
+  for(const line of lines){
+    const p=document.createElement("p");
+    p.className="small";p.textContent=line;
+    details.append(p);
+  }
+  return {preview,details};
+}
 function renderRetail(){
   if(!state?.character)return;
   const choices=state.retailAvailable??[];
@@ -1457,6 +1514,10 @@ function renderRetail(){
       payment.append(option);
     }
     paymentLabel.append(payment);
+    const controls=document.createElement("div");
+    controls.className="retail-buy-controls";
+    controls.append(qtyLabel,paymentLabel);
+    const effects=retailEffectDetails(item);
     const quote=document.createElement("p");quote.className="small";
     const button=document.createElement("button");
     button.type="button";
@@ -1479,7 +1540,7 @@ function renderRetail(){
         bank?Number(payment.value.slice(5)):undefined);
     });
     update();
-    tile.append(name,note,qtyLabel,paymentLabel,quote,button);
+    tile.append(name,note,effects.preview,effects.details,controls,quote,button);
     target.append(tile);
   }
   if(!goods.length){

@@ -68,6 +68,17 @@ function parseArchivedItem(row){
     originalRemaining,originalLastUsedAt:lastUsedSec*1000,
     food};
 }
+// 供商店在「購入前」顯示目前 Web 是否支援直接使用；使用與否仍由正式交易驗證。
+export function supportsLegacyItemUse(rawFields){
+  if(!Array.isArray(rawFields)||rawFields.length!==33)return false;
+  try {
+    return Boolean(parseArchivedItem({
+      category:rawFields[0],original_name:rawFields[1],
+      durability:Number(rawFields[21]),durability_unit:rawFields[22],
+      raw_fields_json:JSON.stringify(rawFields)
+    }));
+  }catch{return false;}
+}
 function readRows(db,userId){
   const present=db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='legacy_inventory_items'").get();
   if(!present)return [];
