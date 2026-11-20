@@ -160,6 +160,51 @@ test("單機獨立教室：原版四課、實際雙能量扣除、減重、資�
   }finally{await srv.stop();}
 });
 
+
+test("薪資去向：偏好存檔、實際銀行入帳與帳簿、重送冷卻及回切現金",async()=>{
+  const srv=await start("solo");
+  try{
+    const created=await api(srv.url,"character",{
+      name:"領薪測試居民",gender:"other",stats:defaultStats()
+    });
+    assert.equal(created.status,200);
+    assert.equal(created.result.character.salaryPayment,"cash");
+    assert.equal((await api(srv.url,"job/payment",{payment:"credit"})).status,400);
+    const pref=await api(srv.url,"job/payment",{payment:"bank"});
+    assert.equal(pref.status,200);
+    assert.equal(pref.result.character.salaryPayment,"bank");
+    const before=pref.result.character;
+    const paid=await api(srv.url,"work",{});
+    assert.equal(paid.status,200);
+    assert.equal(paid.result.result.payment,"bank");
+    assert.equal(paid.result.result.paid,1000);
+    assert.equal(paid.result.character.bank,before.bank+1000);
+    assert.equal(paid.result.character.money,before.money);
+    const entry=paid.result.bankLedger.find(x=>x.action==="工作薪資");
+    assert.ok(entry);
+    assert.equal(entry.type,"ordinary");
+    assert.equal(entry.credit,1000);
+    assert.equal(entry.balance,before.bank+1000);
+    assert.equal((await api(srv.url,"work",{})).status,400,"工作冷卻阻止重複入帳");
+    assert.equal((await api(srv.url,"state")).result.bankLedger
+      .filter(x=>x.action==="工作薪資").length,1);
+    const db=new DatabaseSync(join(srv.directory,"solo.sqlite"));
+    try {
+      assert.equal(db.prepare("SELECT salary_payment FROM characters").get().salary_payment,"bank");
+    }finally{db.close();}
+    const reset=await api(srv.url,"job/payment",{payment:"cash"});
+    assert.equal(reset.status,200);
+    assert.equal(reset.result.character.salaryPayment,"cash");
+    assert.equal((await api(srv.url,"solo/time/advance",{preset:"5m"})).status,200);
+    const second=await api(srv.url,"work",{});
+    assert.equal(second.status,200);
+    assert.equal(second.result.result.payment,"cash");
+    assert.equal(second.result.character.money,before.money+1000);
+    assert.equal(second.result.character.bank,before.bank+1000);
+    assert.equal(second.result.bankLedger.filter(x=>x.action==="工作薪資").length,1);
+  }finally{await srv.stop();}
+});
+
 test("多人：兩位玩家可獨立登入並看見同城居民", async () => {
   const srv = await start("multi");
   try {
