@@ -9,7 +9,7 @@ import {
   createCharacterData, recoverEnergy, jobEligibility, selectJob, performWork,
   maxBodyEnergy, maxBrainEnergy
 } from "./engine.mjs";
-import { parseLegacySchool, parseLegacyGym, calendarDay, trainingAvailability, performTraining } from "./training.mjs";
+import { parseLegacySchool, parseLegacyGym, parseLegacyClassroom, calendarDay, trainingAvailability, performTraining } from "./training.mjs";
 import { initTownMapTable, bootstrapLegacyTownMaps, publicTownMap, editTownTile } from "./town-storage.mjs";
 import { parseHouseCatalog, initHousingTables, listHouses, publicHouseCatalog, buildHouse, renameHouse, sellHouse, getHouseSaleQuote, listHouseEvents, remodelHouse, listHouseRemodelEvents } from "./housing.mjs";
 import { initRoomsTables, ROOM_TYPES, setRoomSlots, viewRoom, addRoomPost, deleteRoomPost } from "./rooms.mjs";
@@ -56,6 +56,7 @@ for (const [column, definition] of [
   ["mastered_job", "TEXT"],
   ["last_school_day", "TEXT NOT NULL DEFAULT ''"],
   ["last_gym_at", "INTEGER NOT NULL DEFAULT 0"],
+  ["classroom_ready_at", "INTEGER NOT NULL DEFAULT 0"],
   ["gym_ready_at", "INTEGER NOT NULL DEFAULT 0"],
   ["created_at", "INTEGER NOT NULL DEFAULT 0"],
   ["last_meal_at", "INTEGER NOT NULL DEFAULT 0"],
@@ -90,7 +91,8 @@ if (!jobs.length) throw new Error("無法讀取舊版職業資料，請檢查 da
 const jobsByKey = new Map(jobs.map(job => [job.key, job]));
 const trainingLessons = [
   ...parseLegacySchool(decodeLegacyText(readFileSync(resolve(REPO_ROOT, "dat_dir", "school.cgi")))),
-  ...parseLegacyGym(decodeLegacyText(readFileSync(resolve(REPO_ROOT, "dat_dir", "gym.cgi"))))
+  ...parseLegacyGym(decodeLegacyText(readFileSync(resolve(REPO_ROOT, "dat_dir", "gym.cgi")))),
+  ...parseLegacyClassroom(decodeLegacyText(readFileSync(resolve(REPO_ROOT, "dat_dir", "kyushitu.cgi"))))
 ];
 const trainingByKey = new Map(trainingLessons.map(lesson => [lesson.key, lesson]));
 const meals = [
@@ -154,7 +156,8 @@ function characterFromRow(row) {
     jobExperience: row.job_experience, jobWorkCount: row.job_work_count,
     masteredJob: row.mastered_job, stats: JSON.parse(row.stats_json),
     lastSchoolDay: row.last_school_day, lastGymAt: row.last_gym_at,
-    gymReadyAt: row.gym_ready_at, lastMealAt: row.last_meal_at,
+    gymReadyAt: row.gym_ready_at, classroomReadyAt:row.classroom_ready_at,
+    lastMealAt: row.last_meal_at,
     healthIndex: row.health_index, lastHealthDay: row.last_health_day,
     lastEventDay: row.last_event_day,
     kpoint: row.kpoint
@@ -166,12 +169,12 @@ function getCharacter(userId) {
 }
 
 function saveCharacter(userId, c) {
-  db.prepare("UPDATE characters SET town_id=?,money=?,bank=?,body_energy=?,brain_energy=?,recovered_at=?,job_id=?,work_progress=?,last_work_at=?,work_count=?,height=?,bmi=?,stats_json=?,weight=?,job_experience=?,job_work_count=?,mastered_job=?,last_school_day=?,last_gym_at=?,gym_ready_at=?,last_meal_at=?,health_index=?,last_health_day=?,last_event_day=? WHERE user_id=?")
+  db.prepare("UPDATE characters SET town_id=?,money=?,bank=?,body_energy=?,brain_energy=?,recovered_at=?,job_id=?,work_progress=?,last_work_at=?,work_count=?,height=?,bmi=?,stats_json=?,weight=?,job_experience=?,job_work_count=?,mastered_job=?,last_school_day=?,last_gym_at=?,gym_ready_at=?,last_meal_at=?,health_index=?,last_health_day=?,last_event_day=?,classroom_ready_at=? WHERE user_id=?")
     .run(c.townId, c.money, c.bank, c.bodyEnergy, c.brainEnergy, c.recoveredAt,
       c.jobId, c.workProgress, c.lastWorkAt, c.workCount, c.height, c.bmi,
       JSON.stringify(c.stats), c.weight, c.jobExperience, c.jobWorkCount, c.masteredJob,
       c.lastSchoolDay, c.lastGymAt, c.gymReadyAt, c.lastMealAt ?? 0,
-      c.healthIndex ?? 50,c.lastHealthDay ?? "",c.lastEventDay ?? "",userId);
+      c.healthIndex ?? 50,c.lastHealthDay ?? "",c.lastEventDay ?? "",c.classroomReadyAt ?? 0,userId);
 }
 
 function addCharacter(userId, c) {
@@ -289,9 +292,12 @@ function snapshot(user) {
     workCooldownMs: updated ? (updated.lastWorkAt === 0 ? 0 : Math.max(0, WORK_COOLDOWN_MS - (now - updated.lastWorkAt))) : 0,
     schoolRemainingToday: updated ? updated.lastSchoolDay === today : false,
     gymCooldownMs: updated ? Math.max(0, updated.gymReadyAt - now) : 0,
+    classroomCooldownMs: updated ? Math.max(0, (updated.classroomReadyAt??0) - now) : 0,
     trainingLessons: updated ? trainingLessons.map(lesson => ({
       key: lesson.key, type: lesson.type, name: lesson.name,
-      price: lesson.price, energyCost: lesson.energyCost, gains: lesson.gains,
+      price: lesson.price, energyCost: lesson.energyCost,
+      bodyCost: lesson.bodyCost, brainCost: lesson.brainCost,
+      weightLoss: lesson.weightLoss, gains: lesson.gains,
       cooldownMs: lesson.cooldownMs,
       reason: trainingAvailability(updated, lesson, now, today)
     })) : [],
@@ -556,6 +562,10 @@ async function handle(req, res) {
     if (path === "/api/train") {
       const lesson = trainingByKey.get(data.key);
       if (!lesson) throw new HttpError(404, "找不到訓練課程");
+      // 原版教室信用商品支付尚無經驗證的持有授權與原子銀行扣款。
+      // 拒絕偽裝信用付款，而非默默當現金收費。
+      if(lesson.type==="classroom" && data.payment!==undefined && data.payment!=="cash")
+        throw new HttpError(400,"目前教室僅支援現金付款");
       const now=gameNow();
       const today = calendarDay(now, GAME_TIMEZONE);
       const result = mutateCharacter(user.id, old => {
@@ -563,7 +573,8 @@ async function handle(req, res) {
         catch (error) { throw new HttpError(400, error.message); }
       });
       return sendJson(res, 200, { ...snapshot(user), trainingResult: {
-        name: result.lesson, gained: result.gained, paid: result.paid
+        name: result.lesson, gained: result.gained, paid: result.paid,
+        weightLoss:result.weightLoss
       } });
     }
 

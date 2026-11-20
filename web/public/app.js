@@ -1179,13 +1179,17 @@ function renderDining() {
 function renderTraining() {
   const byType = {
     school: el("school-lessons"),
-    gym: el("gym-lessons")
+    gym: el("gym-lessons"),
+    classroom: el("classroom-lessons")
   };
   Object.values(byType).forEach(target => target.replaceChildren());
   const statusSchool = state.schoolRemainingToday ? "今天已完成課程" : "今天還可以上課";
   const wait = state.gymCooldownMs ?? 0;
   text("school-status", statusSchool);
   text("gym-status", wait > 0 ? "距離下次訓練約 " + Math.ceil(wait / 60_000) + " 分鐘" : "現在可以訓練");
+  const classroomWait=state.classroomCooldownMs??0;
+  text("classroom-status",classroomWait>0?
+    "距離下次教室課程約 "+Math.ceil(classroomWait/60_000)+" 分鐘":"目前可以上課");
   for (const lesson of state.trainingLessons || []) {
     const target = byType[lesson.type];
     if (!target) continue;
@@ -1195,7 +1199,12 @@ function renderTraining() {
     name.textContent = lesson.name;
     const cost = document.createElement("p");
     cost.className = "small";
-    cost.textContent = "費用 " + money(lesson.price) + "，" +
+    cost.textContent = lesson.type==="classroom"?
+      "現金 "+money(lesson.price)+"，身體消耗 "+lesson.bodyCost+
+      "、頭腦消耗 "+lesson.brainCost+"，體重預計減少 "+
+      (lesson.weightLoss??0).toFixed(2)+" 公斤，間隔 "+
+      (lesson.cooldownMs/60_000)+" 分鐘" :
+      "費用 " + money(lesson.price) + "，" +
       (lesson.type === "school" ? "頭腦" : "身體") +
       "能量消耗 " + lesson.energyCost;
     const gains = document.createElement("p");
@@ -1413,7 +1422,8 @@ async function action(path, data, message) {
         .map(([key, amount]) => (labels[key] || key) + " +" + amount)
         .join("、");
       notify("完成" + result.name + "，花費 " + money(result.paid) +
-        (gains ? "，能力提升：" + gains : "") + "。");
+        (gains ? "，能力提升：" + gains : "") +
+        (result.weightLoss ? "，體重減少 "+result.weightLoss.toFixed(2)+" 公斤" : "") + "。");
     } else if (message) notify(message);
     if (path === "login" || path === "register") closeRoom();
     render();

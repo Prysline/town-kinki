@@ -115,6 +115,51 @@ test("單機：原版配點限制、建角、選職、工作、存提款與冷�
   } finally { await srv.stop(); }
 });
 
+test("單機獨立教室：原版四課、實際雙能量扣除、減重、資料庫冷卻與現金交易",async()=>{
+  const srv=await start("solo");
+  try{
+    const created=await api(srv.url,"character",{
+      name:"教室居民",gender:"other",stats:defaultStats()
+    });
+    assert.equal(created.status,200);
+    const before=created.result.character;
+    const lessons=created.result.trainingLessons.filter(x=>x.type==="classroom");
+    assert.equal(lessons.length,4);
+    assert.deepEqual(lessons.map(x=>x.price),[10000,20000,5000000,10000000]);
+    assert.deepEqual(lessons.map(x=>[x.bodyCost,x.brainCost]),
+      [[10,10],[20,0],[50,50],[100,100]]);
+    const lesson=lessons[0];
+    assert.equal(lesson.reason,null);
+    assert.equal((await api(srv.url,"train",{key:lesson.key,payment:"credit"})).status,400,
+      "尚未移植的信用付款不可偽裝現金");
+    const trained=await api(srv.url,"train",{key:lesson.key,payment:"cash"});
+    assert.equal(trained.status,200);
+    assert.equal(trained.result.trainingResult.paid,10000);
+    assert.equal(trained.result.trainingResult.weightLoss,0.2);
+    const after=trained.result.character;
+    assert.equal(after.money,before.money-10000);
+    assert.equal(after.bodyEnergy,before.bodyEnergy-10);
+    assert.equal(after.brainEnergy,before.brainEnergy-10);
+    assert.equal(after.stats.looks,before.stats.looks+1);
+    assert.equal(after.stats.etti,before.stats.etti+1);
+    assert.equal(after.weight,before.weight-0.2);
+    assert.ok(trained.result.classroomCooldownMs>0);
+    assert.equal(trained.result.gymCooldownMs,0);
+    assert.equal((await api(srv.url,"train",{key:lesson.key})).status,400,
+      "重複請求不可重複扣款或增加能力");
+    const persisted=await api(srv.url,"state");
+    assert.equal(persisted.result.character.money,after.money);
+    assert.equal(persisted.result.character.weight,after.weight);
+    assert.ok(persisted.result.classroomCooldownMs>0);
+    const db=new DatabaseSync(join(srv.directory,"solo.sqlite"));
+    try{
+      assert.ok(db.prepare("PRAGMA table_info(characters)").all()
+        .some(col=>col.name==="classroom_ready_at"));
+      assert.ok(db.prepare("SELECT classroom_ready_at FROM characters").get().classroom_ready_at>0);
+    }finally{db.close();}
+  }finally{await srv.stop();}
+});
+
 test("多人：兩位玩家可獨立登入並看見同城居民", async () => {
   const srv = await start("multi");
   try {
