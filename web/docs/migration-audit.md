@@ -13,6 +13,8 @@
 - 原始 `member/<ID>/mono.cgi`、舊銀行／房屋玩家關聯紀錄、實際街區歷史存檔尚無使用者提供的真實樣本，不能虛構匯入相容性。
 - 與原版有意採用的安全模型差異（非負金額／能力、安全整數、HTTP session、Web 延伸性別）需記錄保留，未經批准不可為等價而直接退回不安全行為。
 
+**入口層總覆蓋對照**：[原版 `unit.pl` 全部 43 個表單入口、Web 地圖／面板與來源功能逐列查核](phase30-entrypoint-coverage.md)。此清冊以原版入口為起點，填補僅看 Web 模組導致的漏項；並不宣稱每個來源 CGI 的交易函式已完整稽核。
+
 ## 14 領域初步差異矩陣（不是全部原版設施的逐入口盤點）
 
 每列依序列出「原版來源｜Web 來源／測試線索｜判定｜差異／阻塞｜優先級｜驗收與下一個 PR」。有直接核對到原始執行分支才可標「確定缺漏」；只有資料表、使用手冊或未能定位實際路徑時須標「資料已存在／執行未驗證」。**14 領域是分類框架而非已覆蓋全部 CGI／每個設施的證據**。本輪後續入口盤點獨立追蹤，避免將未列設施誤判為不存在。
@@ -74,6 +76,8 @@
 | MP-01 四城 12×16 格與圖示 | top.pl；admin2.cgi；town_ini.cgi | src/town-map.mjs；public/town-home.js | 部分完成 | 格子和圖示有實作；原始填充街區資料需另查 | P1 | 每城尺寸、已知／未知符號、原始文件反查（31） |
 | MP-02 原版 townlog 匯入／地圖編輯 | log_dir/townlog0.cgi ～ townlog3.cgi；town_maker.cgi | src/town-storage.mjs；scripts/town-map.mjs | 部分完成 | 目前 fork 的原始地圖日誌需實際確認是否有資料，不能補造配置 | P1 | 空檔與真實檔 round-trip、權限、備份／回滾（後續） |
 | MP-03 車站／交通票券與跨城成本 | station.cgi；town_ini.cgi；商品檔 | public/app.js；src/town-map.mjs | 未實作（原版完整流程） | Web 城市切換不等於原版車站收費與物品效果 | P1 | 交通費、權限、票券扣除、跨城交易（後續） |
+| MP-04 車站六組票價及跨城移動 | unit.pl L85；station.cgi::idou L99–116、L135–169 | src/server.mjs::/api/move；public/app.js；public/town-home.js | **確定規則差異** | 原版 4 城六組票價為 950／780／1210／950／2210／1530 並扣現金；Web 有換城但無此票價流程，原版「駅」地圖格子也無入口 | P1 | 六組方向互返、現金餘額與負數保護、資料回滾及實際移動時序 |
+| MP-05 原版地圖互動入口覆蓋率 | unit.pl::get_unit L62–191（43 個表單入口）；top.pl L472–490 | src/town-map.mjs::MAP_SYMBOLS；public/town-home.js::FACILITY_PANELS | **初步路由覆蓋，非完整遊戲移植** | 43 入口中 28 個有 Web 圖示代碼、15 個未收錄；7 個映射面板但「教室」錯接「學校」，21 個圖示回報 unavailable。詳 [入口逐項稽核](phase30-entrypoint-coverage.md) | P1 | 逐入口證據、未知格代碼、真實空白 townlog 的備份核對、跨城與靜態／動態入口分離 |
 
 ### 06 住宅／進階設施
 
@@ -91,6 +95,7 @@
 | BK-02 玩家轉帳與額度 | parabank.cgi；原始角色資料 | src/banking.mjs；src/server.mjs | 部分完成 | 身份校驗與原子交易已載明；需逐項反查原始限制 | P1 | 七天限制、收款人每日上限、防重／異常回滾（31） |
 | BK-03 住宅貸款及每日還款 | parabank.cgi；原始銀行相關 CGI | src/banking.mjs；tests/loans.test.mjs | 部分完成 | 負餘額與違約模式保留 Web 差異；無法稱為等價 | P1 | 貸款上限、逾期、全額清償、遷移與備份（31） |
 | BK-04 稅務／原版全部資產檔匯入 | yakuba.cgi；銀行及資產關聯檔待整理 | 目前未找到完整 Web 對應 | 缺少來源無法驗證 | 需先定位 CGI 實際徵稅/帳簿來源，不推斷規則 | P2 | 來源核實後拆資料結構與交易 PR（待排定） |
+| BK-05 原版 A～E 股票市場及持股紀錄 | unit.pl L132；kabu.cgi::kabu L36–108；log_dir/kab_hendou.cgi；member/<ID> 相關股票檔 | src/banking.mjs 只有銀行／貸款模組，無股價交易 | **確定缺漏** | 原版有獨立五類股價、持股、交易與清算記錄；不可因 Web 已有銀行而算股票已移植 | P2 | 檢查原始行情更新、買賣、每人持股、交易限制與真實存檔後再實作 |
 
 ### 08 物品／商店／裝備
 
@@ -100,6 +105,8 @@
 | IT-02 可確認消耗品／耐久 | basic.cgi L2556-L2579；dat_dir/syouhin.cgi | src/legacy-item-use.mjs；tests/legacy-item-use.test.mjs | 部分完成 | 只支援部分已封存物品效果，回／日與其他道具尚需逐項核對 | P0 | 體格、疾病、冷卻、失效、幂等與安全範圍（30-體格） |
 | IT-03 商店、贈送、裝備與回收 | dat_dir/prezento.cgi；dat_dir/soubi.cgi；gifutoya.cgi；recycle.cgi | 尚無完整 Web 對應 | 未實作（完整流程） | 商品來源、ギフト限制、裝備效果、交易記錄互相依賴 | P1 | 依原始商品與操作逐項拆分商品、裝備與交易 PR（31/後續） |
 | IT-04 優惠券獲得與兌換 | coupon.cgi；dat_dir/coupon.cgi；event.pl #30/#35 | src/event-effects.mjs；src/events.mjs | 部分完成 | 已處理事件發券；兌換入口與商店通路不可視為完成 | P1 | 券數一致性、兌換防重、跨日／過期（31） |
+| IT-05 原版釣魚與漁獲出售 | unit.pl L77；sea.cgi::turu L139–186、::seri L244–283 | Web 無釣魚／漁獲出售完整模組 | **確定缺漏** | 原版驗證餌料及釣魚間隔，按釣獲階級生成物品與不同出售價格，與食堂／物品封存不同 | P2 | 餌料、抽選、原始魚種、背包、出售金額、防重與交易回滾 |
+| IT-06 原版拍賣場刊登與結算 | unit.pl L189；auction.cgi::auction L49–72、::syupin、::syupin_do、::ukewatashi | Web 無該拍賣／結算流程 | **確定缺漏** | 原版使用獨立拍賣紀錄與刊登、交付分支；不同於普通商店／回收 | P2 | 物品所有權、有效期、競價、交付與多人交易競態 |
 
 ### 09 隨機與限時事件：全部 #01～#44 獨立列示
 
@@ -174,6 +181,9 @@
 | SC-03 決鬥／裝備／獎賞 | battle.cgi；atakka.cgi；dat_dir/battle.cgi | 尚無完整 Web 對應 | 未實作 | 裝備及傷害計算先追來源，不可發明戰鬥公式 | P2 | 傷害、冷卻、結算交易、跨帳號與重送（後續） |
 | SC-04 真實個人檔案自願登記／修改 | basic.cgi::prof L1690–1717、prof_form L1995–2105；town_ini.cgi L148–179 | 尚無 Web 個人檔案資料模型或表單 | **確定缺漏** | 原版為玩家主動填寫的真實公開資料（性別／年齡／地址、5 組選項、15 題自由填寫），不是遊戲 looks／BMI | P2（個資） | 自願公開、欄位選項、修改、遮蔽、權限及防止角色數值自動曝光 |
 | SC-05 個人檔案搜尋／分頁／傳訊入口 | basic.cgi::prof L1738–1991；town_ini.cgi L145–146 | 尚無 Web 公開檔案搜尋 UI | **確定缺漏** | 可依名稱、性別、年齡、住所與五選項查詢，每頁 10 筆並有傳訊入口 | P2（個資） | 真正查詢條件、分頁、可見性、訊息收件者權限與資料安全 |
+| SC-06 原版問卷建立、投票及管理 | unit.pl L83；enq.cgi::top/make/setup/add/write/delete；enq.cgi L417–426 | Web 無獨立問卷投票系統 | **確定缺漏** | 原版有建立問卷、選項、投票與管理分支，不等於登入畫面的事件通知或隨機事件 | P2 | 建立與管理權限、投票防重、選項數、期限、個人資料隔離 |
+| SC-07 原版玩家投稿事件 | unit.pl L79；event.cgi::form/save L21–103；log_dir/eventlog.cgi | Web 隨機事件模組是 event.pl 的抽選；無 event.cgi 投稿流程 | **確定缺漏** | event.cgi 會寫玩家投稿文字、能力與金錢等欄，**不能混成 event.pl #01～#44 已移植**；投稿不是自動加入隨機事件表 | P2 | 欄位、內容驗證、發表權限、審核與來源檔資料分離 |
+| SC-08 原版遊樂中心卡牌遊戲入口 | unit.pl L120；gamerand.cgi L42–79 → donut.cgi 等 | Web 僅有地圖遊樂中心圖示，無設施動作 | **確定缺漏** | 原版 gamerand.cgi 至少列出三種抽卡模式與 High／Low；具體結算需逐讀 donut.cgi，不能從說明推導機率 | P2 | 各玩法賭注、原始回合判定、款項、狀態防重、未成年人與公開部署安全 |
 
 ### 12 帳號／角色／安全
 
@@ -182,6 +192,7 @@
 | AC-01 單人／多人角色與登入 | game.cgi；town_lib.pl | src/server.mjs；src/solo-character.mjs；tests/server.test.mjs | 部分完成 | HTTP-only、scrypt、帳號隔離已存在；部署安全審查未完成 | P0 | solo/multi 不互通、跨帳號拒絕、登出與 session 失效（30/31） |
 | AC-02 單人刪角／繼續遊戲 | 原版角色保存／刪除行為待逐檔確認 | src/solo-character.mjs；public/app.js | 部分完成 | Web 擴充確認流程，非原版全世界重置 | P1 | 取消/誤名/交易失敗、不刪地圖與時鐘（31） |
 | AC-03 公開部署／管理權限／速率限制 | admin.cgi；admin2.cgi；unei.pl | src/server.mjs；README 安全限制 | 部分完成 | 未有完整登入速率限制及公開部署審查；不宜公開直接部署 | P0 | 威脅模型、權限矩陣、網路與備份演練（後續） |
+| AC-04 原版個人設定及備忘錄／朋友清單／死亡通知 | town_maker.cgi L647–649；setup.cgi::setup/change/friend/memo/die L19–23、L31–68、L334–354 | Web 有獨立 solo 刪角及帳號登入，沒有等價的完整原版設定資料模型 | **確定功能缺口／部分重疊** | 原版備忘錄可保存、好友清單和字體／音效設定可編輯；死亡通知含密碼及原始關聯檔處理，不能用 Web solo 刪角代稱完成 | P2 | 自願刪除及密碼驗證、個人檔案、保留關聯、其他設定／多人權限與回滾 |
 
 ### 13 轉檔／資料庫
 
@@ -201,8 +212,11 @@
 | UI-02 事件通知及 20 秒挑戰 | top.pl；event.pl L290-L305 | public/app.js；src/event-cockroach.mjs | 部分完成 | 程式顯示與 API 存在；真實操作與動態尺寸未驗證 | P1 | 模擬快轉阻擋、失效、跨帳號、視覺遮蔽（31） |
 | UI-03 地圖、餐點與手機 RWD | top.pl；town_maker.cgi；command.pl | public/style.css；public/index.html；public/app.js | 部分完成 | UI 結構已有改善；尚無 Chrome/Safari 實際截圖 | P1 | 手機與桌面流程、捲動固定條、讀屏／鍵盤（31） |
 | UI-04 部署／監控／備份 | 原始 CGI 運行環境；README | web/package.json；.github/workflows/town-web.yml | 部分完成 | CI 有測試；尚無正式營運安全／備份定期還原驗證 | P2 | 部署檢查、日誌、備份和恢復演練（後續） |
+| UI-05 地圖「教室」被錯導入學校 | unit.pl L152：教室→kyushitu.cgi；dat_dir/kyushitu.cgi 四課 | public/town-home.js::FACILITY_PANELS["教室"]="school-panel"；src/training.mjs 只讀 school.cgi/gym.cgi | **確定導覽錯置** | 原版學校與教室為不同設施；Web 點「教室」卻打開學校，並沒有原版教室四課功能。不能以已有學校面板算已移植教室 | P1 | 導覽入口誠實顯示尚未移植，後續教室獨立完成才接正式頁／API；用測試防混同 |
 
 ## 第一輪重大發現與應先修項
+
+**新增跨領域重大缺口（逐原版入口核對）**：`unit.pl` 定義 43 個互動入口；Web 地圖只認得其中 28 個，只有 7 個對應面板且教室面板錯置；原版車站六組票價、釣魚、問卷、活動投稿、股票、拍賣、遊樂中心及設定皆另有來源。詳 [逐入口查核](phase30-entrypoint-coverage.md)；**已核實入口不代表每個遊戲執行函式已檢查完畢**。
 
 1. **P0/體格 BMI 判定口徑（PR #12 已修正，P0-D 補半分界）**：`town_lib.pl::check_BMI` 使用 `int(weight/(height/100)^2)`；原版 `basic.cgi` 的職業門檻使用此整數。PR #12 已讓 Web 的 `eligibility` 即時運算整數 BMI，不再用舊的 `character.bmi` 一位小數值；P0-D 進一步修補 Perl `sprintf("%.1f")` 在 17.95／24.95／25.95 的半分界捨入差異。保留原有存檔欄位。
 2. **P1/健身房欄位來源**：`dat_dir/gym.cgi` 的能力增益、費用及能量欄位已對照；「間」與「効果」尚需實際執行路徑驗證。未確定的字串只保留原始資料，不視為待移植的新遊戲效果。
