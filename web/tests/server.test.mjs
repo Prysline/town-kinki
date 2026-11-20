@@ -71,6 +71,22 @@ async function api(base, route, body, cookie) {
 }
 
 const defaultStats = () => Object.fromEntries(["kokugo","suugaku","rika","syakai","eigo","ongaku","bijutu","looks","tairyoku","kenkou","speed","power","wanryoku","kyakuryoku","love","unique","etti"].map(key => [key,20]));
+function anchorSoloSalaryTestAtNoon(srv){
+  // 薪資測試會快轉 25～50 分鐘；若當下接近台北午夜，事件與銀行日利息會
+  // 同時結算，不能把這些每日資產變動誤判為發薪邏輯回歸。
+  const dateParts=new Intl.DateTimeFormat("en-US",{
+    timeZone:"Asia/Taipei",hour:"2-digit",minute:"2-digit",
+    second:"2-digit",hourCycle:"h23"
+  }).formatToParts(new Date());
+  const get=type=>Number(dateParts.find(x=>x.type===type)?.value??0);
+  const elapsed=((get("hour")*60+get("minute"))*60+get("second"))*1000;
+  const day=86400000,midday=12*3600000;
+  const offset=(midday-elapsed+day)%day;
+  const db=new DatabaseSync(join(srv.directory,"solo.sqlite"));
+  try{db.prepare("UPDATE solo_clock SET offset_ms=? WHERE id=1").run(offset);}
+  finally{db.close();}
+}
+
 
 test("單機：原版配點限制、建角、選職、工作、存提款與冷卻", async () => {
   const srv = await start("solo");
@@ -270,6 +286,7 @@ test("多人教室信用卡持有人隔離：不能用其他人的原版卡片�
 
 test("薪資去向：偏好存檔、實際銀行入帳與帳簿、重送冷卻及回切現金",async()=>{
   const srv=await start("solo");
+  anchorSoloSalaryTestAtNoon(srv);
   try{
     const created=await api(srv.url,"character",{
       name:"領薪測試居民",gender:"other",stats:defaultStats()
@@ -314,6 +331,7 @@ test("薪資去向：偏好存檔、實際銀行入帳與帳簿、重送冷卻�
 
 test("便利商店五次結薪：前四次兩種帳戶皆不增加，第五次銀行正確入帳，再五次現金正確入帳",async()=>{
   const srv=await start("solo");
+  anchorSoloSalaryTestAtNoon(srv);
   try{
     const created=await api(srv.url,"character",{
       name:"五次發薪測試",gender:"other",stats:defaultStats()
