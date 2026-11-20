@@ -4,6 +4,8 @@
 >
 > 先前的 14 領域盤點是**功能分類**而不是原版入口清冊；本表專門避免「整個 CGI／設施沒有被列出」的漏項。不能把一個圖片代碼存在，當成遊戲功能已移植。也不能把不存在的來源路徑當作可運作功能。
 
+> **根目錄來源補查**：另對整個 fork 的 67 個根目錄 CGI/Perl 檔交叉盤點，辨識企業員工教育 `unei_2.pl` 實際呼叫，以及 `unit_temp.pl` 副本、空檔與非遊戲管理／診斷 CGI；見 [第二層來源分類](phase30-root-source-classification.md)。
+
 ## 一、逐入口交叉檢查總覽
 
 > **2026-11-20 再核對**：43 入口統計保持不變；另查出 `basic.cgi::keiba`、`gouseiya.cgi::gousei_do`、`obatyan.cgi::battle` 與 `prezent2.cgi::get` 確有程式，但其 Web 玩法尚未移植；`town_maker.cgi::login_view` 有不屬於地圖設施的真實跨日徵稅。詳細證據見 [CGI 來源重盤點](phase30-source-recheck.md)。
