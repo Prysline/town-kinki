@@ -2273,7 +2273,9 @@ test("單機快轉：5 分鐘解鎖工作、半小時累加、1 小時用餐，�
     assert.equal(jumped.result.workCooldownMs,0);
     assert.equal((await api(srv.url,"work",{})).status,200);
 
-    const mealKey=jumped.result.meals.find(meal=>meal.price<=jumped.result.character.money)?.key;
+    // 這個測試要連續吃兩份相同餐點；避免抽到單份可買、第二份卻付不起的隨機餐點。
+    const mealKey=jumped.result.meals.find(meal=>meal.stock>=2&&
+      meal.price*2<=jumped.result.character.money)?.key;
     assert.ok(mealKey,"應有可負擔的食堂餐點");
     assert.equal((await api(srv.url,"meal/eat",{key:mealKey})).status,200);
     const eaten=await api(srv.url,"state");
