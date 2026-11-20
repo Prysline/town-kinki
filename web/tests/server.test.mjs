@@ -1494,6 +1494,15 @@ test("單機：食堂每日兩家各 30 道、共用庫存扣減／不可買下�
     assert.equal(second.length,30);
     assert.ok(first.mealMenuDay);
     assert.ok(first.meals.every(x=>Number.isSafeInteger(x.stock)&&x.stock>0));
+    // 來源 syouhin.cgi L10–43 有 34 道食物；未被今日選出的 4 道
+    // 即使客戶端直接提供真實目錄 key，也不可跳過菜單採購。
+    const notOnMenu=Array.from({length:34},(_,i)=>"meal-main-"+(10+i))
+      .find(key=>!main.some(meal=>meal.key===key));
+    assert.ok(notOnMenu);
+    const rejected=await api(srv.url,"meal/eat",{key:notOnMenu});
+    assert.equal(rejected.status,400);
+    assert.match(rejected.result.error,/售完|菜單/);
+    assert.equal((await api(srv.url,"state")).result.character.money,first.character.money);
     const chosen=main[0];
     const db=new DatabaseSync(join(srv.directory,"solo.sqlite"));
     try{
