@@ -78,10 +78,10 @@ test("原版「無」不等於沒有使用效果；未支援的特殊代碼不�
   const examples=catalog.filter(x=>x.effect==="無"&&
     retailItemDetails(x).effects.looks!==undefined);
   assert.ok(examples.length>0);
-  const unsupported=catalog.find(x=>x.effect==="ステータス");
+  const unsupported=catalog.find(x=>x.effect==="万能,");
   assert.ok(unsupported);
   assert.equal(retailItemDetails(unsupported).usage,"unsupported");
-  assert.equal(retailItemDetails(unsupported).effectCode,"ステータス");
+  assert.equal(retailItemDetails(unsupported).effectCode,"万能,");
 });
 
 test("新增可實際使用的原版甜點、ステータス 道具、分類複合效果及日制書籍，在百貨顯示已支援",()=>{
@@ -93,7 +93,6 @@ test("新增可實際使用的原版甜點、ステータス 道具、分類複�
     ["阪神タイガースの公式チケット","supported"],
     ["どすこいスーパーちゃんこ","supported"],
     ["どすこいスーパーつまみ食い","supported"],
-    ["断食セット","supported"],
     ["こちら葛飾区亀有公園前派出所　全巻","supported"]
   ];
   for(const [name,usage] of samples){
@@ -101,6 +100,8 @@ test("新增可實際使用的原版甜點、ステータス 道具、分類複�
     assert.ok(item,"原版商品不存在："+name);
     assert.equal(retailItemDetails(item).usage,usage,name);
   }
+  // 断食セット 的原版價為 0，百貨的安全目錄不能上架；使用效果另由舊檔道具測試。
+  assert.equal(catalog.some(x=>x.name==="断食セット"),false);
   for(const [name,usage] of [
     ["無駄知識を覚える本","unsupported"],
     ["健康保険","automatic"],["クレジットカード","payment"],
