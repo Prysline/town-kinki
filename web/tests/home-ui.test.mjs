@@ -8,6 +8,14 @@ const html=readFileSync(new URL("../public/index.html",import.meta.url),"utf8");
 const css=readFileSync(new URL("../public/style.css",import.meta.url),"utf8");
 const script=readFileSync(new URL("../public/app.js",import.meta.url),"utf8");
 
+test("原版兩間食堂每日菜單與共用庫存呈現完整且售完時不可下單",()=>{
+  assert.match(html,/id="meal-menu-day"/);
+  assert.match(html,/兩間食堂各每日抽選最多 30 道/);
+  assert.match(script,/state\.mealMenuDay/);
+  assert.match(script,/meal\.stock/);
+  assert.match(script,/meal\.reason\?"目前無法用餐":"選擇這道餐點"/);
+  assert.match(script,/button\.disabled=Boolean\(meal\.reason\)/);
+});
 test("教室原版有效信用卡付款：畫面能選本人卡片、改檢查銀行餘額並送來源行號",()=>{
   assert.match(html,/原版信用卡/);
   assert.match(script,/state\.classroomCreditCards/);
