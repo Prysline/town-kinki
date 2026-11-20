@@ -14,6 +14,7 @@ export function townCellAction(cell) {
   if(Number.isSafeInteger(cell.houseId)&&cell.houseId>0)
     return {kind:"house",houseId:cell.houseId};
   if(BUILDABLE.has(cell.key))return {kind:"build",panelId:"housing-panel"};
+  if(cell.key==="駅")return {kind:"station"};
   if(Object.hasOwn(FACILITY_PANELS,cell.key))
     return {kind:"facility",panelId:FACILITY_PANELS[cell.key]};
   if(["facility","transport","house"].includes(cell.category))
