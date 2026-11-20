@@ -44,8 +44,8 @@
 | WK-01 能量上限及自然恢復 | town_ini.cgi；game.cgi；basic.cgi | src/engine.mjs；src/server.mjs | 部分完成 | Web 有上限與恢復；需核對所有轉職／體格事件的加扣條件 | P1 | 上下限、十秒刻度、快轉／多角色隔離（31） |
 | WK-02 工作薪資、經驗、冷卻 | dat_dir/job.cgi；basic.cgi::do_work L2838–2961 | src/engine.mjs::performWork；tests/engine.test.mjs | 部分完成 | 基礎出勤、經驗與薪資存在；原版薪資可選銀行或現金（另見 WK-05），Web 目前一律現金；每次工作身高／性別重驗的差異見 WK-06 | P0/P1 | 條件、出勤、升級、精通、發薪去向與真實存檔（30/31） |
 | WK-03 飢餓／疾病修正工作 | top.pl L258-L273；basic.cgi | src/dining.mjs L82-L103；src/health.mjs | 部分完成 | 未用餐玩家以 provisional 5 經驗預設；非原版完整懲罰 | P1 | 舊玩家無紀錄、重症、狀態六級實測（31） |
-| WK-04 職業需求數值表及現有能力對照 | basic.cgi::job_change L2751–L2781（17 項必要能力、BMI、性別、身高、薪資、獎金、發薪週期、雙能量消耗，且顯示玩家目前數值）；job.cgi::top L18–L29（滑鼠提示 17 項能力）；dat_dir/job.cgi | src/engine.mjs::parseLegacyJobs（requirements、bmiMin／Max、gender、minHeight、salary 等已解析）；src/server.mjs::snapshot jobs（未回傳 requirements 等大部分條件）；public/app.js::renderJobs（只顯示薪資、消耗與第一項不足原因） | **確定缺漏：原版清楚顯示需求數值，Web 沒有** | 不是原版沒數據；Web 後端快照省略 17 項能力需求與大多數限制，前端無法比較原版的「玩家目前數值／職業要求」。原版可應徵下拉選單與下方全條件表是不同呈現 | P1 | 補 Web jobs snapshot 的完整必要能力、BMI 範圍、性別、身高、發薪與獎金欄位，前端給全部職業可檢視的條件表或明細；無權應徵仍須禁止；比對原版 150 筆及手機可讀性 |
-| WK-05 薪資與獎金領取方式 | basic.cgi::do_work L2920–2953、L2974–2998；town_maker.cgi L142–146；town_lib.pl::kozin_sprit 的 shiharai | src/engine.mjs::performWork（固定入現金）；src/legacy-character.mjs（原始 shiharai 不保留） | **確定缺漏** | 原版可選銀行振込或現金；銀行收入另記帳；Web 尚無偏好、銀行薪資帳簿，原始舊選擇也未匯入 | P1 | 發薪週期、升級獎金、現金與普通存款、帳簿、失敗回滾；舊資料不可虛構恢復 |
+| WK-04 職業需求數值表及現有能力對照 | basic.cgi::job_change L2751–L2781；job.cgi::top L18–L29；dat_dir/job.cgi | src/engine.mjs::parseLegacyJobs；src/server.mjs::snapshot jobs（完整傳回 requirements／BMI／身高／性別／薪資）；public/app.js::jobRequirementsPanel／renderJobs | **核心缺漏已修復（PR #22），待真實瀏覽器驗收** | Web 現已預設列出全部職業，可展開 17 項能力目前值／要求值、BMI、性別、身高、前置精通、薪資獎金與消耗，應徵資格仍在後端檢查 | P1（驗收） | 測試已檢查來源與拒絕不合格應徵；待 375px／768px／桌面實機及 150 筆工作資料核對 |
+| WK-05 薪資與獎金領取方式 | basic.cgi::do_work L2920–2953、L2974–2998；town_maker.cgi L142–146 | src/engine.mjs::performWork；src/server.mjs::/api/job/payment、/api/work；src/banking.mjs::recordBankEntry；public/app.js | **核心缺漏已修復（PR #24），舊偏好轉檔未完成** | 可選現金／普通存款；實際工作薪資與升級獎金按偏好分流，銀行帳簿分筆、SQLite 交易回滾；原版舊 shiharai 未保留時預設 cash，不虛構原值 | P1（舊檔／驗收） | 已有 engine、HTTP/SQLite、UI 測試；待真實原版歷史偏好轉檔、極端金額及瀏覽器驗收 |
 | WK-06 任職後工作再檢查條件 | basic.cgi::job_change L2695–2719；do_work L2867–2879 | src/engine.mjs::eligibility／performWork | 已確認行為差異 | 原版選職檢查性別／身高，但工作段落只查能力、BMI、能量；Web 實際工作還重新檢查性別／身高 | P1（行為確認） | 轉職後身高變化測試；安全差異經審核才能變更，不能隨意拿掉 Web 檢查 |
 | WK-07 工作工廠職業投稿／清單 | unit.pl L69；job.cgi::top L13–74；job.cgi::make L80–87；log_dir/joblog.cgi | Web 只載入 dat_dir/job.cgi 正式職業 | **確定缺漏** | 原版允許提交候選職業到 joblog，並顯示投稿條件；不是直接加入正式職業表；此 fork joblog 0 bytes | P2 | 投稿欄位、權限、審核邊界、顯示與真實投稿樣本（後續） |
 
@@ -56,9 +56,9 @@
 | TR-01 學校原始課程與使用說明 | dat_dir/school.cgi（課程資料）；manual.html L149–150（一天一堂） | src/training.mjs::parseLegacySchool、performTraining | 部分完成（按資料與說明實作） | 原版此 fork 根目錄沒有可執行 school.cgi；有資料和使用說明，無法對照原版實際付款、增益、時鐘執行 CGI | P1（來源邊界） | 逐課比對數值；明示未能核對的原始實際操作條件，不把 Web 行為說成已證實等價 |
 | TR-02 學校每日一次 | manual.html L149–150；dat_dir/school.cgi | src/training.mjs L75–106 | 部分完成（依原版說明） | 每天一次有原始說明依據；跨日、切課、伺服器時區仍需驗證，原版 fork 無獨立 school.cgi 程式可比對 | P1 | 跨日、重啟、同時請求及兩模式隔離（31） |
 | TR-03 健身房課程資料與原版執行來源 | dat_dir/gym.cgi（9 筆課程）；town_lib.pl::gym_sprit；manual.html L145–146 | src/training.mjs::parseLegacyGym、performTraining | 部分完成（根據資料運作） | 本 fork 根目錄無可執行 gym.cgi；Web 暫把「間」作分鐘；不能將另一設施 kyushitu.cgi 的減重、信用付款等同健身房的原版效果 | P1（來源邊界） | 欄位、增益、費用、冷卻回歸；找不到實際 gym CGI 時不宣稱完整等價 |
-| TR-04 教室獨立訓練設施 | unit.pl L152；kyushitu.cgi::kyushitu L30–90、kyushitu_go L93–175；dat_dir/kyushitu.cgi（4 筆） | src/server.mjs::trainingLessons 只讀 school.cgi 和 gym.cgi；無教室入口 | **確定缺漏** | 原版教室有獨立操作流程、17 能力增益、身體／頭腦雙消耗、分鐘間隔；不是 school 或 gym 的別名 | P1 | 四種課程、身體／頭腦能量、單人多人冷卻、原版流程及異常回滾 |
-| TR-05 教室訓練減重 | kyushitu.cgi::kyushitu_go L121–143 | Web 尚無教室模組或此減重公式 | **確定缺漏** | 原版教室明確扣減體重 (身體消耗+頭腦消耗)/100 公斤；不能套用到缺執行來源的運動健身房 | P1 | 四課原始消耗、體重/BMI、低體重保護、重送與資料回滾 |
-| TR-06 教室信用物品付款 | kyushitu.cgi L68–84、L108–118；原版物品欄 syo_kouka=クレジット | Web 無教室付款及物品授信流程 | **確定缺漏** | 原版有現金／有效信用道具選項，信用款項扣普通銀行並記帳；Web 不複製無餘額檢查造成的風險 | P1 | 原始道具有效期、付款授權、普通銀行帳簿、雙能量不足、失敗回滾 |
+| TR-04 教室獨立訓練設施 | unit.pl L152；kyushitu.cgi::kyushitu／kyushitu_go L30–175；dat_dir/kyushitu.cgi（4 筆） | src/training.mjs::parseLegacyClassroom、performTraining；src/server.mjs::/api/train；public/index.html::classroom-panel | **核心現金訓練已實作（PR #23）** | 與學校／健身房不同的四課、17 項能力增益、雙能量、分鐘間隔與獨立冷卻已接入；信用商品付款另列 TR-06 | P1（部分完成） | 來源四課、SQLite 冷卻、重送、付款與能力測試；仍待玩家存檔與實機驗收 |
+| TR-05 教室訓練減重 | kyushitu.cgi::kyushitu_go L121–143 | src/training.mjs::performTraining（type=classroom）、src/engine.mjs::bodyMassIndex | **原版核心公式已實作（PR #23）** | 減重 (身體消耗+頭腦消耗)/100 公斤、更新 BMI；Web 為安全設最低 1kg，和原版沒有下限不同；不挪用到健身房 | P1（驗收） | 四課消耗、連續操作、真實舊檔、極端低體重與 BMI 回歸 |
+| TR-06 教室信用物品付款 | kyushitu.cgi L68–84、L108–118；原版物品欄 syo_kouka=クレジット | Web 教室已支援現金；server.mjs::/api/train 明確拒絕 credit | **仍未實作：有效信用商品付款** | 需按原版物品有效期／授權核對，扣普通銀行並記帳，且不能讓無效或假造的 payment 值扣款；現金課程不能算信用已完成 | P1 | 原始信用持有物、有效期、銀行餘額、帳簿、多人隔離及交易回滾 |
 
 ### 04 飲食／熱量
 
@@ -77,7 +77,7 @@
 | MP-02 原版 townlog 匯入／地圖編輯 | log_dir/townlog0.cgi ～ townlog3.cgi；town_maker.cgi | src/town-storage.mjs；scripts/town-map.mjs | 部分完成 | 目前 fork 的原始地圖日誌需實際確認是否有資料，不能補造配置 | P1 | 空檔與真實檔 round-trip、權限、備份／回滾（後續） |
 | MP-03 車站／交通票券與跨城成本 | station.cgi；town_ini.cgi；商品檔 | public/app.js；src/town-map.mjs | 未實作（原版完整流程） | Web 城市切換不等於原版車站收費與物品效果 | P1 | 交通費、權限、票券扣除、跨城交易（後續） |
 | MP-04 車站六組票價及跨城移動 | unit.pl L85；station.cgi::idou L99–116、L135–169 | src/server.mjs::/api/move；public/app.js；public/town-home.js | **確定規則差異** | 原版 4 城六組票價為 950／780／1210／950／2210／1530 並扣現金；Web 有換城但無此票價流程，原版「駅」地圖格子也無入口 | P1 | 六組方向互返、現金餘額與負數保護、資料回滾及實際移動時序 |
-| MP-05 原版地圖互動入口覆蓋率 | unit.pl::get_unit L62–191（43 個表單入口）；top.pl L472–490 | src/town-map.mjs::MAP_SYMBOLS；public/town-home.js::FACILITY_PANELS | **初步路由覆蓋，非完整遊戲移植** | 43 入口中 28 個有 Web 圖示代碼、15 個未收錄；7 個映射面板但「教室」錯接「學校」，21 個圖示回報 unavailable。詳 [入口逐項稽核](phase30-entrypoint-coverage.md) | P1 | 逐入口證據、未知格代碼、真實空白 townlog 的備份核對、跨城與靜態／動態入口分離 |
+| MP-05 原版地圖互動入口覆蓋率 | unit.pl::get_unit L62–191（43 個表單入口）；top.pl L472–490 | src/town-map.mjs::MAP_SYMBOLS；public/town-home.js::FACILITY_PANELS | 初步路由覆蓋，非完整遊戲移植 | 43 入口中 28 個有 Web 圖示代碼、15 個未收錄；7 個映射面板，教室已獨立連至 classroom-panel（PR #23），剩餘 21 個有圖示但回報 unavailable。詳 [入口逐項稽核](phase30-entrypoint-coverage.md) | P1 | 逐入口實際交易與 CGI、真實空白 townlog、跨城及尚未移植設施 |
 
 ### 06 住宅／進階設施
 
@@ -212,15 +212,17 @@
 | UI-02 事件通知及 20 秒挑戰 | top.pl；event.pl L290-L305 | public/app.js；src/event-cockroach.mjs | 部分完成 | 程式顯示與 API 存在；真實操作與動態尺寸未驗證 | P1 | 模擬快轉阻擋、失效、跨帳號、視覺遮蔽（31） |
 | UI-03 地圖、餐點與手機 RWD | top.pl；town_maker.cgi；command.pl | public/style.css；public/index.html；public/app.js | 部分完成 | UI 結構已有改善；尚無 Chrome/Safari 實際截圖 | P1 | 手機與桌面流程、捲動固定條、讀屏／鍵盤（31） |
 | UI-04 部署／監控／備份 | 原始 CGI 運行環境；README | web/package.json；.github/workflows/town-web.yml | 部分完成 | CI 有測試；尚無正式營運安全／備份定期還原驗證 | P2 | 部署檢查、日誌、備份和恢復演練（後續） |
-| UI-05 地圖「教室」被錯導入學校 | unit.pl L152：教室→kyushitu.cgi；dat_dir/kyushitu.cgi 四課 | public/town-home.js::FACILITY_PANELS["教室"]="school-panel"；src/training.mjs 只讀 school.cgi/gym.cgi | **確定導覽錯置** | 原版學校與教室為不同設施；Web 點「教室」卻打開學校，並沒有原版教室四課功能。不能以已有學校面板算已移植教室 | P1 | 導覽入口誠實顯示尚未移植，後續教室獨立完成才接正式頁／API；用測試防混同 |
+| UI-05 地圖教室獨立入口 | unit.pl L152：教室→kyushitu.cgi；dat_dir/kyushitu.cgi 四課 | public/town-home.js::FACILITY_PANELS["教室"]="classroom-panel"；public/index.html::classroom-panel | **已修正錯誤導覽（PR #23）** | 地圖教室不再誤導至學校；已與獨立教室資料及訓練連動 | P1（驗收） | home-ui.test.mjs 及 server／training 測試已涵蓋，待手機與桌面實際操作 |
+
+**實際修復後更新（2026-11-20）**：PR #22（17 項職業必要值與比較）、#23（獨立教室與錯誤地圖入口修正）、#24（現金／銀行薪資及獎金分流）已通過測試並整合；本文之前列示的「未實作」如有衝突以更新後各列為準。信用商品付款、車站原版票價、釣魚等仍是確定缺口。
 
 ## 第一輪重大發現與應先修項
 
-**新增跨領域重大缺口（逐原版入口核對）**：`unit.pl` 定義 43 個互動入口；Web 地圖只認得其中 28 個，只有 7 個對應面板且教室面板錯置；原版車站六組票價、釣魚、問卷、活動投稿、股票、拍賣、遊樂中心及設定皆另有來源。詳 [逐入口查核](phase30-entrypoint-coverage.md)；**已核實入口不代表每個遊戲執行函式已檢查完畢**。
+**新增跨領域重大缺口（逐原版入口核對）**：`unit.pl` 定義 43 個互動入口；Web 地圖只認得其中 28 個，已有 7 個對應面板且教室入口已修正（PR #23）；原版車站六組票價、釣魚、問卷、活動投稿、股票、拍賣、遊樂中心及設定皆另有來源。詳 [逐入口查核](phase30-entrypoint-coverage.md)；**已核實入口不代表每個遊戲執行函式已檢查完畢**。
 
 1. **P0/體格 BMI 判定口徑（PR #12 已修正，P0-D 補半分界）**：`town_lib.pl::check_BMI` 使用 `int(weight/(height/100)^2)`；原版 `basic.cgi` 的職業門檻使用此整數。PR #12 已讓 Web 的 `eligibility` 即時運算整數 BMI，不再用舊的 `character.bmi` 一位小數值；P0-D 進一步修補 Perl `sprintf("%.1f")` 在 17.95／24.95／25.95 的半分界捨入差異。保留原有存檔欄位。
 2. **P1/健身房欄位來源**：`dat_dir/gym.cgi` 的能力增益、費用及能量欄位已對照；「間」與「効果」尚需實際執行路徑驗證。未確定的字串只保留原始資料，不視為待移植的新遊戲效果。
-3. **P1/職業需求數值表漏移植（已確認）**：原版 `basic.cgi::job_change` L2753–2781 明確輸出每個職業的 17 項能力與 BMI、性別、身高、薪資等，並提供玩家當前值對照；`job.cgi::top` 的滑鼠提示也有各項需求。Web 只向前端送簡化 `reason`，造成不能檢視原版具體門檻。這是 Web 移植缺口，**不是原版不存在**。
+3. **P1/職業需求數值表（PR #22 已修復核心展示）**：原版 `basic.cgi::job_change` L2753–2781 明確輸出每個職業的 17 項能力與 BMI、性別、身高、薪資等，並提供玩家當前值對照；`job.cgi::top` 的滑鼠提示也有各項需求。舊 Web 只向前端送簡化 `reason`，PR #22 已補完整原版數值及玩家比較，**並非原版不存在**。實機驗收仍待完成。
 4. **P1/食堂每日菜單與庫存**：`command.pl` L919–999、L1161–1245 有更新菜單與剩餘量，Web `src/dining.mjs` 頂部承認固定展示。
 5. **P0/事件分支**：缺 #28、#36、#37、#38、#40；其中 #28、#36、#37 的 `kifu*` 要先追完整實作；#38、#40 需物品產生與背包容量。
 6. **P0/展示（PR #13 已合併）**：`public/index.html` 的 `#measurements`、`#physique-status` 已移至狀態分頁常駐體格摘要；`public/app.js` 延用相同資料流。真實瀏覽器截圖和操作驗收仍未完成。
