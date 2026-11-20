@@ -26,6 +26,9 @@ test("工作結果顯示原版結薪進度，避免把未達發薪次數誤認�
   assert.match(script,/result\.worksUntilPayday/);
   assert.match(script,/本次尚未到發薪次數/);
   assert.match(script,/此次沒有薪資入帳/);
+  assert.match(script,/let savingSalaryPayment=false/);
+  assert.match(script,/await action\("job\/payment"/);
+  assert.match(script,/el\("work"\)\.disabled = !ready \|\| savingSalaryPayment/);
 });
 
 test("原版薪資收款方式可從工作面板儲存，銀行與現金有實際分流",()=>{
