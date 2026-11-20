@@ -191,6 +191,15 @@ main{max-width:1100px;margin:.8rem auto;padding:0 .7rem;min-height:unset}
 .game-shell details[open]>summary{margin-bottom:.45rem}
 .game-shell details .small{margin:.3rem 0 .5rem}
 .game-shell .status-extra{margin-top:.25rem}
+/* 體格摘要置於狀態分頁常駐區，沿用既有渲染 ID；適配 290px 側欄與手機。 */
+.game-shell .physique-summary{min-width:0;margin:.4rem 0;padding:.45rem .55rem;
+  border:1px solid #cbdccd;border-radius:5px;background:#f3f8f3}
+.game-shell .physique-summary h3{margin:0 0 .2rem;color:#295b41;font-size:.83rem;line-height:1.35}
+.game-shell .physique-summary .status-physique{margin:0}
+.game-shell .physique-summary .status-physique>div{padding:.25rem 0}
+.game-shell .physique-summary .status-physique>div:last-child{border-bottom:0}
+.game-shell .physique-summary .status-physique dt{white-space:nowrap}
+.game-shell .physique-summary .status-physique dd{font-variant-numeric:tabular-nums}
 .game-shell .event-alert{background:#b3482d;width:100%;color:#fff;font-size:.84rem;margin-top:.35rem;text-align:center;min-height:38px}
 .game-shell .event-alert:focus-visible{outline-color:#d8825e}
 .game-shell .facility-shell{margin-top:.65rem;padding:.75rem .85rem;border:1px solid #b4cbb5;background:#fff;border-radius:5px}
