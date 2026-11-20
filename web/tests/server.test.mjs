@@ -2517,3 +2517,38 @@ test("多人模式無法呼叫刪除單人角色 API，包含已登入的使用�
     assert.equal(after.result.character.name,"多人不刪");
   }finally{await srv.stop();}
 });
+
+
+test("單機有真實百貨建築才能購買：地圖入店、現金/庫存/物品、防重及另一店封鎖",async()=>{
+  const srv=await start("solo");
+  try{
+    const created=await api(srv.url,"character",{name:"百貨驗收玩家",gender:"other",stats:defaultStats()});
+    assert.equal(created.status,200);
+    assert.deepEqual(created.result.retailAvailable,[]);
+    const failed=await api(srv.url,"retail/buy",{
+      shop:"depart1",sku:"legacy-2",quantity:1,requestId:"retail_no_building"});
+    assert.equal(failed.status,400);
+    const placed=await api(srv.url,"map/tile",{row:0,column:0,symbol:"デパ"});
+    assert.equal(placed.status,200);
+    assert.ok(placed.result.retailAvailable.includes("depart1"));
+    assert.ok(!placed.result.retailAvailable.includes("depart2"));
+    assert.equal(placed.result.retailGoods.length,110);
+    const affordable=placed.result.retailGoods.find(item=>item.stock>0&&item.price<=placed.result.character.money);
+    assert.ok(affordable,"當日貨架應存在初始現金能購買的原始商品");
+    const before=placed.result.character.money;
+    const payload={shop:"depart1",sku:affordable.sku,quantity:1,requestId:"retail_http_00001"};
+    const bought=await api(srv.url,"retail/buy",payload);
+    assert.equal(bought.status,200);
+    assert.equal(bought.result.retailResult.paid,affordable.price);
+    assert.equal(bought.result.character.money,before-affordable.price);
+    assert.equal(bought.result.retailPurchases.length,1);
+    assert.ok(bought.result.legacyInventory.some(x=>x.origin==="retail"&&x.name===affordable.name));
+    assert.equal(bought.result.retailGoods.find(x=>x.sku===affordable.sku).stock,affordable.stock-1);
+    const again=await api(srv.url,"retail/buy",payload);
+    assert.equal(again.status,200);
+    assert.equal(again.result.retailResult.replayed,true);
+    assert.equal(again.result.character.money,before-affordable.price);
+    assert.equal((await api(srv.url,"retail/buy",{...payload,shop:"depart2",requestId:"retail_shop2_fail"})).status,400);
+    assert.equal((await api(srv.url,"retail/buy",{...payload,quantity:3,requestId:"retail_qty_fail"})).status,400);
+  }finally{await srv.stop();}
+});

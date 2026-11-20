@@ -88,10 +88,11 @@ test("沒有實體百貨、商品未上架、現金不足、無效序號均拒�
 test("同品不得越過 25 格容量，跨日刷新，但原版匯入物品不可被改寫",()=>{
   const db=fixture();try{
     ensureRetailDay(db,catalog,day,randomIndex);
-    const first=listRetailStock(db,catalog,["depart1"])[0];
-    // 測試免重複價值：每份以唯一來源流水號加入，達 25 格後拒絕。
-    for(let i=0;i<25;i++)buyRetailItem(db,1,catalog,options("depart1",first.sku,"shop_slot_"+String(i).padStart(7,"0")));
-    assert.throws(()=>buyRetailItem(db,1,catalog,options("depart1",first.sku,"shop_slot_overfull")),/25 格/);
+    const selected=listRetailStock(db,catalog,["depart1"]).filter(x=>x.price<=100000).slice(0,26);
+    assert.equal(selected.length,26);
+    // 多種真實上架商品各買一件，確定容量按實際個人物品格而非單一 SKU 計。
+    for(let i=0;i<25;i++)buyRetailItem(db,1,catalog,options("depart1",selected[i].sku,"shop_slot_"+String(i).padStart(7,"0")));
+    assert.throws(()=>buyRetailItem(db,1,catalog,options("depart1",selected[25].sku,"shop_slot_overfull")),/25 格/);
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM legacy_inventory_items WHERE user_id=1").get().n,25);
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM retail_purchases WHERE user_id=1").get().n,25);
     assert.equal(ensureRetailDay(db,catalog,"2026-10-10",randomIndex),true);
