@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   STAT_KEYS, createCharacterData, validateStartingStats, maxBodyEnergy, maxBrainEnergy,
+  bodyMassIndex,
   decodeLegacyText, jobEligibility, parseLegacyJobs, recoverEnergy, selectJob,
   performWork, bankTransaction, WORK_COOLDOWN_MS
 } from "../src/engine.mjs";
@@ -86,6 +87,29 @@ test("工作冷卻、薪資及等級初次獲取", () => {
   const later = performWork(firstWork.character, job, 100001 + WORK_COOLDOWN_MS, () => 0);
   assert.equal(later.character.workCount, 2);
   assert.equal(later.character.jobWorkCount, 2);
+});
+
+test("轉職與工作依原版整數 BMI 門檻判定，忽略存檔中的一位小數 BMI", () => {
+  const [base] = parseLegacyJobs(first);
+  const job = { ...base, bmiMin: 18, bmiMax: 24, bodyCost: 0, brainCost: 0 };
+  const original = createCharacterData("BMI 測試角色", "other", 100000);
+  // 實際 BMI 約 24.98；儲存的顯示用 BMI 為 25.0，原版 int 為 24。
+  const character = {
+    ...original, height: 170, weight: 72.2, bmi: bodyMassIndex(170,72.2)
+  };
+  assert.equal(character.bmi,25);
+  assert.equal(jobEligibility(character,job),null);
+  assert.equal(jobEligibility({...character,bmi:99},job),null);
+  const hired=selectJob(character,job);
+  assert.equal(performWork(hired,job,100001,()=>0).paid,1000);
+
+  const tooThin={...character,weight:51,bmi:24};
+  const tooHeavy={...character,weight:75,bmi:20};
+  assert.equal(jobEligibility(tooThin,job),"體格指數不足");
+  assert.equal(jobEligibility(tooHeavy,job),"體格指數不足");
+  assert.throws(()=>selectJob(tooHeavy,job),/體格指數不足/);
+  assert.throws(()=>performWork({...hired,weight:75,bmi:24},job,100001,()=>0),/體格指數不足/);
+  assert.equal(jobEligibility(tooHeavy,{...job,bmiMax:0}),null);
 });
 
 test("原版每一薪資結算週期支付薪資乘以出勤次數", () => {
