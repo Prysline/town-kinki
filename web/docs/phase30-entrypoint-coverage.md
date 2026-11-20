@@ -6,6 +6,10 @@
 
 ## 一、逐入口交叉檢查總覽
 
+> **2026-11-20 再核對**：43 入口統計保持不變；另查出 `basic.cgi::keiba`、`gouseiya.cgi::gousei_do`、`obatyan.cgi::battle` 與 `prezent2.cgi::get` 確有程式，但其 Web 玩法尚未移植；`town_maker.cgi::login_view` 有不屬於地圖設施的真實跨日徵稅。詳細證據見 [CGI 來源重盤點](phase30-source-recheck.md)。
+
+
+
 直接從原版 `unit.pl` 的 `%unit` 定義重新取出 **73 個地圖代碼**：**43 個**定義互動 `<form>`（包含跨行的「温泉」）；另 **30 個**是地景／道路／裝飾等非表單條目。
 
 針對 43 個互動入口，Web 目前：

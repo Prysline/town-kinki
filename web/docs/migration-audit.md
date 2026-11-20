@@ -96,7 +96,7 @@
 | BK-01 普通與定存、計息與帳簿 | parabank.cgi；相關銀行 CGI 待逐函式核對 | src/banking.mjs；tests/banking.test.mjs | 部分完成 | 利率已有 Web 規則，計息觸發時點與原版不完全同等 | P1 | 連續跨日、停機、重入、金額上限、交易明細（31） |
 | BK-02 玩家轉帳與額度 | parabank.cgi；原始角色資料 | src/banking.mjs；src/server.mjs | 部分完成 | 身份校驗與原子交易已載明；需逐項反查原始限制 | P1 | 七天限制、收款人每日上限、防重／異常回滾（31） |
 | BK-03 住宅貸款及每日還款 | parabank.cgi；原始銀行相關 CGI | src/banking.mjs；tests/loans.test.mjs | 部分完成 | 負餘額與違約模式保留 Web 差異；無法稱為等價 | P1 | 貸款上限、逾期、全額清償、遷移與備份（31） |
-| BK-04 稅務／原版全部資產檔匯入 | yakuba.cgi；銀行及資產關聯檔待整理 | 目前未找到完整 Web 對應 | 缺少來源無法驗證 | 需先定位 CGI 實際徵稅/帳簿來源，不推斷規則 | P2 | 來源核實後拆資料結構與交易 PR（待排定） |
+| BK-04 原版定期徵稅 | town_ini.cgi L40–41；town_maker.cgi::login_view L184–263；town_lib.pl::kozin_sprit（k_sousisan/kpoint） | src/server.mjs 沒有原版徵稅與全資產欄位對應 | **確定缺漏（來源更正）** | 原版指定星期／日期跨日後按全資產 0/1/3/5/7% 階梯徵稅，K 點折扣，普通銀行扣款並記帳；舊清冊誤引 yakuba.cgi（其實是排行榜）。Web 尚未還原稅基，不能隨意以現金/銀行近似，也不照搬負存款 | P2（資產相依） | 逐欄校正 k_sousisan、跨日/指定日、K 點階梯、存款/帳簿、防重/失敗回滾及真實舊檔；先完成資產來源再實作 |
 | BK-05 原版 A～E 股票市場及持股紀錄 | unit.pl L132；kabu.cgi::kabu L36–108；log_dir/kab_hendou.cgi；member/<ID> 相關股票檔 | src/banking.mjs 只有銀行／貸款模組，無股價交易 | **確定缺漏** | 原版有獨立五類股價、持股、交易與清算記錄；不可因 Web 已有銀行而算股票已移植 | P2 | 檢查原始行情更新、買賣、每人持股、交易限制與真實存檔後再實作 |
 
 ### 08 物品／商店／裝備
@@ -106,9 +106,10 @@
 | IT-01 33 欄存檔封存與對照 | dat_dir/syouhin.cgi 首列；member/<ID>/mono.cgi（未提供真實玩家檔） | src/legacy-inventory.mjs；scripts/legacy-inventory.mjs | 部分完成 | 解析／封存存在；未能以真實玩家存檔完成相容性驗證 | P1 | 33 欄全欄測試、未知道具、重匯防重、無損回滾（31） |
 | IT-02 可確認消耗品／耐久 | basic.cgi L2556-L2579；dat_dir/syouhin.cgi | src/legacy-item-use.mjs；tests/legacy-item-use.test.mjs | 部分完成 | 只支援部分已封存物品效果，回／日與其他道具尚需逐項核對 | P0 | 體格、疾病、冷卻、失效、幂等與安全範圍（30-體格） |
 | IT-03 商店、贈送、裝備與回收 | dat_dir/prezento.cgi；dat_dir/soubi.cgi；gifutoya.cgi；recycle.cgi | 尚無完整 Web 對應 | 未實作（完整流程） | 商品來源、ギフト限制、裝備效果、交易記錄互相依賴 | P1 | 依原始商品與操作逐項拆分商品、裝備與交易 PR（31/後續） |
-| IT-04 優惠券獲得與兌換 | coupon.cgi；dat_dir/coupon.cgi；event.pl #30/#35 | src/event-effects.mjs；src/events.mjs | 部分完成 | 已處理事件發券；兌換入口與商店通路不可視為完成 | P1 | 券數一致性、兌換防重、跨日／過期（31） |
+| IT-04 優惠券獲得與兌換 | coupon.cgi::coupon/coupon_do L34–170；dat_dir/coupon.cgi；event.pl #30/#35 | src/event-effects.mjs；src/events.mjs 已保存 Web 事件所得券數；無兌換/獎品交易 | 部分完成（原版兌換確定缺漏） | 原版從本人 mono.cgi 的「ギフト/クーポン」耐久扣除每筆「クーポン交換品:N」點數，並添 33 欄獎品；Web 事件券與舊匯入券尚非同一保存模型。沒有找到券本身跨日歸零/過期分支，不能把此當作原版既有規則 | P1 | 30 筆獎品/點數核對、真正所有權/容量/耐久、匯入券與 Web 事件券對帳、重送/回滾；不虛構券到期 |
 | IT-05 原版釣魚與漁獲出售 | unit.pl L77；sea.cgi::turu L139–186、::seri L244–283 | Web 無釣魚／漁獲出售完整模組 | **確定缺漏** | 原版驗證餌料及釣魚間隔，按釣獲階級生成物品與不同出售價格，與食堂／物品封存不同 | P2 | 餌料、抽選、原始魚種、背包、出售金額、防重與交易回滾 |
 | IT-06 原版拍賣場刊登與結算 | unit.pl L189；auction.cgi::auction L49–72、::syupin、::syupin_do、::ukewatashi | Web 無該拍賣／結算流程 | **確定缺漏** | 原版使用獨立拍賣紀錄與刊登、交付分支；不同於普通商店／回收 | P2 | 物品所有權、有效期、競價、交付與多人交易競態 |
+| IT-07 原版合成屋 | unit.pl L187；gouseiya.cgi::gousei/gousei_do L47–48、L229–365；dat_dir/gousei.cgi | Web 無原始配方與合成交易模型 | **確定缺漏（未完整逐配方核對）** | 原版以本人持有材料耐久生成合成品，不能把現有 33 欄物品解析當作具備合成功能 | P2 | 所有配方及材料、同一材料/多筆持有、產出容量、原子扣耐久與重送、舊檔相容 |
 
 ### 09 隨機與限時事件：全部 #01～#44 獨立列示
 
@@ -180,12 +181,15 @@
 |---|---|---|---|---|---|---|
 | SC-01 私訊與玩家互動 | bbs.cgi；tag.cgi；log_dir/aisatulog.cgi | 尚無完整 Web 對應 | 未實作 | 先確認各 CGI 的權限與儲存格式 | P2 | 收發、跨帳號授權、歷史匯入、刪除與清理（後續） |
 | SC-02 戀愛／婚姻／同居／育兒 | dat_dir/love.cgi；kekkon.cgi；log_dir/couplelog.cgi；log_dir/kodomolog.cgi | 尚無完整 Web 對應 | 未實作 | 依賴角色關聯檔、多人帳號及安全同步 | P2 | 原始關係狀態／事件、隱私及回滾（後續） |
-| SC-03 決鬥／裝備／獎賞 | battle.cgi；atakka.cgi；dat_dir/battle.cgi | 尚無完整 Web 對應 | 未實作 | 裝備及傷害計算先追來源，不可發明戰鬥公式 | P2 | 傷害、冷卻、結算交易、跨帳號與重送（後續） |
+| SC-03 B 聯賽決鬥／裝備／獎賞 | unit.pl L73；battle.cgi::bbin/bb；dat_dir/battle.cgi | 尚無完整 Web 對應 | 未實作 | 原版 battle.cgi 有對戰與結算；atakka.cgi 是 0 位元組資料檔，town_lib.pl::atakka 讀寫防濫用紀錄，**不是戰鬥 CGI**；裝備與其他 C 聯賽須分別來源核對 | P2 | 傷害/掉落/冷卻及道具歸屬，和 C 聯賽、弱／強おばちゃん挑戰分開、跨帳號與重送（後續） |
 | SC-04 真實個人檔案自願登記／修改 | basic.cgi::prof L1690–1717、prof_form L1995–2105；town_ini.cgi L148–179 | 尚無 Web 個人檔案資料模型或表單 | **確定缺漏** | 原版為玩家主動填寫的真實公開資料（性別／年齡／地址、5 組選項、15 題自由填寫），不是遊戲 looks／BMI | P2（個資） | 自願公開、欄位選項、修改、遮蔽、權限及防止角色數值自動曝光 |
 | SC-05 個人檔案搜尋／分頁／傳訊入口 | basic.cgi::prof L1738–1991；town_ini.cgi L145–146 | 尚無 Web 公開檔案搜尋 UI | **確定缺漏** | 可依名稱、性別、年齡、住所與五選項查詢，每頁 10 筆並有傳訊入口 | P2（個資） | 真正查詢條件、分頁、可見性、訊息收件者權限與資料安全 |
 | SC-06 原版問卷建立、投票及管理 | unit.pl L83；enq.cgi::top/make/setup/add/write/delete；enq.cgi L417–426 | Web 無獨立問卷投票系統 | **確定缺漏** | 原版有建立問卷、選項、投票與管理分支，不等於登入畫面的事件通知或隨機事件 | P2 | 建立與管理權限、投票防重、選項數、期限、個人資料隔離 |
 | SC-07 原版玩家投稿事件 | unit.pl L79；event.cgi::form/save L21–103；log_dir/eventlog.cgi | Web 隨機事件模組是 event.pl 的抽選；無 event.cgi 投稿流程 | **確定缺漏** | event.cgi 會寫玩家投稿文字、能力與金錢等欄，**不能混成 event.pl #01～#44 已移植**；投稿不是自動加入隨機事件表 | P2 | 欄位、內容驗證、發表權限、審核與來源檔資料分離 |
 | SC-08 原版遊樂中心各種遊戲入口 | unit.pl L120；gamerand.cgi L42–186 → donut.cgi、loto.cgi、loto6.cgi、fukubiki.cgi、saikoro.cgi、cardw2.cgi、otakara.cgi | Web 僅有地圖遊樂中心圖示，無這些設施操作 | **確定尚缺 Web 玩法；子遊戲規則仍待逐函式盤點** | 原版至少列四種 donut 卡牌模式（含 High／Low）、樂透／六號樂透、福引、骰子、卡牌下注、寶箱；各自交易與機率未完成查核。slot.php 的連結缺檔、kuzi.cgi 表單在此 fork 被註解，不能擅自列為可玩遊戲。詳 [多層入口總清冊](phase30-open-audit-backlog.md) | P2 | 逐玩法來源／可達性、賭注及收益、資料保存、防重與營運安全後再實作 |
+| GM-02 原版競馬 | unit.pl L162；basic.cgi::keiba L530–851 | Web 地圖有競馬圖示，但沒有賽馬下注/結果 API | **確定缺漏** | 原版馬券 500 円/張、最多押兩匹，有限額、賠率、賽事鎖及排行榜；不能自行創造勝率或讓瀏覽器決定結果 | P2 | 逐分支核實原始賠率/鎖/名額、經濟交易及多人同步，拒絕重送 |
+| GM-03 弱／強おばちゃん挑戰 | unit.pl L116–118；gamerand.cgi L206–222；obatyan.cgi::week/strong/battle L16–37 | Web 無兩難度戰鬥與掉落 | **確定缺漏** | 原版從地圖/遊樂中心皆可進，與 B 聯賽不同；裝備與獎品須追持有檔 | P2 | 難度/能量/掉落/商品 33 欄/冷卻/多人交易 |
+| SC-09 原版隱藏口令獎勵 | unit.pl L65；prezent2.cgi::top/get L18–79；log_dir/prezent2.cgi | Web 無原版活動兌換或已領記錄 | **原版有程式，活動可否開放未驗證** | 原始程式需隱藏口令且每人一次，先領五人與其他玩家獎勵不同；不能從原版片段自動重啟活動或公布口令 | P2（活動確認） | 原站活動/口令安全、權限、同時領取與回滾、K 點及真實 log |
 
 ### 12 帳號／角色／安全
 
