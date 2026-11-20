@@ -26,6 +26,17 @@ test("職業條件保留原版十七項數值及全部職業可展開檢視",()=
   assert.match(script, /details\.append\(other,finance,requirements\)/);
   assert.match(script, /button\.disabled = Boolean\(job\.reason\)/);
 });
+test("地圖車站接回原版六組票價與真實跨城操作而非免費切換",()=>{
+  assert.match(html,/id="station-heading"/);
+  assert.match(html,/id="station-status"/);
+  assert.match(script,/state\.trainDestinations/);
+  assert.match(script,/fare=fares\.get\(town\.id\)/);
+  assert.match(script,/button\.disabled = current \|\| !affordable/);
+  assert.match(script,/action\("move", \{ townId: town\.id \}\)/);
+  assert.match(script,/result\.fare/);
+  assert.match(script,/destination\.kind==="station"/);
+  assert.deepEqual(townCellAction(describeTile("駅")),{kind:"station"});
+});
 test("原 CGI 建築代碼只連到 Web 真正已實作的設施入口",()=>{
   const expected={
     "銀行":"bank-panel","病院":"hospital-panel","職安":"jobs-panel",
@@ -39,7 +50,8 @@ test("原 CGI 建築代碼只連到 Web 真正已實作的設施入口",()=>{
     assert.deepEqual(townCellAction(cell),{kind:"facility",panelId});
     assert.match(html,new RegExp('id="'+panelId+'"'));
   }
-  for(const key of ["駅","デパ","ギフト屋","ゲーセン","株"]){
+  assert.deepEqual(townCellAction(describeTile("駅")),{kind:"station"});
+  for(const key of ["デパ","ギフト屋","ゲーセン","株"]){
     const cell=describeTile(key);
     assert.deepEqual(townCellAction(cell),{kind:"unavailable"});
   }
