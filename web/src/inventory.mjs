@@ -1,5 +1,5 @@
 // 原版商品資料（dat_dir/syouhin.cgi）的健康保険欄位及 mono.cgi 的日數耐久結構。
-// 原版玩家商店／百貨每日抽選尚未移植，Web 僅提供健康保險的臨時直購入口。
+// Web 暫保留保險直購；實體百貨購入的原版保險已接入醫院有效期帳本。
 export const ITEM_SLOT_LIMIT=25;
 export const SAME_ITEM_LIMIT=5;
 export const DAY_MS=86400000;

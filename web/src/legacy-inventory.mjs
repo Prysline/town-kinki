@@ -141,7 +141,7 @@ export function importLegacyInventory(db,parsed,{originalId,sourceFile,now=Date.
       throw new Error("此原始角色的物品資料已匯入，拒絕重複匯入");
     const insurance=parsed.insurance?.active?parsed.insurance:null;
     if(insurance&&insuranceCoverage(db,userId,now).activeUntil!==null)
-      throw new Error("角色已持有有效健康保險，拒絕重複匯入覆蓋");
+      throw new Error("角色已持有有效健康保險，拒絕覆蓋或重複匯入");
     if(insurance&&db.prepare(
       "SELECT 1 FROM inventory_items WHERE user_id=? AND item_key='health-insurance'"
     ).get(userId))
