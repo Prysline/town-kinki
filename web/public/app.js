@@ -1492,7 +1492,7 @@ async function submitEquipmentAction(action,{sku,itemId,name,amount,powerUp=0,us
     render();
     notify(result.replayed?"這筆裝備交易已處理，沒有重複扣款或變更裝備。":
       "已"+captions[action]+"「"+result.name+"」。"+
-      (action==="buy"||action==="forge")?"從現金扣除 "+money(-result.amount):
+      ((action==="buy"||action==="forge")?"從現金扣除 "+money(-result.amount):
         action==="sell"?"現金增加 "+money(result.amount):"同類原裝備已退回倉庫。"));
   }catch(error){notify(error.message,true);}
 }
