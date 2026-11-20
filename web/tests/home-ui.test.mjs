@@ -20,7 +20,7 @@ test("職業條件保留原版十七項數值及全部職業可展開檢視",()=
 test("原 CGI 建築代碼只連到 Web 真正已實作的設施入口",()=>{
   const expected={
     "銀行":"bank-panel","病院":"hospital-panel","職安":"jobs-panel",
-    "教室":"school-panel","食堂":"dining-panel","食堂２":"dining-panel",
+    "教室":"classroom-panel","食堂":"dining-panel","食堂２":"dining-panel",
     "建築":"housing-panel"
   };
   assert.deepEqual(FACILITY_PANELS,expected);
@@ -35,6 +35,15 @@ test("原 CGI 建築代碼只連到 Web 真正已實作的設施入口",()=>{
     assert.deepEqual(townCellAction(cell),{kind:"unavailable"});
   }
   assert.deepEqual(townCellAction({category:"empty"}),{kind:"inspect"});
+});
+
+test("原版教室必須導向獨立教室，而非誤開學校或健身房",()=>{
+  const result=townCellAction(describeTile("教室"));
+  assert.deepEqual(result,{kind:"facility",panelId:"classroom-panel"});
+  assert.match(html,/id="classroom-lessons"/);
+  assert.match(html,/id="classroom-status"/);
+  assert.match(script,/classroom: el\("classroom-lessons"\)/);
+  assert.match(script,/state\.classroomCooldownMs/);
 });
 
 test("住宅與真實空地擁有獨立導覽，不會誤把其他土地或道路送去建屋",()=>{
@@ -80,7 +89,7 @@ function expectedFacilityIds(){
 const paneMap={
   house:["housing-panel","room-panel"],
   dining:["dining-panel"],
-  training:["school-panel","gym-panel"],
+  training:["school-panel","gym-panel","classroom-panel"],
   jobs:["jobs-panel"],
   bank:["bank-panel"],
   hospital:["hospital-panel"],
