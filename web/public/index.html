@@ -260,7 +260,7 @@
           <h4>近期購買紀錄</h4>
           <div id="insurance-purchases"></div>
           <h4>原版物品存檔與消耗品</h4>
-          <p class="small">從舊版 mono.cgi 匯入的物品中，已支援的「回」耐久消耗品可依原版能力與使用間隔操作；未支援的特殊效果、裝備、隨機物品及禮物仍只提供唯讀封存。完整商店及一般道具購買尚未移植。</p>
+          <p class="small">舊版 mono.cgi 匯入物品維持原始 33 欄封存；百貨店新購入的物品也記在本人持有清單。已有明確執行證據的「回」耐久消耗品可使用一次；未支援的裝備、特殊效果或禮物不可憑空產生作用。百貨店以外的商店與其交易尚未移植。</p>
           <div id="legacy-inventory-list"></div>
           <h4>最近的道具使用紀錄</h4>
           <div id="legacy-item-use-history"></div>
@@ -280,6 +280,7 @@
         <div id="facility-tabs" class="facility-tabs" role="tablist" aria-label="城鎮設施分頁">
           <button id="facility-tab-house" type="button" role="tab" data-pane="house" aria-controls="facility-pane-house" aria-selected="false" tabindex="-1">住宅</button>
         <button id="facility-tab-dining" type="button" role="tab" data-pane="dining" aria-controls="facility-pane-dining" aria-selected="false" tabindex="-1">食堂</button>
+        <button id="facility-tab-shops" type="button" role="tab" data-pane="shops" aria-controls="facility-pane-shops" aria-selected="false" tabindex="-1">百貨店</button>
         <button id="facility-tab-training" type="button" role="tab" data-pane="training" aria-controls="facility-pane-training" aria-selected="false" tabindex="-1">學習</button>
         <button id="facility-tab-jobs" type="button" role="tab" data-pane="jobs" aria-controls="facility-pane-jobs" aria-selected="true" tabindex="0">工作</button>
         <button id="facility-tab-bank" type="button" role="tab" data-pane="bank" aria-controls="facility-pane-bank" aria-selected="false" tabindex="-1">銀行</button>
@@ -358,6 +359,27 @@
             <option value="second">第二食堂</option>
           </select>
           <div id="meal-list" class="training-grid"></div>
+        </section>
+      </div>
+      <div id="facility-pane-shops" class="facility-pane" role="tabpanel" aria-labelledby="facility-tab-shops" tabindex="0" hidden>
+        <section class="card" id="retail-panel">
+          <div class="heading"><div><div class="eyebrow">原版建築購物</div><h2>百貨店</h2></div><span class="muted">每日上架，庫存全玩家共用</span></div>
+          <details class="explain"><summary>購物規則與目前限制</summary>
+            <p class="small">依原版 command.pl::depart_gamen，百貨店一與二每日各抽選最多 110 種非食堂商品，現金價為商品原始標價三倍。玩家必須在目前城鎮的地圖中有對應百貨店才能購物；本階段每次買一件、最多持有 25 個仍有耐久的物品格。付款、扣庫存和新增本人 33 欄物品紀錄會一起完成。信用卡結帳、同品耐久堆疊、原版跨城購物回饋及禮品轉送仍待後續移植；未支援的特殊商品效果不可憑空使用。</p>
+          </details>
+          <div class="filters">
+            <label for="retail-shop-select">所在城鎮的百貨店</label>
+            <select id="retail-shop-select">
+              <option value="depart1">百貨店（一）</option>
+              <option value="depart2">百貨店（二）</option>
+            </select>
+            <label for="retail-search">搜尋商品名稱或種類</label>
+            <input id="retail-search" type="search" placeholder="輸入商品名稱或種類">
+          </div>
+          <p class="small" id="retail-status"></p>
+          <div id="retail-items" class="training-grid"></div>
+          <h3>近期百貨購物紀錄</h3>
+          <div id="retail-purchases"></div>
         </section>
       </div>
       <div id="facility-pane-training" class="facility-pane" role="tabpanel" aria-labelledby="facility-tab-training" tabindex="0" hidden>

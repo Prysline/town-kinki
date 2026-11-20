@@ -182,11 +182,13 @@ export function listLegacyInventoryItems(db,userId,limit=50){
   if(!exists)return [];
   const cap=Number.isSafeInteger(limit)?Math.max(1,Math.min(limit,100)):50;
   return db.prepare([
-    "SELECT source_line,category,original_name,durability,durability_unit,purchased_at",
-    "FROM legacy_inventory_items WHERE user_id=? ORDER BY source_line LIMIT ?"
+    "SELECT source_line,original_id,category,original_name,durability,durability_unit,purchased_at",
+    "FROM legacy_inventory_items WHERE user_id=? ORDER BY",
+    "CASE WHEN original_id='__web_retail__' THEN 0 ELSE 1 END,source_line LIMIT ?"
   ].join(" ")).all(userId,cap).map(x=>({
     sourceLine:x.source_line,category:x.category,name:x.original_name,
     durability:x.durability,unit:x.durability_unit,purchasedAt:x.purchased_at,
-    readOnly:true
+    readOnly:x.original_id!=="__web_retail__",
+    ...(x.original_id==="__web_retail__"?{origin:"retail"}:{})
   }));
 }

@@ -103,7 +103,7 @@ test("原 CGI 建築代碼只連到 Web 真正已實作的設施入口",()=>{
   const expected={
     "銀行":"bank-panel","病院":"hospital-panel","職安":"jobs-panel",
     "教室":"classroom-panel","食堂":"dining-panel","食堂２":"dining-panel",
-    "建築":"housing-panel"
+    "デパ":"retail-panel","デパ2":"retail-panel","建築":"housing-panel"
   };
   assert.deepEqual(FACILITY_PANELS,expected);
   for(const [key,panelId] of Object.entries(expected)){
@@ -113,13 +113,24 @@ test("原 CGI 建築代碼只連到 Web 真正已實作的設施入口",()=>{
     assert.match(html,new RegExp('id="'+panelId+'"'));
   }
   assert.deepEqual(townCellAction(describeTile("駅")),{kind:"station"});
-  for(const key of ["デパ","ギフト屋","ゲーセン","株"]){
+  for(const key of ["ギフト屋","ゲーセン","株"]){
     const cell=describeTile(key);
     assert.deepEqual(townCellAction(cell),{kind:"unavailable"});
   }
   assert.deepEqual(townCellAction({category:"empty"}),{kind:"inspect"});
 });
 
+test("百貨店實體地圖入口、商品與現金操作需連上真正交易路由",()=>{
+  for(const key of ["デパ","デパ2"])
+    assert.deepEqual(townCellAction(describeTile(key)),{kind:"facility",panelId:"retail-panel"});
+  for(const id of ["retail-panel","retail-shop-select","retail-search","retail-items","retail-purchases"])
+    assert.match(html,new RegExp('id="'+id+'"'));
+  assert.match(script,/function renderRetail\(\)/);
+  assert.match(script,/api\("retail\/buy",pendingRetailPurchase\)/);
+  assert.match(script,/item\.stock<=0/);
+  assert.match(script,/renderRetail\(\)/);
+  assert.match(script,/item\.origin==="retail"/);
+});
 test("原版教室必須導向獨立教室，而非誤開學校或健身房",()=>{
   const result=townCellAction(describeTile("教室"));
   assert.deepEqual(result,{kind:"facility",panelId:"classroom-panel"});
@@ -172,13 +183,14 @@ function expectedFacilityIds(){
 const paneMap={
   house:["housing-panel","room-panel"],
   dining:["dining-panel"],
+  shops:["retail-panel"],
   training:["school-panel","gym-panel","classroom-panel"],
   jobs:["jobs-panel"],
   bank:["bank-panel"],
   hospital:["hospital-panel"],
   events:["event-panel"]
 };
-test("高密度主畫面：地圖摘要與七組可存取設施分頁，保留全部現有操作元件",()=>{
+test("高密度主畫面：地圖摘要與八組可存取設施分頁，保留全部現有操作元件",()=>{
   const main=html.slice(html.indexOf('id="game"'));
   assert.ok(main.indexOf('id="town-panel"')<main.indexOf('id="player-summary"'));
   assert.ok(main.indexOf('id="player-summary"')<main.indexOf('id="facility-tabs"'));
