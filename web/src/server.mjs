@@ -26,6 +26,10 @@ import {parseLegacyVendingCatalog,initVendingTables,ensureVendingRotation,listVe
 import {parseLegacyEquipmentCatalog,initEquipmentTables,listEquipmentItems,listEquipmentTransactions,buyEquipment,equipEquipment,sellEquipment,forgeEquipment,EQUIPMENT_SYMBOL} from "./equipment.mjs";
 import {initGiftTables,GIFT_SHOP_SYMBOL,listGiftSources,listGiftEvents,convertToGift,sendGift} from "./gift-shop.mjs";
 import {initRecycleTables,RECYCLE_SYMBOL,listRecycleListings,listRecycleSellable,listRecycleHistory,buyFromRecycle,sellToRecycle} from "./recycle.mjs";
+import {parseWholesaleCatalog,initWholesaleTables,ensureWholesaleDay,listWholesaleGoods,
+  WHOLESALE_SYMBOL,SHOP_CATEGORIES,configurePlayerShop,listMyShops,
+  listShopInventory,buyWholesale,returnWholesale,listWholesaleHistory}
+  from "./wholesale.mjs";
 import { listValidClassroomCreditCards, requireClassroomCreditCard } from "./legacy-credit.mjs";
 import { legacyPlayerIcon } from "./appearance.mjs";
 import { initLegacyItemUseTables, listLegacyItemActions, listLegacyItemUseHistory, useLegacyItem } from "./legacy-item-use.mjs";
@@ -93,6 +97,7 @@ initVendingTables(db);
 initEquipmentTables(db);
 initGiftTables(db);
 initRecycleTables(db);
+initWholesaleTables(db);
 const houseCatalog = parseHouseCatalog(
   decodeLegacyText(readFileSync(resolve(REPO_ROOT, "town_ini.cgi"))),
   decodeLegacyText(readFileSync(resolve(REPO_ROOT, "command.pl")))
@@ -117,6 +122,7 @@ const meals = [
 const mealsByKey = new Map(meals.map(meal => [meal.key,meal]));
 const insuranceItem=parseLegacyInsurance(decodeLegacyText(readFileSync(resolve(REPO_ROOT,"dat_dir","syouhin.cgi"))));
 const retailCatalog=parseLegacyRetailCatalog(decodeLegacyText(readFileSync(resolve(REPO_ROOT,"dat_dir","syouhin.cgi"))));
+const wholesaleCatalog=parseWholesaleCatalog(decodeLegacyText(readFileSync(resolve(REPO_ROOT,"dat_dir","syouhin.cgi"))));
 const vendingCatalog=parseLegacyVendingCatalog(decodeLegacyText(readFileSync(resolve(REPO_ROOT,"dat_dir","jihanki.cgi"))));
 const equipmentCatalog=parseLegacyEquipmentCatalog(decodeLegacyText(readFileSync(resolve(REPO_ROOT,"dat_dir","soubi.cgi"))));
 
@@ -278,6 +284,16 @@ function snapshot(user) {
     retailMap.cells.some(cell=>cell.key===GIFT_SHOP_SYMBOL));
   const recycleAvailable=Boolean(retailMap?.configured&&
     retailMap.cells.some(cell=>cell.key===RECYCLE_SYMBOL));
+  const wholesaleAvailable=Boolean(retailMap?.configured&&
+    retailMap.cells.some(cell=>cell.key===WHOLESALE_SYMBOL));
+  let wholesaleGoods=[];
+  if(wholesaleAvailable){
+    db.exec("BEGIN IMMEDIATE");
+    try{ensureWholesaleDay(db,wholesaleCatalog,today);db.exec("COMMIT");}
+    catch(error){db.exec("ROLLBACK");throw error;}
+    wholesaleGoods=listWholesaleGoods(db,wholesaleCatalog);
+  }
+  const myShops=updated?listMyShops(db,user.id):[];
   const currentJob = updated?.jobId ? jobsByKey.get(updated.jobId) : null;
   const classroomCreditCards=updated?listValidClassroomCreditCards(db,user.id,now):[];
   const ownedHouses = updated ? listHouses(db, user.id).map(h => ({
@@ -344,6 +360,13 @@ function snapshot(user) {
     recycleListings:recycleAvailable?listRecycleListings(db,now):[],
     recycleSellable:updated?listRecycleSellable(db,user.id,now):[],
     recycleHistory:updated?listRecycleHistory(db,user.id):[],
+    wholesaleAvailable,wholesaleGoods:wholesaleAvailable?wholesaleGoods:[],
+    wholesaleDay:wholesaleAvailable?today:null,
+    shopCategories:SHOP_CATEGORIES,
+    myShops:myShops.map(s=>({
+      ...s,inventory:listShopInventory(db,user.id,s.houseId)
+    })),
+    wholesaleHistory:updated?listWholesaleHistory(db,user.id):[],
     legacyItemActions: updated ? listLegacyItemActions(db,user.id,updated,now) : [],
     legacyItemHistory: updated ? listLegacyItemUseHistory(db,user.id) : [],
     hunger: updated ? hungerStatus(updated.lastMealAt,now) : null,
@@ -740,6 +763,33 @@ async function handle(req, res) {
         else outcome=buyFromRecycle(db,user.id,{...args,listingId:data.listingId});
       }catch(error){throw new HttpError(400,error.message);}
       return sendJson(res,200,{...snapshot(user),recycleResult:outcome});
+    }
+    if(path==="/api/shop/config"||
+       path==="/api/wholesale/buy"||path==="/api/wholesale/return"){
+      const now=gameNow();
+      let result;
+      try{
+        if(path==="/api/shop/config"){
+          result=configurePlayerShop(db,user.id,data.houseId,{
+            category:data.category,title:data.title,confirmClear:data.confirmClear===true
+          },now);
+        }else{
+          const opts={
+            houseId:data.houseId,sku:data.sku,quantity:data.quantity,
+            requestId:data.requestId,now,
+            hasBuilding:(symbol,townId)=>{
+              const map=publicTownMap(db,townId,false);
+              return map.configured&&map.cells.some(cell=>cell.key===symbol);
+            }
+          };
+          result=path==="/api/wholesale/buy"?
+            buyWholesale(db,user.id,wholesaleCatalog,{
+              ...opts,day:calendarDay(now,GAME_TIMEZONE)
+            }):
+            returnWholesale(db,user.id,{...opts,quantity:data.quantity??0});
+        }
+      }catch(error){throw new HttpError(400,error.message);}
+      return sendJson(res,200,{...snapshot(user),wholesaleResult:result});
     }
     if (path === "/api/meal/eat") {
       const meal=mealsByKey.get(data.key);

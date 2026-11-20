@@ -27,12 +27,12 @@ function setup(rank = 0) {
   return db;
 }
 
-test("原版室內等級對應四、三、二、一欄，原版商店不會偽裝成已完成", () => {
+test("原版室內等級對應四、三、二、一欄，商店內容可設定但零售須另行移植", () => {
   assert.deepEqual([0,1,2,3].map(roomCapacity), [4,3,2,1]);
-  assert.deepEqual(ROOM_TYPES.map(x => x.type), ["","0","2","3"]);
+  assert.deepEqual(ROOM_TYPES.map(x => x.type), ["","0","1","2","3"]);
   assert.throws(() => roomCapacity(-1),/室內/);
   assert.throws(() => validateRoomSlots([blank(),blank()], 1),/數量/);
-  assert.throws(() => validateRoomSlots([slot("1","商店")],1),/不支援/);
+  assert.deepEqual(validateRoomSlots([slot("1","商店")],1),[slot("1","商店")]);
 });
 
 test("室內內容標題、連結與程式注入有伺服器端限制", () => {

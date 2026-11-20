@@ -3,6 +3,7 @@
 export const ROOM_TYPES = Object.freeze([
   { type: "", label: "不公開" },
   { type: "0", label: "一般留言板" },
+  { type: "1", label: "玩家商店（可於問屋進貨）" },
   { type: "2", label: "自訂網址（開啟外部網頁）" },
   { type: "3", label: "屋主公告板（僅屋主發文）" }
 ]);
