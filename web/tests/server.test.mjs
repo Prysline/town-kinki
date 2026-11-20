@@ -1480,6 +1480,93 @@ test("多人：各玩家用餐冷卻與費用分開保存，不能改動其他�
 });
 
 
+test("單機：食堂每日兩家各 30 道、共用庫存扣減／不可買下架品、快轉隔日重抽",async()=>{
+  const srv=await start("solo");
+  try{
+    const created=await api(srv.url,"character",{
+      name:"每日菜單居民",gender:"other",stats:defaultStats()
+    });
+    assert.equal(created.status,200);
+    const first=created.result;
+    const main=first.meals.filter(x=>x.menu==="main");
+    const second=first.meals.filter(x=>x.menu==="second");
+    assert.equal(main.length,30);
+    assert.equal(second.length,30);
+    assert.ok(first.mealMenuDay);
+    assert.ok(first.meals.every(x=>Number.isSafeInteger(x.stock)&&x.stock>0));
+    const chosen=main[0];
+    const db=new DatabaseSync(join(srv.directory,"solo.sqlite"));
+    try{
+      assert.equal(db.prepare("SELECT COUNT(*) AS total FROM dining_stock").get().total,60);
+      db.prepare("UPDATE dining_stock SET remaining=1 WHERE meal_key=?").run(chosen.key);
+    }finally{db.close();}
+    const before=await api(srv.url,"state");
+    assert.equal(before.result.meals.find(x=>x.key===chosen.key).stock,1);
+    const meal=await api(srv.url,"meal/eat",{key:chosen.key});
+    assert.equal(meal.status,200);
+    assert.equal(meal.result.mealResult.remaining,0);
+    assert.equal(meal.result.character.money,first.character.money-chosen.price);
+    assert.equal(meal.result.meals.find(x=>x.key===chosen.key).stock,0);
+    assert.match(meal.result.meals.find(x=>x.key===chosen.key).reason,/售完/);
+    const stockDb=new DatabaseSync(join(srv.directory,"solo.sqlite"));
+    try{
+      const row=stockDb.prepare("SELECT remaining FROM dining_stock WHERE meal_key=?").get(chosen.key);
+      assert.equal(row.remaining,0);
+      // 25 道以下原版重新進貨：5 道缺貨、留下 25 道時刷新兩間。
+      stockDb.prepare("UPDATE dining_stock SET remaining=0 WHERE menu='main' AND position<5").run();
+    }finally{stockDb.close();}
+    const refreshed=await api(srv.url,"state");
+    assert.equal(refreshed.status,200);
+    assert.equal(refreshed.result.meals.length,60);
+    assert.ok(refreshed.result.meals.every(x=>x.stock>0));
+    const oldDay=refreshed.result.mealMenuDay;
+    const advanced=await api(srv.url,"solo/time/advance",{preset:"1d"});
+    assert.equal(advanced.status,200);
+    assert.notEqual(advanced.result.mealMenuDay,oldDay);
+    assert.equal(advanced.result.meals.length,60);
+    assert.ok(advanced.result.meals.every(x=>x.stock>0));
+  }finally{await srv.stop();}
+});
+
+test("多人：兩間食堂與商品份數全玩家共用，售完不能超賣、現金不會被錯扣",async()=>{
+  const srv=await start("multi");
+  try{
+    const a=await api(srv.url,"register",{username:"stock_owner_a",password:"long-sample-password-abc"});
+    const b=await api(srv.url,"register",{username:"stock_owner_b",password:"long-sample-password-xyz"});
+    assert.equal(a.status,200);assert.equal(b.status,200);
+    const first=await api(srv.url,"character",{
+      name:"庫存玩家甲",gender:"male",stats:defaultStats()
+    },a.cookie);
+    const second=await api(srv.url,"character",{
+      name:"庫存玩家乙",gender:"female",stats:defaultStats()
+    },b.cookie);
+    assert.equal(first.status,200);assert.equal(second.status,200);
+    assert.deepEqual(first.result.meals.map(x=>x.key),second.result.meals.map(x=>x.key));
+    const chosen=first.result.meals.find(x=>x.menu==="main");
+    const db=new DatabaseSync(join(srv.directory,"multi.sqlite"));
+    try{
+      db.prepare("UPDATE dining_stock SET remaining=1 WHERE meal_key=?").run(chosen.key);
+    }finally{db.close();}
+    const buyer=await api(srv.url,"meal/eat",{key:chosen.key},a.cookie);
+    assert.equal(buyer.status,200);
+    assert.equal(buyer.result.mealResult.remaining,0);
+    const guest=await api(srv.url,"state",undefined,b.cookie);
+    assert.equal(guest.result.meals.find(x=>x.key===chosen.key).stock,0);
+    assert.equal(guest.result.meals.find(x=>x.key===chosen.key).reason,"今日已售完");
+    const attempted=await api(srv.url,"meal/eat",{key:chosen.key},b.cookie);
+    assert.equal(attempted.status,400);
+    assert.match(attempted.result.error,/售完|菜單/);
+    const after=await api(srv.url,"state",undefined,b.cookie);
+    assert.equal(after.result.character.money,second.result.character.money);
+    assert.equal(after.result.character.lastMealAt,0);
+    const verify=new DatabaseSync(join(srv.directory,"multi.sqlite"));
+    try{
+      assert.equal(verify.prepare("SELECT remaining FROM dining_stock WHERE meal_key=?").get(chosen.key).remaining,0);
+      assert.equal(verify.prepare("SELECT COUNT(*) AS n FROM dining_stock").get().n,60);
+    }finally{verify.close();}
+  }finally{await srv.stop();}
+});
+
 test("單機：疾病指數顯示、腦瘤收費、病中不可工作及治療保存",async()=>{
   const srv=await start("solo");
   try {
