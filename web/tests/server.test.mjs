@@ -83,6 +83,18 @@ test("單機：原版配點限制、建角、選職、工作、存提款與冷�
     const created = await api(srv.url, "character", { name: "測試居民", gender: "other", stats: defaultStats() });
     assert.equal(created.status, 200);
     assert.equal(created.result.jobs.find(job => job.key === "legacy-2").name, "日薪打工");
+    const clerk=created.result.jobs.find(job=>job.originalName==="コンビニ店員");
+    assert.ok(clerk,"原版便利商店店員必須可查閱");
+    assert.equal(Object.keys(clerk.requirements).length,17);
+    assert.equal(clerk.requirements.suugaku,50);
+    assert.equal(clerk.requirements.syakai,50);
+    assert.equal(clerk.requirements.tairyoku,60);
+    assert.equal(clerk.requirements.kenkou,50);
+    assert.equal(clerk.bmiMin,17);
+    assert.equal(clerk.payEvery,5);
+    assert.equal(clerk.bonusRate,15);
+    assert.ok(clerk.reason,"不能因公開需求數值而放寬應徵條件");
+    assert.equal((await api(srv.url,"job",{key:clerk.key})).status,400);
     const job = await api(srv.url, "job", { key: "legacy-2" });
     assert.equal(job.status, 200);
     const work = await api(srv.url, "work", {});
