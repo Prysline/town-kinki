@@ -2747,3 +2747,91 @@ test("自販機爽快牛奶從原始商品實際買入、回復頭腦能量並�
     assert.equal(again.result.legacyItemHistory.length,1);
   }finally{await srv.stop();}
 });
+
+
+test("原版裝備屋 HTTP：真實地圖、原價購入、同名拒買、換裝與回倉出售、重送防重",async()=>{
+  const srv=await start("solo");
+  try{
+    const created=await api(srv.url,"character",{
+      name:"裝備商店驗收玩家",gender:"other",stats:defaultStats()
+    });
+    assert.equal(created.status,200);
+    assert.equal(created.result.equipmentAvailable,false);
+    assert.deepEqual(created.result.equipmentGoods,[]);
+    assert.equal((await api(srv.url,"equipment/buy",{
+      sku:"equip-2",requestId:"equip_http_no_shop"
+    })).status,400);
+    const placed=await api(srv.url,"map/tile",{
+      row:0,column:0,symbol:"装備屋"
+    });
+    assert.equal(placed.status,200);
+    assert.equal(placed.result.equipmentAvailable,true);
+    assert.equal(placed.result.equipmentGoods.length,27);
+    assert.equal(placed.result.retailAvailable.length,0);
+    assert.equal(placed.result.vendingAvailable,false);
+    const pencil=placed.result.equipmentGoods.find(x=>x.name==="HBの鉛筆");
+    assert.ok(pencil);
+    assert.equal(pencil.price,50);
+    const initial=placed.result.character.money;
+    const payload={sku:pencil.sku,requestId:"equip_http_buy_pencil"};
+    const buy=await api(srv.url,"equipment/buy",payload);
+    assert.equal(buy.status,200);
+    assert.equal(buy.result.equipmentResult.amount,-50);
+    assert.equal(buy.result.character.money,initial-50);
+    assert.equal(buy.result.equipmentItems.length,1);
+    assert.equal(buy.result.equipmentItems[0].status,"stored");
+    const id=buy.result.equipmentResult.itemId;
+    const replay=await api(srv.url,"equipment/buy",payload);
+    assert.equal(replay.status,200);
+    assert.equal(replay.result.equipmentResult.replayed,true);
+    assert.equal(replay.result.character.money,initial-50);
+    assert.equal((await api(srv.url,"equipment/buy",{
+      ...payload,requestId:"equip_http_duplicate"
+    })).status,400);
+    const worn=await api(srv.url,"equipment/equip",{
+      itemId:id,requestId:"equip_http_wear"
+    });
+    assert.equal(worn.status,200);
+    assert.equal(worn.result.equipmentItems.find(x=>x.id===id).status,"equipped");
+    assert.equal((await api(srv.url,"equipment/sell",{
+      itemId:id,requestId:"equip_http_sell_worn"
+    })).status,400);
+    const rubber=placed.result.equipmentGoods.find(x=>x.name==="輪ゴム鉄砲");
+    const second=await api(srv.url,"equipment/buy",{
+      sku:rubber.sku,requestId:"equip_http_second_buy"
+    });
+    assert.equal(second.status,200);
+    const id2=second.result.equipmentResult.itemId;
+    const swapped=await api(srv.url,"equipment/equip",{
+      itemId:id2,requestId:"equip_http_swap"
+    });
+    assert.equal(swapped.status,200);
+    assert.equal(swapped.result.equipmentItems.find(x=>x.id===id).status,"stored");
+    assert.equal(swapped.result.equipmentItems.find(x=>x.id===id2).status,"equipped");
+    const sale=await api(srv.url,"equipment/sell",{
+      itemId:id,requestId:"equip_http_sale"
+    });
+    assert.equal(sale.status,200);
+    assert.equal(sale.result.equipmentResult.amount,5);
+    assert.equal(sale.result.character.money,initial-50-rubber.price+5);
+    assert.equal(sale.result.equipmentItems.length,1);
+    assert.equal(sale.result.equipmentTransactions.length,5);
+    const again=await api(srv.url,"equipment/sell",{
+      itemId:id,requestId:"equip_http_sale"
+    });
+    assert.equal(again.status,200);
+    assert.equal(again.result.equipmentResult.replayed,true);
+    assert.equal(again.result.character.money,sale.result.character.money);
+    const removed=await api(srv.url,"map/tile",{
+      row:0,column:0,symbol:"空地"
+    });
+    assert.equal(removed.status,200);
+    assert.equal(removed.result.equipmentAvailable,false);
+    assert.equal((await api(srv.url,"equipment/buy",{
+      sku:pencil.sku,requestId:"equip_http_after_removed"
+    })).status,400);
+    assert.equal((await api(srv.url,"equipment/equip",{
+      itemId:id2,requestId:"equip_http_wear_without_shop"
+    })).status,400);
+  }finally{await srv.stop();}
+});

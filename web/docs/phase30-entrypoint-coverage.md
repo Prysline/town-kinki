@@ -16,9 +16,9 @@
 
 針對 43 個互動入口，Web 目前：
 - **28 個**有明確的 [`MAP_SYMBOLS`](../src/town-map.mjs) 地圖代碼；**15 個**原版互動入口沒有被加入 Web 地圖代碼清單（匯入真實地圖時可能以未知圖示呈現，實際需要有資料驗證）。
-- **11 個**有操作入口：**10 個**由 [`FACILITY_PANELS`](../public/town-home.js#L2) 導向 Web 面板（含 PR #23 的獨立教室，PR #27 的已匯入有效信用卡付款），另 **1 個「駅」**由 [`townCellAction`](../public/town-home.js#L12) 導向車站票價與乘車選項（PR #26）。這只是入口覆蓋，不代表設施全部規則已移植。
-- **17 個**已有 Web 地圖代碼，但既未映射 `FACILITY_PANELS`，也不是車站特例；[`townCellAction`](../public/town-home.js#L12) 會回傳 `unavailable`，按圖示只會提示尚未移植。
-- 百貨兩入口與自販機已有實際購物交易，**仍不等於原版全部商店功能**。詳 [百貨店](phase31-department-checkout.md) 與 [自販機](phase33-vending-shopping.md)。
+- **12 個**有操作入口：**11 個**由 [`FACILITY_PANELS`](../public/town-home.js#L2) 導向 Web 面板（含 PR #23 的獨立教室，PR #27 的已匯入有效信用卡付款），另 **1 個「駅」**由 [`townCellAction`](../public/town-home.js#L12) 導向車站票價與乘車選項（PR #26）。這只是入口覆蓋，不代表設施全部規則已移植。
+- **16 個**已有 Web 地圖代碼，但既未映射 `FACILITY_PANELS`，也不是車站特例；[`townCellAction`](../public/town-home.js#L12) 會回傳 `unavailable`，按圖示只會提示尚未移植。
+- 百貨兩入口、自販機與裝備屋已有各自實際購物交易，**仍不等於原版全部商店功能**。詳 [百貨店](phase31-department-checkout.md)、[自販機](phase33-vending-shopping.md) 與 [裝備屋](phase35-equipment-shop.md)。
 - 這些是**程式路由覆蓋率**，不是已完成功能比例；車站已按原版 `station.cgi` 收取四城六組雙向車資（PR #26），而真實原版地圖存檔及其他交通道具仍待核查。
 
 ## 二、原版全部 43 個表單入口
@@ -53,7 +53,7 @@
 | [`デパ`](../../unit.pl#L138) | `$script` | `depart_gamen` | 有 | 已接入地圖、每日最多 110 種、原價×3、1～5 件、本人有效信用卡／普通存款、同品耐久及共用庫存；仍缺特殊物品／贈券全部流程 |
 | [`デパ2`](../../unit.pl#L140) | `$script` | `depart_gamen2` | 有 | 已接入第二間獨立貨架、1～5 件／現金或本人有效信用卡、耐久入庫與共用庫存；全部原版效果仍待逐項驗證 |
 | [`自販機`](../../unit.pl#L142) | `$script` | `hanbai` | 有 | 已加入 [獨立原價飲料貨架、每期十種、當地中午 12 點換檔、真實扣款與本人入庫](phase33-vending-shopping.md)；特殊飲料效果仍待驗證 |
-| [`装備屋`](../../unit.pl#L144) | `hanbai.cgi` | `hanbai` | 有 | Web 有圖示、點選不可進入 |
+| [`装備屋`](../../unit.pl#L144) | `hanbai.cgi` | `hanbai` | 有 | 已接入 [原版 6 欄商品原價單件現金購買、獨立 7 欄倉庫、四類換裝、倉庫回收與防重交易](phase35-equipment-shop.md)；戰鬥及鍛造尚未移植 |
 | [`販売1`](../../unit.pl#L146) | `hanbai1.cgi` | `hanbai1` | 無 | Web 地圖代碼未收錄 |
 | [`リサイ`](../../unit.pl#L148) | `recycle.cgi` | `resycle` | 有 | Web 有圖示、點選不可進入 |
 | [`クーポン`](../../unit.pl#L150) | `coupon.cgi` | `coupon` | 無 | Web 地圖代碼未收錄 |

@@ -23,6 +23,7 @@ import { parseLegacyInsurance, initInventoryTables, inventoryOverview, hasActive
 import { listLegacyInventoryItems } from "./legacy-inventory.mjs";
 import {parseLegacyRetailCatalog,initRetailTables,ensureRetailDay,listRetailStock,listRetailPurchases,buyRetailItem,RETAIL_SHOPS} from "./retail.mjs";
 import {parseLegacyVendingCatalog,initVendingTables,ensureVendingRotation,listVendingStock,vendingPeriodKey,VENDING_SYMBOL,VENDING_SHOP} from "./vending.mjs";
+import {parseLegacyEquipmentCatalog,initEquipmentTables,listEquipmentItems,listEquipmentTransactions,buyEquipment,equipEquipment,sellEquipment,EQUIPMENT_SYMBOL} from "./equipment.mjs";
 import { listValidClassroomCreditCards, requireClassroomCreditCard } from "./legacy-credit.mjs";
 import { legacyPlayerIcon } from "./appearance.mjs";
 import { initLegacyItemUseTables, listLegacyItemActions, listLegacyItemUseHistory, useLegacyItem } from "./legacy-item-use.mjs";
@@ -87,6 +88,7 @@ initDiningStockTables(db);
 initLegacyItemUseTables(db);
 initRetailTables(db);
 initVendingTables(db);
+initEquipmentTables(db);
 const houseCatalog = parseHouseCatalog(
   decodeLegacyText(readFileSync(resolve(REPO_ROOT, "town_ini.cgi"))),
   decodeLegacyText(readFileSync(resolve(REPO_ROOT, "command.pl")))
@@ -112,6 +114,7 @@ const mealsByKey = new Map(meals.map(meal => [meal.key,meal]));
 const insuranceItem=parseLegacyInsurance(decodeLegacyText(readFileSync(resolve(REPO_ROOT,"dat_dir","syouhin.cgi"))));
 const retailCatalog=parseLegacyRetailCatalog(decodeLegacyText(readFileSync(resolve(REPO_ROOT,"dat_dir","syouhin.cgi"))));
 const vendingCatalog=parseLegacyVendingCatalog(decodeLegacyText(readFileSync(resolve(REPO_ROOT,"dat_dir","jihanki.cgi"))));
+const equipmentCatalog=parseLegacyEquipmentCatalog(decodeLegacyText(readFileSync(resolve(REPO_ROOT,"dat_dir","soubi.cgi"))));
 
 const sessionHash = token => createHash("sha256").update(token).digest("hex");
 const passwordHash = (password, salt) => scryptSync(password, salt, 64).toString("hex");
@@ -265,6 +268,8 @@ function snapshot(user) {
     }catch(error){db.exec("ROLLBACK");throw error;}
     vendingGoods=listVendingStock(db,vendingCatalog);
   }
+  const equipmentAvailable=Boolean(retailMap?.configured&&
+    retailMap.cells.some(cell=>cell.key===EQUIPMENT_SYMBOL));
   const currentJob = updated?.jobId ? jobsByKey.get(updated.jobId) : null;
   const classroomCreditCards=updated?listValidClassroomCreditCards(db,user.id,now):[];
   const ownedHouses = updated ? listHouses(db, user.id).map(h => ({
@@ -321,6 +326,9 @@ function snapshot(user) {
     retailPurchases:updated?listRetailPurchases(db,user.id):[],
     vendingAvailable,vendingGoods,
     vendingPeriod:vendingAvailable?vendingPeriodKey(now,GAME_TIMEZONE):null,
+    equipmentAvailable,equipmentGoods:equipmentAvailable?equipmentCatalog:[],
+    equipmentItems:updated?listEquipmentItems(db,user.id):[],
+    equipmentTransactions:updated?listEquipmentTransactions(db,user.id):[],
     legacyItemActions: updated ? listLegacyItemActions(db,user.id,updated,now) : [],
     legacyItemHistory: updated ? listLegacyItemUseHistory(db,user.id) : [],
     hunger: updated ? hungerStatus(updated.lastMealAt,now) : null,
@@ -661,6 +669,24 @@ async function handle(req, res) {
         });
       }catch(error){throw new HttpError(400,error.message);}
       return sendJson(res,200,{...snapshot(user),retailResult:bought});
+    }
+    if (path === "/api/equipment/buy"||path === "/api/equipment/equip"||
+        path === "/api/equipment/sell") {
+      const now=gameNow();
+      const guards={now,requestId:data.requestId,hasBuilding:(symbol,townId)=>{
+        const map=publicTownMap(db,townId,false);
+        return map.configured&&map.cells.some(cell=>cell.key===symbol);
+      }};
+      let result;
+      try{
+        if(path === "/api/equipment/buy")
+          result=buyEquipment(db,user.id,equipmentCatalog,{...guards,sku:data.sku});
+        else if(path === "/api/equipment/equip")
+          result=equipEquipment(db,user.id,{...guards,itemId:data.itemId});
+        else
+          result=sellEquipment(db,user.id,equipmentCatalog,{...guards,itemId:data.itemId});
+      }catch(error){throw new HttpError(400,error.message);}
+      return sendJson(res,200,{...snapshot(user),equipmentResult:result});
     }
     if (path === "/api/meal/eat") {
       const meal=mealsByKey.get(data.key);

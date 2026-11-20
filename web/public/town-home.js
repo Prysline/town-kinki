@@ -9,6 +9,7 @@ export const FACILITY_PANELS=Object.freeze({
   "デパ":"retail-panel",
   "デパ2":"retail-panel",
   "自販機":"vending-panel",
+  "装備屋":"equipment-panel",
   "建築":"housing-panel"
 });
 const BUILDABLE=new Set(["空地","空地2","空地3","空地4"]);
