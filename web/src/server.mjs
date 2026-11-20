@@ -629,13 +629,13 @@ async function handle(req, res) {
     }
 
     if (path === "/api/retail/buy") {
-      if(data.quantity!==undefined&&data.quantity!==1)
-        throw new HttpError(400,"百貨店第一階段每次僅能購買一件");
       const now=gameNow();
       let bought;
       try{
         bought=buyRetailItem(db,user.id,retailCatalog,{
           shop:data.shop,sku:data.sku,requestId:data.requestId,
+          quantity:data.quantity??1,payment:data.payment??"cash",
+          cardSourceLine:data.cardSourceLine,
           now,day:calendarDay(now,GAME_TIMEZONE),
           hasBuilding:(symbol,townId)=>{
             const map=publicTownMap(db,townId,false);

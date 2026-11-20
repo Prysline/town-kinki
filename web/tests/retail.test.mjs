@@ -4,6 +4,7 @@ import {readFileSync} from "node:fs";
 import {DatabaseSync} from "node:sqlite";
 import {decodeLegacyText} from "../src/engine.mjs";
 import {initLegacyItemUseTables,listLegacyItemActions} from "../src/legacy-item-use.mjs";
+import {initBankTables} from "../src/banking.mjs";
 import {parseLegacyRetailCatalog,initRetailTables,ensureRetailDay,listRetailStock,buyRetailItem,listRetailPurchases} from "../src/retail.mjs";
 const original=decodeLegacyText(readFileSync(new URL("../../dat_dir/syouhin.cgi",import.meta.url)));
 const script=decodeLegacyText(readFileSync(new URL("../../command.pl",import.meta.url)));
@@ -13,11 +14,11 @@ function fixture(){
   db.exec([
     "PRAGMA foreign_keys=ON;",
     "CREATE TABLE users (id INTEGER PRIMARY KEY);",
-    "CREATE TABLE characters (user_id INTEGER PRIMARY KEY REFERENCES users(id),money INTEGER NOT NULL,town_id INTEGER NOT NULL);",
+    "CREATE TABLE characters (user_id INTEGER PRIMARY KEY REFERENCES users(id),money INTEGER NOT NULL,bank INTEGER NOT NULL,town_id INTEGER NOT NULL);",
     "INSERT INTO users(id) VALUES(1),(2);",
-    "INSERT INTO characters(user_id,money,town_id) VALUES(1,9999999,0),(2,9999999,0);"
+    "INSERT INTO characters(user_id,money,bank,town_id) VALUES(1,9999999,9999999,0),(2,9999999,9999999,0);"
   ].join(" "));
-  initLegacyItemUseTables(db);initRetailTables(db);
+  initBankTables(db);initLegacyItemUseTables(db);initRetailTables(db);
   return db;
 }
 const now=1760000000000,day="2026-10-09";
@@ -85,17 +86,157 @@ test("沒有實體百貨、商品未上架、現金不足、無效序號均拒�
     assert.equal(before,9999999);
   }finally{db.close();}
 });
-test("同品不得越過 25 格容量，跨日刷新，但原版匯入物品不可被改寫",()=>{
+test("不同一般商品不得越過 25 格容量，跨日刷新，但原版匯入物品不可被改寫",()=>{
   const db=fixture();try{
     ensureRetailDay(db,catalog,day,randomIndex);
-    const selected=listRetailStock(db,catalog,["depart1"]).filter(x=>x.price<=100000).slice(0,26);
-    assert.equal(selected.length,26);
+    const selected=listRetailStock(db,catalog,["depart1"]).filter(x=>x.price<=100000&&
+      !catalog.find(c=>c.sku===x.sku).effect.includes("ギフト")&&x.category!=="ギフト");
+    const distinct=[...new Map(selected.map(x=>[x.name,x])).values()].slice(0,26);
+    assert.equal(distinct.length,26);
     // 多種真實上架商品各買一件，確定容量按實際個人物品格而非單一 SKU 計。
-    for(let i=0;i<25;i++)buyRetailItem(db,1,catalog,options("depart1",selected[i].sku,"shop_slot_"+String(i).padStart(7,"0")));
-    assert.throws(()=>buyRetailItem(db,1,catalog,options("depart1",selected[25].sku,"shop_slot_overfull")),/25 格/);
+    for(let i=0;i<25;i++)buyRetailItem(db,1,catalog,options("depart1",distinct[i].sku,"shop_slot_"+String(i).padStart(7,"0")));
+    assert.throws(()=>buyRetailItem(db,1,catalog,options("depart1",distinct[25].sku,"shop_slot_overfull")),/25 格/);
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM legacy_inventory_items WHERE user_id=1").get().n,25);
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM retail_purchases WHERE user_id=1").get().n,25);
     assert.equal(ensureRetailDay(db,catalog,"2026-10-10",randomIndex),true);
     assert.equal(db.prepare("SELECT day FROM retail_day").get().day,"2026-10-10");
+  }finally{db.close();}
+});
+
+
+test("百貨可一次購買 1～5 件並與本人 Web 同品合併耐久；保留使用紀錄及購物防重",()=>{
+  const db=fixture();try{
+    ensureRetailDay(db,catalog,day,randomIndex);
+    const shop=listRetailStock(db,catalog,["depart1"])
+      .find(x=>x.stock>=4&&x.price*4<=9999999&&
+        x.unit==="回"&&x.category!=="ギフト"&&
+        !catalog.find(c=>c.sku===x.sku).effect.includes("ギフト"));
+    assert.ok(shop);
+    const before=db.prepare("SELECT money FROM characters WHERE user_id=1").get().money;
+    const first=buyRetailItem(db,1,catalog,{...options("depart1",shop.sku,"retail_multi_1"),quantity:2});
+    assert.equal(first.quantity,2);
+    assert.equal(first.paid,shop.price*2);
+    assert.equal(first.merged,false);
+    const original=db.prepare("SELECT * FROM legacy_inventory_items WHERE user_id=1 AND source_line=?")
+      .get(first.sourceLine);
+    assert.equal(original.durability,shop.durability*2);
+    db.prepare("INSERT INTO legacy_item_usage(user_id,source_line,remaining,last_used_at_ms) VALUES(?,?,?,?)")
+      .run(1,first.sourceLine,original.durability-1,now-1000);
+    const second=buyRetailItem(db,1,catalog,{...options("depart1",shop.sku,"retail_multi_2"),quantity:2});
+    assert.equal(second.sourceLine,first.sourceLine);
+    assert.equal(second.merged,true);
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM legacy_inventory_items WHERE user_id=1").get().n,1);
+    const merged=db.prepare("SELECT durability,raw_fields_json FROM legacy_inventory_items WHERE user_id=1").get();
+    assert.equal(merged.durability,shop.durability*4-1);
+    assert.equal(JSON.parse(merged.raw_fields_json)[21],String(merged.durability));
+    assert.equal(db.prepare("SELECT remaining FROM legacy_item_usage WHERE user_id=1").get().remaining,merged.durability);
+    assert.equal(db.prepare("SELECT money FROM characters WHERE user_id=1").get().money,before-shop.price*4);
+    assert.equal(listRetailStock(db,catalog,["depart1"]).find(x=>x.sku===shop.sku).stock,shop.stock-4);
+    assert.equal(buyRetailItem(db,1,catalog,{...options("depart1",shop.sku,"retail_multi_2"),quantity:2}).replayed,true);
+    assert.throws(()=>buyRetailItem(db,1,catalog,{
+      ...options("depart1",shop.sku,"retail_multi_2"),quantity:1
+    }),/不同商品、數量/);
+    assert.equal(listRetailPurchases(db,1)[0].quantity,2);
+    assert.equal(listRetailPurchases(db,1)[0].merged,true);
+  }finally{db.close();}
+});
+
+test("多件購物的數量、現金、庫存與同品上限均在交易中檢查並回滾",()=>{
+  const db=fixture();try{
+    ensureRetailDay(db,catalog,day,randomIndex);
+    const shop=listRetailStock(db,catalog,["depart1"])
+      .find(x=>x.stock>=5&&x.price*5<=9999999&&x.category!=="ギフト"&&
+        !catalog.find(c=>c.sku===x.sku).effect.includes("ギフト"));
+    assert.ok(shop);
+    const before=db.prepare("SELECT money FROM characters WHERE user_id=1").get().money;
+    assert.throws(()=>buyRetailItem(db,1,catalog,{
+      ...options("depart1",shop.sku,"retail_invalid_6"),quantity:6
+    }),/1～5/);
+    const first=buyRetailItem(db,1,catalog,{
+      ...options("depart1",shop.sku,"retail_limit_5"),quantity:5
+    });
+    const after=db.prepare("SELECT money FROM characters WHERE user_id=1").get().money;
+    assert.equal(after,before-shop.price*5);
+    assert.throws(()=>buyRetailItem(db,1,catalog,{
+      ...options("depart1",shop.sku,"retail_limit_more"),quantity:1
+    }),/5 件持有上限/);
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM retail_purchases").get().n,1);
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM legacy_inventory_items").get().n,1);
+    assert.equal(db.prepare("SELECT money FROM characters WHERE user_id=1").get().money,after);
+    assert.equal(listRetailStock(db,catalog,["depart1"]).find(x=>x.sku===shop.sku).stock,shop.stock-5);
+    assert.ok(first.sourceLine>0);
+  }finally{db.close();}
+});
+
+test("原版信用卡有效時可從普通銀行結帳並登帳；過期、他人卡片、餘額不足拒絕",()=>{
+  const db=fixture();try{
+    const credit=catalog.find(x=>x.effect==="クレジット"&&x.durabilityUnit==="日");
+    assert.ok(credit,"原版目錄應存在可驗證的信用卡");
+    const fields=[...credit.rawFields];
+    fields[30]=String(Math.floor(now/1000)-60);
+    const src=712398;
+    db.prepare([
+      "INSERT INTO legacy_inventory_items(user_id,original_id,source_line,category,original_name,",
+      "effect,durability,durability_unit,purchased_at,last_used_at,raw_fields_json)",
+      "VALUES(?,?,?,?,?,?,?,?,?,?,?)"
+    ].join(" ")).run(1,"legacy_test",src,fields[0],fields[1],fields[9],
+      credit.durability,"日",Number(fields[30]),0,JSON.stringify(fields));
+    ensureRetailDay(db,catalog,day,randomIndex);
+    const shop=listRetailStock(db,catalog,["depart1"])
+      .find(x=>x.price<9999999&&x.stock>=1);
+    const cash=db.prepare("SELECT money FROM characters WHERE user_id=1").get().money;
+    const bank=db.prepare("SELECT bank FROM characters WHERE user_id=1").get().bank;
+    const receipt=buyRetailItem(db,1,catalog,{
+      ...options("depart1",shop.sku,"retail_credit_ok"),
+      payment:"bank",cardSourceLine:src
+    });
+    assert.equal(receipt.payment,"bank");
+    assert.equal(db.prepare("SELECT money FROM characters WHERE user_id=1").get().money,cash);
+    assert.equal(db.prepare("SELECT bank FROM characters WHERE user_id=1").get().bank,bank-shop.price);
+    const ledger=db.prepare("SELECT debit,credit,balance FROM bank_ledger WHERE user_id=1").get();
+    assert.deepEqual(ledger,{debit:shop.price,credit:0,balance:bank-shop.price});
+    assert.throws(()=>buyRetailItem(db,2,catalog,{
+      ...options("depart1",shop.sku,"retail_credit_other"),
+      payment:"bank",cardSourceLine:src
+    }),/屬於本人的/);
+    db.prepare("UPDATE characters SET bank=0 WHERE user_id=1").run();
+    assert.throws(()=>buyRetailItem(db,1,catalog,{
+      ...options("depart1",shop.sku,"retail_credit_no_funds"),
+      payment:"bank",cardSourceLine:src
+    }),/銀行存款不足/);
+    const count=db.prepare("SELECT COUNT(*) AS n FROM retail_purchases").get().n;
+    assert.equal(count,1);
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM bank_ledger").get().n,1);
+  }finally{db.close();}
+});
+
+test("購買禮品採獨立 10 格上限，普通持有物不能擠佔禮品購買格",()=>{
+  const db=fixture();try{
+    const gift=catalog.find(x=>x.category==="ギフト"&&x.basePrice<10000);
+    assert.ok(gift);
+    ensureRetailDay(db,[gift],day,randomIndex);
+    db.prepare("UPDATE retail_stock SET remaining=100 WHERE shop='depart1'").run();
+    for(let i=0;i<10;i++){
+      const r=buyRetailItem(db,1,[gift],{
+        ...options("depart1",gift.sku,"retail_gift_"+String(i).padStart(6,"0")),
+        quantity:1
+      });
+      assert.equal(r.merged,false);
+    }
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM legacy_inventory_items WHERE user_id=1 AND category='ギフト'").get().n,10);
+    assert.throws(()=>buyRetailItem(db,1,[gift],options("depart1",gift.sku,"retail_gift_full")),/10 格/);
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM retail_purchases").get().n,10);
+  }finally{db.close();}
+});
+
+test("舊有購物紀錄升級補上數量及付款方式，不丟失既有訂單",()=>{
+  const db=fixture();try{
+    db.prepare([
+      "INSERT INTO retail_purchases(user_id,shop,sku,name,paid,source_line,request_id,created_at)",
+      "VALUES(1,'depart1','old-sku','舊單件商品',100,1000001,'retail_old_purchase',?)"
+    ].join(" ")).run(now);
+    initRetailTables(db);
+    const row=db.prepare("SELECT quantity,payment,merged FROM retail_purchases WHERE request_id='retail_old_purchase'").get();
+    assert.deepEqual(row,{quantity:1,payment:"cash",merged:0});
   }finally{db.close();}
 });

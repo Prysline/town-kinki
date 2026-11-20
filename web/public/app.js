@@ -1214,19 +1214,28 @@ function renderDining() {
 
 
 let pendingRetailPurchase=null;
-async function submitRetailPurchase(item){
-  if(!window.confirm("確定支付 "+money(item.price)+" 購買「"+item.name+"」一件嗎？"))return;
+async function submitRetailPurchase(item,quantity,payment,cardSourceLine){
+  const total=item.price*quantity;
+  const method=payment==="bank"?"普通銀行存款（有效信用卡）":"現金";
+  if(!window.confirm("確定以"+method+"支付 "+money(total)+
+    "，購買「"+item.name+"」×"+quantity+" 嗎？"))return;
   if(!pendingRetailPurchase||pendingRetailPurchase.shop!==item.shop||
-     pendingRetailPurchase.sku!==item.sku)
-    pendingRetailPurchase={shop:item.shop,sku:item.sku,quantity:1,requestId:crypto.randomUUID()};
+     pendingRetailPurchase.sku!==item.sku||
+     pendingRetailPurchase.quantity!==quantity||
+     pendingRetailPurchase.payment!==payment||
+     pendingRetailPurchase.cardSourceLine!==cardSourceLine)
+    pendingRetailPurchase={shop:item.shop,sku:item.sku,quantity,payment,
+      ...(payment==="bank"?{cardSourceLine}:{}),
+      requestId:crypto.randomUUID()};
   try{
     state=await api("retail/buy",pendingRetailPurchase);
     const result=state.retailResult;
     pendingRetailPurchase=null;
     render();
     notify(result.replayed?"這筆購買已完成，未重複扣款。":
-      "已在百貨店購入「"+result.name+"」，現金支付 "+money(result.paid)+
-      "；物品已加入本人持有清單。");
+      "已購入「"+result.name+"」×"+result.quantity+"，"+
+      (result.payment==="bank"?"普通存款":"現金")+"支付 "+money(result.paid)+
+      (result.merged?"；耐久已合併至原持有物。":"；物品已加入本人清單。"));
   }catch(error){notify(error.message,true);}
 }
 function renderRetail(){
@@ -1243,22 +1252,65 @@ function renderRetail(){
   text("retail-status",!choices.length?
     "目前城鎮沒有已配置的百貨店。請先在地圖中找到百貨店，單機模式可配置原版建築代碼。" :
     !choices.includes(shop)?"這間百貨店不在目前城鎮。" :
-    (state.retailDay??"今日")+"｜符合搜尋的商品 "+goods.length+" 種，最多先顯示 30 筆；新購入物品可在右側「物品」查看。");
+    (state.retailDay??"今日")+"｜符合搜尋的商品 "+goods.length+
+    " 種，最多先顯示 30 筆。每筆可買 1～5 件；一般持有上限 25 格、購入禮品 10 格。");
   const target=el("retail-items");
   target.replaceChildren();
+  const cards=state.classroomCreditCards??[];
   for(const item of goods.slice(0,30)){
     const tile=document.createElement("div");tile.className="training-tile";
     const name=document.createElement("strong");name.textContent=item.name;
     const note=document.createElement("p");note.className="small";
     note.textContent=item.category+"｜單價 "+money(item.price)+
       "｜耐久 "+item.durability+item.unit+"｜剩餘庫存 "+item.stock;
+    const qtyLabel=document.createElement("label");
+    qtyLabel.textContent="數量";
+    const qty=document.createElement("select");
+    qty.setAttribute("aria-label",item.name+"購買數量");
+    for(let n=1;n<=5;n++){
+      const option=document.createElement("option");
+      option.value=String(n);option.textContent=n+" 件";
+      option.disabled=n>item.stock;
+      qty.append(option);
+    }
+    qtyLabel.append(qty);
+    const paymentLabel=document.createElement("label");
+    paymentLabel.textContent="付款方式";
+    const payment=document.createElement("select");
+    payment.setAttribute("aria-label",item.name+"付款方式");
+    const cashOption=document.createElement("option");
+    cashOption.value="cash";cashOption.textContent="現金";
+    payment.append(cashOption);
+    for(const card of cards){
+      const option=document.createElement("option");
+      option.value="card:"+card.sourceLine;
+      option.textContent="信用卡："+card.name;
+      payment.append(option);
+    }
+    paymentLabel.append(payment);
+    const quote=document.createElement("p");quote.className="small";
     const button=document.createElement("button");
     button.type="button";
-    button.disabled=item.stock<=0||state.character.money<item.price;
-    button.textContent=item.stock<=0?"今日售完":
-      state.character.money<item.price?"現金不足":"購買一件";
-    button.addEventListener("click",()=>submitRetailPurchase(item));
-    tile.append(name,note,button);
+    const update=()=>{
+      const quantity=Number(qty.value);
+      const total=item.price*quantity;
+      const bank=payment.value.startsWith("card:");
+      const balance=bank?state.character.bank:state.character.money;
+      const affordable=Number.isSafeInteger(total)&&total<=balance;
+      quote.textContent="合計 "+money(total)+"（"+(bank?"普通存款":"現金")+"）"+
+        (!affordable?"｜餘額不足":quantity>item.stock?"｜庫存不足":"");
+      button.disabled=quantity>item.stock||item.stock<=0||!affordable;
+      button.textContent=item.stock<=0?"今日售完":!affordable?"餘額不足":"購買";
+    };
+    qty.addEventListener("change",update);
+    payment.addEventListener("change",update);
+    button.addEventListener("click",()=>{
+      const bank=payment.value.startsWith("card:");
+      submitRetailPurchase(item,Number(qty.value),bank?"bank":"cash",
+        bank?Number(payment.value.slice(5)):undefined);
+    });
+    update();
+    tile.append(name,note,qtyLabel,paymentLabel,quote,button);
     target.append(tile);
   }
   if(!goods.length){
@@ -1273,8 +1325,10 @@ function renderRetail(){
     const line=document.createElement("li");
     line.textContent=new Date(purchase.createdAt).toLocaleString("zh-TW")+
       "｜"+(purchase.shop==="depart2"?"百貨二":"百貨一")+"｜"+purchase.name+
-      "｜支付 "+money(purchase.paid)+"｜剩餘 "+(purchase.remaining??"?")+
-      (purchase.unit??"");
+      " ×"+purchase.quantity+"｜"+(purchase.payment==="bank"?"信用卡／普通存款":"現金")+
+      "支付 "+money(purchase.paid)+
+      (purchase.merged?"｜已合併耐久":"")+
+      "｜目前對應持有物耐久 "+(purchase.remaining??"?")+(purchase.unit??"");
     list.append(line);
   }
   if(!list.childElementCount){
