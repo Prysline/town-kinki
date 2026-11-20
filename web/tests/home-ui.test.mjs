@@ -17,6 +17,17 @@ test("教室原版有效信用卡付款：畫面能選本人卡片、改檢查�
   assert.match(script,/sourceLine:Number\(value\.slice\(7\)\)/);
   assert.match(script,/action\("train", \{ key,\.\.\.payment \}\)/);
 });
+test("工作結果顯示原版結薪進度，避免把未達發薪次數誤認為銀行或現金入帳故障",()=>{
+  assert.match(html,/id="work-payday-status"/);
+  assert.match(script,/job\.worksUntilPayday/);
+  assert.match(script,/job\.workProgress/);
+  assert.match(script,/result\.pending/);
+  assert.match(script,/result\.payEvery/);
+  assert.match(script,/result\.worksUntilPayday/);
+  assert.match(script,/本次尚未到發薪次數/);
+  assert.match(script,/此次沒有薪資入帳/);
+});
+
 test("原版薪資收款方式可從工作面板儲存，銀行與現金有實際分流",()=>{
   assert.match(html,/id="salary-payment"/);
   assert.match(html,/<option value="cash">現金領取<\/option>/);
