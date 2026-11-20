@@ -88,6 +88,8 @@
 - 本人／配偶家屋、戀愛、育兒與顯示條件：[`town_maker.cgi` L615–643](../../town_maker.cgi#L615)。
 - 設定、儲存：[`town_maker.cgi` L647–655](../../town_maker.cgi#L647)。
 
+**防漏檢查**：[`tests/audit-entrypoints.test.mjs`](../tests/audit-entrypoints.test.mjs) 會從原始 `unit.pl` 重新抽取所有表單入口，逐一對照本文件 43 列及 Web `MAP_SYMBOLS` 的圖示收錄與否。**它驗證清冊完整性，不測試各 CGI 的功能正確性或歷史地圖可達性。**
+
 ## 五、尚未核實的原版可達性與資料
 
 1. 此 fork 的 `log_dir/townlog0.cgi`～`townlog3.cgi` 都是 **0 位元組**；沒有真實原版城市配置可證明 43 個互動代碼當年全部能在實際地圖上點到。**本表只證明入口定義存在**。
