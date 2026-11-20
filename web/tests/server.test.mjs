@@ -2266,9 +2266,14 @@ test("單機跨日快轉會重置學校每日限制並依既有規則計算銀�
     }finally{db.close();}
     const before=await api(srv.url,"state");
     assert.equal(before.result.schoolRemainingToday,true);
+    assert.ok(before.result.schoolCooldownMs>0);
+    assert.equal(before.result.schoolReadyAtMs,
+      before.result.gameTimeMs+before.result.schoolCooldownMs);
     const advanced=await api(srv.url,"solo/time/advance",{preset:"1d"});
     assert.equal(advanced.status,200);
     assert.equal(advanced.result.schoolRemainingToday,false);
+    assert.equal(advanced.result.schoolCooldownMs,0);
+    assert.equal(advanced.result.schoolReadyAtMs,null);
     assert.notEqual(advanced.result.bankAccount.lastInterestDay,day);
     assert.equal(advanced.result.gameTimeOffsetMs,86400000);
     const interest=advanced.result.bankLedger.find(item=>item.action==="普通存款利息");
