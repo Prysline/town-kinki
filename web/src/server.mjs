@@ -19,6 +19,7 @@ import { initCharacterEvents, settleDailyIllnessEvent, listCharacterEvents, getC
 import { getCockroachChallenge,claimCockroach } from "./event-cockroach.mjs";
 import { parseLegacyInsurance, initInventoryTables, inventoryOverview, hasActiveHealthInsurance, listInsurancePurchases, buyHealthInsurance } from "./inventory.mjs";
 import { listLegacyInventoryItems } from "./legacy-inventory.mjs";
+import { legacyPlayerIcon } from "./appearance.mjs";
 import { initLegacyItemUseTables, listLegacyItemActions, listLegacyItemUseHistory, useLegacyItem } from "./legacy-item-use.mjs";
 import { initBankTables, settleBankInterest, bankOperation, bankOverview, bankLedger, transferToPlayer, BANK_TRANSFER_LIMIT, NEW_MEMBER_DAYS, NEW_MEMBER_TRANSFER_LIMIT, bankLoanOverview, borrowBankLoan, payoffBankLoan } from "./banking.mjs";
 import { initSoloClock, gameTimestamp, advanceSoloClock, soloOffset } from "./solo-clock.mjs";
@@ -241,6 +242,7 @@ function snapshot(user) {
     gameTimeOffsetMs: MODE === "solo" ? soloOffset(db) : 0,
     user: user ? { username: MODE === "solo" ? "單機玩家" : user.username } : null,
     character: updated,
+    legacyPlayerIcon: updated ? legacyPlayerIcon(db,user.id) : { status: "none" },
     bankAccount: updated ? bankOverview(db,user.id) : null,
     bankLoan: updated ? bankLoanOverview(db,user.id,currentJob) : null,
     bankLedger: updated ? bankLedger(db,user.id) : [],
@@ -352,7 +354,7 @@ function safeFile(res, dir, requestPath, prefix) {
   if (!type || !existsSync(target)) throw new HttpError(404, "找不到檔案");
   res.writeHead(200, {
     "Content-Type": type, "X-Content-Type-Options": "nosniff",
-    "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
+    "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
   });
   res.end(readFileSync(target));
 }
