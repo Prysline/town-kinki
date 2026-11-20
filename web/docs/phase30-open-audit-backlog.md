@@ -1,6 +1,6 @@
 # 第 30 階段：尚未盤點／已盤點未修／已修待驗收總清冊
 
-> 查核日期：2026-11-20。比較來源：此 fork 原版 Perl／CGI 與 `feature/web-dual-mode-phase1`（至少包含 PR #22～#29）；來源詳見 [差異矩陣](migration-audit.md)、[43 個地圖入口](phase30-entrypoint-coverage.md)、[職業／教室來源](phase30-jobs-training-profile-audit.md) 及 [外貌來源](appearance-source-audit.md)。**本文件是待辦與來源追蹤，不代表已完成程式移植或實機驗收。**
+> 查核日期：2026-11-20。比較來源：此 fork 原版 Perl／CGI 與 `feature/web-dual-mode-phase1`（包含 PR #22～#31）；來源詳見 [差異矩陣](migration-audit.md)、[43 個地圖入口](phase30-entrypoint-coverage.md)、[職業／教室來源](phase30-jobs-training-profile-audit.md) 及 [外貌來源](appearance-source-audit.md)。**本文件是待辦與來源追蹤，不代表已完成程式移植或實機驗收。**
 >
 > 狀態定義：**A 尚未深入盤點**＝只找到入口／分流／資料，未完整查證執行規則；**B 已盤點未完成**＝已找到原版實際執行依據，但 Web 缺乏整體或部分功能；**C 核心已修待驗收**＝已完成相應程式和測試但未完成原版真實檔／實際瀏覽器／全流程等價驗收；**D 不可當作已確認功能**＝無法確認可達、缺檔或只見字串。
 >
@@ -24,6 +24,10 @@
 | A-GM-05 | [`gamerand.cgi` L182–185](../../gamerand.cgi#L182) → [`otakara.cgi`](../../otakara.cgi) | 寶箱資料、開箱費、稀有獎勵和原版庫存／玩家日誌 |
 | A-IT-01 | [`unit.pl` L122](../../unit.pl#L122) → [`item.cgi::item_make/item_make_w1`](../../item.cgi) | 道具創意投稿、修改、來源 `log_dir/item_toukou.cgi`、權限／審核；**不是玩家可立即取得商品** |
 | A-MN-01 | [`unit.pl` L71](../../unit.pl#L71) → [`mon_make.cgi::mon_make/kakikomi`](../../mon_make.cgi) | 怪物投稿資料、獎勵／掉落欄位、保存方式及管理權限；**不是已可參加的對戰** |
+| A-IT-02 | [`unit.pl` L187](../../unit.pl#L187) → [`gouseiya.cgi::gousei/gousei_do`](../../gouseiya.cgi#L47) | 原始合成配方、重複材料與原子扣耐久；雖有可執行流程，但 Web 未移植，詳 [重盤點](phase30-source-recheck.md) |
+| A-GM-06 | [`unit.pl` L162](../../unit.pl#L162) → [`basic.cgi::keiba`](../../basic.cgi#L530) | 原版競馬賽程、押注、上限／鎖與排行榜；不可只用地圖圖示推定玩法 |
+| A-GM-07 | [`unit.pl` L116–118](../../unit.pl#L116)、[`gamerand.cgi` L206–222](../../gamerand.cgi#L206) → [`obatyan.cgi`](../../obatyan.cgi#L16) | 弱／強挑戰、掉落、對戰計算及本人持有物，與 B 聯賽區分 |
+| A-EV-03 | [`unit.pl` L65](../../unit.pl#L65) → [`prezent2.cgi::top/get`](../../prezent2.cgi#L18) | 原版隱藏口令、每名玩家一次、前五人名額；不直接將原口令重啟為 Web 獎勵 |
 | A-CT-01 | [`unit.pl` L124](../../unit.pl#L124) → [`yakuba.cgi::yakuba`](../../yakuba.cgi) | 居民／各類排行榜；原版包含閒置帳號刪除及其住宅、問卷、婚戀檔案的清理副作用。**僅記錄，不照搬刪角** |
 | A-CT-02 | [`unit.pl` L168](../../unit.pl#L168) → [`mati_contest.cgi::matikon/mati_kouken`](../../mati_contest.cgi) | 城市競賽、能力／金錢貢獻、分配／排名、原始記錄、多人交易 |
 | A-EV-01 | [`unit.pl` L81](../../unit.pl#L81) → [`tokuten.cgi::tokuten`](../../tokuten.cgi) | 通關口令、活動日期、本人參加次數、獎品、管理修改權限 |
@@ -38,19 +42,25 @@
 - [`gamerand.cgi` L167–176](../../gamerand.cgi#L167) 把 `kuzi.cgi` 表單**註解**，畫面提示目前無法進入；雖然程式存在，原版此入口不算已證實正常開放。
 - `unit.pl` 的「人生」指向缺失的 `./sugoroku/zinsei.cgi`，不補造人生遊戲規則；`プレ３` 指向的 `test.cgi` 須核實實際內容。
 - 單有商品說明、特殊 `効果` 字串或圖片，不可推導未知外貌狀態、虛構附加效果或新遊戲。
+- 原版 `atakka.cgi` 是 0 位元組的防濫用紀錄檔（`town_lib.pl::atakka` 讀寫），**不是 B 聯賽或新戰鬥執行 CGI**；原版稅務執行源在 `town_maker.cgi` 而非 `yakuba.cgi`。
 
 ## 3. B：已盤點、尚未修復的原版功能
 
 | 優先順序 | 既有 ID／功能 | 目前程式缺漏與來源核對 | 前置／保留界線 |
 |---|---|---|---|
 | P1 | **IT-03 商店、贈送、裝備、回收** | `basic.cgi`、`hanbai.cgi`、`gifutoya.cgi`、`recycle.cgi` 等的購買、交付與耐久未形成完整 Web 交易 | 不把只可使用的已匯入道具當作商店已存在；原版信用卡購買尚未完成 |
-| P1 | **IT-04 優惠券兌換** | Web 事件能取得券，但 [`coupon.cgi`](../../coupon.cgi) 的兌換、扣券與原版物品交付尚未完整移植 | 和遊樂中心福引券分別確認來源／持有欄位 |
+| P1 | **IT-04 優惠券兌換** | Web 事件能取得券，但 [`coupon.cgi::coupon_do`](../../coupon.cgi#L120) 的按點數扣券與 33 欄原版獎品交付尚未完整移植 | 對照 [`dat_dir/coupon.cgi`](../../dat_dir/coupon.cgi) 的真實兌換門檻，辨識匯入道具券與 Web 事件券；**原版無已證實的跨日券到期規則**，不可虛構 |
 | P1 | **EV-28／36／37／38／40 隨機事件** | [`event.pl`](../../event.pl) 已有真實分支；Web `event-effects.mjs` 尚無這五個 ID 結算 | 先驗證 `kifu*`、`get_itm*`、持有物、背包容量與回滾；不能以假獎勵代替 |
 | P1 | **WK-06 任職後工作門檻差異** | [`basic.cgi::do_work`](../../basic.cgi) 不在同段重新檢查全部選職限制；Web 額外重驗性別／身高 | 先做轉職後身高變動回歸並記錄差異，不直接放鬆安全限制 |
 | P1 | **TR-01～03 學校／健身房執行等價** | `dat_dir/school.cgi`、`dat_dir/gym.cgi` 有課程資料，這份 fork 未找到同名可執行根目錄 CGI | 尚未驗證的 `効果`、付款或時間欄不可當成既定規則；教室 `kyushitu.cgi` 不適用於兩者 |
 | P2 | **IT-05 釣魚、漁獲出售** | [`sea.cgi`](../../sea.cgi) 有餌料、釣魚間隔、魚獲／出售分支；Web 無完整系統 | 原始物品庫存與出售金額 |
 | P2 | **BK-05 A～E 股票** | [`kabu.cgi`](../../kabu.cgi) 有原版行情、持股、交易／清算；Web 無對應模型 | 多人市場與原始股價記錄 |
 | P2 | **IT-06 拍賣** | [`auction.cgi`](../../auction.cgi) 有刊登與交付／結算；Web 無完整流程 | 道具所有權、到期、多人競價與交易 |
+| P2（需資產欄） | **BK-04 原版定期徵稅** | [`town_maker.cgi::login_view` L184–263](../../town_maker.cgi#L184) 與 [`town_ini.cgi` L41](../../town_ini.cgi#L41) 確認原版每逢指定日期／星期徵稅、使用 `k_sousisan` 和 K 點折扣、扣普通存款；Web 尚無相等計算 | **舊清冊誤引 `yakuba.cgi`**；不得以現金加銀行代造全部資產，亦不直接複製負銀行 |
+| P2 | **GM-02 原版競馬** | [`basic.cgi::keiba`](../../basic.cgi#L530) 有押馬、結算與排行榜，Web 有地圖圖示但無玩法 | 核對賠率／上限／鎖定資料、競態與金流；尚未完整函式盤點 |
+| P2 | **IT-07 原版合成屋** | [`gouseiya.cgi::gousei_do`](../../gouseiya.cgi#L229) 以原始配方扣材料耐久並生成物品，Web 無此交易 | 先有原始背包、配方與防重交易；不可用假材料 |
+| P2 | **GM-03 弱／強おばちゃん挑戰** | [`obatyan.cgi`](../../obatyan.cgi#L16) 由地圖或遊樂中心進入；Web 無相應難度／戰鬥／掉落 | 分開兩種難度，檢查資產與物品資料及程式原始限制 |
+| P2（活動需驗證） | **SC-09 原版隱藏口令獎勵** | [`prezent2.cgi::top/get`](../../prezent2.cgi#L18) 有每人一次、前五名現金／K 點獎品 | 未確認原站現況與活動授權；不提供舊版秘密口令或無條件發獎 |
 | P2 | **WK-07 工作工廠職業投稿** | [`job.cgi`](../../job.cgi) 寫投稿清單，不等於直接建立正式可選職業 | 投稿驗證、展示與管理權限 |
 | P2 | **SC-06／07 問卷與事件投稿** | [`enq.cgi`](../../enq.cgi) 的問卷／投票與 [`event.cgi`](../../event.cgi) 投稿獨立存在 | 不與 `event.pl` 隨機事件混為一談 |
 | P2 | **SC-01～03 社交／婚戀／育兒／戰鬥** | 相關原版 CGI／記錄與 Web 尚未形成完整模組 | 先對照真正的多人關聯檔、權限、物品／獎勵 |
@@ -76,6 +86,8 @@
 | **事件已支援分支** | `event-effects.mjs`、`events.mjs` 已實作部分原版效果 | 各分支／耐久／交易／多人資料隔離，仍需逐原版來源查核 |
 
 ## 5. 文件過時處，應與程式同步
+
+- [本次 CGI 來源重盤點](phase30-source-recheck.md) 已校正 `BK-04` 稅務誤引、`IT-04` 券跨日到期想像、`SC-03` 把空白 `atakka.cgi` 當戰鬥程式，以及漏列的競馬、合成、弱／強おばちゃん與口令獎勵。
 
 - [`phase30-entrypoint-coverage.md`](phase30-entrypoint-coverage.md) 原本說 7／21、車站未收費；**PR #26 後正確為 8／20**，已修訂該文件。
 - [`migration-audit.md`](migration-audit.md) 的 WK-02「一律現金」與 WK-04「全部 17 項能力一律列出目前值／必要值」落後 PR #24／#29；已同步修訂。
