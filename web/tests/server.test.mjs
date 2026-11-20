@@ -276,7 +276,7 @@ test("多人電車扣款只作用於登入玩家，不可藉請求指定其他�
     const untouched=await api(srv.url,"state",undefined,second.cookie);
     assert.equal(untouched.result.character.townId,0);
     assert.equal(untouched.result.character.money,100000);
-    assert.equal((await api(srv.url,"move",{townId:3})).status,409,
+    assert.equal((await api(srv.url,"move",{townId:3})).status,401,
       "未登入不得代替任何玩家搭車");
   }finally{await srv.stop();}
 });
