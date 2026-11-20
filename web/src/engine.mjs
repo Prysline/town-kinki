@@ -158,7 +158,7 @@ export function createCharacterData(
     bodyEnergy: maxBodyEnergy(stats), brainEnergy: maxBrainEnergy(stats), recoveredAt: now,
     jobId: "legacy-2", workProgress: 0, lastWorkAt: 0,
     workCount: 0, jobWorkCount: 0, jobExperience: 0, masteredJob: null,
-    lastSchoolDay: "", lastGymAt: 0, gymReadyAt: 0,
+    lastSchoolDay: "", lastGymAt: 0, gymReadyAt: 0, classroomReadyAt: 0,
     lastMealAt: 0, healthIndex: DEFAULT_HEALTH_INDEX, lastHealthDay: "",
     lastEventDay: "",
     height, weight, bmi: bodyMassIndex(height, weight), stats
