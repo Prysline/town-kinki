@@ -103,7 +103,7 @@ test("原 CGI 建築代碼只連到 Web 真正已實作的設施入口",()=>{
   const expected={
     "銀行":"bank-panel","病院":"hospital-panel","職安":"jobs-panel",
     "教室":"classroom-panel","食堂":"dining-panel","食堂２":"dining-panel",
-    "デパ":"retail-panel","デパ2":"retail-panel","自販機":"vending-panel","建築":"housing-panel"
+    "デパ":"retail-panel","デパ2":"retail-panel","自販機":"vending-panel","装備屋":"equipment-panel","建築":"housing-panel"
   };
   assert.deepEqual(FACILITY_PANELS,expected);
   for(const [key,panelId] of Object.entries(expected)){
@@ -143,6 +143,22 @@ test("自動販賣機真實地圖入口、獨立飲料原價、庫存及結帳�
   assert.match(script,/state\.vendingGoods/);
   assert.match(script,/item\.price\*quantity/);
   assert.match(script,/if\(cell\.key==="自販機"\)renderVending\(\)/);
+});
+
+test("裝備屋真實地圖、獨立 6 欄商品、購入與換裝倉庫操作入口",()=>{
+  const cell=describeTile("装備屋");
+  assert.deepEqual(townCellAction(cell),
+    {kind:"facility",panelId:"equipment-panel"});
+  for(const id of ["equipment-panel","equipment-status","equipment-goods",
+      "equipment-inventory","equipment-history"])
+    assert.match(html,new RegExp('id="'+id+'"'));
+  assert.match(html,/dat_dir\/soubi\.cgi/);
+  assert.match(html,/原價現金單件購買/);
+  assert.match(script,/function renderEquipment\(\)/);
+  assert.match(script,/state\.equipmentGoods/);
+  assert.match(script,/state\.equipmentItems/);
+  assert.match(script,/api\("equipment\/"\+action,payload\)/);
+  assert.match(script,/if\(cell\.key==="装備屋"\)renderEquipment\(\)/);
 });
 
 test("原版教室必須導向獨立教室，而非誤開學校或健身房",()=>{

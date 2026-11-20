@@ -389,6 +389,7 @@ function renderTownMap() {
             goToFacility(destination.panelId);
             if(cell.key==="デパ"||cell.key==="デパ2")renderRetail();
             if(cell.key==="自販機")renderVending();
+            if(cell.key==="装備屋")renderEquipment();
           }
           else if(destination.kind==="station"){
             el("station-heading").scrollIntoView({behavior:"smooth",block:"start"});
@@ -1467,6 +1468,120 @@ function renderVending(){
   }
 }
 
+
+let pendingEquipmentAction=null;
+async function submitEquipmentAction(action,{sku,itemId,name,amount}){
+  const captions={buy:"購買",equip:"裝備",sell:"出售"};
+  if(!Object.hasOwn(captions,action))return;
+  const moneyText=action==="buy"?"支付 "+money(-amount):
+    action==="sell"?"收入 "+money(amount):"把同類原裝備退回倉庫";
+  if(!window.confirm("確定"+captions[action]+"「"+name+"」嗎？"+
+    "（"+moneyText+"）"))return;
+  if(!pendingEquipmentAction||pendingEquipmentAction.action!==action||
+     pendingEquipmentAction.sku!==sku||pendingEquipmentAction.itemId!==itemId)
+    pendingEquipmentAction={action,sku,itemId,requestId:crypto.randomUUID()};
+  const payload=action==="buy"?
+    {sku,requestId:pendingEquipmentAction.requestId}:
+    {itemId,requestId:pendingEquipmentAction.requestId};
+  try{
+    state=await api("equipment/"+action,payload);
+    const result=state.equipmentResult;
+    pendingEquipmentAction=null;
+    render();
+    notify(result.replayed?"這筆裝備交易已處理，沒有重複扣款或變更裝備。":
+      "已"+captions[action]+"「"+result.name+"」。"+
+      (action==="buy"?"從現金扣除 "+money(-result.amount):
+        action==="sell"?"現金增加 "+money(result.amount):"同類原裝備已退回倉庫。"));
+  }catch(error){notify(error.message,true);}
+}
+function renderEquipment(){
+  if(!state?.character)return;
+  const available=state.equipmentAvailable===true;
+  text("equipment-status",available?
+    "目前城鎮裝備屋營業中｜獨立原價商品 "+(state.equipmentGoods??[]).length+
+    " 種；購買後可換裝或出售，暫不提供戰鬥效果與鍛造。" :
+    "目前城鎮沒有原版「装備屋」。請在地圖中找到該建築，單機模式可先配置。");
+  const goodsTarget=el("equipment-goods");
+  goodsTarget.replaceChildren();
+  const owned=state.equipmentItems??[];
+  for(const item of state.equipmentGoods??[]){
+    const tile=document.createElement("div");tile.className="training-tile";
+    const heading=document.createElement("strong");
+    heading.textContent=item.name+"｜"+item.category;
+    const note=document.createElement("p");note.className="small";
+    note.textContent="威力 "+item.power+"｜命中 "+item.accuracy+"%｜可使用 "+item.uses+
+      " 次｜售價 "+money(item.price);
+    const button=document.createElement("button");button.type="button";
+    const duplicate=owned.some(x=>x.name===item.name);
+    const affordable=state.character.money>item.price;
+    button.disabled=!available||duplicate||!affordable;
+    button.textContent=duplicate?"已持有／已裝備":!affordable?"現金不足":"購買並存入倉庫";
+    button.addEventListener("click",()=>submitEquipmentAction("buy",{
+      sku:item.sku,itemId:null,name:item.name,amount:-item.price
+    }));
+    tile.append(heading,note,button);
+    goodsTarget.append(tile);
+  }
+  if(!available){
+    const note=document.createElement("p");note.className="small";
+    note.textContent="此地沒有裝備屋，無法購買；已有的本人裝備清單仍可查看。";
+    goodsTarget.append(note);
+  }
+  const warehouse=el("equipment-inventory");
+  warehouse.replaceChildren();
+  for(const item of owned){
+    const tile=document.createElement("div");tile.className="training-tile";
+    const title=document.createElement("strong");
+    title.textContent=item.name+"｜"+item.category+"｜"+
+      (item.status==="equipped"?"已裝備":"倉庫");
+    const note=document.createElement("p");note.className="small";
+    note.textContent="威力 "+item.power+"｜命中 "+item.accuracy+"%｜剩餘使用 "+item.uses+
+      " 次｜等級 "+item.level+"｜經驗 "+item.experience;
+    tile.append(title,note);
+    if(item.status==="stored"&&available){
+      const buttons=document.createElement("div");buttons.className="filters";
+      const wear=document.createElement("button");
+      wear.type="button";wear.textContent="裝備";
+      wear.addEventListener("click",()=>submitEquipmentAction("equip",{
+        sku:"item-"+item.id,itemId:item.id,name:item.name,amount:0
+      }));
+      const sell=document.createElement("button");
+      sell.type="button";sell.className="secondary";sell.textContent="出售";
+      const price=(state.equipmentGoods??[]).find(x=>x.sku===item.sku)?.price;
+      const credit=Number.isSafeInteger(price)?Math.floor(price*item.level/10):null;
+      sell.disabled=credit===null;
+      sell.addEventListener("click",()=>submitEquipmentAction("sell",{
+        sku:"item-"+item.id,itemId:item.id,name:item.name,amount:credit
+      }));
+      buttons.append(wear,sell);tile.append(buttons);
+    }
+    warehouse.append(tile);
+  }
+  if(!owned.length){
+    const note=document.createElement("p");note.className="small";
+    note.textContent="本人尚無從 Web 裝備屋購入的裝備；原版 7 欄倉庫舊檔尚未匯入此處。";
+    warehouse.append(note);
+  }
+  const history=el("equipment-history");
+  history.replaceChildren();
+  const list=document.createElement("ol");list.className="health-event-list";
+  for(const tx of state.equipmentTransactions??[]){
+    const row=document.createElement("li");
+    const label={buy:"購買",equip:"換裝",sell:"出售"}[tx.action]??tx.action;
+    row.textContent=new Date(tx.createdAt).toLocaleString("zh-TW")+"｜"+
+      label+"｜"+tx.name+"｜"+
+      (tx.amount<0?"現金支出 "+money(-tx.amount):
+       tx.amount>0?"現金收入 "+money(tx.amount):"無金額變動");
+    list.append(row);
+  }
+  if(list.childElementCount)history.append(list);
+  else{
+    const note=document.createElement("p");note.className="small";
+    note.textContent="尚無裝備交易紀錄。";
+    history.append(note);
+  }
+}
+
 function renderTraining() {
   const oldChoices=new Map([...el("classroom-lessons").querySelectorAll("select[data-lesson-key]")]
     .map(item=>[item.dataset.lessonKey,item.value]));
@@ -1702,6 +1817,7 @@ function render() {
   renderDining();
   renderRetail();
   renderVending();
+  renderEquipment();
   renderInsurance();
   const ready = Boolean(state.currentJob) && state.workCooldownMs === 0 &&
     state.condition?.baseExperience !== null;
