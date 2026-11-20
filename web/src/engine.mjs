@@ -156,7 +156,7 @@ export function createCharacterData(
   return {
     name, gender, townId: 0, money: 100000, bank: 0,
     bodyEnergy: maxBodyEnergy(stats), brainEnergy: maxBrainEnergy(stats), recoveredAt: now,
-    jobId: "legacy-2", workProgress: 0, lastWorkAt: 0,
+    jobId: "legacy-2", salaryPayment:"cash", workProgress: 0, lastWorkAt: 0,
     workCount: 0, jobWorkCount: 0, jobExperience: 0, masteredJob: null,
     lastSchoolDay: "", lastGymAt: 0, gymReadyAt: 0, classroomReadyAt: 0,
     lastMealAt: 0, healthIndex: DEFAULT_HEALTH_INDEX, lastHealthDay: "",
@@ -228,12 +228,20 @@ export function performWork(character, job, now = Date.now(), random = Math.rand
   const nextJobCount = (current.jobWorkCount ?? 0) + 1;
   const paid = nextJobCount % job.payEvery === 0 ? effectiveSalary * job.payEvery : 0;
   const bonus = leveledUp ? effectiveSalary * job.bonusRate : 0;
+  const payout=paid+bonus;
+  const toBank=current.salaryPayment==="bank";
+  const destination=toBank?current.bank:current.money;
+  if(!Number.isSafeInteger(payout)||payout<0||
+      !Number.isSafeInteger(destination)||destination<0||
+      !Number.isSafeInteger(destination+payout))
+    throw new Error("薪資金額超出安全整數範圍");
   const mastered = leveledUp && jobLevel >= 15 && current.masteredJob !== job.originalName;
   const weight = Math.max(1, Math.round(((current.weight ?? 60) - job.bodyCost / 100) * 100) / 100);
   const next = {
     ...current, bodyEnergy: current.bodyEnergy - job.bodyCost,
     brainEnergy: current.brainEnergy - job.brainCost,
-    money: current.money + paid + bonus,
+    money: current.money + (toBank?0:payout),
+    bank: current.bank + (toBank?payout:0),
     workProgress: nextJobCount % job.payEvery,
     jobWorkCount: nextJobCount,
     jobExperience,
@@ -243,7 +251,7 @@ export function performWork(character, job, now = Date.now(), random = Math.rand
   };
   return { character: next, paid, pending: next.workProgress,
     experienceGain, jobLevel, leveledUp, bonus, mastered, effectiveSalary,
-    condition:condition.label };
+    condition:condition.label, payment:toBank?"bank":"cash" };
 }
 
 export function bankTransaction(character, action, amount) {
