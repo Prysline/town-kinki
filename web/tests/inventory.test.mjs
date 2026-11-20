@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {DatabaseSync} from "node:sqlite";
 import {initLegacyInventoryTables} from "../src/legacy-inventory.mjs";
+import {initRetailTables} from "../src/retail.mjs";
 import {
   ITEM_SLOT_LIMIT,SAME_ITEM_LIMIT,DAY_MS,parseLegacyInsurance,initInventoryTables,
   inventoryOverview,hasActiveHealthInsurance,listInsurancePurchases,buyHealthInsurance
@@ -162,7 +163,7 @@ test("升級舊 Web 資料庫不重設角色金錢、保險有效期或購買歷
 
 test("舊版百貨已購入的真實 33 欄健康保險可被醫院辨識，續購不重複計算原有效期",()=>{
   const db=setup();try{
-    initLegacyInventoryTables(db);
+    initRetailTables(db);
     const raw=Array(33).fill("0");
     raw[0]="日用品";raw[1]="健康保険";raw[9]="無";
     raw[21]="30";raw[22]="日";raw[30]=String(NOW/1000);
@@ -172,6 +173,10 @@ test("舊版百貨已購入的真實 33 欄健康保險可被醫院辨識，續�
       "VALUES(?,?,?,?,?,?,?,?,?,?,?)"
     ].join(" ")).run(1,"__web_retail__",1000001,"日用品","健康保険",
       "無",30,"日",NOW/1000,0,JSON.stringify(raw));
+    db.prepare([
+      "INSERT INTO retail_purchases(user_id,shop,sku,name,paid,source_line,request_id,created_at)",
+      "VALUES(1,'depart1','legacy-356','健康保険',30000,1000001,?,?)"
+    ].join(" ")).run("retail_insurance_seed",NOW);
     assert.equal(hasActiveHealthInsurance(db,1,insurance,NOW),true);
     assert.equal(inventoryOverview(db,1,insurance,NOW).remainingDays,30);
     assert.equal(inventoryOverview(db,1,insurance,NOW).activeUntil,NOW+30*DAY_MS);
@@ -202,7 +207,7 @@ test("完整 33 欄若沒有本人百貨交易流水，仍不能自行獲得醫�
 
 test("同名偽造或內容不一致的百貨保險不能取得醫院折扣",()=>{
   const db=setup();try{
-    initLegacyInventoryTables(db);
+    initRetailTables(db);
     const raw=Array(33).fill("0");
     raw[0]="日用品";raw[1]="健康保険";raw[9]="無";
     raw[21]="60";raw[22]="日";raw[30]=String(NOW/1000);
@@ -212,6 +217,10 @@ test("同名偽造或內容不一致的百貨保險不能取得醫院折扣",()=
       "VALUES(?,?,?,?,?,?,?,?,?,?,?)"
     ].join(" ")).run(1,"__web_retail__",1000001,"日用品","健康保険",
       "無",30,"日",NOW/1000,0,JSON.stringify(raw));
+    db.prepare([
+      "INSERT INTO retail_purchases(user_id,shop,sku,name,paid,source_line,request_id,created_at)",
+      "VALUES(1,'depart1','legacy-356','健康保険',30000,1000001,?,?)"
+    ].join(" ")).run("retail_insurance_seed",NOW);
     assert.equal(hasActiveHealthInsurance(db,1,insurance,NOW),false);
   }finally{db.close();}
 });
