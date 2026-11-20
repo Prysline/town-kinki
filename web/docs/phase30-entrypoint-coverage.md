@@ -1,6 +1,6 @@
 # 第 30 階段：原版設施／入口逐項追蹤（第一批）
 
-> **來源與時間**：2026-11-20，原版 [`unit.pl::get_unit`](../../unit.pl#L1)、[首頁快捷鍵 `town_maker.cgi`](../../town_maker.cgi#L581)、[`top.pl` 地圖渲染](../../top.pl#L472)，對照 Web [`town-map.mjs`](../src/town-map.mjs)、[`town-home.js`](../public/town-home.js)、[`app.js`](../public/app.js)、[`server.mjs`](../src/server.mjs)；以 PR #19 已合併的整合分支為基準。**此表統計「原版定義了互動表單入口」而非歷史上所有城鎮一定設有該格子**。
+> **來源與時間**：2026-11-20，原版 [`unit.pl::get_unit`](../../unit.pl#L1)、[首頁快捷鍵 `town_maker.cgi`](../../town_maker.cgi#L581)、[`top.pl` 地圖渲染](../../top.pl#L472)，對照 Web [`town-map.mjs`](../src/town-map.mjs)、[`town-home.js`](../public/town-home.js)、[`app.js`](../public/app.js)、[`server.mjs`](../src/server.mjs)；最初以 PR #19 已合併分支盤點；本次同步 PR #26／#29 之後的入口狀態。**此表統計「原版定義了互動表單入口」而非歷史上所有城鎮一定設有該格子**。
 >
 > 先前的 14 領域盤點是**功能分類**而不是原版入口清冊；本表專門避免「整個 CGI／設施沒有被列出」的漏項。不能把一個圖片代碼存在，當成遊戲功能已移植。也不能把不存在的來源路徑當作可運作功能。
 
@@ -10,9 +10,9 @@
 
 針對 43 個互動入口，Web 目前：
 - **28 個**有明確的 [`MAP_SYMBOLS`](../src/town-map.mjs) 地圖代碼；**15 個**原版互動入口沒有被加入 Web 地圖代碼清單（匯入真實地圖時可能以未知圖示呈現，實際需要有資料驗證）。
-- **7 個**被 [`FACILITY_PANELS`](../public/town-home.js#L2) 導向對應 Web 面板；其中原先「教室」錯導向學校的問題已由 **PR #23 修正**，目前導向獨立 `classroom-panel`，並能實際操作四堂原版現金課程。此數量仍只是路由覆蓋，不代表其他設施全規則已移植。
-- **21 個**已有 Web 地圖代碼，卻沒有對應 `FACILITY_PANELS` 路由；現行 [`townCellAction`](../public/town-home.js#L12) 會回傳 `unavailable`，按圖示只會提示尚未移植。
-- 這些是**程式路由覆蓋率**，不是已完成功能比例；例如車站移動另有 Web 按鈕，但並未按原版 `station.cgi` 收費。
+- **8 個**有操作入口：**7 個**由 [`FACILITY_PANELS`](../public/town-home.js#L2) 導向 Web 面板（含 PR #23 的獨立教室，PR #27 的已匯入有效信用卡付款），另 **1 個「駅」**由 [`townCellAction`](../public/town-home.js#L12) 導向車站票價與乘車選項（PR #26）。這只是入口覆蓋，不代表設施全部規則已移植。
+- **20 個**已有 Web 地圖代碼，但既未映射 `FACILITY_PANELS`，也不是車站特例；[`townCellAction`](../public/town-home.js#L12) 會回傳 `unavailable`，按圖示只會提示尚未移植。
+- 這些是**程式路由覆蓋率**，不是已完成功能比例；車站已按原版 `station.cgi` 收取四城六組雙向車資（PR #26），而真實原版地圖存檔及其他交通道具仍待核查。
 
 ## 二、原版全部 43 個表單入口
 
@@ -31,7 +31,7 @@
 | [`イベント`](../../unit.pl#L79) | `event.cgi` | `form` | 無 | Web 地圖代碼未收錄 |
 | [`特典`](../../unit.pl#L81) | `tokuten.cgi` | `tokuten` | 無 | Web 地圖代碼未收錄 |
 | [`アンケ`](../../unit.pl#L83) | `enq.cgi` | `top` | 有 | Web 有圖示、點選不可進入 |
-| [`駅`](../../unit.pl#L85) | `station.cgi` | `map` | 有 | Web 有圖示、點選不可進入 |
+| [`駅`](../../unit.pl#L85) | `station.cgi` | `map` | 有 | **PR #26 已修復** → 點車站可查看六組原版票價並實際跨城扣現金；其他交通券未核實 |
 | [`おばちゃん`](../../unit.pl#L116) | `obatyan.cgi` | `week` | 無 | Web 地圖代碼未收錄 |
 | [`おばちゃん強`](../../unit.pl#L118) | `obatyan.cgi` | `strong` | 無 | Web 地圖代碼未收錄 |
 | [`ゲーセン`](../../unit.pl#L120) | `gamerand.cgi` | `—` | 有 | Web 有圖示、點選不可進入 |
@@ -66,11 +66,13 @@
 
 > **重要例外**：[原版「人生」入口](../../unit.pl#L185) 指向 `./sugoroku/zinsei.cgi`；這份 fork 的 GitHub 樹中**沒有該檔**，因此只能標記為「來源中存在外部／缺檔連結」，不能宣稱原版有一套可在此 fork 正常執行的人生遊戲，也不能據此創作其規則。`プレ３` 指向 `test.cgi`，也需要檢查實際有效性，不按名稱賦予遊戲效果。
 
+**後續多層入口補盤**：原版 [`gamerand.cgi`](../../gamerand.cgi) 另連到 `donut.cgi`、`loto.cgi`、`loto6.cgi`、`fukubiki.cgi`、`saikoro.cgi`、`cardw2.cgi`、`otakara.cgi` 等子流程。詳 [尚未盤點與未修復總清冊](phase30-open-audit-backlog.md)。不把一個地圖入口算成一個完整系統，也不把 `slot.php` 缺檔、已註解的 `kuzi.cgi` 當成確認可玩。
+
 ## 三、逐函式驗證的確定缺口與行為差異
 
 | ID | 原版實際可執行證據 | Web 對照與判定 |
 |---|---|---|
-| **MP-04 車站收費與跨城** | [`station.cgi::idou` L99–116](../../station.cgi#L99) 明列四城市間六種票價：0↔1 **950**、0↔2 **780**、0↔3 **1,210**、1↔2 **950**、1↔3 **2,210**、2↔3 **1,530**；原版扣 `money`，L135–169 顯示 5 秒移動倒數。 | Web [`/api/move`](../src/server.mjs) 有換城功能，但尚未實作原版六組交通費；地圖「駅」圖示點擊被視為未移植。**確定規則差異**；原版倒數畫面不等於一定有伺服器端 5 秒旅行冷卻。 |
+| **MP-04 車站收費與跨城（已修核心、待實機／舊檔驗收）** | [`station.cgi::idou` L99–116](../../station.cgi#L99) 有四城六組票價：0↔1 **950**、0↔2 **780**、0↔3 **1,210**、1↔2 **950**、1↔3 **2,210**、2↔3 **1,530**；L135–169 為畫面移動倒數。 | PR #26 已修復 [`/api/move`](../src/server.mjs) 與地圖「駅」：按原版票價扣現金、更新城鎮，同城或餘額不足拒絕；原版 5 秒倒數**不是**新增伺服器旅行冷卻的證據；其他交通券及真實玩家地圖仍待核實。 |
 | **UI-05 教室獨立導航（已修復）** | [`unit.pl` L152](../../unit.pl#L152) 的 `教室` 指向 [`kyushitu.cgi`](../../kyushitu.cgi)，有獨立四課資料。 | [`town-home.js` L6](../public/town-home.js#L6) 已將「教室」導向 `classroom-panel`；Web 由 [`training.mjs`](../src/training.mjs) 按原版資料執行四堂現金課程及原版有效匯入卡片付款。**PR #23 修正地圖導覽；PR #27 補入本人有效原版信用卡付款，購卡流程未移植**。 |
 | **IT-05 原版釣魚及漁獲出售** | [`unit.pl` L77](../../unit.pl#L77) 指向 [`sea.cgi`](../../sea.cgi)；`turu` L139–186 檢查上次釣魚間隔、實際持有餌料與釣獲分支；`seri` L244–283 檢查實際漁獲並依不同類別結算售價。 | Web 沒有完整對應釣魚／漁獲出售行為；不得以現有物品封存或餐飲菜單視為完成。**確定缺漏**。 |
 | **EV-01 玩家投稿事件** | [`unit.pl` L79](../../unit.pl#L79) 的 `イベント` 指向 [`event.cgi::form/save` L21–103](../../event.cgi#L21)；`save` 將文字、能力、金錢等資料寫 `log_dir/eventlog.cgi`。 | **與 `event.pl` 的 #01～#44 隨機事件完全是兩件事**；Web 已支援部分隨機事件，但沒有此原版玩家投稿入口。投稿並非自動導入隨機事件池。**確定缺漏**。 |
