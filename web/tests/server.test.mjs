@@ -2591,3 +2591,48 @@ test("百貨 HTTP 多件現金購物：庫存扣量、同品合併、請求防�
     assert.equal(noCard.result.error.includes("信用卡"),true);
   }finally{await srv.stop();}
 });
+
+
+test("實體百貨健康保険透過 HTTP 購入後生效於醫院折扣與原版保險狀態",async()=>{
+  const srv=await start("solo");
+  try{
+    const created=await api(srv.url,"character",{
+      name:"百貨保險患者",gender:"other",stats:defaultStats()
+    });
+    assert.equal(created.status,200);
+    const placed=await api(srv.url,"map/tile",{row:0,column:0,symbol:"デパ"});
+    assert.equal(placed.status,200);
+    assert.equal(placed.result.hospital.hasInsurance,false);
+    // 測試實際目錄第 356 行健康保険：只改隔離測試 DB 的當日貨架，
+    // 不開啟任何無建築直購捷徑，也不修改原始商品資料。
+    const healthSku="legacy-356";
+    if(!placed.result.retailGoods.some(x=>x.sku===healthSku)){
+      const db=new DatabaseSync(join(srv.directory,"solo.sqlite"));
+      try{
+        const replacement=db.prepare("SELECT position FROM retail_stock WHERE shop='depart1' ORDER BY position LIMIT 1").get();
+        db.prepare("UPDATE retail_stock SET sku=?,remaining=15 WHERE shop='depart1' AND position=?")
+          .run(healthSku,replacement.position);
+      }finally{db.close();}
+    }
+    const ready=await api(srv.url,"state");
+    const health=ready.result.retailGoods.find(x=>x.sku===healthSku);
+    assert.ok(health);
+    assert.equal(health.name,"健康保険");
+    assert.equal(health.price,30000);
+    const bought=await api(srv.url,"retail/buy",{
+      shop:"depart1",sku:health.sku,quantity:2,requestId:"retail_health_hospital"
+    });
+    assert.equal(bought.status,200);
+    assert.equal(bought.result.retailResult.paid,60000);
+    assert.equal(bought.result.hospital.hasInsurance,true);
+    assert.equal(bought.result.insurance.active,true);
+    assert.equal(bought.result.insurance.remainingDays,60);
+    assert.equal(bought.result.hospital.price,Math.floor(placed.result.hospital.basePrice/3));
+    const again=await api(srv.url,"retail/buy",{
+      shop:"depart1",sku:health.sku,quantity:2,requestId:"retail_health_hospital"
+    });
+    assert.equal(again.status,200);
+    assert.equal(again.result.retailResult.replayed,true);
+    assert.equal(again.result.insurance.remainingDays,60);
+  }finally{await srv.stop();}
+});

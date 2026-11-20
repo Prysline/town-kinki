@@ -4,6 +4,7 @@ import { randomInt } from "node:crypto";
 import { LEGACY_ITEM_FIELDS,initLegacyInventoryTables } from "./legacy-inventory.mjs";
 import { requireClassroomCreditCard } from "./legacy-credit.mjs";
 import { recordBankEntry } from "./banking.mjs";
+import { initInventoryTables,insuranceCoverage,DAY_MS } from "./inventory.mjs";
 
 export const RETAIL_SHOPS=Object.freeze({depart1:"デパ",depart2:"デパ2"});
 export const RETAIL_DAILY_LIMIT=110;
@@ -44,6 +45,7 @@ export function parseLegacyRetailCatalog(source) {
   return Object.freeze(catalog);
 }
 export function initRetailTables(db){
+  initInventoryTables(db);
   initLegacyInventoryTables(db);
   db.exec([
     "CREATE TABLE IF NOT EXISTS retail_day (id INTEGER PRIMARY KEY CHECK(id=1),day TEXT NOT NULL);",
@@ -200,6 +202,21 @@ export function buyRetailItem(db,userId,catalog,{
     }
     const category=ownedCategory(item);
     const gift=category==="ギフト";
+    const healthInsurance=category==="日用品"&&item.name==="健康保険"&&
+      item.effect==="無"&&item.durabilityUnit==="日";
+    let insuranceUntil=null;
+    if(healthInsurance){
+      // 將百貨購入的原版健康保険及既有暫時直購保險統一為醫院使用的期限。
+      // 先計算所有已知保險來源的剩餘時間，再延長，避免兩種購買途徑重複折扣。
+      const remaining=insuranceCoverage(db,userId,now).remainingMs;
+      const extension=addedDurability*DAY_MS;
+      const cap=item.durability*RETAIL_MAX_QUANTITY*DAY_MS;
+      insuranceUntil=now+remaining+extension;
+      if(![remaining,extension,cap,insuranceUntil].every(Number.isSafeInteger))
+        throw new Error("保險期限超出安全範圍");
+      if(remaining+extension>cap)
+        throw new Error("健康保險有效耐久不得超過 5 份");
+    }
     const inventory=currentInventory(db,userId,now);
     const active=inventory.filter(x=>x.remainingNow>0);
     let existing=null;
@@ -280,6 +297,14 @@ export function buyRetailItem(db,userId,catalog,{
       ].join(" ")).run(userId,RETAIL_ITEM_ORIGIN,sourceLine,category,fields[1],
         fields[9],addedDurability,item.durabilityUnit,purchasedAt,
         NONNEG.test(fields[26])?Number(fields[26]):0,JSON.stringify(fields));
+    }
+    if(healthInsurance){
+      db.prepare([
+        "INSERT INTO inventory_items(user_id,item_key,active_until,last_purchased_at)",
+        "VALUES(?,'health-insurance',?,?)",
+        "ON CONFLICT(user_id,item_key) DO UPDATE SET",
+        "active_until=excluded.active_until,last_purchased_at=excluded.last_purchased_at"
+      ].join(" ")).run(userId,insuranceUntil,now);
     }
     db.prepare("UPDATE retail_purchases SET source_line=? WHERE id=?").run(sourceLine,purchaseId);
     db.exec("COMMIT");

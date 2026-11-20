@@ -1051,7 +1051,8 @@ function renderLegacyItems() {
         (actionInfo?.remaining??item.durability)+" "+
         (item.unit||"（未標示單位）")+
         (item.origin==="retail"?"｜百貨店新購入":"｜原始存檔第 "+item.sourceLine+" 行")+
-        (actionInfo?"（已支援使用）":item.origin==="retail"?"（尚未支援直接使用）":"（唯讀封存）");
+        (actionInfo?"（已支援使用）":item.name==="健康保険"&&state.insurance?.active?
+        "（醫院自動生效，不需手動使用）":item.origin==="retail"?"（尚未支援直接使用）":"（唯讀封存）");
       row.append(label);
       if(actionInfo){
         const button=document.createElement("button");
