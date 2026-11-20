@@ -155,7 +155,7 @@
           </div>
           <p class="small" id="map-selection" role="status"></p>
           <nav id="facility-shortcuts" class="town-shortcuts" aria-label="城鎮常用操作">
-            <button type="button" id="home-work" data-action="work"><img src="/legacy-assets/button/go_work.png" alt="">工作</button>
+            <button type="button" id="home-work" data-facility="jobs-panel"><img src="/legacy-assets/button/go_work.png" alt="">工作</button>
             <button type="button" data-facility="inventory-panel"><img src="/legacy-assets/button/item.png" alt="">物品</button>
             <button type="button" data-facility="bank-panel"><img src="/legacy-assets/bank.gif" alt="">銀行</button>
             <button type="button" data-facility="hospital-panel"><img src="/legacy-assets/hospital.gif" alt="">醫院</button>
@@ -208,6 +208,10 @@
             <div><dt>工作次數</dt><dd id="work-count"></dd></div>
             <div><dt>目前職業經驗</dt><dd id="job-experience"></dd></div>
             <div><dt>目前職業等級</dt><dd id="job-level"></dd></div>
+            <div><dt>目前職業精通進度</dt><dd class="mastery-status">
+              <span id="job-mastery-status">尚未就職</span>
+              <progress id="job-mastery-bar" max="1500" value="0" aria-label="目前職業的精通經驗進度"></progress>
+            </dd></div>
             <div><dt>精通職業</dt><dd id="mastered-job"></dd></div>
             <div><dt>飽足度</dt><dd id="hunger-status"></dd></div>
             <div><dt>目前狀態</dt><dd id="condition-status"></dd></div>
@@ -386,6 +390,7 @@
       <div id="facility-pane-jobs" class="facility-pane" role="tabpanel" aria-labelledby="facility-tab-jobs" tabindex="0">
         <section class="card" id="jobs-panel">
           <div class="heading"><div><div class="eyebrow">職業介紹所</div><h2>選擇工作</h2></div><span id="job-count" class="muted"></span></div>
+          <p class="small" id="jobs-mastery-status">目前職業精通進度：尚未就職。</p>
           <div class="filters">
             <label class="sr-only" for="job-search">搜尋職業</label>
             <input id="job-search" placeholder="搜尋職業名稱">
