@@ -120,7 +120,7 @@ function renderSoloTime() {
 let publicPreview=null;
 let previewLoading=false;
 // 方案 B：一次顯示一組設施。原本的表單留在 DOM，既有事件和資料更新不受影響。
-const FACILITY_TAB_NAMES = Object.freeze(["house","dining","training","jobs","bank","hospital","events"]);
+const FACILITY_TAB_NAMES = Object.freeze(["house","dining","shops","training","jobs","bank","hospital","events"]);
 const PROFILE_VIEWS = Object.freeze(["status","inventory","attributes"]);
 let activeProfileView="status";
 function selectProfileView(name,{focus=false}={}) {
@@ -383,8 +383,12 @@ function renderTownMap() {
           board.querySelectorAll(".map-cell.selected").forEach(node=>node.classList.remove("selected"));
           button.classList.add("selected");
           if(destination.kind==="house")openRoom(destination.houseId);
-          else if(destination.kind==="build"||destination.kind==="facility")
+          else if(destination.kind==="build"||destination.kind==="facility"){
+            if(cell.key==="デパ"||cell.key==="デパ2")
+              el("retail-shop-select").value=cell.key==="デパ2"?"depart2":"depart1";
             goToFacility(destination.panelId);
+            if(cell.key==="デパ"||cell.key==="デパ2")renderRetail();
+          }
           else if(destination.kind==="station"){
             el("station-heading").scrollIntoView({behavior:"smooth",block:"start"});
             el("towns").querySelector("button:not(:disabled)")?.focus({preventScroll:true});
@@ -1045,8 +1049,9 @@ function renderLegacyItems() {
       const label=document.createElement("span");
       label.textContent=item.category+"｜"+item.name+"｜剩餘耐久 "+
         (actionInfo?.remaining??item.durability)+" "+
-        (item.unit||"（未標示單位）")+"｜原始存檔第 "+item.sourceLine+" 行"+
-        (actionInfo?"（已支援使用）":"（唯讀封存）");
+        (item.unit||"（未標示單位）")+
+        (item.origin==="retail"?"｜百貨店新購入":"｜原始存檔第 "+item.sourceLine+" 行")+
+        (actionInfo?"（已支援使用）":item.origin==="retail"?"（尚未支援直接使用）":"（唯讀封存）");
       row.append(label);
       if(actionInfo){
         const button=document.createElement("button");
@@ -1205,6 +1210,78 @@ function renderDining() {
     tile.append(button);
     list.append(tile);
   }
+}
+
+
+let pendingRetailPurchase=null;
+async function submitRetailPurchase(item){
+  if(!window.confirm("確定支付 "+money(item.price)+" 購買「"+item.name+"」一件嗎？"))return;
+  if(!pendingRetailPurchase||pendingRetailPurchase.shop!==item.shop||
+     pendingRetailPurchase.sku!==item.sku)
+    pendingRetailPurchase={shop:item.shop,sku:item.sku,quantity:1,requestId:crypto.randomUUID()};
+  try{
+    state=await api("retail/buy",pendingRetailPurchase);
+    const result=state.retailResult;
+    pendingRetailPurchase=null;
+    render();
+    notify(result.replayed?"這筆購買已完成，未重複扣款。":
+      "已在百貨店購入「"+result.name+"」，現金支付 "+money(result.paid)+
+      "；物品已加入本人持有清單。");
+  }catch(error){notify(error.message,true);}
+}
+function renderRetail(){
+  if(!state?.character)return;
+  const choices=state.retailAvailable??[];
+  const select=el("retail-shop-select");
+  for(const option of select.options)option.disabled=!choices.includes(option.value);
+  if(!choices.includes(select.value))select.value=choices[0]??"depart1";
+  const shop=select.value;
+  const search=el("retail-search").value.trim().toLocaleLowerCase("zh-TW");
+  const goods=(state.retailGoods??[]).filter(item=>item.shop===shop&&
+    (item.name.toLocaleLowerCase("zh-TW").includes(search)||
+     item.category.toLocaleLowerCase("zh-TW").includes(search)));
+  text("retail-status",!choices.length?
+    "目前城鎮沒有已配置的百貨店。請先在地圖中找到百貨店，單機模式可配置原版建築代碼。" :
+    !choices.includes(shop)?"這間百貨店不在目前城鎮。" :
+    (state.retailDay??"今日")+"｜符合搜尋的商品 "+goods.length+" 種，最多先顯示 30 筆；新購入物品可在右側「物品」查看。");
+  const target=el("retail-items");
+  target.replaceChildren();
+  for(const item of goods.slice(0,30)){
+    const tile=document.createElement("div");tile.className="training-tile";
+    const name=document.createElement("strong");name.textContent=item.name;
+    const note=document.createElement("p");note.className="small";
+    note.textContent=item.category+"｜單價 "+money(item.price)+
+      "｜耐久 "+item.durability+item.unit+"｜剩餘庫存 "+item.stock;
+    const button=document.createElement("button");
+    button.type="button";
+    button.disabled=item.stock<=0||state.character.money<item.price;
+    button.textContent=item.stock<=0?"今日售完":
+      state.character.money<item.price?"現金不足":"購買一件";
+    button.addEventListener("click",()=>submitRetailPurchase(item));
+    tile.append(name,note,button);
+    target.append(tile);
+  }
+  if(!goods.length){
+    const empty=document.createElement("p");empty.className="small";
+    empty.textContent=choices.length?"目前沒有符合條件的上架商品。":"尚無可進入的百貨店。";
+    target.append(empty);
+  }
+  const receipts=el("retail-purchases");
+  receipts.replaceChildren();
+  const list=document.createElement("ol");list.className="health-event-list";
+  for(const purchase of state.retailPurchases??[]){
+    const line=document.createElement("li");
+    line.textContent=new Date(purchase.createdAt).toLocaleString("zh-TW")+
+      "｜"+(purchase.shop==="depart2"?"百貨二":"百貨一")+"｜"+purchase.name+
+      "｜支付 "+money(purchase.paid)+"｜剩餘 "+(purchase.remaining??"?")+
+      (purchase.unit??"");
+    list.append(line);
+  }
+  if(!list.childElementCount){
+    const empty=document.createElement("p");empty.className="small";
+    empty.textContent="尚無百貨店購物紀錄。";
+    receipts.append(empty);
+  }else receipts.append(list);
 }
 
 function renderTraining() {
@@ -1440,6 +1517,7 @@ function render() {
   text("mastered-job", c.masteredJob || "無");
   text("measurements", c.height + " 公分／" + c.weight + " 公斤");
   renderDining();
+  renderRetail();
   renderInsurance();
   const ready = Boolean(state.currentJob) && state.workCooldownMs === 0 &&
     state.condition?.baseExperience !== null;
@@ -1664,6 +1742,8 @@ el("loan-payoff").addEventListener("click",()=>{
       " 以清償貸款嗎？")) return;
   action("bank/loan/payoff",{},"剩餘貸款已全額清償。");
 });
+el("retail-shop-select").addEventListener("change",renderRetail);
+el("retail-search").addEventListener("input",renderRetail);
 el("meal-menu").addEventListener("change",renderDining);
 el("bank-ledger-filter").addEventListener("change", renderBank);
 el("term-deposit-form").addEventListener("submit", event => {

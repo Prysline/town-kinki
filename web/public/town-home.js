@@ -6,6 +6,8 @@ export const FACILITY_PANELS=Object.freeze({
   "教室":"classroom-panel",
   "食堂":"dining-panel",
   "食堂２":"dining-panel",
+  "デパ":"retail-panel",
+  "デパ2":"retail-panel",
   "建築":"housing-panel"
 });
 const BUILDABLE=new Set(["空地","空地2","空地3","空地4"]);
