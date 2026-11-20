@@ -2549,6 +2549,45 @@ test("單機有真實百貨建築才能購買：地圖入店、現金/庫存/物
     assert.equal(again.result.retailResult.replayed,true);
     assert.equal(again.result.character.money,before-affordable.price);
     assert.equal((await api(srv.url,"retail/buy",{...payload,shop:"depart2",requestId:"retail_shop2_fail"})).status,400);
-    assert.equal((await api(srv.url,"retail/buy",{...payload,quantity:3,requestId:"retail_qty_fail"})).status,400);
+    assert.equal((await api(srv.url,"retail/buy",{...payload,quantity:6,requestId:"retail_qty_fail"})).status,400);
+  }finally{await srv.stop();}
+});
+
+
+test("百貨 HTTP 多件現金購物：庫存扣量、同品合併、請求防重與銀行付款拒絕",async()=>{
+  const srv=await start("solo");
+  try{
+    assert.equal((await api(srv.url,"character",{
+      name:"多件購物角色",gender:"other",stats:defaultStats()
+    })).status,200);
+    const placed=await api(srv.url,"map/tile",{row:0,column:0,symbol:"デパ"});
+    assert.equal(placed.status,200);
+    const item=placed.result.retailGoods.find(g=>g.stock>=3&&g.price*3<=placed.result.character.money&&
+      g.category!=="ギフト");
+    assert.ok(item,"貨架至少一項普通商品可購買三件");
+    const initial=placed.result.character.money;
+    const payload={shop:"depart1",sku:item.sku,quantity:2,requestId:"retail_http_multi_a"};
+    const first=await api(srv.url,"retail/buy",payload);
+    assert.equal(first.status,200);
+    assert.equal(first.result.retailResult.quantity,2);
+    assert.equal(first.result.retailResult.paid,item.price*2);
+    const second=await api(srv.url,"retail/buy",{
+      shop:"depart1",sku:item.sku,quantity:1,requestId:"retail_http_multi_b"
+    });
+    assert.equal(second.status,200);
+    assert.equal(second.result.retailResult.merged,true);
+    assert.equal(second.result.retailResult.sourceLine,first.result.retailResult.sourceLine);
+    assert.equal(second.result.legacyInventory.filter(x=>x.origin==="retail"&&x.name===item.name).length,1);
+    assert.equal(second.result.character.money,initial-item.price*3);
+    assert.equal(second.result.retailGoods.find(g=>g.sku===item.sku).stock,item.stock-3);
+    const replay=await api(srv.url,"retail/buy",payload);
+    assert.equal(replay.status,200);
+    assert.equal(replay.result.retailResult.replayed,true);
+    assert.equal(replay.result.character.money,initial-item.price*3);
+    const noCard=await api(srv.url,"retail/buy",{
+      ...payload,requestId:"retail_http_credit_fail",payment:"bank",cardSourceLine:111111
+    });
+    assert.equal(noCard.status,400);
+    assert.equal(noCard.result.error.includes("信用卡"),true);
   }finally{await srv.stop();}
 });

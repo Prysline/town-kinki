@@ -2,10 +2,14 @@
 // 首個 Web 購物切片只允許每次購買一件、現金付款；原版贈品與折扣等另行追來源。
 import { randomInt } from "node:crypto";
 import { LEGACY_ITEM_FIELDS,initLegacyInventoryTables } from "./legacy-inventory.mjs";
+import { requireClassroomCreditCard } from "./legacy-credit.mjs";
+import { recordBankEntry } from "./banking.mjs";
 
 export const RETAIL_SHOPS=Object.freeze({depart1:"デパ",depart2:"デパ2"});
 export const RETAIL_DAILY_LIMIT=110;
 export const RETAIL_SLOT_LIMIT=25;
+export const RETAIL_GIFT_LIMIT=10;
+export const RETAIL_MAX_QUANTITY=5;
 export const RETAIL_ITEM_ORIGIN="__web_retail__";
 const RETAIL_SOURCE_LINE=1000000;
 const REQUEST_ID=/^[A-Za-z0-9_-]{8,80}$/;
@@ -56,6 +60,14 @@ export function initRetailTables(db){
     "request_id TEXT NOT NULL,created_at INTEGER NOT NULL,",
     "UNIQUE(user_id,request_id));"
   ].join(" "));
+  // PR #35 的現有購物紀錄無數量和付款方式：舊單筆交易不動，套用原先的現金一件預設值。
+  const columns=new Set(db.prepare("PRAGMA table_info(retail_purchases)").all().map(x=>x.name));
+  for(const [name,definition] of [
+    ["quantity","INTEGER NOT NULL DEFAULT 1"],
+    ["payment","TEXT NOT NULL DEFAULT 'cash'"],
+    ["card_source_line","INTEGER"],
+    ["merged","INTEGER NOT NULL DEFAULT 0"]
+  ])if(!columns.has(name))db.exec("ALTER TABLE retail_purchases ADD COLUMN "+name+" "+definition);
 }
 function shuffle(source,randomIndex){
   const a=[...source];
@@ -100,6 +112,7 @@ export function listRetailStock(db,catalog,allowedShops=[]){
 export function listRetailPurchases(db,userId,limit=25){
   return db.prepare([
     "SELECT p.shop,p.sku,p.name,p.paid,p.source_line,p.created_at,",
+    "p.quantity,p.payment,p.merged,",
     "COALESCE(u.remaining,i.durability) AS remaining,i.durability_unit AS unit",
     "FROM retail_purchases p",
     "LEFT JOIN legacy_inventory_items i ON i.user_id=p.user_id AND i.source_line=p.source_line",
@@ -107,72 +120,170 @@ export function listRetailPurchases(db,userId,limit=25){
     "WHERE p.user_id=? ORDER BY p.id DESC LIMIT ?"
   ].join(" ")).all(userId,limit).map(row=>({
     shop:row.shop,sku:row.sku,name:row.name,paid:row.paid,
+    quantity:row.quantity,payment:row.payment,merged:Boolean(row.merged),
     sourceLine:row.source_line,createdAt:row.created_at,
     remaining:row.remaining,unit:row.unit
   }));
 }
-export function buyRetailItem(db,userId,catalog,{shop,sku,requestId,now,day,hasBuilding}={}){
+// 原版「日」耐久按購入日起算；「回」耐久以 Web 已消耗的剩餘次數為準。
+// 舊檔不改寫：只合併有明確 Web 購物來源、相同商品資訊的物品。
+function remainingNow(row,now){
+  if(row.durability_unit==="日"){
+    if(!Number.isSafeInteger(row.purchased_at)||row.purchased_at<=0)return 0;
+    const elapsed=Math.max(0,Math.floor((Math.floor(now/1000)-row.purchased_at)/86400));
+    return Math.max(0,row.durability-elapsed);
+  }
+  return Math.max(0,row.web_remaining??row.durability);
+}
+function currentInventory(db,userId,now){
+  const rows=db.prepare([
+    "SELECT i.*,u.remaining AS web_remaining",
+    "FROM legacy_inventory_items i LEFT JOIN legacy_item_usage u",
+    "ON u.user_id=i.user_id AND u.source_line=i.source_line WHERE i.user_id=?"
+  ].join(" ")).all(userId);
+  return rows.map(row=>({...row,remainingNow:remainingNow(row,now)}));
+}
+function ownedCategory(item){
+  if(item.effect.includes("ギフト"))return "ギフト";
+  if(item.effect.includes("食料品"))return "食料品";
+  if(item.effect.includes("ファ"))return "ファーストフード";
+  return item.category;
+}
+export function buyRetailItem(db,userId,catalog,{
+  shop,sku,requestId,now,day,hasBuilding,quantity=1,payment="cash",cardSourceLine
+}={}){
   if(!Number.isSafeInteger(userId)||userId<1||
      !Object.hasOwn(RETAIL_SHOPS,shop)||typeof sku!=="string"||
      typeof requestId!=="string"||!REQUEST_ID.test(requestId)||
-     !Number.isSafeInteger(now)||now<=0||typeof hasBuilding!=="function")
-    throw new Error("百貨店購物請求格式不正確");
+     !Number.isSafeInteger(now)||now<=0||typeof hasBuilding!=="function"||
+     !Number.isSafeInteger(quantity)||quantity<1||quantity>RETAIL_MAX_QUANTITY||
+     !["cash","bank"].includes(payment)||
+     (payment==="bank"&&(!Number.isSafeInteger(cardSourceLine)||cardSourceLine<=0))||
+     (payment==="cash"&&cardSourceLine!==undefined))
+    throw new Error("百貨店購物請求格式不正確（單次可選 1～5 件）");
   const item=catalog.find(x=>x.sku===sku);
   if(!item)throw new Error("找不到原版百貨店商品");
+  const total=item.unitPrice*quantity;
+  const addedDurability=item.durability*quantity;
+  if(!Number.isSafeInteger(total)||!Number.isSafeInteger(addedDurability))
+    throw new Error("購買總額或耐久超出安全範圍");
   db.exec("BEGIN IMMEDIATE");
   try{
-    const previous=db.prepare("SELECT shop,sku,name,paid,source_line FROM retail_purchases WHERE user_id=? AND request_id=?").get(userId,requestId);
+    const previous=db.prepare([
+      "SELECT shop,sku,name,paid,source_line,quantity,payment,card_source_line,merged",
+      "FROM retail_purchases WHERE user_id=? AND request_id=?"
+    ].join(" ")).get(userId,requestId);
     if(previous){
-      if(previous.shop!==shop||previous.sku!==sku)
-        throw new Error("購買識別碼已被用於不同商品");
+      if(previous.shop!==shop||previous.sku!==sku||
+         previous.quantity!==quantity||previous.payment!==payment||
+         (previous.card_source_line??null)!==(cardSourceLine??null))
+        throw new Error("購買識別碼已被用於不同商品、數量或付款方式");
       db.exec("COMMIT");
       return {shop,sku,name:previous.name,paid:previous.paid,
-        sourceLine:previous.source_line,replayed:true};
+        sourceLine:previous.source_line,quantity,payment,
+        merged:Boolean(previous.merged),replayed:true};
     }
-    const character=db.prepare("SELECT user_id,money,town_id FROM characters WHERE user_id=?").get(userId);
+    const character=db.prepare("SELECT user_id,money,bank,town_id FROM characters WHERE user_id=?").get(userId);
     if(!character)throw new Error("請先建立角色");
     if(!hasBuilding(RETAIL_SHOPS[shop],character.town_id))
       throw new Error("目前所在城鎮沒有這間百貨店");
     ensureRetailDay(db,catalog,day);
     const available=db.prepare("SELECT remaining FROM retail_stock WHERE shop=? AND sku=?").get(shop,sku);
-    if(!available||available.remaining<=0)
-      throw new Error("商品今日未上架或已售完");
-    if(character.money<item.unitPrice)throw new Error("現金不足");
-    const slots=db.prepare([
-      "SELECT COUNT(*) AS n FROM legacy_inventory_items i",
-      "LEFT JOIN legacy_item_usage u ON i.user_id=u.user_id AND i.source_line=u.source_line",
-      "WHERE i.user_id=? AND COALESCE(u.remaining,i.durability)>0"
-    ].join(" ")).get(userId).n;
-    if(slots>=RETAIL_SLOT_LIMIT)throw new Error("持有物已達 25 格限制");
-    if(db.prepare("UPDATE retail_stock SET remaining=remaining-1 WHERE shop=? AND sku=? AND remaining>0")
-      .run(shop,sku).changes!==1)throw new Error("商品庫存不足");
-    if(db.prepare("UPDATE characters SET money=money-? WHERE user_id=? AND money>=?")
-      .run(item.unitPrice,userId,item.unitPrice).changes!==1)
-      throw new Error("現金不足");
+    if(!available||available.remaining<quantity)
+      throw new Error("商品今日未上架或庫存不足");
+    if(payment==="cash"){
+      if(character.money<total)throw new Error("現金不足");
+    }else{
+      // 不接受前端自報卡片有效性；須是本人原版 33 欄、尚在有效期內的信用卡。
+      requireClassroomCreditCard(db,userId,cardSourceLine,now);
+      if(character.bank<total)throw new Error("普通銀行存款不足");
+    }
+    const category=ownedCategory(item);
+    const gift=category==="ギフト";
+    const inventory=currentInventory(db,userId,now);
+    const active=inventory.filter(x=>x.remainingNow>0);
+    let existing=null;
+    if(!gift){
+      const matches=active.filter(x=>
+        x.original_id===RETAIL_ITEM_ORIGIN&&x.original_name===item.name&&
+        x.category===category&&x.effect===item.effect&&
+        x.durability_unit===item.durabilityUnit);
+      if(matches.length){
+        // 兼容舊版 Web 同品多列：挑選尚可容納的一筆，不動歷史的其他列。
+        existing=matches.find(x=>Number.isSafeInteger(x.remainingNow+addedDurability)&&
+          x.remainingNow+addedDurability<=item.durability*RETAIL_MAX_QUANTITY)??null;
+        if(!existing)throw new Error("相同商品已達 5 件持有上限");
+      }
+    }
+    if(gift){
+      if(active.filter(x=>x.category==="ギフト").length>=RETAIL_GIFT_LIMIT)
+        throw new Error("購入禮品已達 10 格限制");
+    }else if(!existing&&active.filter(x=>x.category!=="ギフト"&&x.category!=="ギフト商品").length>=RETAIL_SLOT_LIMIT){
+      throw new Error("一般持有物已達 25 格限制");
+    }
+    if(db.prepare("UPDATE retail_stock SET remaining=remaining-? WHERE shop=? AND sku=? AND remaining>=?")
+      .run(quantity,shop,sku,quantity).changes!==1)throw new Error("商品庫存不足");
+    if(payment==="cash"){
+      if(db.prepare("UPDATE characters SET money=money-? WHERE user_id=? AND money>=?")
+        .run(total,userId,total).changes!==1)throw new Error("現金不足");
+    }else{
+      if(db.prepare("UPDATE characters SET bank=bank-? WHERE user_id=? AND bank>=?")
+        .run(total,userId,total).changes!==1)throw new Error("普通銀行存款不足");
+      recordBankEntry(db,userId,"ordinary",("百貨信用付款："+item.name).slice(0,50),
+        total,0,character.bank-total,now);
+    }
     const purchasedAt=Math.floor(now/1000);
-    const fields=[...item.rawFields];
-    // 原版 command.pl 會依效果把贈品或食品轉為使用時對應的分類。
-    if(item.effect.includes("ギフト"))fields[0]="ギフト";
-    else if(item.effect.includes("食料品"))fields[0]="食料品";
-    else if(item.effect.includes("ファ"))fields[0]="ファーストフード";
-    fields[30]=String(purchasedAt);
-    fields[31]=String(Math.trunc(item.unitPrice/item.durability));
     const insert=db.prepare([
-      "INSERT INTO retail_purchases(user_id,shop,sku,name,paid,request_id,created_at)",
-      "VALUES(?,?,?,?,?,?,?)"
-    ].join(" ")).run(userId,shop,sku,item.name,item.unitPrice,requestId,now);
-    const id=Number(insert.lastInsertRowid);
-    const sourceLine=RETAIL_SOURCE_LINE+id;
-    if(!Number.isSafeInteger(sourceLine))throw new Error("購物流水號超出範圍");
-    db.prepare([
-      "INSERT INTO legacy_inventory_items(user_id,original_id,source_line,category,original_name,",
-      "effect,durability,durability_unit,purchased_at,last_used_at,raw_fields_json)",
+      "INSERT INTO retail_purchases(user_id,shop,sku,name,paid,request_id,created_at,",
+      "quantity,payment,card_source_line,merged)",
       "VALUES(?,?,?,?,?,?,?,?,?,?,?)"
-    ].join(" ")).run(userId,RETAIL_ITEM_ORIGIN,sourceLine,fields[0],fields[1],
-      fields[9],item.durability,item.durabilityUnit,purchasedAt,
-      NONNEG.test(fields[26])?Number(fields[26]):0,JSON.stringify(fields));
-    db.prepare("UPDATE retail_purchases SET source_line=? WHERE id=?").run(sourceLine,id);
+    ].join(" ")).run(userId,shop,sku,item.name,total,requestId,now,
+      quantity,payment,payment==="bank"?cardSourceLine:null,existing?1:0);
+    const purchaseId=Number(insert.lastInsertRowid);
+    const sourceLine=existing?.source_line??RETAIL_SOURCE_LINE+purchaseId;
+    if(!Number.isSafeInteger(sourceLine))throw new Error("購物流水號超出範圍");
+    if(existing){
+      let fields;
+      try{fields=JSON.parse(existing.raw_fields_json);}catch{}
+      if(!Array.isArray(fields)||fields.length!==33||
+         fields[0]!==existing.category||fields[1]!==existing.original_name||
+         fields[21]!==String(existing.durability))
+        throw new Error("既有購買物品 33 欄資料不一致");
+      const nextDurability=existing.remainingNow+addedDurability;
+      fields[21]=String(nextDurability);
+      // 原版「日」續購重算起始日；「回」保留已使用時點與冷卻紀錄。
+      const newPurchasedAt=item.durabilityUnit==="日"?purchasedAt:existing.purchased_at;
+      if(item.durabilityUnit==="日")fields[30]=String(purchasedAt);
+      const oldUnit=NONNEG.test(fields[31])?BigInt(fields[31]):0n;
+      const weighted=(oldUnit*BigInt(existing.remainingNow)+BigInt(total))/BigInt(nextDurability);
+      if(weighted>BigInt(Number.MAX_SAFE_INTEGER))throw new Error("耐久單價超出安全整數");
+      fields[31]=String(weighted);
+      db.prepare([
+        "UPDATE legacy_inventory_items SET durability=?,purchased_at=?,raw_fields_json=?",
+        "WHERE user_id=? AND source_line=? AND original_id=?"
+      ].join(" ")).run(nextDurability,newPurchasedAt,JSON.stringify(fields),
+        userId,sourceLine,RETAIL_ITEM_ORIGIN);
+      if(item.durabilityUnit==="回"){
+        db.prepare("UPDATE legacy_item_usage SET remaining=? WHERE user_id=? AND source_line=?")
+          .run(nextDurability,userId,sourceLine);
+      }
+    }else{
+      const fields=[...item.rawFields];
+      fields[0]=category;
+      fields[21]=String(addedDurability);
+      fields[30]=String(purchasedAt);
+      fields[31]=String(Math.trunc(total/addedDurability));
+      db.prepare([
+        "INSERT INTO legacy_inventory_items(user_id,original_id,source_line,category,original_name,",
+        "effect,durability,durability_unit,purchased_at,last_used_at,raw_fields_json)",
+        "VALUES(?,?,?,?,?,?,?,?,?,?,?)"
+      ].join(" ")).run(userId,RETAIL_ITEM_ORIGIN,sourceLine,category,fields[1],
+        fields[9],addedDurability,item.durabilityUnit,purchasedAt,
+        NONNEG.test(fields[26])?Number(fields[26]):0,JSON.stringify(fields));
+    }
+    db.prepare("UPDATE retail_purchases SET source_line=? WHERE id=?").run(sourceLine,purchaseId);
     db.exec("COMMIT");
-    return {shop,sku,name:item.name,paid:item.unitPrice,sourceLine,replayed:false};
+    return {shop,sku,name:item.name,paid:total,sourceLine,quantity,payment,
+      merged:Boolean(existing),replayed:false};
   }catch(error){db.exec("ROLLBACK");throw error;}
 }
