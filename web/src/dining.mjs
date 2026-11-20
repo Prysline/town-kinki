@@ -67,10 +67,18 @@ export function hungerStatus(lastMealAt,now=Date.now(),mealInterval=MEAL_COOLDOW
   return {key,label:HUNGER_LABELS[key],elapsedMs:delta,
     nextMealAt:lastMealAt+mealInterval,canEat:delta>=mealInterval};
 }
-export function physiqueStatus(height,weight) {
+// 原版 basic.cgi 在檢查職業與狀態前，先將體重 sprintf("%.1f")；
+// town_lib.pl::check_BMI 再取整數。不可直接截斷 Web 儲存的一位小數 BMI。
+export function legacyPhysiqueBmi(height,weight) {
   if (!Number.isFinite(height)||height<=0||!Number.isFinite(weight)||weight<0)
     throw new Error("無效的身高體重");
-  const bmi=Math.floor(weight/((height/100)**2));
+  const roundedWeight=Math.round(weight*10)/10;
+  const bmi=Math.trunc(roundedWeight/((height/100)**2));
+  if (!Number.isFinite(bmi)) throw new Error("無效的身高體重");
+  return bmi;
+}
+export function physiqueStatus(height,weight) {
+  const bmi=legacyPhysiqueBmi(height,weight);
   const key=bmi>=26?"obese":bmi>=24?"overweight":bmi>=20?"normal":
     bmi>=18?"underweight":"veryUnderweight";
   const labels={obese:"肥胖",overweight:"稍微偏胖",normal:"標準",
