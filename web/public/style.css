@@ -376,3 +376,14 @@ body.compact-status-active .game-shell .facility-pane{scroll-margin-top:7rem}
 @media(max-width:800px){
   .game-shell .inventory-panel{max-height:min(58vh,480px)}
 }
+
+/* 原版就業條件：可展開檢視全部 17 個必要值與當前數值 */
+.job .job-main{flex:1;min-width:0}
+.job{align-items:flex-start}
+.job-requirements{margin-top:.45rem;padding:.45rem .55rem;border:1px solid #dde7dd;border-radius:7px;max-width:100%;font-size:.83rem}
+.job-requirements summary{cursor:pointer;color:#235b40;font-weight:650}
+.job-condition-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));gap:.3rem;margin:.6rem 0}
+.job-condition{padding:.35rem .45rem;background:#f2f7f2;border-radius:5px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.job-condition-missing{background:#fff1e9;color:#974422;font-weight:650}
+.job-finance{margin:.45rem 0}
+@media(max-width:520px){.job{gap:.4rem;flex-wrap:wrap}.job .job-main{flex-basis:100%}.job button{margin-left:auto}.job-condition-grid{grid-template-columns:1fr}}
