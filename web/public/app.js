@@ -843,27 +843,87 @@ function renderTowns() {
   }
 }
 
+// 原版 basic.cgi::job_change 顯示 17 項能力的「目前值／必要值」及所有限制。
+// 不用「能力不足」替代數字；每個職業都能檢視，即使不能應徵也一樣。
+const JOB_REQUIREMENT_KEYS = Object.freeze([
+  "kokugo","suugaku","rika","syakai","eigo","ongaku","bijutu",
+  "looks","tairyoku","kenkou","speed","power","wanryoku","kyakuryoku",
+  "love","unique","etti"
+]);
+function jobRequirementsPanel(job) {
+  const details=document.createElement("details");
+  details.className="job-requirements";
+  details.dataset.jobKey=job.key;
+  const summary=document.createElement("summary");
+  summary.textContent="檢視完整條件（17 項能力／體格／待遇）";
+  details.append(summary);
+  const other=document.createElement("div");
+  other.className="job-condition-grid";
+  const bmi=(job.bmiMin||job.bmiMax)?
+    ((job.bmiMin||"不限")+"～"+(job.bmiMax||"不限")):"不限";
+  const gender=job.gender==="male"?"男":job.gender==="female"?"女":"不限";
+  const status=[
+    ["BMI",state.physique?.bmi??"—",bmi,
+      (job.bmiMin&&state.physique.bmi<job.bmiMin)||
+      (job.bmiMax&&state.physique.bmi>job.bmiMax)],
+    ["身高",state.character.height+" cm",job.minHeight?job.minHeight+" cm 以上":"不限",
+      Boolean(job.minHeight&&state.character.height<job.minHeight)],
+    ["性別",state.character.gender==="male"?"男":state.character.gender==="female"?"女":"其他",
+      gender,Boolean(job.gender&&state.character.gender!==job.gender)],
+    ["前置精通",state.character.masteredJob||"尚無",job.previousJob||"不限",
+      Boolean(job.previousJob&&state.character.masteredJob!==job.previousJob)]
+  ];
+  for(const [label,current,required,missing] of status){
+    const row=document.createElement("div");
+    row.className="job-condition"+(missing?" job-condition-missing":"");
+    row.textContent=label+"：目前 "+current+"／要求 "+required;
+    other.append(row);
+  }
+  const finance=document.createElement("p");
+  finance.className="small job-finance";
+  finance.textContent="每次基礎薪資 "+money(job.salary)+
+    " · 每 "+job.payEvery+" 次工作發薪 · 升級獎金倍率 ×"+
+    job.bonusRate+" · 升薪倍率 ×"+job.raiseRate+
+    " · 身體消耗 "+job.bodyCost+" · 頭腦消耗 "+job.brainCost;
+  const requirements=document.createElement("div");
+  requirements.className="job-condition-grid job-stats-grid";
+  for(const key of JOB_REQUIREMENT_KEYS){
+    const current=Number(state.character.stats[key]??0);
+    const required=Number(job.requirements?.[key]??0);
+    const row=document.createElement("div");
+    row.className="job-condition"+(current<required?" job-condition-missing":"");
+    row.textContent=labels[key]+"：目前 "+current+"／要求 "+required;
+    requirements.append(row);
+  }
+  details.append(other,finance,requirements);
+  return details;
+}
 function renderJobs() {
   if (!state?.character) return;
   const target = el("jobs");
   const search = el("job-search").value.trim().toLocaleLowerCase("zh-TW");
   const availableOnly = el("job-filter").value === "available";
+  const expanded=new Set([...target.querySelectorAll("details[open][data-job-key]")]
+    .map(element=>element.dataset.jobKey));
   const filtered = state.jobs.filter(job =>
     (!availableOnly || !job.reason) && job.name.toLocaleLowerCase("zh-TW").includes(search)
   );
-  text("job-count", "符合條件：" + filtered.length + " / " + state.jobs.length);
+  text("job-count", "顯示：" + filtered.length + " / " + state.jobs.length);
   target.replaceChildren();
   for (const job of filtered) {
     const row = document.createElement("div");
     row.className = "job" + (job.key === state.character.jobId ? " active" : "");
     const meta = document.createElement("div");
+    meta.className="job-main";
     const title = document.createElement("span");
     const desc = document.createElement("small");
     title.textContent = job.name + (job.translated ? "" : "（未翻譯）");
     desc.textContent = "薪資 " + money(job.salary) + "／每 " + job.payEvery +
       " 次工作 · 體力 " + job.bodyCost + " · 頭腦 " + job.brainCost +
       (job.reason ? " · " + job.reason : "");
-    meta.append(title, desc);
+    const requirements=jobRequirementsPanel(job);
+    requirements.open=expanded.has(job.key);
+    meta.append(title, desc, requirements);
     const button = document.createElement("button");
     button.type = "button";
     button.textContent = job.key === state.character.jobId ? "任職中" : "應徵";
@@ -879,7 +939,6 @@ function renderJobs() {
     target.append(empty);
   }
 }
-
 function renderInsurance() {
   const item=state?.insurance;
   if (!item||!state.character) return;

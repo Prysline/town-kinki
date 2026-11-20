@@ -8,6 +8,15 @@ const html=readFileSync(new URL("../public/index.html",import.meta.url),"utf8");
 const css=readFileSync(new URL("../public/style.css",import.meta.url),"utf8");
 const script=readFileSync(new URL("../public/app.js",import.meta.url),"utf8");
 
+test("職業條件保留原版十七項數值及全部職業可展開檢視",()=>{
+  assert.match(html, /id="job-filter"><option value="all">全部職業/);
+  assert.match(script, /JOB_REQUIREMENT_KEYS/);
+  assert.match(script, /function jobRequirementsPanel\(job\)/);
+  assert.match(script, /job\.requirements\?\.\[key\]/);
+  assert.match(script, /state\.physique\?\.bmi/);
+  assert.match(script, /details\.append\(other,finance,requirements\)/);
+  assert.match(script, /button\.disabled = Boolean\(job\.reason\)/);
+});
 test("原 CGI 建築代碼只連到 Web 真正已實作的設施入口",()=>{
   const expected={
     "銀行":"bank-panel","病院":"hospital-panel","職安":"jobs-panel",
