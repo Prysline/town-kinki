@@ -2,6 +2,46 @@ import { townCellAction } from "./town-home.js";
 import { shouldShowCompactEnergy } from "./energy-visibility.js";
 const el = id => document.getElementById(id);
 let state = null;
+let requestedLegacyIconUrl = null;
+let loadedLegacyIconUrl = null;
+// 原始 kounyuu 圖示不屬於 BMI 或 C 聯賽角色圖片。
+// 不在 render() 中設定外部 src：只有本人按下預覽時才真正請求圖片。
+function clearLegacyIconPreview() {
+  requestedLegacyIconUrl = null;
+  loadedLegacyIconUrl = null;
+  const image = document.getElementById("legacy-icon-image");
+  if (image) { image.hidden = true; image.removeAttribute("src"); }
+}
+function renderLegacyIcon() {
+  const panel = document.getElementById("legacy-icon-panel");
+  const button = document.getElementById("legacy-icon-toggle");
+  const image = document.getElementById("legacy-icon-image");
+  const icon = state?.legacyPlayerIcon;
+  if (!state?.character || (state.mode === "solo" && soloAtHome) ||
+      !icon || icon.status === "none") {
+    panel.hidden = true;
+    if (requestedLegacyIconUrl) clearLegacyIconPreview();
+    return;
+  }
+  panel.hidden = false;
+  if (icon.status !== "available") {
+    clearLegacyIconPreview();
+    button.hidden = true;
+    text("legacy-icon-help", "原版圖示連結不符合 Web 的 HTTPS 安全預覽條件，暫不載入。");
+    return;
+  }
+  if (requestedLegacyIconUrl && requestedLegacyIconUrl !== icon.url)
+    clearLegacyIconPreview();
+  const displayed = loadedLegacyIconUrl === icon.url;
+  image.hidden = !displayed;
+  button.hidden = false;
+  button.disabled = Boolean(requestedLegacyIconUrl) && !displayed;
+  button.textContent = displayed ? "隱藏原版圖示" : "載入原版圖示（外部圖片）";
+  text("legacy-icon-help", displayed
+    ? "此 32×32 圖片來自原版存檔所記錄的網址。"
+    : "按下後才會向原版圖示的外部網站載入圖片；可能向對方透露連線資訊。");
+}
+
 const labels = {
   kokugo:"國語",suugaku:"數學",rika:"理科",syakai:"社會",eigo:"英語",
   ongaku:"音樂",bijutu:"美術",looks:"外貌",tairyoku:"體力",
@@ -1225,6 +1265,7 @@ function render() {
   el("game").hidden = !state.character || lobby;
   el("logout").hidden = !state.user || lobby || (solo && !state.character);
   el("logout").textContent=solo?"離開遊戲":"登出";
+  renderLegacyIcon();
   if (!state.character || lobby) {
     if(!publicPreview&&!previewLoading)loadPublicPreview();
     updateCompactVisibility();
@@ -1624,6 +1665,33 @@ el("map-edit-toggle").addEventListener("change", () => {
   text("map-selection", el("map-edit-toggle").checked
     ? "編輯模式已啟用。點選街區格子即可設定為選單中的設施。"
     : "編輯模式已關閉。點選格子可查看位置與設施。");
+});
+el("legacy-icon-toggle").addEventListener("click", () => {
+  const icon = state?.legacyPlayerIcon;
+  if (!state?.character || icon?.status !== "available") return;
+  if (loadedLegacyIconUrl === icon.url) {
+    clearLegacyIconPreview();
+    renderLegacyIcon();
+    return;
+  }
+  requestedLegacyIconUrl = icon.url;
+  const image = el("legacy-icon-image");
+  image.hidden = true;
+  // 機密資訊不寫入訊息或文字 DOM，且原版 URL 僅以 src 屬性使用。
+  image.src = icon.url;
+  renderLegacyIcon();
+});
+el("legacy-icon-image").addEventListener("load", () => {
+  if (requestedLegacyIconUrl && state?.legacyPlayerIcon?.url === requestedLegacyIconUrl) {
+    loadedLegacyIconUrl = requestedLegacyIconUrl;
+    renderLegacyIcon();
+  }
+});
+el("legacy-icon-image").addEventListener("error", () => {
+  if (!requestedLegacyIconUrl) return;
+  clearLegacyIconPreview();
+  renderLegacyIcon();
+  text("legacy-icon-help", "原版圖示無法載入，可再次按下嘗試。");
 });
 el("refresh").addEventListener("click", async () => {
   try { state = await api("state"); render(); notify("遊戲資料已更新"); }
