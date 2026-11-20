@@ -53,6 +53,33 @@ test("職業條件只列真正大於零的需求，保留非零體格條件與�
   assert.match(script,/details\.append\(finance\)/);
   assert.match(script,/button\.disabled = Boolean\(job\.reason\)/);
 });
+test("職業精通有清楚的 15 級／1500 經驗進度，與既有精通紀錄分開",()=>{
+  assert.match(html,/id="job-mastery-status"/);
+  assert.match(html,/id="job-mastery-bar" max="1500" value="0"/);
+  assert.match(html,/id="jobs-mastery-status"/);
+  assert.match(script,/const masteryTargetXp=1500/);
+  assert.match(script,/state\.jobLevel>=15/);
+  assert.match(script,/距離精通還需 /);
+  assert.match(script,/el\("job-mastery-bar"\)\.value=Math\.min\(currentMasteryXp,masteryTargetXp\)/);
+  assert.match(script,/text\("mastered-job", c\.masteredJob \|\| "無"\)/);
+  assert.match(css,/\.game-shell \.mastery-status progress\{/);
+});
+
+test("城鎮快捷工作只切到工作頁籤，不會自動出勤或受工作冷卻停用",()=>{
+  assert.match(html,/id="home-work" data-facility="jobs-panel"/);
+  assert.doesNotMatch(html,/id="home-work" data-action="work"/);
+  const shortcuts=script.slice(
+    script.indexOf('el("facility-shortcuts").addEventListener("click"'),
+    script.indexOf('el("map-edit-toggle").addEventListener("change"')
+  );
+  assert.match(shortcuts,/event\.target\.closest\("button\[data-facility\]"\)/);
+  assert.match(shortcuts,/goToFacility\(button\.dataset\.facility\)/);
+  assert.doesNotMatch(shortcuts,/action\("work"/);
+  assert.match(script,/if\(pane\)selectFacilityTab\(pane\.id\.slice\("facility-pane-"\.length\)\)/);
+  assert.match(script,/el\("home-work"\)\.disabled = false/);
+  assert.match(script,/el\("work"\)\.addEventListener\("click", \(\) => action\("work", \{\}\)\)/);
+});
+
 test("地圖車站接回原版六組票價與真實跨城操作而非免費切換",()=>{
   assert.match(html,/id="station-heading"/);
   assert.match(html,/id="station-status"/);
@@ -121,8 +148,8 @@ test("未登入亦有唯讀街區預覽與登入區，手機及桌機版均為�
   assert.ok(main.indexOf('class="content game-map-column"')<main.indexOf('class="sidebar game-status-column"'));
   assert.ok(main.indexOf('id="town-panel"')<main.indexOf('id="housing-panel"'));
   assert.match(html,/id="facility-shortcuts"/);
-  assert.match(html,/id="home-work" data-action="work"/);
-  assert.match(script,/el\("home-work"\)\.disabled = !ready/);
+  assert.match(html,/id="home-work" data-facility="jobs-panel"/);
+  assert.match(script,/el\("home-work"\)\.disabled = false/);
   assert.match(script,/townCellAction\(cell\)/);
   assert.match(css,/@media\(max-width:800px\)/);
   assert.match(css,/\.landing-layout\{display:grid/);
