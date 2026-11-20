@@ -2835,3 +2835,67 @@ test("原版裝備屋 HTTP：真實地圖、原價購入、同名拒買、換裝
     })).status,400);
   }finally{await srv.stop();}
 });
+
+
+test("原版鍛造 HTTP：從裝備屋購入後強化、已穿戴裝備可鍛造，重送與缺建築拒絕",async()=>{
+  const srv=await start("solo");
+  try{
+    const created=await api(srv.url,"character",{
+      name:"裝備鍛造測試玩家",gender:"other",stats:defaultStats()
+    });
+    assert.equal(created.status,200);
+    const placed=await api(srv.url,"map/tile",{
+      row:0,column:0,symbol:"装備屋"
+    });
+    assert.equal(placed.status,200);
+    const item=placed.result.equipmentGoods.find(x=>x.name==="HBの鉛筆");
+    assert.ok(item);
+    const bought=await api(srv.url,"equipment/buy",{
+      sku:item.sku,requestId:"forge_http_buy_pencil"
+    });
+    assert.equal(bought.status,200);
+    const id=bought.result.equipmentResult.itemId;
+    const initial=bought.result.character.money;
+    const selected=bought.result.equipmentItems.find(x=>x.id===id);
+    const invalid=await api(srv.url,"equipment/forge",{
+      itemId:id,powerUp:2,usesUp:0,requestId:"forge_http_invalid_increment"
+    });
+    assert.equal(invalid.status,400);
+    const forgeRequest={
+      itemId:id,powerUp:1,usesUp:3,requestId:"forge_http_first_1_3"
+    };
+    const forged=await api(srv.url,"equipment/forge",forgeRequest);
+    assert.equal(forged.status,200);
+    assert.equal(forged.result.equipmentResult.amount,-13000);
+    assert.equal(forged.result.character.money,initial-13000);
+    assert.equal(forged.result.equipmentItems.find(x=>x.id===id).power,selected.power+1);
+    assert.equal(forged.result.equipmentItems.find(x=>x.id===id).uses,selected.uses+3);
+    const replay=await api(srv.url,"equipment/forge",forgeRequest);
+    assert.equal(replay.status,200);
+    assert.equal(replay.result.equipmentResult.replayed,true);
+    assert.equal(replay.result.character.money,initial-13000);
+    const collision=await api(srv.url,"equipment/forge",{
+      ...forgeRequest,powerUp:3,usesUp:1
+    });
+    assert.equal(collision.status,400);
+    const worn=await api(srv.url,"equipment/equip",{
+      itemId:id,requestId:"forge_http_wear"
+    });
+    assert.equal(worn.status,200);
+    const forgeWorn=await api(srv.url,"equipment/forge",{
+      itemId:id,powerUp:0,usesUp:1,requestId:"forge_http_worn_uses"
+    });
+    assert.equal(forgeWorn.status,200);
+    assert.equal(forgeWorn.result.equipmentItems.find(x=>x.id===id).status,"equipped");
+    assert.equal(forgeWorn.result.equipmentItems.find(x=>x.id===id).uses,selected.uses+4);
+    const noBuilding=await api(srv.url,"map/tile",{
+      row:0,column:0,symbol:"空地"
+    });
+    assert.equal(noBuilding.status,200);
+    const rejected=await api(srv.url,"equipment/forge",{
+      itemId:id,powerUp:1,usesUp:0,requestId:"forge_http_without_building"
+    });
+    assert.equal(rejected.status,400);
+    assert.equal(rejected.result.error.includes("裝備屋"),true);
+  }finally{await srv.stop();}
+});

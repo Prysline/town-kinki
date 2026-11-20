@@ -1470,10 +1470,10 @@ function renderVending(){
 
 
 let pendingEquipmentAction=null;
-async function submitEquipmentAction(action,{sku,itemId,name,amount}){
-  const captions={buy:"購買",equip:"裝備",sell:"出售"};
+async function submitEquipmentAction(action,{sku,itemId,name,amount,powerUp=0,usesUp=0}){
+  const captions={buy:"購買",equip:"裝備",sell:"出售",forge:"鍛造"};
   if(!Object.hasOwn(captions,action))return;
-  const moneyText=action==="buy"?"支付 "+money(-amount):
+  const moneyText=(action==="buy"||action==="forge")?"支付 "+money(-amount):
     action==="sell"?"收入 "+money(amount):"把同類原裝備退回倉庫";
   if(!window.confirm("確定"+captions[action]+"「"+name+"」嗎？"+
     "（"+moneyText+"）"))return;
@@ -1482,7 +1482,9 @@ async function submitEquipmentAction(action,{sku,itemId,name,amount}){
     pendingEquipmentAction={action,sku,itemId,requestId:crypto.randomUUID()};
   const payload=action==="buy"?
     {sku,requestId:pendingEquipmentAction.requestId}:
-    {itemId,requestId:pendingEquipmentAction.requestId};
+    action==="forge"?
+      {itemId,powerUp,usesUp,requestId:pendingEquipmentAction.requestId}:
+      {itemId,requestId:pendingEquipmentAction.requestId};
   try{
     state=await api("equipment/"+action,payload);
     const result=state.equipmentResult;
@@ -1490,7 +1492,7 @@ async function submitEquipmentAction(action,{sku,itemId,name,amount}){
     render();
     notify(result.replayed?"這筆裝備交易已處理，沒有重複扣款或變更裝備。":
       "已"+captions[action]+"「"+result.name+"」。"+
-      (action==="buy"?"從現金扣除 "+money(-result.amount):
+      ((action==="buy"||action==="forge")?"從現金扣除 "+money(-result.amount):
         action==="sell"?"現金增加 "+money(result.amount):"同類原裝備已退回倉庫。"));
   }catch(error){notify(error.message,true);}
 }
@@ -1499,7 +1501,7 @@ function renderEquipment(){
   const available=state.equipmentAvailable===true;
   text("equipment-status",available?
     "目前城鎮裝備屋營業中｜獨立原價商品 "+(state.equipmentGoods??[]).length+
-    " 種；購買後可換裝或出售，暫不提供戰鬥效果與鍛造。" :
+    " 種；可購買、換裝、出售及按原版費用鍛造，暫不提供戰鬥效果。" :
     "目前城鎮沒有原版「装備屋」。請在地圖中找到該建築，單機模式可先配置。");
   const goodsTarget=el("equipment-goods");
   goodsTarget.replaceChildren();
@@ -1555,6 +1557,54 @@ function renderEquipment(){
       }));
       buttons.append(wear,sell);tile.append(buttons);
     }
+    if(available){
+      const forge=document.createElement("div");
+      forge.className="filters";
+      const choices=[0,1,3,5,10,15,25,50];
+      function selector(label){
+        const wrapper=document.createElement("label");
+        wrapper.textContent=label;
+        const input=document.createElement("select");
+        input.setAttribute("aria-label",item.name+"鍛造"+label);
+        for(const count of choices){
+          const option=document.createElement("option");
+          option.value=String(count);
+          option.textContent=count?"＋"+count:"不增加";
+          input.append(option);
+        }
+        wrapper.append(input);
+        forge.append(wrapper);
+        return input;
+      }
+      const power=selector("威力");
+      const uses=selector("使用次數");
+      const quote=document.createElement("p");
+      quote.className="small";
+      const button=document.createElement("button");
+      button.type="button";
+      const update=()=>{
+        const p=Number(power.value),u=Number(uses.value);
+        const cost=p*10000+u*1000;
+        const tooHigh=item.power+p>1000000||item.uses+u>1000000;
+        quote.textContent="鍛造費 "+money(cost)+
+          (cost>state.character.money?"｜現金不足":tooHigh?"｜超過安全屬性上限":"");
+        button.disabled=(!p&&!u)||cost>state.character.money||tooHigh;
+        button.textContent="鍛造";
+      };
+      power.addEventListener("change",update);
+      uses.addEventListener("change",update);
+      button.addEventListener("click",()=>{
+        const powerUp=Number(power.value),usesUp=Number(uses.value);
+        submitEquipmentAction("forge",{
+          sku:"item-"+item.id+"-power-"+powerUp+"-uses-"+usesUp,
+          itemId:item.id,name:item.name,powerUp,usesUp,
+          amount:-(powerUp*10000+usesUp*1000)
+        });
+      });
+      update();
+      forge.append(quote,button);
+      tile.append(forge);
+    }
     warehouse.append(tile);
   }
   if(!owned.length){
@@ -1567,7 +1617,7 @@ function renderEquipment(){
   const list=document.createElement("ol");list.className="health-event-list";
   for(const tx of state.equipmentTransactions??[]){
     const row=document.createElement("li");
-    const label={buy:"購買",equip:"換裝",sell:"出售"}[tx.action]??tx.action;
+    const label={buy:"購買",equip:"換裝",sell:"出售",forge:"鍛造"}[tx.action]??tx.action;
     row.textContent=new Date(tx.createdAt).toLocaleString("zh-TW")+"｜"+
       label+"｜"+tx.name+"｜"+
       (tx.amount<0?"現金支出 "+money(-tx.amount):
