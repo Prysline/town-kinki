@@ -4,7 +4,7 @@
 
 > **整合狀態（2026-11-20）**：PR #9～#13 已依序合併到 `feature/web-dual-mode-phase1`；`master` 仍保留原版 Perl/CGI。已實作第 30 階段的 BMI 職業條件與狀態頁體格摘要，並持續修正 Perl 的 BMI 半分界計算。這些是局部成果，**不代表整套遊戲、真實玩家存檔或瀏覽器視覺驗收完成**。
 
-> **第 30 階段盤點與後續工作**：[原版 CGI → Web 差異矩陣（14 領域、44 個事件）](docs/migration-audit.md) 持續記錄已核對的功能、缺口、風險及驗收；[完整盤點工作契約](docs/PHASE30-MIGRATION-INVENTORY-PLAN.md) 是工作規格，不是驗收證明。下一步仍須逐 CGI 函式核對、真實存檔／瀏覽器測試與尚未移植功能。
+> **第 30 階段盤點與後續工作**：[原版 CGI → Web 差異矩陣（14 領域、44 個事件）](docs/migration-audit.md) 持續記錄已核對的功能、缺口、風險及驗收；[原版外貌／圖示來源盤點](docs/appearance-source-audit.md) 另行核實 `looks`、美容商品、玩家圖示 URL、C 聯賽圖片與 BMI 是否有圖像對照；[完整盤點工作契約](docs/PHASE30-MIGRATION-INVENTORY-PLAN.md) 是工作規格，不是驗收證明。仍須逐 CGI 函式核對、真實存檔／瀏覽器測試與尚未移植功能。
 
 ## 本階段已完成
 
