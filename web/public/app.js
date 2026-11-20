@@ -105,7 +105,14 @@ function renderSoloTime() {
   if(state.workCooldownMs>0)remain.push("工作還需約 "+Math.ceil(state.workCooldownMs/60000)+" 分鐘");
   if(state.gymCooldownMs>0)remain.push("健身房還需約 "+Math.ceil(state.gymCooldownMs/60000)+" 分鐘");
   if(state.mealCooldownMs>0)remain.push("用餐還需約 "+Math.ceil(state.mealCooldownMs/60000)+" 分鐘");
-  if(state.schoolRemainingToday)remain.push("學校須隔日才可再上課");
+  const schoolWait=Math.max(0,(state.schoolReadyAtMs??0)-browserGameNow());
+  if(schoolWait>0){
+    const minutes=Math.ceil(schoolWait/60000);
+    const hours=Math.floor(minutes/60);
+    const rest=minutes%60;
+    remain.push("學校還需約 "+(hours?hours+" 小時 ":"")+
+      (rest||!hours?rest+" 分鐘":"")+"（遊戲時間隔日 00:00 可再上課）");
+  }
   text("solo-wait-hints",remain.length?remain.join("；")+"。":"目前沒有主要冷卻等待。");
   const blocked=timeAdvanceBusy || (
     state.cockroachChallenge?.status==="active" &&
@@ -855,8 +862,8 @@ function renderTowns() {
   }
 }
 
-// 原版 basic.cgi::job_change 顯示 17 項能力的「目前值／必要值」及所有限制。
-// 不用「能力不足」替代數字；每個職業都能檢視，即使不能應徵也一樣。
+// 原版 basic.cgi::job_change 有 17 個能力欄，但只列出實際大於 0 的需求。
+// 不顯示無門檻的能力或「不限」欄位；應徵資格仍在伺服器判定。
 const JOB_REQUIREMENT_KEYS = Object.freeze([
   "kokugo","suugaku","rika","syakai","eigo","ongaku","bijutu",
   "looks","tairyoku","kenkou","speed","power","wanryoku","kyakuryoku",
@@ -866,48 +873,60 @@ function jobRequirementsPanel(job) {
   const details=document.createElement("details");
   details.className="job-requirements";
   details.dataset.jobKey=job.key;
+  const demanded=JOB_REQUIREMENT_KEYS.filter(key=>Number(job.requirements?.[key]??0)>0);
   const summary=document.createElement("summary");
-  summary.textContent="檢視完整條件（17 項能力／體格／待遇）";
+  summary.textContent=demanded.length?
+    "檢視職業條件（"+demanded.length+" 項能力門檻）":"檢視職業條件與待遇";
   details.append(summary);
+
   const other=document.createElement("div");
   other.className="job-condition-grid";
-  const bmi=(job.bmiMin||job.bmiMax)?
-    ((job.bmiMin||"不限")+"～"+(job.bmiMax||"不限")):"不限";
-  const gender=job.gender==="male"?"男":job.gender==="female"?"女":"不限";
-  const status=[
-    ["BMI",state.physique?.bmi??"—",bmi,
-      (job.bmiMin&&state.physique.bmi<job.bmiMin)||
-      (job.bmiMax&&state.physique.bmi>job.bmiMax)],
-    ["身高",state.character.height+" cm",job.minHeight?job.minHeight+" cm 以上":"不限",
-      Boolean(job.minHeight&&state.character.height<job.minHeight)],
-    ["性別",state.character.gender==="male"?"男":state.character.gender==="female"?"女":"其他",
-      gender,Boolean(job.gender&&state.character.gender!==job.gender)],
-    ["前置精通",state.character.masteredJob||"尚無",job.previousJob||"不限",
-      Boolean(job.previousJob&&state.character.masteredJob!==job.previousJob)]
-  ];
-  for(const [label,current,required,missing] of status){
+  const status=[];
+  if(job.bmiMin||job.bmiMax){
+    const bmi=(job.bmiMin||"不限")+"～"+(job.bmiMax||"不限");
+    const current=state.physique?.bmi;
+    status.push(["BMI",bmi,
+      (job.bmiMin&&current<job.bmiMin)||
+      (job.bmiMax&&current>job.bmiMax)]);
+  }
+  if(job.minHeight>0)
+    status.push(["身高",job.minHeight+" cm 以上",
+      state.character.height<job.minHeight]);
+  if(job.gender)
+    status.push(["性別",job.gender==="male"?"男":"女",
+      state.character.gender!==job.gender]);
+  if(job.previousJob)
+    status.push(["前置精通",job.previousJob,
+      state.character.masteredJob!==job.previousJob]);
+  for(const [label,required,missing] of status){
     const row=document.createElement("div");
     row.className="job-condition"+(missing?" job-condition-missing":"");
-    row.textContent=label+"：目前 "+current+"／要求 "+required;
+    row.textContent=label+"：要求 "+required;
     other.append(row);
   }
+  if(status.length)details.append(other);
+
   const finance=document.createElement("p");
   finance.className="small job-finance";
   finance.textContent="每次基礎薪資 "+money(job.salary)+
     " · 每 "+job.payEvery+" 次工作發薪 · 升級獎金倍率 ×"+
     job.bonusRate+" · 升薪倍率 ×"+job.raiseRate+
     " · 身體消耗 "+job.bodyCost+" · 頭腦消耗 "+job.brainCost;
-  const requirements=document.createElement("div");
-  requirements.className="job-condition-grid job-stats-grid";
-  for(const key of JOB_REQUIREMENT_KEYS){
-    const current=Number(state.character.stats[key]??0);
-    const required=Number(job.requirements?.[key]??0);
-    const row=document.createElement("div");
-    row.className="job-condition"+(current<required?" job-condition-missing":"");
-    row.textContent=labels[key]+"：目前 "+current+"／要求 "+required;
-    requirements.append(row);
+
+  if(demanded.length){
+    const requirements=document.createElement("div");
+    requirements.className="job-condition-grid job-stats-grid";
+    for(const key of demanded){
+      const current=Number(state.character.stats[key]??0);
+      const required=Number(job.requirements[key]);
+      const row=document.createElement("div");
+      row.className="job-condition"+(current<required?" job-condition-missing":"");
+      row.textContent=labels[key]+"：要求 "+required;
+      requirements.append(row);
+    }
+    details.append(requirements);
   }
-  details.append(other,finance,requirements);
+  details.append(finance);
   return details;
 }
 function renderJobs() {
