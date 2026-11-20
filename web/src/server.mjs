@@ -9,7 +9,7 @@ import {
   createCharacterData, recoverEnergy, jobEligibility, selectJob, performWork,
   maxBodyEnergy, maxBrainEnergy
 } from "./engine.mjs";
-import { parseLegacySchool, parseLegacyGym, parseLegacyClassroom, calendarDay, trainingAvailability, performTraining } from "./training.mjs";
+import { parseLegacySchool, parseLegacyGym, parseLegacyClassroom, calendarDay, nextCalendarDayStartMs, trainingAvailability, performTraining } from "./training.mjs";
 import { initTownMapTable, bootstrapLegacyTownMaps, publicTownMap, editTownTile } from "./town-storage.mjs";
 import { trainDestinations, travelByTrain } from "./transport.mjs";
 import { parseHouseCatalog, initHousingTables, listHouses, publicHouseCatalog, buildHouse, renameHouse, sellHouse, getHouseSaleQuote, listHouseEvents, remodelHouse, listHouseRemodelEvents } from "./housing.mjs";
@@ -222,6 +222,8 @@ function snapshot(user) {
       updated = getCharacter(user.id);
     }
   }
+  const schoolReadyAtMs=updated?.lastSchoolDay===today
+    ? nextCalendarDayStartMs(now,GAME_TIMEZONE) : null;
   const currentJob = updated?.jobId ? jobsByKey.get(updated.jobId) : null;
   const classroomCreditCards=updated?listValidClassroomCreditCards(db,user.id,now):[];
   const ownedHouses = updated ? listHouses(db, user.id).map(h => ({
@@ -302,7 +304,9 @@ function snapshot(user) {
     houseCatalog: updated ? publicHouseCatalog(houseCatalog, updated.townId, ownedHouses.length) : null,
     residents,
     workCooldownMs: updated ? (updated.lastWorkAt === 0 ? 0 : Math.max(0, WORK_COOLDOWN_MS - (now - updated.lastWorkAt))) : 0,
-    schoolRemainingToday: updated ? updated.lastSchoolDay === today : false,
+    schoolRemainingToday: schoolReadyAtMs!==null,
+    schoolReadyAtMs,
+    schoolCooldownMs: schoolReadyAtMs===null ? 0 : schoolReadyAtMs-now,
     gymCooldownMs: updated ? Math.max(0, updated.gymReadyAt - now) : 0,
     classroomCooldownMs: updated ? Math.max(0, (updated.classroomReadyAt??0) - now) : 0,
     classroomCreditCards,
