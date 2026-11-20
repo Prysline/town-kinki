@@ -30,6 +30,8 @@ import {parseWholesaleCatalog,initWholesaleTables,ensureWholesaleDay,listWholesa
   WHOLESALE_SYMBOL,SHOP_CATEGORIES,configurePlayerShop,listMyShops,
   listShopInventory,buyWholesale,returnWholesale,listWholesaleHistory}
   from "./wholesale.mjs";
+import {initPlayerStoreTables,viewPlayerStore,setPlayerStorePrice,
+  buyPlayerStore,listPlayerShopSales} from "./player-store.mjs";
 import { listValidClassroomCreditCards, requireClassroomCreditCard } from "./legacy-credit.mjs";
 import { legacyPlayerIcon } from "./appearance.mjs";
 import { initLegacyItemUseTables, listLegacyItemActions, listLegacyItemUseHistory, useLegacyItem } from "./legacy-item-use.mjs";
@@ -98,6 +100,7 @@ initEquipmentTables(db);
 initGiftTables(db);
 initRecycleTables(db);
 initWholesaleTables(db);
+initPlayerStoreTables(db);
 const houseCatalog = parseHouseCatalog(
   decodeLegacyText(readFileSync(resolve(REPO_ROOT, "town_ini.cgi"))),
   decodeLegacyText(readFileSync(resolve(REPO_ROOT, "command.pl")))
@@ -367,6 +370,7 @@ function snapshot(user) {
       ...s,inventory:listShopInventory(db,user.id,s.houseId)
     })),
     wholesaleHistory:updated?listWholesaleHistory(db,user.id):[],
+    playerShopSales:updated?listPlayerShopSales(db,user.id):[],
     legacyItemActions: updated ? listLegacyItemActions(db,user.id,updated,now) : [],
     legacyItemHistory: updated ? listLegacyItemUseHistory(db,user.id) : [],
     hunger: updated ? hungerStatus(updated.lastMealAt,now) : null,
@@ -518,6 +522,13 @@ async function handle(req, res) {
       const slot = slotParam === null ? null : Number(slotParam);
       try { return sendJson(res, 200, viewRoom(db, visitor.id, houseId, slot)); }
       catch (error) { throw new HttpError(400, error.message); }
+    }
+    if(req.method==="GET"&&path==="/api/shop/visit"){
+      const visitor=getUser(req);
+      if(!visitor)throw new HttpError(401,"請先登入");
+      const houseId=Number(url.searchParams.get("houseId"));
+      try{return sendJson(res,200,viewPlayerStore(db,visitor.id,houseId));}
+      catch(error){throw new HttpError(400,error.message);}
     }
     if (req.method !== "POST") throw new HttpError(404, "找不到指定的功能");
     const origin = req.headers.origin;
@@ -763,6 +774,21 @@ async function handle(req, res) {
         else outcome=buyFromRecycle(db,user.id,{...args,listingId:data.listingId});
       }catch(error){throw new HttpError(400,error.message);}
       return sendJson(res,200,{...snapshot(user),recycleResult:outcome});
+    }
+    if(path==="/api/shop/price"||path==="/api/shop/buy"){
+      let result;
+      try{
+        if(path==="/api/shop/price")
+          result=setPlayerStorePrice(db,user.id,{
+            houseId:data.houseId,sku:data.sku,price:data.price
+          });
+        else result=buyPlayerStore(db,user.id,{
+          houseId:data.houseId,sku:data.sku,quantity:data.quantity,
+          payment:data.payment,cardSourceLine:data.cardSourceLine,
+          requestId:data.requestId,now:gameNow()
+        });
+      }catch(error){throw new HttpError(400,error.message);}
+      return sendJson(res,200,{...snapshot(user),playerStoreResult:result});
     }
     if(path==="/api/shop/config"||
        path==="/api/wholesale/buy"||path==="/api/wholesale/return"){

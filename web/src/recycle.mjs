@@ -5,7 +5,7 @@ export const RECYCLE_LIFETIME_MS=7*86400000;
 export const RECYCLE_SELL_MAX=200000;
 export const RECYCLE_WAIT_MS=30*60000;
 const REQUEST=/^[A-Za-z0-9_-]{8,80}$/;
-const OWNED=new Set(["__web_retail__","__web_gift__","__web_recycle__"]);
+const OWNED=new Set(["__web_retail__","__web_gift__","__web_recycle__","__web_store__"]);
 function check(userId,requestId,now,hasBuilding){
   if(!Number.isSafeInteger(userId)||userId<1||typeof requestId!=="string"||
      !REQUEST.test(requestId)||!Number.isSafeInteger(now)||now<=0||

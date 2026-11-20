@@ -2273,7 +2273,9 @@ test("單機快轉：5 分鐘解鎖工作、半小時累加、1 小時用餐，�
     assert.equal(jumped.result.workCooldownMs,0);
     assert.equal((await api(srv.url,"work",{})).status,200);
 
-    const mealKey=jumped.result.meals.find(meal=>meal.price<=jumped.result.character.money)?.key;
+    // 這個測試要連續吃兩份相同餐點；避免抽到單份可買、第二份卻付不起的隨機餐點。
+    const mealKey=jumped.result.meals.find(meal=>meal.stock>=2&&
+      meal.price*2<=jumped.result.character.money)?.key;
     assert.ok(mealKey,"應有可負擔的食堂餐點");
     assert.equal((await api(srv.url,"meal/eat",{key:mealKey})).status,200);
     const eaten=await api(srv.url,"state");
@@ -3160,5 +3162,92 @@ test("原版問屋 HTTP：必有本人住宅商店及地圖建築，普通銀行
     assert.equal(remaining.status,200);
     assert.equal(remaining.result.myShops[0].inventory.length,0);
     assert.equal(remaining.result.wholesaleHistory.length,3);
+  }finally{await srv.stop();}
+});
+
+
+test("多人住宅商店 HTTP：店主進貨與定價，訪客付款入庫，店主銀行收款與售罄防重",async()=>{
+  const seed=directory=>{
+    const db=new DatabaseSync(join(directory,"multi.sqlite"));
+    db.exec("CREATE TABLE town_maps(town_id INTEGER PRIMARY KEY,original_name TEXT NOT NULL DEFAULT '',original_record TEXT NOT NULL DEFAULT '',source TEXT NOT NULL,tiles_json TEXT NOT NULL,updated_at INTEGER NOT NULL)");
+    const tiles=Array(192).fill("");tiles[0]="空地";tiles[1]="問屋";
+    db.prepare("INSERT INTO town_maps(town_id,original_name,source,tiles_json,updated_at) VALUES(3,'和歌山アイランド','legacy-import',?,?)")
+      .run(JSON.stringify(tiles),Date.now());
+    db.close();
+  };
+  const srv=await start("multi",seed);
+  try{
+    const owner=await api(srv.url,"register",{username:"storeHttpOwner",password:"owner-password-123456"});
+    const guest=await api(srv.url,"register",{username:"storeHttpGuest",password:"guest-password-123456"});
+    assert.equal(owner.status,200);assert.equal(guest.status,200);
+    assert.equal((await api(srv.url,"character",{name:"線上店主",gender:"other",stats:defaultStats()},owner.cookie)).status,200);
+    assert.equal((await api(srv.url,"character",{name:"線上買家",gender:"other",stats:defaultStats()},guest.cookie)).status,200);
+    assert.equal((await api(srv.url,"move",{townId:3},owner.cookie)).status,200);
+    assert.equal((await api(srv.url,"move",{townId:3},guest.cookie)).status,200);
+    const db=new DatabaseSync(join(srv.directory,"multi.sqlite"));
+    try{db.prepare("UPDATE characters SET bank=100000000 WHERE name='線上店主'").run();}
+    finally{db.close();}
+    const built=await api(srv.url,"house/build",{
+      row:0,column:0,image:"house/kamakura.gif",interiorRank:3,payment:"bank"
+    },owner.cookie);
+    assert.equal(built.status,200);
+    const houseId=built.result.houses[0].id;
+    assert.equal((await api(srv.url,"house/room/config",{
+      houseId,slots:[{type:"1",title:"住宅商店"}]
+    },owner.cookie)).status,200);
+    const before=await api(srv.url,"state",undefined,owner.cookie);
+    assert.equal(before.result.wholesaleAvailable,true);
+    const pick=before.result.wholesaleGoods.find(x=>
+      before.result.shopCategories.includes(x.category)&&
+      x.category!=="スーパー"&&x.price>=10&&x.price<=10000&&x.stock>=3);
+    assert.ok(pick,"問屋貨架應含可安全結帳的原版商品");
+    assert.equal((await api(srv.url,"shop/config",{
+      houseId,category:pick.category,title:"線上實體商店"
+    },owner.cookie)).status,200);
+    assert.equal((await api(srv.url,"wholesale/buy",{
+      houseId,sku:pick.sku,quantity:3,requestId:"store_http_wholesale_in"
+    },owner.cookie)).status,200);
+    const publicStore=await api(srv.url,"shop/visit?houseId="+houseId,undefined,guest.cookie);
+    assert.equal(publicStore.status,200);
+    assert.equal(publicStore.result.items[0].stock,3);
+    assert.equal(publicStore.result.items[0].price,pick.price*2);
+    assert.equal((await api(srv.url,"shop/price",{
+      houseId,sku:pick.sku,price:pick.price*2-1
+    },guest.cookie)).status,400);
+    const price=pick.price*2-1;
+    assert.equal((await api(srv.url,"shop/price",{
+      houseId,sku:pick.sku,price
+    },owner.cookie)).status,200);
+    const sellerBefore=(await api(srv.url,"state",undefined,owner.cookie)).result;
+    const buyerBefore=(await api(srv.url,"state",undefined,guest.cookie)).result;
+    const payload={
+      houseId,sku:pick.sku,quantity:2,payment:"cash",requestId:"store_http_purchase_2"
+    };
+    const bought=await api(srv.url,"shop/buy",payload,guest.cookie);
+    assert.equal(bought.status,200);
+    assert.equal(bought.result.playerStoreResult.paid,price*2);
+    assert.equal(bought.result.playerStoreResult.cashback,0);
+    assert.equal(bought.result.character.money,buyerBefore.character.money-price*2);
+    assert.ok(bought.result.legacyInventory.some(x=>
+      x.origin==="store"&&x.name===pick.name&&x.readOnly===false));
+    const seller=(await api(srv.url,"state",undefined,owner.cookie)).result;
+    assert.equal(seller.character.bank,sellerBefore.character.bank+price*2);
+    assert.equal(seller.myShops[0].inventory[0].quantity,1);
+    assert.equal(seller.playerShopSales[0].role,"seller");
+    const repeated=await api(srv.url,"shop/buy",payload,guest.cookie);
+    assert.equal(repeated.status,200);
+    assert.equal(repeated.result.playerStoreResult.replayed,true);
+    assert.equal(repeated.result.character.money,buyerBefore.character.money-price*2);
+    assert.equal((await api(srv.url,"shop/buy",{
+      ...payload,quantity:1
+    },guest.cookie)).status,400);
+    const last=await api(srv.url,"shop/buy",{
+      houseId,sku:pick.sku,quantity:1,payment:"cash",requestId:"store_http_last_one"
+    },guest.cookie);
+    assert.equal(last.status,200);
+    assert.equal((await api(srv.url,"shop/visit?houseId="+houseId,undefined,guest.cookie)).result.items.length,0);
+    assert.equal((await api(srv.url,"shop/buy",{
+      houseId,sku:pick.sku,quantity:1,payment:"cash",requestId:"store_http_sold_out"
+    },guest.cookie)).status,400);
   }finally{await srv.stop();}
 });

@@ -74,6 +74,26 @@ export function initWholesaleTables(db){
     "quantity INTEGER NOT NULL,amount INTEGER NOT NULL,created_at INTEGER NOT NULL,",
     "UNIQUE(user_id,request_id));"
   ].join(" "));
+  const cols=new Set(db.prepare("PRAGMA table_info(player_shop_stock)").all().map(x=>x.name));
+  if(!cols.has("sale_price"))
+    db.exec("ALTER TABLE player_shop_stock ADD COLUMN sale_price INTEGER");
+}
+export function defaultStorePrice(basePrice,shopCategory){
+  if(!Number.isSafeInteger(basePrice)||basePrice<=0)throw new Error("商店進貨原價不正確");
+  const value=BigInt(basePrice)*(shopCategory==="スーパー"?3n:2n);
+  if(value>BigInt(MAX))throw new Error("商店標準售價超出整數範圍");
+  return Number(value);
+}
+export function storePriceRange(basePrice,shopCategory=""){
+  if(!Number.isSafeInteger(basePrice)||basePrice<=0)throw new Error("商店進貨原價不正確");
+  // original_house.cgi::my_syouhin 先將超市進貨原價乘 1.5，
+  // 隨後以該顯示值的 1/10～3 倍作自訂售價上下限。
+  const mul=shopCategory==="スーパー"?3n:2n;
+  const cost=BigInt(basePrice)*mul;
+  const min=(cost+19n)/20n;
+  const max=cost*3n/2n;
+  if(max>BigInt(MAX))throw new Error("店鋪售價上限超出安全整數");
+  return {min:Number(min),max:Number(max)};
 }
 function shuffle(catalog,randomIndex){
   const items=[...catalog];
@@ -144,10 +164,15 @@ export function listShopInventory(db,userId,houseId){
     "WHERE h.id=? AND h.owner_user_id=?"
   ].join(" ")).get(houseId,userId))return [];
   return db.prepare([
-    "SELECT sku,category,name,unit_price,quantity FROM player_shop_stock",
+    "SELECT sku,category,name,unit_price,quantity,sale_price FROM player_shop_stock",
     "WHERE house_id=? ORDER BY category,name LIMIT 110"
   ].join(" ")).all(houseId).map(x=>({
-    sku:x.sku,category:x.category,name:x.name,unitPrice:x.unit_price,quantity:x.quantity
+    sku:x.sku,category:x.category,name:x.name,unitPrice:x.unit_price,quantity:x.quantity,
+    salePrice:x.sale_price??defaultStorePrice(x.unit_price,
+      db.prepare("SELECT category FROM player_shops WHERE house_id=?").get(houseId).category),
+    customPrice:x.sale_price!==null,
+    ...storePriceRange(x.unit_price,
+      db.prepare("SELECT category FROM player_shops WHERE house_id=?").get(houseId).category)
   }));
 }
 export function configurePlayerShop(db,userId,houseId,{category,title,confirmClear=false}={},now=Date.now()){
