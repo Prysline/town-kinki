@@ -71,7 +71,7 @@ async function api(base, route, body, cookie) {
 }
 
 const defaultStats = () => Object.fromEntries(["kokugo","suugaku","rika","syakai","eigo","ongaku","bijutu","looks","tairyoku","kenkou","speed","power","wanryoku","kyakuryoku","love","unique","etti"].map(key => [key,20]));
-function anchorSoloSalaryTestAtNoon(srv){
+function anchorSoloTestAtNoon(srv){
   // 薪資測試會快轉 25～50 分鐘；若當下接近台北午夜，事件與銀行日利息會
   // 同時結算，不能把這些每日資產變動誤判為發薪邏輯回歸。
   const dateParts=new Intl.DateTimeFormat("en-US",{
@@ -286,7 +286,7 @@ test("多人教室信用卡持有人隔離：不能用其他人的原版卡片�
 
 test("薪資去向：偏好存檔、實際銀行入帳與帳簿、重送冷卻及回切現金",async()=>{
   const srv=await start("solo");
-  anchorSoloSalaryTestAtNoon(srv);
+  anchorSoloTestAtNoon(srv);
   try{
     const created=await api(srv.url,"character",{
       name:"領薪測試居民",gender:"other",stats:defaultStats()
@@ -331,7 +331,7 @@ test("薪資去向：偏好存檔、實際銀行入帳與帳簿、重送冷卻�
 
 test("便利商店五次結薪：前四次兩種帳戶皆不增加，第五次銀行正確入帳，再五次現金正確入帳",async()=>{
   const srv=await start("solo");
-  anchorSoloSalaryTestAtNoon(srv);
+  anchorSoloTestAtNoon(srv);
   try{
     const created=await api(srv.url,"character",{
       name:"五次發薪測試",gender:"other",stats:defaultStats()
@@ -391,6 +391,8 @@ test("便利商店五次結薪：前四次兩種帳戶皆不增加，第五次�
 
 test("原版車站：四城六組票價、12 向扣款、無效／同城／餘額不足不更動資料",async()=>{
   const srv=await start("solo");
+  // 車資測試不應跨午夜混入原版每日隨機收入／支出事件。
+  anchorSoloTestAtNoon(srv);
   try{
     const created=await api(srv.url,"character",{
       name:"電車旅客",gender:"other",stats:defaultStats()
