@@ -243,11 +243,11 @@ test("原版車站：四城六組票價、12 向扣款、無效／同城／餘�
       const poor=await api(srv.url,"move",{townId:3});
       assert.equal(poor.status,400);
       assert.match(poor.result.error,/現金不足/);
-      assert.deepEqual(db.prepare("SELECT money,town_id FROM characters").get(),
+      assert.deepEqual({...db.prepare("SELECT money,town_id FROM characters").get()},
         {money:2209,town_id:1});
       for(const invalid of [-1,4,1.5,"3",null]){
         assert.equal((await api(srv.url,"move",{townId:invalid})).status,400);
-        assert.deepEqual(db.prepare("SELECT money,town_id FROM characters").get(),
+        assert.deepEqual({...db.prepare("SELECT money,town_id FROM characters").get()},
           {money:2209,town_id:1});
       }
     }finally{db.close();}
@@ -611,12 +611,13 @@ test("多人：非屋主不得出售，兩個同時出售請求只退一次錢�
     ]);
     assert.deepEqual(sales.map(x=>x.status).sort((x,y)=>x-y),[200,400]);
     const after=await api(srv.url,"state",undefined,a.cookie);
-    assert.equal(after.result.character.money,5100000);
+    // 原版車站現在會扣 0→3 的 1,210 元；售屋退款不再假設免費換城。
+    assert.equal(after.result.character.money,5100000-1210);
     assert.equal(after.result.character.bank,13500000);
     assert.equal(after.result.map.cells[0].raw,"空地3");
     assert.equal(after.result.townHouses.length,0);
     assert.equal(after.result.houseEvents.filter(x=>x.action==="sold").length,1);
-    assert.equal((await api(srv.url,"state",undefined,b.cookie)).result.character.money,100000);
+    assert.equal((await api(srv.url,"state",undefined,b.cookie)).result.character.money,100000-1210);
     const repurchased=await api(srv.url,"house/build",{
       row:0,column:0,image:"house/kamakura.gif",interiorRank:3,payment:"bank"
     },b.cookie);
