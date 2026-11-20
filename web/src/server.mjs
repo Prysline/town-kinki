@@ -21,6 +21,7 @@ import { initCharacterEvents, settleDailyIllnessEvent, listCharacterEvents, getC
 import { getCockroachChallenge,claimCockroach } from "./event-cockroach.mjs";
 import { parseLegacyInsurance, initInventoryTables, inventoryOverview, hasActiveHealthInsurance, listInsurancePurchases, buyHealthInsurance } from "./inventory.mjs";
 import { listLegacyInventoryItems } from "./legacy-inventory.mjs";
+import {parseLegacyRetailCatalog,initRetailTables,ensureRetailDay,listRetailStock,listRetailPurchases,buyRetailItem,RETAIL_SHOPS} from "./retail.mjs";
 import { listValidClassroomCreditCards, requireClassroomCreditCard } from "./legacy-credit.mjs";
 import { legacyPlayerIcon } from "./appearance.mjs";
 import { initLegacyItemUseTables, listLegacyItemActions, listLegacyItemUseHistory, useLegacyItem } from "./legacy-item-use.mjs";
@@ -83,6 +84,7 @@ initCharacterEvents(db);
 initInventoryTables(db);
 initDiningStockTables(db);
 initLegacyItemUseTables(db);
+initRetailTables(db);
 const houseCatalog = parseHouseCatalog(
   decodeLegacyText(readFileSync(resolve(REPO_ROOT, "town_ini.cgi"))),
   decodeLegacyText(readFileSync(resolve(REPO_ROOT, "command.pl")))
@@ -106,6 +108,7 @@ const meals = [
 ];
 const mealsByKey = new Map(meals.map(meal => [meal.key,meal]));
 const insuranceItem=parseLegacyInsurance(decodeLegacyText(readFileSync(resolve(REPO_ROOT,"dat_dir","syouhin.cgi"))));
+const retailCatalog=parseLegacyRetailCatalog(decodeLegacyText(readFileSync(resolve(REPO_ROOT,"dat_dir","syouhin.cgi"))));
 
 const sessionHash = token => createHash("sha256").update(token).digest("hex");
 const passwordHash = (password, salt) => scryptSync(password, salt, 64).toString("hex");
@@ -235,6 +238,18 @@ function snapshot(user) {
     }catch(error){db.exec("ROLLBACK");throw error;}
     dailyMeals=listedDiningMeals(db,meals);
   }
+  // 真正設於角色所在城鎮地圖中的百貨店才可瀏覽／購買；不提供無建築直購捷徑。
+  const retailMap=updated ? publicTownMap(db,updated.townId,false) : null;
+  const retailAvailable=retailMap?.configured ? Object.entries(RETAIL_SHOPS)
+    .filter(([,symbol])=>retailMap.cells.some(cell=>cell.key===symbol))
+    .map(([shop])=>shop) : [];
+  let retailGoods=[];
+  if(retailAvailable.length){
+    db.exec("BEGIN IMMEDIATE");
+    try{ensureRetailDay(db,retailCatalog,today);db.exec("COMMIT");}
+    catch(error){db.exec("ROLLBACK");throw error;}
+    retailGoods=listRetailStock(db,retailCatalog,retailAvailable);
+  }
   const currentJob = updated?.jobId ? jobsByKey.get(updated.jobId) : null;
   const classroomCreditCards=updated?listValidClassroomCreditCards(db,user.id,now):[];
   const ownedHouses = updated ? listHouses(db, user.id).map(h => ({
@@ -287,6 +302,8 @@ function snapshot(user) {
     insurance: updated ? inventoryOverview(db,user.id,insuranceItem,now) : null,
     insurancePurchases: updated ? listInsurancePurchases(db,user.id) : [],
     legacyInventory: updated ? listLegacyInventoryItems(db,user.id) : [],
+    retailAvailable,retailGoods,retailDay:updated?today:null,
+    retailPurchases:updated?listRetailPurchases(db,user.id):[],
     legacyItemActions: updated ? listLegacyItemActions(db,user.id,updated,now) : [],
     legacyItemHistory: updated ? listLegacyItemUseHistory(db,user.id) : [],
     hunger: updated ? hungerStatus(updated.lastMealAt,now) : null,
@@ -611,6 +628,23 @@ async function handle(req, res) {
       return sendJson(res,200,{...snapshot(user),insuranceResult:result});
     }
 
+    if (path === "/api/retail/buy") {
+      if(data.quantity!==undefined&&data.quantity!==1)
+        throw new HttpError(400,"百貨店第一階段每次僅能購買一件");
+      const now=gameNow();
+      let bought;
+      try{
+        bought=buyRetailItem(db,user.id,retailCatalog,{
+          shop:data.shop,sku:data.sku,requestId:data.requestId,
+          now,day:calendarDay(now,GAME_TIMEZONE),
+          hasBuilding:(symbol,townId)=>{
+            const map=publicTownMap(db,townId,false);
+            return map.configured&&map.cells.some(cell=>cell.key===symbol);
+          }
+        });
+      }catch(error){throw new HttpError(400,error.message);}
+      return sendJson(res,200,{...snapshot(user),retailResult:bought});
+    }
     if (path === "/api/meal/eat") {
       const meal=mealsByKey.get(data.key);
       if (!meal) throw new HttpError(404,"找不到食堂餐點");
