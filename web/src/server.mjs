@@ -296,8 +296,12 @@ function snapshot(user) {
       reason: trainingAvailability(updated, lesson, now, today)
     })) : [],
     jobs: updated ? jobs.map(job => ({
-      key: job.key, name: job.name, translated: job.translated, rank: job.rank,
-      salary: job.salary, payEvery: job.payEvery, bodyCost: job.bodyCost,
+      key: job.key, name: job.name, originalName: job.originalName,
+      translated: job.translated, rank: job.rank,
+      requirements: job.requirements, bmiMin: job.bmiMin, bmiMax: job.bmiMax,
+      gender: job.gender, minHeight: job.minHeight,
+      salary: job.salary, payEvery: job.payEvery, bonusRate: job.bonusRate,
+      raiseRate: job.raiseRate, bodyCost: job.bodyCost,
       brainCost: job.brainCost, previousJob: job.previousJob,
       reason: jobEligibility(updated, job)
     })) : []
