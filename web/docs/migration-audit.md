@@ -27,7 +27,12 @@
 | PH-04 飲食／工作增減重 | command.pl L1342-L1355；basic.cgi L2956-L2961 | src/dining.mjs L105-L125；src/engine.mjs L230-L240 | 部分完成 | 公式對齊，累積四捨五入、極低體重與未記錄用餐相容仍需驗證 | P0 | 連續吃飯／工作與重開 DB，身高變化後 BMI 再計算（30-體格） |
 | PH-05 消耗品身高／體重 | basic.cgi L2556-L2579；dat_dir/syouhin.cgi | src/legacy-item-use.mjs L146-L179 | 部分完成 | 僅可確認封存消耗品；不是原版整個物品流通與作用系統 | P0 | 效果名／回或日耐久／過期／無效商品及交易回滾（30-體格） |
 | PH-06 狀態頁集中顯示 | basic.cgi L2646-L2657；town_maker.cgi | public/index.html::physique-summary；public/app.js::renderDining | 部分完成（PR #13 已合併） | 身高／體重、體型與 BMI 已移至狀態頁常駐摘要；真實手機與桌面瀏覽器操作未驗證 | P0 | 375px／768px／桌面截圖、對照工作後及用餐後刷新（30-體格） |
-| PH-07 體型驅動外觀 | town_lib.pl L507-L520；原始 img/ 素材 | 目前未找到對應 Web 規則 | 缺少來源無法驗證 | 需找原始外觀變形規則／對應圖片；不能將 BMI 分類當作外觀已完成 | P2 | 取得來源與素材映射才開實作 PR（待排定） |
+| PH-07 BMI 與圖片切換 | town_lib.pl::check_BMI；town_maker.cgi::loged_gamen；img/ | src/dining.mjs；[外貌來源盤點](appearance-source-audit.md) | 缺少來源無法驗證 | 已找到 BMI 五種文字分類，但尚無原始 BMI→頭像／立繪映射證據；不能將玩家圖示 URL 或 C 聯賽角色圖像當作體型變形 | P2 | 找到實際觸發程式、圖像對照表並目視檢驗素材才實作 |
+| PH-08 玩家圖示 URL／舊角色保留 | town_lib.pl::kozin_sprit（kounyuu＝アイコンURL）；game.cgi::battle | src/legacy-character.mjs（unmapped_json 封存，尚無正式渲染） | 部分完成（只封存） | 原版玩家對戰畫面會用 32×32 圖片顯示 kounyuu；Web 尚未實作安全圖示載入、換圖或物品連動 | P1 | 先追原版 URL 來源、真實舊檔與撤銷條件、安全處理外部圖片（30/31） |
+| PH-09 外貌自填／自選描述 | town_ini.cgi L148-L179；basic.cgi::prof | 尚未找到完整 Web 個人檔案對照 | 未實作 | 原版靜態形容詞與身高／體重選項是使用者自填，不是 BMI 自動分級 | P2 | 逐項核對欄位與原始個人檔資料，再設計存檔與 UI（後續） |
+| PH-10 C 聯賽自創角色圖片 | game.cgi::doukyo／c_league；member/<ID>/chara_ini.cgi | 尚無完整 Web C 聯賽資料模型 | 未實作 | ch_gazou 是另一個可自訂圖像的比賽角色，與 kounyuu 不同；需要完整遊戲模組前置 | P2 | 原始比賽角色存檔、圖片規範、參賽流程與權限驗證（後續） |
+
+**外貌與圖像來源已另外盤點**：[原版外貌能力、玩家圖示、美容商品與 C 聯賽圖像來源稽核](appearance-source-audit.md)。該文件區分已證實的數值規則、圖示 URL、資料欄位及尚未確認的圖片切換，不能直接當作新功能設計規格。
 
 ### 02 能量與工作
 
