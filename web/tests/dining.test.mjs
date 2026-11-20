@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createCharacterData,performWork,maxBodyEnergy,maxBrainEnergy } from "../src/engine.mjs";
 import {
-  parseLegacyMeals,hungerStatus,physiqueStatus,deriveCondition,
+  parseLegacyMeals,hungerStatus,legacyPhysiqueBmi,physiqueStatus,deriveCondition,
   eatMeal,MEAL_COOLDOWN_MS
 } from "../src/dining.mjs";
 
@@ -74,6 +74,21 @@ test("原版 BMI 整數分段，健康及精力與飽足一起構成角色工作
     bodyEnergy:0,brainEnergy:0},maxBody,maxBrain,NOW);
   assert.equal(extremelyWeak.key,"worst");
   assert.equal(extremelyWeak.baseExperience,null);
+});
+
+
+test("原版 BMI 先將體重四捨五入至 0.1kg，再取整數分類",()=>{
+  // 原 CGI 的 basic.cgi::job_change/do_work 先 sprintf("%.1f", $taijuu)，
+  // town_lib.pl::check_BMI 隨後以 int 取得 BMI。
+  assert.equal(legacyPhysiqueBmi(100,17.94),17);
+  assert.equal(legacyPhysiqueBmi(100,17.96),18);
+  assert.equal(legacyPhysiqueBmi(100,24.94),24);
+  assert.equal(legacyPhysiqueBmi(100,24.96),25);
+  assert.equal(legacyPhysiqueBmi(100,25.96),26);
+  assert.equal(physiqueStatus(100,17.96).key,"underweight");
+  assert.equal(physiqueStatus(100,25.96).key,"obese");
+  assert.throws(()=>legacyPhysiqueBmi(0,70),/身高體重/);
+  assert.throws(()=>legacyPhysiqueBmi(170,-1),/身高體重/);
 });
 
 test("用餐扣現金、增加指定能力和體重，冷卻期間不可再次用餐",()=>{
