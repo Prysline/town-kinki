@@ -2,14 +2,14 @@
 
 > **版本與邊界**：原始盤點於 2026-11-20 以 `feature/web-phase29-event34-santa`（`90434f4f...`）的原版與 Web 程式開始比對，後續逐項更新。本文件是**第一輪逐項檢核、持續修正中，並非完整移植或真實玩家驗收通過聲明**。
 >
-> **最新整合狀態（2026-11-20）**：PR #9、#10、#11（本盤點）、#12（整數 BMI 職業條件）、#13（狀態頁體格資訊）均已合併至 `feature/web-dual-mode-phase1`，最新合併提交為 `2b39a362b39548981b7849ea056247cb3a852d83`，整合 CI run #605 成功；`master` 原版未變。下方原始追蹤表若記錄過往堆疊，應以本行與更新後的逐項狀態為準。
+> **最新整合狀態（2026-11-20）**：PR #9～#16 均已合併至 `feature/web-dual-mode-phase1`，最近功能合併提交為 `75fc7cc71a7360c9d36aaf30048bcf2b4c2a6d38`，合併後 GitHub Actions run `44666147616` 成功；`master` 原版未變。歷史 PR 階段請以本行及更新後的各項狀態為準。
 >
 > 狀態用語：**已完成（限該單項公式）**、**部分完成**、**未實作**、**缺少來源無法驗證**、**暫不移植**。標示「部分完成」不代表已通過真正瀏覽器／真實舊存檔／完整 CGI 等價測試。以目前比對過的程式為準；未讀完每個 CGI 函式的欄位明寫「待逐檔核對」。
 
 ## 稽核方法與未驗證邊界
 
 - 實際讀取原版 `town_lib.pl::check_BMI`（L507–520）、`basic.cgi` 工作／物品片段、`command.pl` 食堂片段、`event.pl` #01～#46 分支、`dat_dir` 原始課程與菜單表及 Web 對應模組；樹狀目錄和 README 用於確定其餘模組的範圍。
-- PR #9～#13 已依序合併整合分支；最終整合提交 `2b39a362...` 的 GitHub Actions run `44660549606`（#605）為 success。**尚未以真實瀏覽器或真實玩家資料備份完成驗收**。
+- PR #9～#16 已依序合併整合分支；PR #16 整合提交 `75fc7cc71...` 的 GitHub Actions run `44666147616` 為 success。**尚未以真實瀏覽器或真實玩家資料備份完成驗收**。
 - 原始 `member/<ID>/mono.cgi`、舊銀行／房屋玩家關聯紀錄、實際街區歷史存檔尚無使用者提供的真實樣本，不能虛構匯入相容性。
 - 與原版有意採用的安全模型差異（非負金額／能力、安全整數、HTTP session、Web 延伸性別）需記錄保留，未經批准不可為等價而直接退回不安全行為。
 
@@ -22,17 +22,16 @@
 | ID／功能 | 原版來源 | Web 現況／來源 | 判定 | 差異／相依 | 優先度 | 驗收／切片 |
 |---|---|---|---|---|---|---|
 | PH-01 建立角色身高、體重與原始值 | game.cgi L1609-L1618 | src/engine.mjs L145-L165 | 部分完成 | 男／女依原版；Web 增設 other 預設值；須逐欄核對初始亂數與匯入 | P0 | 核對男女邊界與 other 擴充分流；建角與匯入回歸（30-體格） |
-| PH-02 BMI 五種體型 | town_lib.pl::check_BMI；basic.cgi::job_change | src/dining.mjs::legacyPhysiqueBmi／physiqueStatus | 部分完成（P0-B 已合併；P0-D 修正中） | 整數 BMI 五段已對齊；最新查出 Perl sprintf 半分界與 JS Math.round 不同，P0-D 修正並補測 17.95／24.95／25.95 | P0 | 檢查 18／20／24／26 臨界、半分界及真實檔案重讀（30-體格） |
+| PH-02 BMI 五種體型 | town_lib.pl::check_BMI；basic.cgi::job_change | src/dining.mjs::legacyPhysiqueBmi／physiqueStatus | 部分完成（PR #12 與 #14 已合併，待舊檔驗收） | 整數 BMI 五段已對齊；最新查出 Perl sprintf 半分界與 JS Math.round 不同，P0-D 已修正並補測 17.95／24.95／25.95 | P0 | 檢查 18／20／24／26 臨界、半分界及真實檔案重讀（30-體格） |
 | PH-03 職業 BMI 上下限 | basic.cgi L2691-L2706,L2869-L2879；dat_dir/job.cgi | src/engine.mjs::eligibility；src/dining.mjs::legacyPhysiqueBmi | 部分完成（核心判定已合併） | PR #12 已讓轉職／工作都從身高、體重即時計算原版整數 BMI；P0-D 補 Perl sprintf 半分界；舊實際存檔尚無資料驗證 | P0 | 24.95／24.96、身高變更、體格上下限及舊存檔（30-體格） |
 | PH-04 飲食／工作增減重 | command.pl L1342-L1355；basic.cgi L2956-L2961 | src/dining.mjs L105-L125；src/engine.mjs L230-L240 | 部分完成 | 公式對齊，累積四捨五入、極低體重與未記錄用餐相容仍需驗證 | P0 | 連續吃飯／工作與重開 DB，身高變化後 BMI 再計算（30-體格） |
 | PH-05 消耗品身高／體重 | basic.cgi L2556-L2579；dat_dir/syouhin.cgi | src/legacy-item-use.mjs L146-L179 | 部分完成 | 僅可確認封存消耗品；不是原版整個物品流通與作用系統 | P0 | 效果名／回或日耐久／過期／無效商品及交易回滾（30-體格） |
 | PH-06 狀態頁集中顯示 | basic.cgi L2646-L2657；town_maker.cgi | public/index.html::physique-summary；public/app.js::renderDining | 部分完成（PR #13 已合併） | 身高／體重、體型與 BMI 已移至狀態頁常駐摘要；真實手機與桌面瀏覽器操作未驗證 | P0 | 375px／768px／桌面截圖、對照工作後及用餐後刷新（30-體格） |
-| PH-07 BMI 與圖片切換 | town_lib.pl::check_BMI；town_maker.cgi::loged_gamen；img/ | src/dining.mjs；[外貌來源盤點](appearance-source-audit.md) | 缺少來源無法驗證 | 已找到 BMI 五種文字分類，但尚無原始 BMI→頭像／立繪映射證據；不能將玩家圖示 URL 或 C 聯賽角色圖像當作體型變形 | P2 | 找到實際觸發程式、圖像對照表並目視檢驗素材才實作 |
-| PH-08 玩家圖示 URL／舊角色保留 | town_lib.pl::kozin_sprit（kounyuu＝アイコンURL）；game.cgi::battle | src/appearance.mjs；public/app.js::renderLegacyIcon；src/legacy-character.mjs | 部分完成（已匯入的本人圖示可手動預覽） | 原版對戰以 32×32 顯示 kounyuu；Web 只在本人點擊時載入安全 HTTPS URL，仍缺圖示取得／變更／商品連動與真實圖片測試 | P1 | 完成來源取得、更換／撤銷條件、真實舊檔及瀏覽器驗證（30/31） |
+| PH-08 玩家圖示 URL／舊角色保留 | town_lib.pl::kozin_sprit（kounyuu＝アイコンURL）；game.cgi::battle | src/appearance.mjs；public/app.js::renderLegacyIcon；src/legacy-character.mjs | 部分完成（已匯入本人圖示可手動預覽） | 原版對戰可顯示 32×32 kounyuu；Web 僅由本人點擊預覽 HTTPS 已封存 URL，未支援原版對戰中對手圖示 | P1 | 真實舊存檔、玩家對戰圖示、瀏覽器與 URL 安全驗證（後續） |
 | PH-09 外貌自填／自選描述 | town_ini.cgi L148-L179；basic.cgi::prof | 尚未找到完整 Web 個人檔案對照 | 未實作 | 原版靜態形容詞與身高／體重選項是使用者自填，不是 BMI 自動分級 | P2 | 逐項核對欄位與原始個人檔資料，再設計存檔與 UI（後續） |
 | PH-10 C 聯賽自創角色圖片 | game.cgi::doukyo／c_league；member/<ID>/chara_ini.cgi | 尚無完整 Web C 聯賽資料模型 | 未實作 | ch_gazou 是另一個可自訂圖像的比賽角色，與 kounyuu 不同；需要完整遊戲模組前置 | P2 | 原始比賽角色存檔、圖片規範、參賽流程與權限驗證（後續） |
 
-**外貌與圖像來源已另外盤點**：[原版外貌能力、玩家圖示、美容商品與 C 聯賽圖像來源稽核](appearance-source-audit.md)。該文件區分已證實的數值規則、圖示 URL、資料欄位及尚未確認的圖片切換，不能直接當作新功能設計規格。
+**外貌原版來源對照**：[重新盤點的外貌能力、美容商品、玩家圖示、個人檔案與 C 聯賽來源](appearance-source-audit.md)。只列有原始資料或實際執行分支的功能；單憑商品名稱、備註或未解析欄位，不建立新增功能任務。
 
 ### 02 能量與工作
 
@@ -41,6 +40,7 @@
 | WK-01 能量上限及自然恢復 | town_ini.cgi；game.cgi；basic.cgi | src/engine.mjs；src/server.mjs | 部分完成 | Web 有上限與恢復；需核對所有轉職／體格事件的加扣條件 | P1 | 上下限、十秒刻度、快轉／多角色隔離（31） |
 | WK-02 工作薪資、經驗、冷卻 | dat_dir/job.cgi；basic.cgi L2869-L2961 | src/engine.mjs L194-L245；tests/engine.test.mjs | 部分完成 | 工作薪資與經驗已有；原版整數 BMI 職業限制已對齊（P0-D 補半分界），其他原始條件仍待查核 | P0 | BMI 條件、工作次數、升階、精通與固定亂數測試（30/31） |
 | WK-03 飢餓／疾病修正工作 | top.pl L258-L273；basic.cgi | src/dining.mjs L82-L103；src/health.mjs | 部分完成 | 未用餐玩家以 provisional 5 經驗預設；非原版完整懲罰 | P1 | 舊玩家無紀錄、重症、狀態六級實測（31） |
+| WK-04 職業需求數值表及現有能力對照 | basic.cgi::job_change L2751–L2781（17 項必要能力、BMI、性別、身高、薪資、獎金、發薪週期、雙能量消耗，且顯示玩家目前數值）；job.cgi::top L18–L29（滑鼠提示 17 項能力）；dat_dir/job.cgi | src/engine.mjs::parseLegacyJobs（requirements、bmiMin／Max、gender、minHeight、salary 等已解析）；src/server.mjs::snapshot jobs（未回傳 requirements 等大部分條件）；public/app.js::renderJobs（只顯示薪資、消耗與第一項不足原因） | **確定缺漏：原版清楚顯示需求數值，Web 沒有** | 不是原版沒數據；Web 後端快照省略 17 項能力需求與大多數限制，前端無法比較原版的「玩家目前數值／職業要求」。原版可應徵下拉選單與下方全條件表是不同呈現 | P1 | 補 Web jobs snapshot 的完整必要能力、BMI 範圍、性別、身高、發薪與獎金欄位，前端給全部職業可檢視的條件表或明細；無權應徵仍須禁止；比對原版 150 筆及手機可讀性 |
 
 ### 03 學校／健身房
 
@@ -48,8 +48,7 @@
 |---|---|---|---|---|---|---|
 | TR-01 原版課程／費用／能量 | dat_dir/school.cgi；dat_dir/gym.cgi | src/training.mjs L30-L66 | 部分完成 | 主表有解析；須逐課核對原始欄位及能力增幅 | P1 | 各課費用、能量扣除、能力變動快照（31） |
 | TR-02 學校每日一次 | manual.html；dat_dir/school.cgi | src/training.mjs L75-L106 | 部分完成 | 有每日限制；日期、時區與伺服器重啟須覆核 | P1 | 跨日、切換課程及兩模式無繞過（31） |
-| TR-03 健身房時間欄與額外效果 | dat_dir/gym.cgi 首列與游泳「美」 | src/training.mjs L47-L55,L75-L106 | 部分完成 | 「間」當分鐘仍是 Web 假設；extraEffect 被解析但未套用 | P1 | 先查找原版實際訓練 CGI 行為，再決定效果和冷卻（31） |
-| TR-04 健身改變體格 | dat_dir/gym.cgi；原版訓練操作待定位 | src/training.mjs；src/engine.mjs | 缺少來源無法驗證 | Web 通用訓練只改能力／能量；不應假定健身必然減重 | P0 | 先取得原版可重現證據，再決定是否改重（30-體格） |
+| TR-03 健身房欄位及冷卻來源 | dat_dir/gym.cgi 首列與游泳的原始資料欄 | src/training.mjs L47-L55,L75-L106 | 部分完成（原始欄位可解析） | 資料有「間」與「効果=美」欄；尚未核對完整原版訓練執行入口，Web 將「間」暫作分鐘。不得從未解析字串建立額外效果 | P1（來源核對） | 查實際 gym 執行路徑、時間／扣款／能力增益條件；找到來源行為才補邏輯 |
 
 ### 04 飲食／熱量
 
@@ -195,11 +194,12 @@
 ## 第一輪重大發現與應先修項
 
 1. **P0/體格 BMI 判定口徑（PR #12 已修正，P0-D 補半分界）**：`town_lib.pl::check_BMI` 使用 `int(weight/(height/100)^2)`；原版 `basic.cgi` 的職業門檻使用此整數。PR #12 已讓 Web 的 `eligibility` 即時運算整數 BMI，不再用舊的 `character.bmi` 一位小數值；P0-D 進一步修補 Perl `sprintf("%.1f")` 在 17.95／24.95／25.95 的半分界捨入差異。保留原有存檔欄位。
-2. **P0/健身與體格**：`dat_dir/gym.cgi` 游泳課程原始效果為 `美`，`src/training.mjs` 僅保留 `extraEffect` 欄未套用；不可自行把此欄當作「體重 -X」或設計外觀變形。
-3. **P1/食堂每日菜單與庫存**：`command.pl` L919–999、L1161–1245 有更新菜單與剩餘量，Web `src/dining.mjs` 頂部承認固定展示。
-4. **P0/事件分支**：缺 #28、#36、#37、#38、#40；其中 #28、#36、#37 的 `kifu*` 要先追完整實作；#38、#40 需物品產生與背包容量。
-5. **P0/展示（PR #13 已合併）**：`public/index.html` 的 `#measurements`、`#physique-status` 已移至狀態分頁常駐體格摘要；`public/app.js` 延用相同資料流。真實瀏覽器截圖和操作驗收仍未完成。
-6. **來源警示**：`src/dining.mjs` L66 用 `2995` 日門檻，對應 `town_ini.cgi` 的 `deleteUser=3000` 與原版 `top.pl` 的 `deleteUser - 5`；數字有來源，真正不同是 Web 無用餐紀錄的 provisional 保護與原版刪角機制。
+2. **P1/健身房欄位來源**：`dat_dir/gym.cgi` 的能力增益、費用及能量欄位已對照；「間」與「効果」尚需實際執行路徑驗證。未確定的字串只保留原始資料，不視為待移植的新遊戲效果。
+3. **P1/職業需求數值表漏移植（已確認）**：原版 `basic.cgi::job_change` L2753–2781 明確輸出每個職業的 17 項能力與 BMI、性別、身高、薪資等，並提供玩家當前值對照；`job.cgi::top` 的滑鼠提示也有各項需求。Web 只向前端送簡化 `reason`，造成不能檢視原版具體門檻。這是 Web 移植缺口，**不是原版不存在**。
+4. **P1/食堂每日菜單與庫存**：`command.pl` L919–999、L1161–1245 有更新菜單與剩餘量，Web `src/dining.mjs` 頂部承認固定展示。
+5. **P0/事件分支**：缺 #28、#36、#37、#38、#40；其中 #28、#36、#37 的 `kifu*` 要先追完整實作；#38、#40 需物品產生與背包容量。
+6. **P0/展示（PR #13 已合併）**：`public/index.html` 的 `#measurements`、`#physique-status` 已移至狀態分頁常駐體格摘要；`public/app.js` 延用相同資料流。真實瀏覽器截圖和操作驗收仍未完成。
+7. **來源警示**：`src/dining.mjs` L66 用 `2995` 日門檻，對應 `town_ini.cgi` 的 `deleteUser=3000` 與原版 `top.pl` 的 `deleteUser - 5`；數字有來源，真正不同是 Web 無用餐紀錄的 provisional 保護與原版刪角機制。
 
 ## 第 30 階段 P0-B 體格核心追蹤：BMI 職業判定
 
@@ -207,32 +207,32 @@
 - **Web 修正範圍（P0-B 開發分支）**：新增 `src/dining.mjs::legacyPhysiqueBmi`，統一 `physiqueStatus`（五種體型）與 `src/engine.mjs::eligibility`（轉職、工作）使用原版公式。保留 `bodyMassIndex` 的一位小數結果作為現有角色存檔欄位，不改表結構或批量覆寫舊存檔；職業判定由身高／體重即時計算，不信任可能陳舊的 `character.bmi`。
 - **測試**：`tests/dining.test.mjs` 涵蓋原版體重小數四捨五入前後的 18／24／26 臨界；`tests/engine.test.mjs` 涵蓋超出／剛好符合 BMI 職業上限、最低門檻、無上限、轉職與實際工作、過時存檔 BMI 不影響判定。
 - **保留差異／範圍外**：P0-D 補上 Perl `sprintf` 在半分界的實際行為和測試；極端浮點範圍、真正瀏覽器、真實舊存檔及其他職業／消耗品細節仍待驗證。
-- **狀態**：PR #12 已合併 `feature/web-dual-mode-phase1`，整合 CI 成功；P0-D 半分界微調另以獨立 PR 檢查。
+- **狀態**：PR #12 已合併 `feature/web-dual-mode-phase1`，整合 CI 成功；P0-D 修正已透過 PR #14 合併並通過 CI。
 
 ## 第 30 階段 P0-C 狀態頁體格摘要（PR #13 已合併）
 
 - **修改**：`public/index.html` 將既有 `#measurements`、`#physique-status` 自「更多角色資訊」的可展開區移到「狀態」分頁常駐的 `physique-summary` 區塊；`public/style.css` 為 290px 側欄增加緊湊樣式。
-- **保持不變**：`public/app.js` 仍由現有 snapshot 更新兩個 ID；沒有新 API、SQLite 欄位、交互控制或額外減重／變形規則；體格更新來自現行角色身高、體重與原版整數 BMI。
+- **保持不變**：`public/app.js` 仍由現有 snapshot 更新兩個 ID；沒有新 API、SQLite 欄位或互動控制；體格更新來自現行角色身高、體重與原版整數 BMI。
 - **驗收**：`tests/home-ui.test.mjs` 靜態驗證摘要位於折疊區外、ID 唯一、渲染路徑不變。**尚未開啟真實瀏覽器做手機 375px、768px、桌面截圖／操作／鍵盤及讀屏測試**，不可聲稱視覺驗收已完成。
 - **狀態**：PR #13 已合併整合分支且 CI 通過；`master` 未修改。實機視覺／鍵盤操作仍待驗收。
 
-## 第 30 階段 P0-D：Perl BMI 半分界捨入與來源驗證（待 CI／合併）
+## 第 30 階段 P0-D：Perl BMI 半分界捨入與來源驗證（PR #14 已合併）
 
 - **來源**：`basic.cgi::job_change`、`do_work` 使用 `sprintf("%.1f",$taijuu)` 後執行 `town_lib.pl::check_BMI`。Node.js `Math.round(weight*10)/10` 不等於原 Perl 對浮點數的格式化。
 - **已核對數值**：使用本機 Perl 與 Node.js 對照，`17.95 → 17.9`、`24.95 → 24.9`、`25.95 → 25.9`，而舊 Web `Math.round` 分別得到 18.0、25.0、26.0；精確半分界 `50.25` 在 Perl 得 50.2（取偶）。逐項對照 **0.00～299.99，步進 0.01，共 30,000 筆**，替代捨入方法在此測試範圍內無差異。
 - **Web 修正**：`src/dining.mjs::legacyPhysiqueBmi` 改為 `toFixed(1)` 加上精確中點取偶判斷，使五種體型、轉職、實際工作共用；`tests/dining.test.mjs` 和 `tests/engine.test.mjs` 增加回歸。保留 Web 現有一位小數 `character.bmi` 欄位與現存 SQLite 資料，不執行 migration。
-- **未完成**：本開發分支尚須 GitHub CI；實際玩家舊存檔、極端浮點數、跨作業系統 Perl 字串格式與瀏覽器測試沒有全面驗收。
-- **健身房來源查核**：原版 `dat_dir/gym.cgi` 含游泳 `美` 欄及 `間` 值；已讀取根目錄 `basic.cgi`、`command.pl`、`town_lib.pl`、`town_maker.cgi`，僅找到 `town_lib.pl::gym_sprit` 欄位解析與 `town_maker.cgi` 對 `gym` 模式的提及，**尚未定位可驗證的實際健身執行規則**。本輪不創作減重效果，也不把 `間` 已確定當作原版分鐘。
+- **整合狀態**：PR #14 已合併並通過 GitHub Actions；實際玩家舊存檔、極端浮點數、跨作業系統 Perl 字串格式與瀏覽器測試沒有全面驗收。
+- **健身房資料範圍**：`dat_dir/gym.cgi` 包含「効果=美」、「間」欄；`town_lib.pl::gym_sprit` 會讀取欄位。尚未定位該字串的執行規則，因此不依字面擴充 Web 訓練效果或視為功能缺漏。
 
 ## P0 → P1 → P2 切片與相依／拒絕條件
 
 | 切片／預定 PR | 目標／檔案與資料 | 前置 | 必須新增／保留的測試 | 拒絕條件 |
 |---|---|---|---|---|
 | P0-A：本盤點 PR | 只新增 `web/docs/migration-audit.md`，README 入口 | PR #10 作為堆疊基底 | 文件 14 領域／44 ID 完整、連結與靜態證據；CI | 未核對的事項不得標成已完成；不改遊戲程式 |
-| P0-B：體格核心 | `src/engine.mjs`、`src/dining.mjs`、`src/legacy-item-use.mjs`、相關 tests；必要時非破壞 DB migration | P0-A 審核；查原版工作 BMI 路徑 | BMI 上限邊界、身高變更、連續飲食／工作／物品、存檔重啟、跨帳號隔離 | 不直接覆蓋舊角色 BMI／體重，不加入無來源的健身減重 |
+| P0-B：體格核心 | `src/engine.mjs`、`src/dining.mjs`、`src/legacy-item-use.mjs`、相關 tests；必要時非破壞 DB migration | P0-A 審核；查原版工作 BMI 路徑 | BMI 上限邊界、身高變更、連續飲食／工作／物品、存檔重啟、跨帳號隔離 | 不直接覆蓋舊角色 BMI／體重，不從未驗證欄位擴充功能 |
 | P0-C：狀態頁體格整理 | `public/index.html`、`public/app.js`、`public/style.css`、UI tests | P0-B 欄位定案 | 手機 375px/768px 與桌面真實瀏覽器／鍵盤檢查 | 無瀏覽器驗證不得標註視覺驗收成功 |
 | P1-A：餐飲日表及庫存 | `src/dining.mjs`、`src/server.mjs`、SQLite 日菜單／庫存表、tests | P0-B、每日時鐘與餐飲交易 | 隨機菜單、跨日、賣完、同城共用、重送完整回滾 | 不憑空生成原版不存在的商品或菜單 |
-| P1-B：健身特殊效果 | `src/training.mjs`、原版 gym 相關 CGI／tests | 原版實際效果與「間」欄來源確定 | 課程額外效果、時間、失敗回滾 | 來源不足則先補研究，不造數值 |
+| P1-B：健身資料來源核對 | `src/training.mjs`、原版 gym 相關 CGI／tests | 確認原版實際健身執行函式 | 原版費用、能力增益、課程時間及失敗回滾 | 無原版執行依據的欄位只保留資料，不建立額外效果功能 |
 | P1-C：剩餘五事件 | `src/event-effects.mjs`、`src/events.mjs`、物品交易／庫存、tests | `kifu*`、`get_itm*`、來源交易已可表示 | 每 ID 亂數、耐久、容量、日限額、多人隔離、rollback | 未有贈送/物品產生交易時不可用假獎勵替代 |
 | P2：住宅商店／社交／戰鬥／部署 | 原始 CGI 對應表、Web 新模組、SQLite、UI | 角色資料、經濟／權限／真實舊存檔依賴 | 端到端與安全／備份演練 | 未核對規則不宣稱等價 |
 
