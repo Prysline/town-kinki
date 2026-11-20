@@ -212,10 +212,12 @@ test("單機介面：只有單機可看到四種實際等待快轉，倒數與�
   assert.match(html,/data-advance="1h"/);
   assert.match(html,/data-advance="1d"/);
   assert.match(html,/id="solo-wait-hints"/);
-  assert.match(script,/state\.schoolReadyAtMs/);
-  assert.match(script,/const schoolWait=Math\.max\(0,/);
-  assert.match(script,/學校還需約 /);
-  assert.match(script,/遊戲時間隔日 00:00 可再上課/);
+  assert.match(script,/state\.schoolRemainingToday/);
+  assert.match(script,/學校須隔日才可再上課/);
+  assert.match(script,/state\.character\.classroomReadyAt/);
+  assert.match(script,/const classroomWait=Math\.max\(0,/);
+  assert.match(script,/教室還需約 /);
+  assert.match(script,/browserGameNow\(\)/);
   assert.match(script,/panel\.hidden=state\?\.mode!=="solo" \|\| !state\?\.character/);
   assert.match(script,/api\("solo\/time\/advance",\{preset\}\)/);
   assert.match(script,/const browserGameNow=\(\)=>syncedGameMs\+/);
@@ -223,6 +225,11 @@ test("單機介面：只有單機可看到四種實際等待快轉，倒數與�
   assert.match(script,/state\.cockroachChallenge\.expiresAt>browserGameNow\(\)/);
   assert.match(css,/\.game-shell \.solo-time-panel/);
   assert.match(css,/\.game-shell \.solo-time-panel \.solo-time-buttons/);
+  assert.match(css,/\.solo-time-buttons\{display:grid;grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
+  assert.match(css,/\.solo-time-buttons button\{display:flex;align-items:center;justify-content:center/);
+  assert.match(css,/min-height:42px/);
+  assert.doesNotMatch(css,/\.solo-time-buttons\{grid-template-columns:repeat\(4,/);
+  assert.equal((html.match(/data-advance="(?:5m|30m|1h|1d)"/g)||[]).length,4);
 });
 
 
