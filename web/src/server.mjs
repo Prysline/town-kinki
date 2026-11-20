@@ -25,6 +25,7 @@ import {parseLegacyRetailCatalog,initRetailTables,ensureRetailDay,listRetailStoc
 import {parseLegacyVendingCatalog,initVendingTables,ensureVendingRotation,listVendingStock,vendingPeriodKey,VENDING_SYMBOL,VENDING_SHOP} from "./vending.mjs";
 import {parseLegacyEquipmentCatalog,initEquipmentTables,listEquipmentItems,listEquipmentTransactions,buyEquipment,equipEquipment,sellEquipment,forgeEquipment,EQUIPMENT_SYMBOL} from "./equipment.mjs";
 import {initGiftTables,GIFT_SHOP_SYMBOL,listGiftSources,listGiftEvents,convertToGift,sendGift} from "./gift-shop.mjs";
+import {initRecycleTables,RECYCLE_SYMBOL,listRecycleListings,listRecycleSellable,listRecycleHistory,buyFromRecycle,sellToRecycle} from "./recycle.mjs";
 import { listValidClassroomCreditCards, requireClassroomCreditCard } from "./legacy-credit.mjs";
 import { legacyPlayerIcon } from "./appearance.mjs";
 import { initLegacyItemUseTables, listLegacyItemActions, listLegacyItemUseHistory, useLegacyItem } from "./legacy-item-use.mjs";
@@ -91,6 +92,7 @@ initRetailTables(db);
 initVendingTables(db);
 initEquipmentTables(db);
 initGiftTables(db);
+initRecycleTables(db);
 const houseCatalog = parseHouseCatalog(
   decodeLegacyText(readFileSync(resolve(REPO_ROOT, "town_ini.cgi"))),
   decodeLegacyText(readFileSync(resolve(REPO_ROOT, "command.pl")))
@@ -274,6 +276,8 @@ function snapshot(user) {
     retailMap.cells.some(cell=>cell.key===EQUIPMENT_SYMBOL));
   const giftShopAvailable=Boolean(retailMap?.configured&&
     retailMap.cells.some(cell=>cell.key===GIFT_SHOP_SYMBOL));
+  const recycleAvailable=Boolean(retailMap?.configured&&
+    retailMap.cells.some(cell=>cell.key===RECYCLE_SYMBOL));
   const currentJob = updated?.jobId ? jobsByKey.get(updated.jobId) : null;
   const classroomCreditCards=updated?listValidClassroomCreditCards(db,user.id,now):[];
   const ownedHouses = updated ? listHouses(db, user.id).map(h => ({
@@ -336,6 +340,10 @@ function snapshot(user) {
     giftShopAvailable,
     giftSources:updated?listGiftSources(db,user.id,now):[],
     giftEvents:updated?listGiftEvents(db,user.id):[],
+    recycleAvailable,
+    recycleListings:recycleAvailable?listRecycleListings(db,now):[],
+    recycleSellable:updated?listRecycleSellable(db,user.id,now):[],
+    recycleHistory:updated?listRecycleHistory(db,user.id):[],
     legacyItemActions: updated ? listLegacyItemActions(db,user.id,updated,now) : [],
     legacyItemHistory: updated ? listLegacyItemUseHistory(db,user.id) : [],
     hunger: updated ? hungerStatus(updated.lastMealAt,now) : null,
@@ -717,6 +725,21 @@ async function handle(req, res) {
         });
       }catch(error){throw new HttpError(400,error.message);}
       return sendJson(res,200,{...snapshot(user),giftResult:result});
+    }
+    if(path==="/api/recycle/sell"||path==="/api/recycle/buy"){
+      const now=gameNow();
+      const args={requestId:data.requestId,now,
+        hasBuilding:(symbol,townId)=>{
+          const map=publicTownMap(db,townId,false);
+          return map.configured&&map.cells.some(cell=>cell.key===symbol);
+        }};
+      let outcome;
+      try{
+        if(path==="/api/recycle/sell")
+          outcome=sellToRecycle(db,user.id,{...args,sourceLine:data.sourceLine});
+        else outcome=buyFromRecycle(db,user.id,{...args,listingId:data.listingId});
+      }catch(error){throw new HttpError(400,error.message);}
+      return sendJson(res,200,{...snapshot(user),recycleResult:outcome});
     }
     if (path === "/api/meal/eat") {
       const meal=mealsByKey.get(data.key);

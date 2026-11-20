@@ -103,7 +103,7 @@ test("原 CGI 建築代碼只連到 Web 真正已實作的設施入口",()=>{
   const expected={
     "銀行":"bank-panel","病院":"hospital-panel","職安":"jobs-panel",
     "教室":"classroom-panel","食堂":"dining-panel","食堂２":"dining-panel",
-    "デパ":"retail-panel","デパ2":"retail-panel","自販機":"vending-panel","装備屋":"equipment-panel","ギフト屋":"gift-panel","建築":"housing-panel"
+    "デパ":"retail-panel","デパ2":"retail-panel","自販機":"vending-panel","装備屋":"equipment-panel","ギフト屋":"gift-panel","リサイ":"recycle-panel","建築":"housing-panel"
   };
   assert.deepEqual(FACILITY_PANELS,expected);
   for(const [key,panelId] of Object.entries(expected)){
@@ -176,6 +176,20 @@ test("原版禮品店地圖入口、五萬元轉換、指定收件人與跨玩�
   assert.match(script,/api\("gift\/"\+action,payload\)/);
   assert.match(script,/if\(cell\.key==="ギフト屋"\)renderGiftShop\(\)/);
 });
+test("原版「リサイ」回收商店真實地圖入口、二手貨架與本人出售控制",()=>{
+  assert.deepEqual(townCellAction(describeTile("リサイ")),
+    {kind:"facility",panelId:"recycle-panel"});
+  for(const id of ["recycle-panel","recycle-status","recycle-market",
+      "recycle-sellable","recycle-history"])
+    assert.match(html,new RegExp('id="'+id+'"'));
+  assert.match(html,/原版 recycle\.cgi/);
+  assert.match(script,/function renderRecycle\(\)/);
+  assert.match(script,/state\.recycleListings/);
+  assert.match(script,/state\.recycleSellable/);
+  assert.match(script,/api\("recycle\/"\+action,body\)/);
+  assert.match(script,/if\(cell\.key==="リサイ"\)renderRecycle\(\)/);
+});
+
 test("原版教室必須導向獨立教室，而非誤開學校或健身房",()=>{
   const result=townCellAction(describeTile("教室"));
   assert.deepEqual(result,{kind:"facility",panelId:"classroom-panel"});

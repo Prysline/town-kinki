@@ -5,7 +5,7 @@ export const GIFT_CONVERSION_FEE=50000;
 export const GIFT_PURCHASED_LIMIT=10;
 export const GIFT_RECEIVED_LIMIT=10;
 const VALID_REQUEST=/^[A-Za-z0-9_-]{8,80}$/;
-const EDITABLE=new Set(["__web_retail__","__web_gift__"]);
+const EDITABLE=new Set(["__web_retail__","__web_gift__","__web_recycle__"]);
 const DAY_MS=86400000;
 function requireArgs(userId,requestId,now){
   if(!Number.isSafeInteger(userId)||userId<1||
