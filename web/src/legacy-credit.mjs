@@ -1,5 +1,5 @@
 // kyushitu.cgi L69–83、L109–116：只有持有有效「クレジット」原版日用品，
-// 才可選銀行付教室學費。此處不虛構購買功能，也不修改匯入的原始 33 欄。
+// 才可選銀行付教室學費。有效卡片可來自已匯入原版物品，或百貨店實際購入的 33 欄物品；不改寫原始存檔。
 import { DAY_MS } from "./inventory.mjs";
 
 function eligibleCard(row, now) {
@@ -23,7 +23,7 @@ function eligibleCard(row, now) {
 export function listValidClassroomCreditCards(db,userId,now=Date.now()){
   if(!Number.isSafeInteger(userId)||userId<1||!Number.isSafeInteger(now)||now<0)
     throw new Error("無效的信用付款查詢");
-  // 只從真正匯入到本人帳號的原版物品挑卡；不可傳任何任意商品名作付款授權。
+  // 只從本人真實持有的 33 欄物品挑卡（原版封存／百貨購買）；不能傳任意名稱授權。
   const rows=db.prepare([
     "SELECT source_line,category,original_name,effect,durability,",
     "durability_unit,purchased_at,raw_fields_json",
