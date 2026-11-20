@@ -226,6 +226,26 @@ test("能力值位於右側角色資訊切換而非全寬設施分頁，三組�
   assert.match(css,/\.ability-groups\{display:grid;grid-template-columns:minmax\(0,1fr\)/);
   assert.match(css,/\.ability-track>span\{display:block;height:100%;background:#edc443/);
 });
+test("體格資訊在右側狀態分頁直接可見，不必展開更多資訊",()=>{
+  const aside=html.slice(html.indexOf('id="player-summary"'),html.indexOf('id="inventory-panel"'));
+  const physiquePos=aside.indexOf('class="physique-summary"');
+  const detailsPos=aside.indexOf('class="status-details"');
+  assert.ok(physiquePos>0&&detailsPos>physiquePos);
+  const visible=aside.slice(physiquePos,detailsPos);
+  assert.match(visible,/aria-labelledby="physique-summary-title"/);
+  assert.match(visible,/id="physique-summary-title">體格資訊/);
+  assert.match(visible,/id="measurements"/);
+  assert.match(visible,/id="physique-status"/);
+  assert.doesNotMatch(aside.slice(detailsPos),/id="measurements"|id="physique-status"/);
+  assert.equal((html.match(/id="measurements"/g)||[]).length,1);
+  assert.equal((html.match(/id="physique-status"/g)||[]).length,1);
+  // 保留原本的 API snapshot 與渲染 ID：移動顯示位置，不引入新資料欄位。
+  assert.match(script,/text\("measurements", c\.height/);
+  assert.match(script,/text\("physique-status",\(state\.physique\?\.label/);
+  assert.match(css,/\.game-shell \.physique-summary\{min-width:0/);
+  assert.match(css,/\.physique-summary \.status-physique dd\{font-variant-numeric:tabular-nums\}/);
+});
+
 test("原版右上角事件通知：可關閉，限時事件直接拍打，不再強制捲動整頁",()=>{
   assert.match(html,/id="event-popup"[^>]*hidden/);
   assert.match(html,/id="event-popup-close"/);
