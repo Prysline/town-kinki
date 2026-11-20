@@ -106,6 +106,10 @@ function renderSoloTime() {
   if(state.gymCooldownMs>0)remain.push("健身房還需約 "+Math.ceil(state.gymCooldownMs/60000)+" 分鐘");
   if(state.mealCooldownMs>0)remain.push("用餐還需約 "+Math.ceil(state.mealCooldownMs/60000)+" 分鐘");
   if(state.schoolRemainingToday)remain.push("學校須隔日才可再上課");
+  // 教室的間隔是實際課程完成時儲存的 classroomReadyAt，不是學校的每日重設。
+  // 用遊戲時鐘推算剩餘時間，快轉與畫面每秒更新都會同步變化。
+  const classroomWait=Math.max(0,(state.character.classroomReadyAt??0)-browserGameNow());
+  if(classroomWait>0)remain.push("教室還需約 "+Math.ceil(classroomWait/60000)+" 分鐘");
   text("solo-wait-hints",remain.length?remain.join("；")+"。":"目前沒有主要冷卻等待。");
   const blocked=timeAdvanceBusy || (
     state.cockroachChallenge?.status==="active" &&
@@ -855,8 +859,8 @@ function renderTowns() {
   }
 }
 
-// 原版 basic.cgi::job_change 顯示 17 項能力的「目前值／必要值」及所有限制。
-// 不用「能力不足」替代數字；每個職業都能檢視，即使不能應徵也一樣。
+// 原版 basic.cgi::job_change 有 17 個能力欄，但只列出實際大於 0 的需求。
+// 不顯示無門檻的能力或「不限」欄位；應徵資格仍在伺服器判定。
 const JOB_REQUIREMENT_KEYS = Object.freeze([
   "kokugo","suugaku","rika","syakai","eigo","ongaku","bijutu",
   "looks","tairyoku","kenkou","speed","power","wanryoku","kyakuryoku",
@@ -866,48 +870,60 @@ function jobRequirementsPanel(job) {
   const details=document.createElement("details");
   details.className="job-requirements";
   details.dataset.jobKey=job.key;
+  const demanded=JOB_REQUIREMENT_KEYS.filter(key=>Number(job.requirements?.[key]??0)>0);
   const summary=document.createElement("summary");
-  summary.textContent="檢視完整條件（17 項能力／體格／待遇）";
+  summary.textContent=demanded.length?
+    "檢視職業條件（"+demanded.length+" 項能力門檻）":"檢視職業條件與待遇";
   details.append(summary);
+
   const other=document.createElement("div");
   other.className="job-condition-grid";
-  const bmi=(job.bmiMin||job.bmiMax)?
-    ((job.bmiMin||"不限")+"～"+(job.bmiMax||"不限")):"不限";
-  const gender=job.gender==="male"?"男":job.gender==="female"?"女":"不限";
-  const status=[
-    ["BMI",state.physique?.bmi??"—",bmi,
-      (job.bmiMin&&state.physique.bmi<job.bmiMin)||
-      (job.bmiMax&&state.physique.bmi>job.bmiMax)],
-    ["身高",state.character.height+" cm",job.minHeight?job.minHeight+" cm 以上":"不限",
-      Boolean(job.minHeight&&state.character.height<job.minHeight)],
-    ["性別",state.character.gender==="male"?"男":state.character.gender==="female"?"女":"其他",
-      gender,Boolean(job.gender&&state.character.gender!==job.gender)],
-    ["前置精通",state.character.masteredJob||"尚無",job.previousJob||"不限",
-      Boolean(job.previousJob&&state.character.masteredJob!==job.previousJob)]
-  ];
-  for(const [label,current,required,missing] of status){
+  const status=[];
+  if(job.bmiMin||job.bmiMax){
+    const bmi=(job.bmiMin||"不限")+"～"+(job.bmiMax||"不限");
+    const current=state.physique?.bmi;
+    status.push(["BMI",bmi,
+      (job.bmiMin&&current<job.bmiMin)||
+      (job.bmiMax&&current>job.bmiMax)]);
+  }
+  if(job.minHeight>0)
+    status.push(["身高",job.minHeight+" cm 以上",
+      state.character.height<job.minHeight]);
+  if(job.gender)
+    status.push(["性別",job.gender==="male"?"男":"女",
+      state.character.gender!==job.gender]);
+  if(job.previousJob)
+    status.push(["前置精通",job.previousJob,
+      state.character.masteredJob!==job.previousJob]);
+  for(const [label,required,missing] of status){
     const row=document.createElement("div");
     row.className="job-condition"+(missing?" job-condition-missing":"");
-    row.textContent=label+"：目前 "+current+"／要求 "+required;
+    row.textContent=label+"：要求 "+required;
     other.append(row);
   }
+  if(status.length)details.append(other);
+
   const finance=document.createElement("p");
   finance.className="small job-finance";
   finance.textContent="每次基礎薪資 "+money(job.salary)+
     " · 每 "+job.payEvery+" 次工作發薪 · 升級獎金倍率 ×"+
     job.bonusRate+" · 升薪倍率 ×"+job.raiseRate+
     " · 身體消耗 "+job.bodyCost+" · 頭腦消耗 "+job.brainCost;
-  const requirements=document.createElement("div");
-  requirements.className="job-condition-grid job-stats-grid";
-  for(const key of JOB_REQUIREMENT_KEYS){
-    const current=Number(state.character.stats[key]??0);
-    const required=Number(job.requirements?.[key]??0);
-    const row=document.createElement("div");
-    row.className="job-condition"+(current<required?" job-condition-missing":"");
-    row.textContent=labels[key]+"：目前 "+current+"／要求 "+required;
-    requirements.append(row);
+
+  if(demanded.length){
+    const requirements=document.createElement("div");
+    requirements.className="job-condition-grid job-stats-grid";
+    for(const key of demanded){
+      const current=Number(state.character.stats[key]??0);
+      const required=Number(job.requirements[key]);
+      const row=document.createElement("div");
+      row.className="job-condition"+(current<required?" job-condition-missing":"");
+      row.textContent=labels[key]+"：要求 "+required;
+      requirements.append(row);
+    }
+    details.append(requirements);
   }
-  details.append(other,finance,requirements);
+  details.append(finance);
   return details;
 }
 function renderJobs() {
@@ -1406,6 +1422,19 @@ function render() {
   text("work-count", c.workCount + " 次（目前職業 " + c.jobWorkCount + " 次）");
   text("job-experience", c.jobExperience + " 點");
   text("job-level", state.jobLevel + " 級");
+  // 原版 town_maker.cgi：每 100 經驗升一級，basic.cgi 達 15 級精通。
+  // 只呈現目前職業的進度；masteredJob 是先前已精通的職業，兩者不得混用。
+  const currentMasteryXp=state.currentJob?Math.max(0,c.jobExperience??0):0;
+  const masteryTargetXp=1500;
+  const masteryReached=Boolean(state.currentJob&&state.jobLevel>=15);
+  const masteryText=!state.currentJob?"尚未就職":
+    masteryReached?"已達精通門檻（15 級，"+currentMasteryXp+" 經驗）":
+    "目前 "+Math.min(currentMasteryXp,masteryTargetXp)+" / "+masteryTargetXp+
+      " 經驗（"+state.jobLevel+" / 15 級），距離精通還需 "+
+      (masteryTargetXp-currentMasteryXp)+" 經驗";
+  text("job-mastery-status",masteryText);
+  el("job-mastery-bar").value=Math.min(currentMasteryXp,masteryTargetXp);
+  text("jobs-mastery-status","目前職業精通進度："+masteryText+"。");
   text("mastered-job", c.masteredJob || "無");
   text("measurements", c.height + " 公分／" + c.weight + " 公斤");
   renderDining();
@@ -1413,7 +1442,8 @@ function render() {
   const ready = Boolean(state.currentJob) && state.workCooldownMs === 0 &&
     state.condition?.baseExperience !== null;
   el("work").disabled = !ready || savingSalaryPayment;
-  el("home-work").disabled = !ready || savingSalaryPayment;
+  // 地圖快捷「工作」僅是前往工作頁面，不執行工作，也不受出勤冷卻限制。
+  el("home-work").disabled = false;
   text("cooldown", !state.currentJob ? "請先前往職業介紹所選擇工作。" :
     state.workCooldownMs > 0 ? "距離下次工作約 " + Math.ceil(state.workCooldownMs / 1000) + " 秒。" :
       "工作冷卻時間已結束。");
@@ -1792,9 +1822,6 @@ el("profile-view-tabs").addEventListener("keydown",event=>{
   selectProfileView(PROFILE_VIEWS[next],{focus:true});
 });
 el("facility-shortcuts").addEventListener("click",event=>{
-  if(event.target.closest('button[data-action="work"]')){
-    action("work",{});return;
-  }
   const button=event.target.closest("button[data-facility]");
   if(button)goToFacility(button.dataset.facility);
 });
