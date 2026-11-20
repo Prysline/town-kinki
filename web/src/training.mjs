@@ -1,6 +1,6 @@
-// TOWN 訓練系統：直接讀取原版 dat_dir/school.cgi 與 gym.cgi。
-// 原版手冊規定學校每日一堂；本 fork 缺少完整訓練邏輯，其他行為為 Web 移植規則。
-import { STAT_LABELS, recoverEnergy } from "./engine.mjs";
+// 學校、健身房讀取原版資料表；獨立教室有 kyushitu.cgi 真正的執行依據。
+// 不將教室的減重與雙能量消耗套到只有資料表的 gym/school。
+import { STAT_KEYS, STAT_LABELS, recoverEnergy, bodyMassIndex } from "./engine.mjs";
 
 const BRAIN = ["kokugo", "suugaku", "rika", "syakai", "eigo", "ongaku", "bijutu"];
 const BODY = ["looks", "tairyoku", "kenkou", "speed", "power", "wanryoku", "kyakuryoku"];
@@ -65,6 +65,36 @@ export function parseLegacyGym(source) {
   return records(source, "gym");
 }
 
+export const CLASSROOM_ZH_TW = Object.freeze({
+  "フラフラダンス":"搖搖晃晃舞蹈",
+  "フラダンス":"草裙舞",
+  "帝王学ミニ":"帝王學入門",
+  "帝王学":"帝王學"
+});
+
+// kyushitu.cgi L35、L61–65：名稱＋17 項能力＋金額、效果、間隔分鐘、雙能量。
+// 原版只為這個獨立教室提供 kyushitu_go 的可執行訓練規則。
+export function parseLegacyClassroom(source) {
+  return source.split(/\r?\n/).slice(1).flatMap((line,index)=>{
+    if(!line.trim())return [];
+    const fields=line.replace(/\r$/,"").split("<>");
+    if(fields.length<23)throw new Error("無效的原版教室資料列："+(index+2));
+    const originalName=fields[0];
+    const gains=Object.fromEntries(STAT_KEYS.map((key,i)=>[key,wholeNumber(fields[i+1])]));
+    const price=wholeNumber(fields[18]);
+    const cooldownMs=wholeNumber(fields[20])*60_000;
+    const bodyCost=wholeNumber(fields[21]);
+    const brainCost=wholeNumber(fields[22]);
+    return [{
+      key:"classroom-"+(index+2), type:"classroom", originalName,
+      name:CLASSROOM_ZH_TW[originalName]??originalName,
+      gains,price,cooldownMs,bodyCost,brainCost,
+      weightLoss:(bodyCost+brainCost)/100,
+      extraEffect:fields[19]  // 保留原文；來源沒有證明可執行的額外效果
+    }];
+  });
+}
+
 // 世界時間由多人伺服器統一決定；單機與多人共用同一套函式。
 export function calendarDay(now = Date.now(), timeZone = "Asia/Taipei") {
   return new Intl.DateTimeFormat("en-CA", {
@@ -73,17 +103,23 @@ export function calendarDay(now = Date.now(), timeZone = "Asia/Taipei") {
 }
 
 export function trainingAvailability(character, lesson, now = Date.now(), day = calendarDay(now)) {
-  if (!lesson || !["school", "gym"].includes(lesson.type)) return "找不到訓練課程";
+  if (!lesson || !["school", "gym", "classroom"].includes(lesson.type)) return "找不到訓練課程";
   const current = recoverEnergy(character, now);
   if (lesson.type === "school" && current.lastSchoolDay === day)
     return "今日已經上過一堂課，請明天再來";
   if (lesson.type === "gym" && current.gymReadyAt > now)
     return "健身房還需要等待 " + Math.ceil((current.gymReadyAt - now) / 1000) + " 秒";
+  if (lesson.type === "classroom" && (current.classroomReadyAt??0)>now)
+    return "教室還需要等待 "+Math.ceil((current.classroomReadyAt-now)/1000)+" 秒";
   if (current.money < lesson.price) return "現金不足";
   if (lesson.type === "school" && current.brainEnergy < lesson.energyCost)
     return "頭腦能量不足";
   if (lesson.type === "gym" && current.bodyEnergy < lesson.energyCost)
     return "身體能量不足";
+  if (lesson.type === "classroom" && current.bodyEnergy < lesson.bodyCost)
+    return "身體能量不足";
+  if (lesson.type === "classroom" && current.brainEnergy < lesson.brainCost)
+    return "頭腦能量不足";
   return null;
 }
 
@@ -96,12 +132,23 @@ export function performTraining(character, lesson, now = Date.now(), day = calen
     if (!Object.hasOwn(STAT_LABELS, key)) throw new Error("不支援的能力值");
     stats[key] = (stats[key] ?? 0) + amount;
   }
-  const next = {
-    ...current, money: current.money - lesson.price, stats,
-    ...(lesson.type === "school"
-      ? { brainEnergy: current.brainEnergy - lesson.energyCost, lastSchoolDay: day }
-      : { bodyEnergy: current.bodyEnergy - lesson.energyCost,
-          lastGymAt: now, gymReadyAt: now + lesson.cooldownMs })
-  };
-  return { character: next, gained: lesson.gains, paid: lesson.price, lesson: lesson.name };
+  let extra;
+  if(lesson.type==="school"){
+    extra={brainEnergy:current.brainEnergy-lesson.energyCost,lastSchoolDay:day};
+  }else if(lesson.type==="gym"){
+    extra={bodyEnergy:current.bodyEnergy-lesson.energyCost,
+      lastGymAt:now,gymReadyAt:now+lesson.cooldownMs};
+  }else{
+    // kyushitu.cgi::kyushitu_go L139–143：扣除兩種能量，體重減少兩種消耗／100。
+    // 最低 1kg 為 Web 防止非物理負數的保護；原版未做此保護。
+    const weight=Math.max(1,Math.round((current.weight-lesson.weightLoss)*100)/100);
+    extra={bodyEnergy:current.bodyEnergy-lesson.bodyCost,
+      brainEnergy:current.brainEnergy-lesson.brainCost,
+      classroomReadyAt:now+lesson.cooldownMs,
+      weight,bmi:bodyMassIndex(current.height,weight)};
+  }
+  const next={...current,money:current.money-lesson.price,stats,...extra};
+  return {character:next,gained:lesson.gains,paid:lesson.price,
+    lesson:lesson.name,weightLoss:lesson.type==="classroom"?
+      Math.round((current.weight-next.weight)*100)/100:0};
 }
