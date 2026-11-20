@@ -46,7 +46,7 @@ test("原版兩間百貨同日上架，單價三倍，最多各 110 件，並非
 test("本人現金購物、共用扣庫存與 33 欄持有物同筆儲存；重送不能扣第二次",()=>{
   const db=fixture();try{
     ensureRetailDay(db,catalog,day,randomIndex);
-    const first=listRetailStock(db,catalog,["depart1"])[0];
+    const first=listRetailStock(db,catalog,["depart1"]).find(x=>x.price<=100000);
     const before=db.prepare("SELECT money FROM characters WHERE user_id=1").get().money;
     const requestId="shop_dept_000001";
     const receipt=buyRetailItem(db,1,catalog,options("depart1",first.sku,requestId));

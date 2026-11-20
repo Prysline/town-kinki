@@ -79,7 +79,7 @@
 | MP-02 原版 townlog 匯入／地圖編輯 | log_dir/townlog0.cgi ～ townlog3.cgi；town_maker.cgi | src/town-storage.mjs；scripts/town-map.mjs | 部分完成 | 目前 fork 的原始地圖日誌需實際確認是否有資料，不能補造配置 | P1 | 空檔與真實檔 round-trip、權限、備份／回滾（後續） |
 | MP-03 車站／交通票券與跨城成本 | station.cgi；town_ini.cgi；商品檔 | src/transport.mjs；src/server.mjs::/api/move；public/app.js；public/town-home.js | **基本車站收費已移植（PR #26），其他交通票券待驗證** | 四城六組票價與跨城扣現金已實作；實際原版其他交通券／道具是否有獨立效果仍需追來源 | P1（部分完成） | 12 種方向、同城／欠費／多人隔離已測；舊存檔與瀏覽器驗收待完成 |
 | MP-04 車站六組票價及跨城移動 | unit.pl L85；station.cgi::idou L99–116、L135–169 | src/transport.mjs；src/server.mjs::/api/move；public/app.js／town-home.js | **原版票價與地圖入口已修復（PR #26）** | 6 組雙向票價 950／780／1210／950／2210／1530 均會扣現金；拒絕同城、非法目的地與餘額不足；原版 5 秒僅前端倒數，未虛構伺服器冷卻 | P1（實機驗收） | 12 方向、SQLite 原子交易／失敗回滾與兩玩家隔離已測 |
-| MP-05 原版地圖互動入口覆蓋率 | unit.pl::get_unit L62–191（43 個表單入口）；top.pl L472–490 | src/town-map.mjs::MAP_SYMBOLS；public/town-home.js::FACILITY_PANELS／station | **入口清冊已核對；各設施未全部盤點／移植** | 43 入口中 28 個有 Web 圖示代碼、15 個未收錄；**8 個**可導入功能（7 個面板＋已修車站），**20 個**有圖示仍回報 unavailable。原版 gamerand.cgi 等入口內還有多個未逐函式盤點的子 CGI。詳 [入口表](phase30-entrypoint-coverage.md) 與 [新增待辦總清冊](phase30-open-audit-backlog.md) | P1 | 按來源逐原版執行路徑、交易、真實街區存檔、瀏覽器驗收 |
+| MP-05 原版地圖互動入口覆蓋率 | unit.pl::get_unit L62–191（43 個表單入口）；top.pl L472–490 | src/town-map.mjs::MAP_SYMBOLS；public/town-home.js::FACILITY_PANELS／station | **入口清冊已核對；各設施未全部盤點／移植** | 43 入口中 28 個有 Web 圖示代碼、15 個未收錄；**10 個**可導入功能（9 個面板＋已修車站），**18 個**有圖示仍回報 unavailable。原版 gamerand.cgi 等入口內還有多個未逐函式盤點的子 CGI。詳 [入口表](phase30-entrypoint-coverage.md) 與 [新增待辦總清冊](phase30-open-audit-backlog.md) | P1 | 按來源逐原版執行路徑、交易、真實街區存檔、瀏覽器驗收 |
 
 ### 06 住宅／進階設施
 
@@ -106,7 +106,7 @@
 |---|---|---|---|---|---|---|
 | IT-01 33 欄存檔封存與對照 | dat_dir/syouhin.cgi 首列；member/<ID>/mono.cgi（未提供真實玩家檔） | src/legacy-inventory.mjs；scripts/legacy-inventory.mjs | 部分完成 | 解析／封存存在；未能以真實玩家存檔完成相容性驗證 | P1 | 33 欄全欄測試、未知道具、重匯防重、無損回滾（31） |
 | IT-02 可確認消耗品／耐久 | basic.cgi L2556-L2579；dat_dir/syouhin.cgi | src/legacy-item-use.mjs；tests/legacy-item-use.test.mjs | 部分完成 | 只支援部分已封存物品效果，回／日與其他道具尚需逐項核對 | P0 | 體格、疾病、冷卻、失效、幂等與安全範圍（30-體格） |
-| IT-03 商店、贈送、裝備與回收 | dat_dir/prezento.cgi；dat_dir/soubi.cgi；gifutoya.cgi；recycle.cgi | 尚無完整 Web 對應 | 未實作（完整流程） | 商品來源、ギフト限制、裝備效果、交易記錄互相依賴 | P1 | 依原始商品與操作逐項拆分商品、裝備與交易 PR（31/後續） |
+| IT-03 百貨店一／二、販賣機、裝備／禮品／回收 | unit.pl L130–148；command.pl::depart_gamen/buy_syouhin；hanbai.cgi；gifutoya.cgi；recycle.cgi | src/retail.mjs；src/server.mjs::/api/retail/buy；public/app.js::renderRetail；legacy_inventory_items | **百貨店一／二單件現金購物已實作，待瀏覽器驗收；其他建築缺漏** | 兩店依原始 33 欄每日各最多 110 非食商品、三倍售價、共用貨架／庫存、25 格、本人入庫／防重 SQLite 交易；多件、原作堆疊、信用付款、同城回饋與各別商店流程未完成 | P1（建築優先） | 每個有實體地圖建築的交易分別比對來源、舊存檔、多人併發、跨日及實機；先完善百貨規則，再自販機、裝備／禮品、回收與批發 |
 | IT-04 優惠券獲得與兌換 | coupon.cgi::coupon/coupon_do L34–170；dat_dir/coupon.cgi；event.pl #30/#35 | src/event-effects.mjs；src/events.mjs 已保存 Web 事件所得券數；無兌換/獎品交易 | 部分完成（原版兌換確定缺漏） | 原版從本人 mono.cgi 的「ギフト/クーポン」耐久扣除每筆「クーポン交換品:N」點數，並添 33 欄獎品；Web 事件券與舊匯入券尚非同一保存模型。沒有找到券本身跨日歸零/過期分支，不能把此當作原版既有規則 | P1 | 30 筆獎品/點數核對、真正所有權/容量/耐久、匯入券與 Web 事件券對帳、重送/回滾；不虛構券到期 |
 | IT-05 原版釣魚與漁獲出售 | unit.pl L77；sea.cgi::turu L139–186、::seri L244–283 | Web 無釣魚／漁獲出售完整模組 | **確定缺漏** | 原版驗證餌料及釣魚間隔，按釣獲階級生成物品與不同出售價格，與食堂／物品封存不同 | P2 | 餌料、抽選、原始魚種、背包、出售金額、防重與交易回滾 |
 | IT-06 原版拍賣場刊登與結算 | unit.pl L189；auction.cgi::auction L49–72、::syupin、::syupin_do、::ukewatashi | Web 無該拍賣／結算流程 | **確定缺漏** | 原版使用獨立拍賣紀錄與刊登、交付分支；不同於普通商店／回收 | P2 | 物品所有權、有效期、競價、交付與多人交易競態 |
