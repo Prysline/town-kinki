@@ -1,5 +1,5 @@
 // 依原版 top.pl（空腹度）、town_lib.pl（BMI）與 command.pl（食堂）移植。
-// 兩份食堂資料目前固定列出，原版每日抽選／共用庫存待另行完成。
+// 餐點基本效果依原版；每日抽選與共用庫存由 dining-stock.mjs 管理。
 export const MEAL_COOLDOWN_MS = 60 * 60 * 1000;
 export const HUNGER_LABELS = Object.freeze({
   untracked:"尚無用餐紀錄", full:"飽足", comfortable:"剛剛好",
@@ -39,13 +39,14 @@ export function parseLegacyMeals(source, menu = "main") {
     ));
     const price=sourceNumber(f[17],"售價")*3;
     const calories=sourceNumber(f[25],"熱量");
+    const stock=sourceNumber(f[24],"來源庫存");
     if (!Number.isSafeInteger(price)) throw new Error("食物售價超出安全上限");
     const originalName=f[1];
     const base=originalName.replace(/2$/,"");
     return [{
       key:"meal-"+menu+"-"+(index+2),
       name:TRANSLATIONS[base] || originalName,
-      originalName,menu,price,calories,gains
+      originalName,menu,price,calories,gains,stock
     }];
   });
 }
