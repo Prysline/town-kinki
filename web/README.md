@@ -4,7 +4,7 @@
 
 > **整合狀態（2026-11-20）**：PR #9～#18 已依序合併到 `feature/web-dual-mode-phase1`；`master` 仍保留原版 Perl/CGI。已包含原版 BMI 職業門檻、捨入邊界、體格摘要、部分舊角色圖示預覽及美容物品回歸測試。這些是局部成果，**不代表整套遊戲、真實玩家存檔或瀏覽器視覺驗收完成**。
 
-> **第 30 階段盤點與後續工作**：[原版 CGI → Web 差異矩陣（14 領域、44 個事件）](docs/migration-audit.md) 持續記錄有來源的功能、缺口及驗收；[外貌與玩家圖示](docs/appearance-source-audit.md) 已重核原版數值／圖示；[職業、獨立教室與公開個人檔案逐函式盤點](docs/phase30-jobs-training-profile-audit.md) 記錄原版確實存在、Web 尚未完整移植的數值表、薪資去向、教室訓練／減重、個人檔案與職業投稿。歷史 [盤點工作契約](docs/PHASE30-MIGRATION-INVENTORY-PLAN.md) 不是驗收證明；真實舊資料與瀏覽器仍待驗收。
+> **第 30 階段盤點與後續工作**：[現行原版 → Web 差異矩陣](docs/migration-audit.md)、[全 43 個原版地圖互動入口與 Web 導覽覆蓋表](docs/phase30-entrypoint-coverage.md)、[外貌與圖示來源](docs/appearance-source-audit.md)、[職業／教室／公開個人檔案](docs/phase30-jobs-training-profile-audit.md) 分別追溯原版程式與實際缺漏。**新清冊設有自動核對原版 `unit.pl` 和 Web 圖示代碼的 CI 測試**；歷史 [工作契約](docs/PHASE30-MIGRATION-INVENTORY-PLAN.md) 不是驗收證明。實際玩家資料／瀏覽器仍待驗收。
 
 ## 本階段已完成
 
