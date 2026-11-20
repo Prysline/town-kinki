@@ -1412,8 +1412,8 @@ function render() {
   renderInsurance();
   const ready = Boolean(state.currentJob) && state.workCooldownMs === 0 &&
     state.condition?.baseExperience !== null;
-  el("work").disabled = !ready;
-  el("home-work").disabled = !ready;
+  el("work").disabled = !ready || savingSalaryPayment;
+  el("home-work").disabled = !ready || savingSalaryPayment;
   text("cooldown", !state.currentJob ? "請先前往職業介紹所選擇工作。" :
     state.workCooldownMs > 0 ? "距離下次工作約 " + Math.ceil(state.workCooldownMs / 1000) + " 秒。" :
       "工作冷卻時間已結束。");
