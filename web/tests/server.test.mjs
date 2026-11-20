@@ -2696,3 +2696,54 @@ test("原版自販機 HTTP：必須有地圖建築、使用原價、跨玩家共
     })).status,400);
   }finally{await srv.stop();}
 });
+
+
+test("自販機爽快牛奶從原始商品實際買入、回復頭腦能量並扣除耐久",async()=>{
+  const srv=await start("solo");
+  try{
+    const created=await api(srv.url,"character",{
+      name:"原版牛奶效果驗收",gender:"other",stats:defaultStats()
+    });
+    assert.equal(created.status,200);
+    const placed=await api(srv.url,"map/tile",{row:0,column:0,symbol:"自販機"});
+    assert.equal(placed.status,200);
+    const sku="vending-2"; // dat_dir/jihanki.cgi 第二行「爽快ミルク」，效果「効果」/腦力消耗 -500
+    if(!placed.result.vendingGoods.some(x=>x.sku===sku)){
+      const db=new DatabaseSync(join(srv.directory,"solo.sqlite"));
+      try{
+        const first=db.prepare("SELECT position FROM vending_stock ORDER BY position LIMIT 1").get();
+        db.prepare("UPDATE vending_stock SET sku=?,remaining=30 WHERE position=?")
+          .run(sku,first.position);
+      }finally{db.close();}
+    }
+    const current=await api(srv.url,"state");
+    const item=current.result.vendingGoods.find(x=>x.sku===sku);
+    assert.ok(item);
+    assert.equal(item.price,800);
+    assert.equal(item.name,"爽快ミルク");
+    const buy=await api(srv.url,"retail/buy",{
+      shop:"vending",sku,quantity:1,requestId:"vending_milk_http_buy"
+    });
+    assert.equal(buy.status,200);
+    const line=buy.result.retailResult.sourceLine;
+    assert.ok(buy.result.legacyItemActions.some(x=>x.sourceLine===line&&x.canUse));
+    const db=new DatabaseSync(join(srv.directory,"solo.sqlite"));
+    try{
+      db.prepare("UPDATE characters SET brain_energy=0,recovered_at=? WHERE name='原版牛奶效果驗收'")
+        .run(buy.result.gameTimeMs);
+    }finally{db.close();}
+    const used=await api(srv.url,"inventory/legacy/use",{
+      sourceLine:line,requestId:"vending_milk_http_use"
+    });
+    assert.equal(used.status,200);
+    assert.ok(used.result.itemUseResult.changes.brainEnergy>0);
+    assert.equal(used.result.itemUseResult.replayed,false);
+    assert.equal(used.result.legacyItemActions.find(x=>x.sourceLine===line).remaining,0);
+    const again=await api(srv.url,"inventory/legacy/use",{
+      sourceLine:line,requestId:"vending_milk_http_use"
+    });
+    assert.equal(again.status,200);
+    assert.equal(again.result.itemUseResult.replayed,true);
+    assert.equal(again.result.legacyItemHistory.length,1);
+  }finally{await srv.stop();}
+});

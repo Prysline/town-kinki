@@ -88,6 +88,55 @@ test("只允許原版 33 欄與可確定的「回」耐久效果，特殊道具�
   }finally{db.close();}
 });
 
+test("原版自販機牛奶「効果」透過負能量消耗實際回復，冷卻及請求防重不變",()=>{
+  const db=createDb();
+  try{
+    db.prepare("UPDATE characters SET brain_energy=0,body_energy=0 WHERE user_id=1").run();
+    addItem(db,1,archived({category:"ドリンク",name:"爽快ミルク",effect:"効果",
+      durability:2,interval:3,bodyCost:0,brainCost:-500,calories:300,
+      bonuses:{kokugo:1}}));
+    addItem(db,2,archived({category:"ドリンク",name:"元気ミルク",effect:"効果",
+      durability:1,interval:3,bodyCost:-500,brainCost:0,calories:300}));
+    const available=listLegacyItemActions(db,1,{
+      bodyEnergy:0,brainEnergy:0,lastMealAt:0
+    },NOW);
+    assert.deepEqual(available.map(x=>x.sourceLine),[1,2]);
+    assert.ok(available.every(x=>x.canUse));
+    const first=use(db,1,"vending_milk_brain");
+    assert.equal(first.replayed,false);
+    assert.ok(first.changes.brainEnergy>0);
+    assert.equal(first.changes.stats.kokugo,1);
+    assert.equal(read(db).weight,60.3);
+    assert.equal(db.prepare("SELECT remaining FROM legacy_item_usage WHERE source_line=1").get().remaining,1);
+    assert.throws(()=>use(db,1,"vending_milk_cooldown",NOW+1000),/間隔/);
+    const again=use(db,1,"vending_milk_brain",NOW+10000);
+    assert.equal(again.replayed,true);
+    assert.deepEqual(again.changes,first.changes);
+    assert.equal(db.prepare("SELECT remaining FROM legacy_item_usage WHERE source_line=1").get().remaining,1);
+    const body=use(db,2,"vending_milk_body",NOW);
+    assert.ok(body.changes.bodyEnergy>0);
+    assert.equal(db.prepare("SELECT remaining FROM legacy_item_usage WHERE source_line=2").get().remaining,0);
+    assert.equal(listLegacyItemUseHistory(db,1).length,2);
+  }finally{db.close();}
+});
+
+test("沒有來源證實的「効果」商品與篡改能量欄位不能假冒自販機牛奶",()=>{
+  const db=createDb();
+  try{
+    addItem(db,1,archived({category:"ドリンク",name:"仿製牛奶",effect:"効果",
+      bodyCost:0,brainCost:-500}));
+    addItem(db,2,archived({category:"ドリンク",name:"爽快ミルク",effect:"効果",
+      bodyCost:0,brainCost:-501}));
+    addItem(db,3,archived({category:"ドリンク",name:"爽快ミルク",effect:"効果,1",
+      bodyCost:0,brainCost:-500}));
+    const actions=listLegacyItemActions(db,1,{bodyEnergy:25,brainEnergy:35,lastMealAt:0},NOW);
+    assert.deepEqual(actions,[]);
+    for(let i=1;i<=3;i++)
+      assert.throws(()=>use(db,i,"fake-milk-"+i+"-0001"),/尚未支援/);
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM legacy_item_usage").get().n,0);
+  }finally{db.close();}
+});
+
 test("感冒藥依原版只在風邪分類增加疾病指數，扣除使用次數並保存獨立歷史",()=>{
   const db=createDb();
   try{

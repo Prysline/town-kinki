@@ -36,12 +36,21 @@ function parseArchivedItem(row){
       NON_CONSUMABLE.has(row.category)||row.original_name==="ランダム品")
     return null;
   const parts=raw[9].split(",");
-  if(parts.length>2||!SPECIAL_TYPES.has(parts[0]))return null;
+  if(parts.length>2)return null;
   const effect=parts[0];
-  if(effect!=="無"&&(parts.length!==2||!/^\d+$/.test(parts[1])))return null;
-  if(effect==="無"&&parts.length!==1)return null;
-  // 排除以效果字串重新分類的商品、特殊禮物或需要尚未移植系統的功能。
-  const magnitude=effect==="無"?0:nonnegative(parts[1],"特殊效果",100000);
+  // basic.cgi::item_do 對「効果」沒有特殊增加值的分支。
+  // 原版兩款牛奶的第 28/29 欄是 -500 能量消耗（即恢復）；只有它們可安全使用。
+  const originalEnergyDrink=effect==="効果"&&row.category==="ドリンク"&&
+    parts.length===1&&(
+      (row.original_name==="元気ミルク"&&raw[27]==="-500"&&raw[28]==="0")||
+      (row.original_name==="爽快ミルク"&&raw[27]==="0"&&raw[28]==="-500")
+    );
+  if(!SPECIAL_TYPES.has(effect)&&!originalEnergyDrink)return null;
+  if(effect!=="無"&&!originalEnergyDrink&&
+     (parts.length!==2||!/^\d+$/.test(parts[1])))return null;
+  if((effect==="無"||originalEnergyDrink)&&parts.length!==1)return null;
+  const magnitude=effect==="無"||originalEnergyDrink?0:
+    nonnegative(parts[1],"特殊效果",100000);
   const bonuses=Object.fromEntries(STAT_KEYS.map((key,index)=>[
     key,signedNumber(raw[STATS_INDEX[index]],key+"能力增減")
   ]));
