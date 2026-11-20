@@ -88,6 +88,7 @@
 | HS-01 建屋／賣屋／改裝 | town_ini.cgi；original_house.cgi | src/housing.mjs；tests/housing.test.mjs | 部分完成 | 基礎住宅有功能；全部特殊地形與交易規則未逐檔覆核 | P1 | 同格競態、現金／銀行、售後還原、回滾（31） |
 | HS-02 室內公告／留言與訪客權限 | original_house.cgi；command.pl L214-L218 | src/rooms.mjs；tests/rooms.test.mjs | 部分完成 | 主流程存在；舊版角色關聯日誌尚未完整匯入 | P1 | 屋主、訪客、出售搬家保留、越權拒絕（31） |
 | HS-03 商店／企業／分店／特殊住宅 | command.pl；kaishiya.pl；hanbai.cgi；original_house.cgi | 尚無完整 Web 對應模組 | 未實作 | 依賴商品市場、玩家間交易、房屋存檔、經濟模型 | P2 | 先盤點各種設施使用條件與原始存檔，分 PR 建立（後續） |
+| HS-04 企業員工教育／員工紀錄 | original_house.cgi L21、L1586 → unei_2.pl::unei_2；member/<ID>/<slot>_log.cgi | 無 Web 企業員工訓練／名冊模型 | **確定缺漏（由住宅實際呼叫）** | 原版可增員工、花費自身能力訓練員工、限制名額與間隔，含現金/信用分支；和普通住宅房間留言不同；原版部分付款及可達性須再核實 | P2（企業／資料相依） | 住宅入口、slot 與員工資料格式、真實舊檔、能力扣除/付款驗證、防重及多人隔離 |
 
 ### 07 銀行／資產
 
