@@ -61,12 +61,20 @@ function nowValid(now) {
 // 唯有來源確為本 Web 真實購買、33 欄一致的保險才接受為舊購物過渡來源。
 // 已同步的保險不重複相加，統一取真正最晚的有效期限。
 function retailInsuranceExpiry(db,userId){
-  if(!db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='legacy_inventory_items'").get())
-    return {expiresAt:0,lastPurchasedAt:null};
+  const tables=db.prepare([
+    "SELECT name FROM sqlite_master WHERE type='table'",
+    "AND name IN ('legacy_inventory_items','retail_purchases')"
+  ].join(" ")).all();
+  if(tables.length!==2)return {expiresAt:0,lastPurchasedAt:null};
   const rows=db.prepare([
-    "SELECT durability,purchased_at,category,original_name,effect,durability_unit,raw_fields_json",
-    "FROM legacy_inventory_items WHERE user_id=? AND original_id='__web_retail__'",
-    "AND category='日用品' AND original_name='健康保険' AND effect='無' AND durability_unit='日'"
+    "SELECT i.durability,i.purchased_at,i.category,i.original_name,i.effect,",
+    "i.durability_unit,i.raw_fields_json",
+    "FROM legacy_inventory_items i WHERE i.user_id=?",
+    "AND i.original_id='__web_retail__' AND i.category='日用品'",
+    "AND i.original_name='健康保険' AND i.effect='無' AND i.durability_unit='日'",
+    "AND EXISTS (SELECT 1 FROM retail_purchases p WHERE p.user_id=i.user_id",
+    "AND p.source_line=i.source_line AND p.sku='legacy-356'",
+    "AND p.name='健康保険' AND p.shop IN ('depart1','depart2'))"
   ].join(" ")).all(userId);
   let expiresAt=0,lastPurchasedAt=null;
   for(const row of rows){

@@ -184,6 +184,22 @@ test("舊版百貨已購入的真實 33 欄健康保險可被醫院辨識，續�
   }finally{db.close();}
 });
 
+test("完整 33 欄若沒有本人百貨交易流水，仍不能自行獲得醫療保險",()=>{
+  const db=setup();try{
+    initRetailTables(db);
+    const raw=Array(33).fill("0");
+    raw[0]="日用品";raw[1]="健康保険";raw[9]="無";
+    raw[21]="30";raw[22]="日";raw[30]=String(NOW/1000);
+    db.prepare([
+      "INSERT INTO legacy_inventory_items(user_id,original_id,source_line,category,original_name,",
+      "effect,durability,durability_unit,purchased_at,last_used_at,raw_fields_json)",
+      "VALUES(?,?,?,?,?,?,?,?,?,?,?)"
+    ].join(" ")).run(1,"__web_retail__",1000001,"日用品","健康保険",
+      "無",30,"日",NOW/1000,0,JSON.stringify(raw));
+    assert.equal(hasActiveHealthInsurance(db,1,insurance,NOW),false);
+  }finally{db.close();}
+});
+
 test("同名偽造或內容不一致的百貨保險不能取得醫院折扣",()=>{
   const db=setup();try{
     initLegacyInventoryTables(db);
