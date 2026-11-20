@@ -392,6 +392,7 @@ function renderTownMap() {
             if(cell.key==="装備屋")renderEquipment();
             if(cell.key==="ギフト屋")renderGiftShop();
             if(cell.key==="リサイ")renderRecycle();
+            if(cell.key==="問屋")renderWholesale();
           }
           else if(destination.kind==="station"){
             el("station-heading").scrollIntoView({behavior:"smooth",block:"start"});
@@ -453,7 +454,7 @@ function renderRoom() {
     button.type = "button";
     button.className = view.selectedIndex === slot.index ? "primary" : "secondary";
     button.textContent = slot.title || (slot.type === "0" ? "一般留言板" :
-      slot.type === "3" ? "屋主公告板" : "自訂網址");
+      slot.type === "3" ? "屋主公告板" : slot.type==="1"?"玩家商店":"自訂網址");
     button.addEventListener("click", () => openRoom(view.houseId, slot.index, false));
     nav.append(button);
   }
@@ -472,6 +473,25 @@ function renderRoom() {
     empty.textContent = view.owner ?
       "尚未公開任何室內內容，請先設定下方欄位。" : "尚無可觀看的內容。";
     body.append(empty);
+  } else if (current.type === "1") {
+    const note=document.createElement("p");
+    note.className="small";
+    const shop=(state.myShops??[]).find(x=>x.houseId===view.houseId);
+    note.textContent=shop?
+      "住宅商店「"+shop.title+"」｜分類："+shop.category+
+      "｜店鋪已可向原版問屋進貨；對外零售尚未移植。":
+      "這間住宅設有原版玩家商店欄位；屋主尚未完成店鋪分類與名稱設定。";
+    body.append(note);
+    if(view.owner){
+      const button=document.createElement("button");
+      button.type="button";button.textContent="前往問屋／設定商店";
+      button.addEventListener("click",()=>{
+        selectedWholesaleHouseId=view.houseId;
+        goToFacility("wholesale-panel");
+        renderWholesale();
+      });
+      body.append(button);
+    }
   } else if (current.type === "2") {
     const note = document.createElement("p");
     note.className = "small";
@@ -1844,6 +1864,215 @@ function renderRecycle(){
   }
 }
 
+
+let selectedWholesaleHouseId=null;
+let pendingWholesaleOrder=null;
+async function submitWholesaleAction(action,{houseId,sku,name,quantity,price}){
+  if(!["buy","return"].includes(action))return;
+  if(!window.confirm(
+    (action==="buy"?"確定從問屋進貨「":"確定把商店貨物退回問屋「")+
+    name+"」 "+(quantity===0?"全部剩餘":quantity+" 件")+"，"+
+    (action==="buy"?"從普通存款支付 ":"退回普通存款 ")+money(price)+" 嗎？"
+  ))return;
+  if(!pendingWholesaleOrder||
+     pendingWholesaleOrder.action!==action||
+     pendingWholesaleOrder.houseId!==houseId||
+     pendingWholesaleOrder.sku!==sku||
+     pendingWholesaleOrder.quantity!==quantity){
+    pendingWholesaleOrder={action,houseId,sku,quantity,requestId:crypto.randomUUID()};
+  }
+  const body={houseId,sku,quantity,requestId:pendingWholesaleOrder.requestId};
+  try{
+    state=await api("wholesale/"+action,body);
+    const result=state.wholesaleResult;
+    pendingWholesaleOrder=null;
+    render();
+    notify(result.replayed?"這筆問屋交易已結帳，沒有重複扣款、加貨或退貨。":
+      (action==="buy"?"已進貨「":"已退貨「")+result.name+"」×"+
+      (action==="return"?(result.returned??quantity):quantity)+"，"+
+      (result.amount<0?"普通存款扣除 ":"普通存款增加 ")+money(Math.abs(result.amount))+"。");
+  }catch(error){notify(error.message,true);}
+}
+function renderWholesale(){
+  if(!state?.character)return;
+  const available=state.wholesaleAvailable===true;
+  const houseSelect=el("wholesale-house-select");
+  const category=el("wholesale-category");
+  const titleInput=el("wholesale-shop-title");
+  const oldCategory=category.value;
+  houseSelect.replaceChildren();
+  for(const house of state.houses??[]){
+    const o=document.createElement("option");
+    o.value=String(house.id);
+    o.textContent=house.name+"（"+house.location+"）";
+    houseSelect.append(o);
+  }
+  const houses=state.houses??[];
+  if(!houses.some(h=>h.id===selectedWholesaleHouseId))
+    selectedWholesaleHouseId=houses[0]?.id??null;
+  houseSelect.value=selectedWholesaleHouseId===null?"":String(selectedWholesaleHouseId);
+  const shop=(state.myShops??[]).find(x=>x.houseId===selectedWholesaleHouseId);
+  category.replaceChildren();
+  for(const kind of state.shopCategories??[]){
+    const o=document.createElement("option");
+    o.value=kind;o.textContent=kind;
+    category.append(o);
+  }
+  category.value=shop?.category??(
+    (state.shopCategories??[]).includes(oldCategory)?oldCategory:
+      (state.shopCategories??[]).find(x=>x!=="スーパー")??"");
+  titleInput.value=shop?.title??"";
+  el("wholesale-shop-save").disabled=!selectedWholesaleHouseId;
+  text("wholesale-status",available?
+    "目前城鎮設有問屋｜本期 "+(state.wholesaleGoods?.length??0)+
+    " 種商品，共用庫存、來源原價、普通銀行付款（貨架按遊戲日期更新）。":
+    "目前城鎮沒有「問屋」；可以先在自己的住宅配置玩家商店，但不能進貨。");
+  text("wholesale-shop-summary",!houses.length?
+    "你尚無住宅。必須先建立住宅，於室內配置中選「玩家商店」，再設定店鋪類別。":
+    shop?"已設定「"+shop.title+"」（"+shop.category+
+      "）｜店鋪倉庫 "+shop.inventory.length+"/100 種；變更類別會清除庫存。":
+    "請先進入本人住宅，把至少一個室內欄位設為「玩家商店」，再於此設定店名與類別。");
+  const goods=el("wholesale-goods");goods.replaceChildren();
+  const search=(el("wholesale-search").value??"").trim().toLocaleLowerCase();
+  const matching=(state.wholesaleGoods??[]).filter(item=>
+    (!search||(item.name+" "+item.category).toLocaleLowerCase().includes(search))&&
+    (!shop||shop.category==="スーパー"||
+     item.category===shop.category)
+  );
+  for(const item of matching.slice(0,40)){
+    const tile=document.createElement("div");tile.className="training-tile";
+    const heading=document.createElement("strong");
+    heading.textContent=item.name+"｜"+item.category;
+    const note=document.createElement("p");note.className="small";
+    note.textContent="原價 "+money(item.price)+"｜本期共用庫存 "+item.stock;
+    const quantityLabel=document.createElement("label");
+    quantityLabel.textContent="進貨數量（1～100）";
+    const quantity=document.createElement("input");
+    quantity.type="number";quantity.min="1";quantity.max="100";
+    quantity.step="1";quantity.value="1";quantityLabel.append(quantity);
+    const quote=document.createElement("p");quote.className="small";
+    const button=document.createElement("button");button.type="button";
+    const update=()=>{
+      const n=Number(quantity.value);
+      const cost=Math.ceil(item.price*n*(shop?.category==="スーパー"?1.5:1));
+      const owned=shop?.inventory.find(x=>x.sku===item.sku)?.quantity??0;
+      const restricted=shop?.category==="スーパー"&&
+        /専門店限定商品|秘伝商品/.test(item.note??"");
+      const ok=available&&Boolean(shop)&&Number.isSafeInteger(n)&&n>=1&&
+        n<=100&&n<=item.stock&&owned+n<=100&&
+        Number.isSafeInteger(cost)&&cost<=state.character.bank&&!restricted;
+      button.disabled=!ok;
+      button.textContent=restricted?"原版專賣店限定":
+        !shop?"尚未設定商店":!available?"本城無問屋":
+        item.stock<=0?"庫存不足":"進貨到商店倉庫";
+      quote.textContent="合計 "+money(cost)+(shop?.category==="スーパー"?"（超市×1.5）":"")+
+        (owned?"｜店內既有 "+owned+" 件":"")+
+        (cost>state.character.bank?"｜普通存款不足":"");
+    };
+    quantity.addEventListener("input",update);
+    button.addEventListener("click",()=>{
+      const n=Number(quantity.value);
+      if(!Number.isSafeInteger(n)||n<1||n>100){notify("進貨數量需為 1～100",true);return;}
+      submitWholesaleAction("buy",{
+        houseId:selectedWholesaleHouseId,sku:item.sku,
+        name:item.name,quantity:n,
+        price:Math.ceil(item.price*n*(shop?.category==="スーパー"?1.5:1))
+      });
+    });
+    update();tile.append(heading,note,quantityLabel,quote,button);goods.append(tile);
+  }
+  if(matching.length>40){
+    const note=document.createElement("p");note.className="small";
+    note.textContent="僅顯示前 40 筆，共 "+matching.length+" 筆符合搜尋；請輸入商品名稱縮小範圍。";
+    goods.append(note);
+  }
+  if(!matching.length){
+    const note=document.createElement("p");note.className="small";
+    note.textContent=available?"目前沒有符合類別／搜尋條件的問屋商品。":"目前沒有可瀏覽的問屋貨架。";
+    goods.append(note);
+  }
+  const warehouse=el("wholesale-inventory");warehouse.replaceChildren();
+  for(const stock of shop?.inventory??[]){
+    const tile=document.createElement("div");tile.className="training-tile";
+    const name=document.createElement("strong");
+    name.textContent=stock.name+"｜"+stock.category;
+    const note=document.createElement("p");note.className="small";
+    note.textContent="店鋪庫存 "+stock.quantity+" 件｜每件進貨原價 "+money(stock.unitPrice);
+    const qtyLabel=document.createElement("label");
+    qtyLabel.textContent="退貨數量（0 表示全部）";
+    const qty=document.createElement("input");
+    qty.type="number";qty.min="0";qty.max=String(stock.quantity);
+    qty.step="1";qty.value="0";qtyLabel.append(qty);
+    const refund=document.createElement("p");refund.className="small";
+    const button=document.createElement("button");
+    button.type="button";button.textContent="退貨至普通銀行";
+    const update=()=>{
+      const n=Number(qty.value),moved=n===0?stock.quantity:n;
+      const valid=Number.isSafeInteger(n)&&n>=0&&n<=stock.quantity;
+      const total=Math.floor(moved*stock.unitPrice*
+        (shop.category==="スーパー"?1.5:1)*0.75);
+      button.disabled=!valid;
+      refund.textContent="預估退款 "+money(total)+"（原版進貨價×75%）";
+    };
+    qty.addEventListener("input",update);
+    button.addEventListener("click",()=>{
+      const n=Number(qty.value);
+      if(!Number.isSafeInteger(n)||n<0||n>stock.quantity){notify("退貨數量無效",true);return;}
+      const amount=Math.floor((n||stock.quantity)*stock.unitPrice*
+        (shop.category==="スーパー"?1.5:1)*0.75);
+      submitWholesaleAction("return",{houseId:shop.houseId,sku:stock.sku,
+        name:stock.name,quantity:n,price:amount});
+    });
+    update();tile.append(name,note,qtyLabel,refund,button);warehouse.append(tile);
+  }
+  if(!warehouse.childElementCount){
+    const note=document.createElement("p");note.className="small";
+    note.textContent="這間住宅商店尚無從問屋進貨的庫存。";
+    warehouse.append(note);
+  }
+  const history=el("wholesale-history");history.replaceChildren();
+  const list=document.createElement("ol");list.className="health-event-list";
+  for(const entry of state.wholesaleHistory??[]){
+    const line=document.createElement("li");
+    line.textContent=new Date(entry.createdAt).toLocaleString("zh-TW")+"｜"+
+      (entry.action==="buy"?"進貨":"退貨")+"｜"+entry.name+" ×"+entry.quantity+
+      "｜"+(entry.amount<0?"普通存款扣除 ":"普通存款增加 ")+
+      money(Math.abs(entry.amount));
+    list.append(line);
+  }
+  if(list.childElementCount)history.append(list);
+  else{
+    const note=document.createElement("p");note.className="small";
+    note.textContent="尚無問屋進貨或退貨紀錄。";history.append(note);
+  }
+}
+el("wholesale-house-select").addEventListener("change",event=>{
+  selectedWholesaleHouseId=Number(event.target.value);
+  renderWholesale();
+});
+el("wholesale-category").addEventListener("change",()=>{
+  // 使用者選擇分類時保存輸入，避免重新顯示庫存時自行清空商店設定。
+});
+el("wholesale-search").addEventListener("input",renderWholesale);
+el("wholesale-shop-save").addEventListener("click",async()=>{
+  const houseId=selectedWholesaleHouseId;
+  const category=el("wholesale-category").value;
+  const title=el("wholesale-shop-title").value.trim();
+  const previous=(state.myShops??[]).find(x=>x.houseId===houseId);
+  const changed=previous&&previous.category!==category&&previous.inventory.length>0;
+  const confirmClear=Boolean(changed)&&window.confirm(
+    "原版切換商店類別會永久清空現有的 "+previous.inventory.length+
+    " 種進貨庫存且不退費。確定繼續嗎？"
+  );
+  if(changed&&!confirmClear)return;
+  try{
+    state=await api("shop/config",{houseId,category,title,confirmClear});
+    render();
+    notify(state.wholesaleResult.stockCleared?
+      "商店類別已變更，原有貨物依原版規則清除。":"住宅商店設定已儲存。");
+  }catch(error){notify(error.message,true);}
+});
+
 function renderTraining() {
   const oldChoices=new Map([...el("classroom-lessons").querySelectorAll("select[data-lesson-key]")]
     .map(item=>[item.dataset.lessonKey,item.value]));
@@ -2082,6 +2311,7 @@ function render() {
   renderEquipment();
   renderGiftShop();
   renderRecycle();
+  renderWholesale();
   renderInsurance();
   const ready = Boolean(state.currentJob) && state.workCooldownMs === 0 &&
     state.condition?.baseExperience !== null;

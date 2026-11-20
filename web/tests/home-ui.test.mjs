@@ -103,7 +103,7 @@ test("原 CGI 建築代碼只連到 Web 真正已實作的設施入口",()=>{
   const expected={
     "銀行":"bank-panel","病院":"hospital-panel","職安":"jobs-panel",
     "教室":"classroom-panel","食堂":"dining-panel","食堂２":"dining-panel",
-    "デパ":"retail-panel","デパ2":"retail-panel","自販機":"vending-panel","装備屋":"equipment-panel","ギフト屋":"gift-panel","リサイ":"recycle-panel","建築":"housing-panel"
+    "デパ":"retail-panel","デパ2":"retail-panel","自販機":"vending-panel","装備屋":"equipment-panel","ギフト屋":"gift-panel","リサイ":"recycle-panel","問屋":"wholesale-panel","建築":"housing-panel"
   };
   assert.deepEqual(FACILITY_PANELS,expected);
   for(const [key,panelId] of Object.entries(expected)){
@@ -188,6 +188,23 @@ test("原版「リサイ」回收商店真實地圖入口、二手貨架與本�
   assert.match(script,/state\.recycleSellable/);
   assert.match(script,/api\("recycle\/"\+action,body\)/);
   assert.match(script,/if\(cell\.key==="リサイ"\)renderRecycle\(\)/);
+});
+
+test("原版問屋入口與住宅商店設定、普通銀行結帳、倉庫及退貨 UI",()=>{
+  assert.deepEqual(townCellAction(describeTile("問屋")),
+    {kind:"facility",panelId:"wholesale-panel"});
+  for(const id of ["wholesale-panel","wholesale-status","wholesale-house-select",
+      "wholesale-category","wholesale-shop-title","wholesale-shop-save",
+      "wholesale-goods","wholesale-inventory","wholesale-history"])
+    assert.match(html,new RegExp('id="'+id+'"'));
+  assert.match(html,/command\.pl::orosi/);
+  assert.match(html,/tonya|問屋/);
+  assert.match(script,/function renderWholesale\(\)/);
+  assert.match(script,/api\("wholesale\/"\+action,body\)/);
+  assert.match(script,/api\("shop\/config"/);
+  assert.match(script,/state\.wholesaleGoods/);
+  assert.match(script,/state\.myShops/);
+  assert.match(script,/if\(cell\.key==="問屋"\)renderWholesale\(\)/);
 });
 
 test("原版教室必須導向獨立教室，而非誤開學校或健身房",()=>{

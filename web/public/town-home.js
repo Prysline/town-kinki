@@ -12,6 +12,7 @@ export const FACILITY_PANELS=Object.freeze({
   "装備屋":"equipment-panel",
   "ギフト屋":"gift-panel",
   "リサイ":"recycle-panel",
+  "問屋":"wholesale-panel",
   "建築":"housing-panel"
 });
 const BUILDABLE=new Set(["空地","空地2","空地3","空地4"]);

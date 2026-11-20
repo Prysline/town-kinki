@@ -922,7 +922,7 @@ test("多人：訪客可留言但不可改設定，屋主公告與自訂網址�
     assert.equal((await api(srv.url,visit,undefined,b.cookie)).result.posts[0].body,"正式公告");
     assert.equal((await api(srv.url,"house/room/config",{
       houseId,slots:[{type:"1",title:"商店"}]
-    },a.cookie)).status,400);
+    },a.cookie)).status,200);
     assert.equal((await api(srv.url,"house/room/config",{
       houseId,slots:[{type:"2",title:"偽連結",url:"javascript:alert(1)"}]
     },a.cookie)).status,400);
@@ -3068,5 +3068,97 @@ test("回收商店 HTTP：原版建築、本人出售、二手市場買回、30 
     });
     assert.equal(denied.status,400);
     assert.match(denied.result.error,/沒有回收商店/);
+  }finally{await srv.stop();}
+});
+
+
+test("原版問屋 HTTP：必有本人住宅商店及地圖建築，普通銀行進貨、店鋪庫存與退貨",async()=>{
+  const srv=await start("solo");
+  try{
+    const created=await api(srv.url,"character",{
+      name:"批發商店測試玩家",gender:"other",stats:defaultStats()
+    });
+    assert.equal(created.status,200);
+    assert.equal(created.result.wholesaleAvailable,false);
+    assert.deepEqual(created.result.myShops,[]);
+    await api(srv.url,"move",{townId:3});
+    const placedLot=await api(srv.url,"map/tile",{row:0,column:0,symbol:"空地"});
+    assert.equal(placedLot.status,200);
+    const bankDb=new DatabaseSync(join(srv.directory,"solo.sqlite"));
+    try{bankDb.prepare("UPDATE characters SET bank=100000000 WHERE name='批發商店測試玩家'").run();}
+    finally{bankDb.close();}
+    const built=await api(srv.url,"house/build",{
+      row:0,column:0,image:"house/kamakura.gif",interiorRank:3,payment:"bank"
+    });
+    assert.equal(built.status,200);
+    const houseId=built.result.houses[0].id;
+    assert.equal((await api(srv.url,"shop/config",{
+      houseId,category:"食料品",title:"還沒室內欄位"
+    })).status,400);
+    const enabled=await api(srv.url,"house/room/config",{
+      houseId,slots:[{type:"1",title:"原版商店"}]
+    });
+    assert.equal(enabled.status,200);
+    const configured=await api(srv.url,"shop/config",{
+      houseId,category:"食料品",title:"試營運食料品店"
+    });
+    assert.equal(configured.status,200);
+    assert.equal(configured.result.myShops[0].category,"食料品");
+    assert.equal(configured.result.myShops[0].title,"試營運食料品店");
+    assert.equal((await api(srv.url,"wholesale/buy",{
+      houseId,sku:"wholesale-2",quantity:1,requestId:"wholesale_http_no_building"
+    })).status,400);
+    const map=await api(srv.url,"map/tile",{
+      row:0,column:1,symbol:"問屋"
+    });
+    assert.equal(map.status,200);
+    assert.equal(map.result.wholesaleAvailable,true);
+    assert.equal(map.result.wholesaleGoods.length,120);
+    const chosen=map.result.wholesaleGoods.find(x=>
+      x.category==="食料品"&&x.stock>=3&&x.price<10000);
+    assert.ok(chosen,"原版 120 種隨機貨架必須存在一項可測的日用品");
+    const cash=map.result.character.money,bank=map.result.character.bank;
+    const payload={houseId,sku:chosen.sku,quantity:2,
+      requestId:"wholesale_http_buy_two"};
+    const bought=await api(srv.url,"wholesale/buy",payload);
+    assert.equal(bought.status,200);
+    assert.equal(bought.result.wholesaleResult.amount,-chosen.price*2);
+    assert.equal(bought.result.character.money,cash);
+    assert.equal(bought.result.character.bank,bank-chosen.price*2);
+    assert.equal(bought.result.myShops[0].inventory[0].quantity,2);
+    assert.equal(bought.result.myShops[0].inventory[0].name,chosen.name);
+    assert.equal(bought.result.legacyInventory.some(x=>x.name===chosen.name),false);
+    assert.equal(bought.result.wholesaleGoods.find(x=>x.sku===chosen.sku).stock,
+      chosen.stock-2);
+    const retry=await api(srv.url,"wholesale/buy",payload);
+    assert.equal(retry.status,200);
+    assert.equal(retry.result.wholesaleResult.replayed,true);
+    assert.equal(retry.result.character.bank,bank-chosen.price*2);
+    assert.equal((await api(srv.url,"wholesale/buy",{
+      ...payload,quantity:1
+    })).status,400);
+    const refund=await api(srv.url,"wholesale/return",{
+      houseId,sku:chosen.sku,quantity:1,requestId:"wholesale_http_return_one"
+    });
+    assert.equal(refund.status,200);
+    assert.equal(refund.result.wholesaleResult.amount,Math.floor(chosen.price*0.75));
+    assert.equal(refund.result.myShops[0].inventory[0].quantity,1);
+    assert.equal(refund.result.character.bank,
+      bank-chosen.price*2+Math.floor(chosen.price*0.75));
+    const deleted=await api(srv.url,"map/tile",{
+      row:0,column:1,symbol:"空地"
+    });
+    assert.equal(deleted.status,200);
+    assert.equal(deleted.result.wholesaleAvailable,false);
+    assert.equal((await api(srv.url,"wholesale/buy",{
+      houseId,sku:chosen.sku,quantity:1,requestId:"wholesale_http_removed_building"
+    })).status,400);
+    // 原版退貨由住宅商店入口進行，不需要問屋仍在同一張地圖。
+    const remaining=await api(srv.url,"wholesale/return",{
+      houseId,sku:chosen.sku,quantity:0,requestId:"wholesale_http_return_all"
+    });
+    assert.equal(remaining.status,200);
+    assert.equal(remaining.result.myShops[0].inventory.length,0);
+    assert.equal(remaining.result.wholesaleHistory.length,3);
   }finally{await srv.stop();}
 });
