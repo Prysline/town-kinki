@@ -350,3 +350,44 @@ test("原版商品表五款萬能藥可按原本的疾病指數增幅直接使�
     assert.equal(listLegacyItemUseHistory(db,1).length,5);
   }finally{db.close();}
 });
+
+
+test("原版 13 筆美容用品：移植外貌增益、瘦身、身高與耐久，絕不假定改變角色圖像",()=>{
+  const catalog=decodeLegacyText(readFileSync(new URL("../../dat_dir/syouhin.cgi",import.meta.url)));
+  const cosmetics=catalog.split(/\r?\n/).filter(line=>line.startsWith("美容<>"))
+    .map(line=>{
+      const fields=line.split("<>");
+      if(fields.length===34&&fields[33]==="")fields.pop();
+      return fields;
+    });
+  assert.equal(cosmetics.length,13,"商品數量必須與原版美容分類一致");
+  assert.deepEqual(cosmetics.map(fields=>fields[1]),[
+    "ヘアーカラー(髪染め)","リフレッシュエステ","美顔パック","油取り紙",
+    "シャネルの５番","シャネルの限定コフレ","Dior2004限定KIT",
+    "ヌーブラ","フェロモン香水","幸せを呼ぶ香水",
+    "スリムアップビューティ","バストアップブラ","セイ・ノビール"
+  ]);
+  for(const fields of cosmetics){
+    const db=createDb();
+    try{
+      assert.equal(fields.length,33);
+      assert.equal(fields[22],"回");
+      addItem(db,1,fields);
+      const expectedLooks=Number(fields[10]);
+      const result=use(db,1,"cosmetics-original-1");
+      assert.equal(result.changes.stats.looks??0,expectedLooks,fields[1]);
+      assert.equal(read(db).stats.looks,20+expectedLooks,fields[1]);
+      assert.equal(read(db,2).stats.looks,20,"不得影響其他玩家");
+      assert.equal(result.changes.weight,fields[1]==="スリムアップビューティ"?-2:0);
+      assert.equal(result.changes.height,fields[1]==="セイ・ノビール"?1:0);
+      assert.equal(db.prepare("SELECT remaining FROM legacy_item_usage WHERE user_id=1").get().remaining,
+        Number(fields[21])-1);
+      const replay=use(db,1,"cosmetics-original-1",NOW+1);
+      assert.equal(replay.replayed,true);
+      assert.equal(read(db).stats.looks,20+expectedLooks);
+      assert.equal(db.prepare("SELECT COUNT(*) n FROM legacy_item_use_history WHERE user_id=1").get().n,1);
+      assert.deepEqual(JSON.parse(db.prepare("SELECT raw_fields_json FROM legacy_inventory_items WHERE user_id=1").get().raw_fields_json),fields,
+        "原版 33 欄應保持唯讀封存");
+    }finally{db.close();}
+  }
+});
