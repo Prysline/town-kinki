@@ -94,6 +94,6 @@
 
 1. 此 fork 的 `log_dir/townlog0.cgi`～`townlog3.cgi` 都是 **0 位元組**；沒有真實原版城市配置可證明 43 個互動代碼當年全部能在實際地圖上點到。**本表只證明入口定義存在**。
 2. `unit.pl` 可由動態住宅記錄新增玩家住宅入口（[`kozin_house` L195–223](../../unit.pl#L195)），並非本表 73 個靜態符號之一。Web 已有部分住宅實作，但真實原版關聯檔仍待驗收。
-3. 當前只讀取所列每個入口的原始 CGI 名稱／分流，並深入 `station.cgi`、`sea.cgi`、`event.cgi`、`enq.cgi`、`kabu.cgi`、`auction.cgi`、`gamerand.cgi`、`setup.cgi` 的真實執行片段。**仍未把 43 個目標 CGI 的每個子函式逐一簽核**；下一輪按本表逐一追實際扣款、存檔、交易、防重、权限／UI，避免遺漏。
+3. 當前只讀取所列每個入口的原始 CGI 名稱／分流，並深入 `station.cgi`、`sea.cgi`、`event.cgi`、`enq.cgi`、`kabu.cgi`、`auction.cgi`、`gamerand.cgi`、`setup.cgi` 的真實執行片段。**仍未把 43 個入口所連到的 CGI／模式及其子函式逐一簽核（多個入口可能共用同一 CGI）**；下一輪按本表逐一追實際扣款、存檔、交易、防重、权限／UI，避免遺漏。
 4. 真實瀏覽器／舊玩家存檔端到端測試仍未進行；不得將 43 個原版入口掃描誤報為 43 個功能已完成移植。
 

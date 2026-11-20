@@ -2,14 +2,14 @@
 
 > **版本與邊界**：原始盤點於 2026-11-20 以 `feature/web-phase29-event34-santa`（`90434f4f...`）的原版與 Web 程式開始比對，後續逐項更新。本文件是**第一輪逐項檢核、持續修正中，並非完整移植或真實玩家驗收通過聲明**。
 >
-> **盤點基準（2026-11-20）**：PR #9～#18 已合併至 `feature/web-dual-mode-phase1`；最近盤點合併提交 `6ce7fdbfc94d6a0344b0756499ecb41ef6f0c1d4`，合併後 GitHub Actions run `44670824358` 成功。原版 `master` 未變。此狀態是**提交與 CI** 的確認，不等同 14 領域全部執行規則已逐一驗收。
+> **來源與整合狀態**：本盤點持續對照 [`feature/web-dual-mode-phase1`](https://github.com/Prysline/town-kinki/tree/feature/web-dual-mode-phase1) 與原版 CGI。已核實的**歷史基準**：PR #18 合併提交 `6ce7fdbfc94d6a0344b0756499ecb41ef6f0c1d4`，整合後 CI run `44670824358` 成功；PR #19、#20 此後也完成盤點修正及入口稽核。**最新 PR／CI 請由 [GitHub PR](https://github.com/Prysline/town-kinki/pulls?q=is%3Apr+is%3Amerged) 與 [Actions](https://github.com/Prysline/town-kinki/actions) 即時查詢**，不把手寫編號當作永久的最新狀態。`master` 不作 Web 修改。
 >
 > 狀態用語：**已完成（限該單項公式）**、**部分完成**、**未實作**、**缺少來源無法驗證**、**暫不移植**。標示「部分完成」不代表已通過真正瀏覽器／真實舊存檔／完整 CGI 等價測試。以目前比對過的程式為準；未讀完每個 CGI 函式的欄位明寫「待逐檔核對」。
 
 ## 稽核方法與未驗證邊界
 
 - 實際讀取原版 `town_lib.pl::check_BMI`（L507–520）、`basic.cgi` 工作／物品片段、`command.pl` 食堂片段、`event.pl` #01～#46 分支、`dat_dir` 原始課程與菜單表及 Web 對應模組；樹狀目錄和 README 用於確定其餘模組的範圍。
-- PR #9～#18 已依序合併整合分支；PR #18 整合提交 `6ce7fdbfc...` 的 GitHub Actions run `44670824358` 為 success。**尚未以真實瀏覽器或真實玩家資料備份完成驗收**。
+- **歷史整合證據**：截至 PR #18，PR #9～#18 已合併；PR #18 整合提交 `6ce7fdbfc...` 的 GitHub Actions run `44670824358` 為 success。之後版本一律由 GitHub PR／Actions 查核；**尚未以真實瀏覽器或真實玩家資料備份完成驗收**。
 - 原始 `member/<ID>/mono.cgi`、舊銀行／房屋玩家關聯紀錄、實際街區歷史存檔尚無使用者提供的真實樣本，不能虛構匯入相容性。
 - 與原版有意採用的安全模型差異（非負金額／能力、安全整數、HTTP session、Web 延伸性別）需記錄保留，未經批准不可為等價而直接退回不安全行為。
 
