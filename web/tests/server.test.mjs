@@ -2288,7 +2288,11 @@ test("單機快轉：5 分鐘解鎖工作、半小時累加、1 小時用餐，�
     const hour=await api(srv.url,"solo/time/advance",{preset:"30m"});
     assert.equal(hour.status,200);
     assert.equal(hour.result.mealCooldownMs,0);
-    assert.equal((await api(srv.url,"meal/eat",{key:mealKey})).status,200);
+    // 遊戲可能於午夜跨日，原版食堂會換菜單；第二次應買「新時點真正上架」的餐點。
+    const nextMealKey=hour.result.meals.find(meal=>
+      meal.stock>0&&meal.price<=hour.result.character.money)?.key;
+    assert.ok(nextMealKey,"快轉後本日菜單應有可支付餐點");
+    assert.equal((await api(srv.url,"meal/eat",{key:nextMealKey})).status,200);
     const oneHour=await api(srv.url,"solo/time/advance",{preset:"1h"});
     assert.equal(oneHour.status,200);
     assert.equal(oneHour.result.timeAdvance.advancedMs,3600000);
