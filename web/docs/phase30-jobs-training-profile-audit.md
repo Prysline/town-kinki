@@ -23,9 +23,9 @@
 |---|---|---|---|
 | **TR-01：資料存在** 學校 | [`dat_dir/school.cgi`](../../dat_dir/school.cgi) 有原始課程欄位；[`manual.html` L149–150](../../manual.html#L149) 註明**每天一堂課**。在此 fork 根目錄沒有可執行的 `school.cgi`，`unit.pl` 也沒找到學校操作入口。 | `training.mjs::parseLegacySchool` 讀資料，使用 `lastSchoolDay` 限每日一次、消耗頭腦能量。 | Web 是依資料與使用說明建出的可執行流程；**無法把未在此 fork 找到的原版學校支付／成功執行方式宣稱已逐函式等價**。不可因此刪掉真實存在的原版課程資料。 |
 | **TR-02／TR-03：資料存在** 健身房 | [`dat_dir/gym.cgi`](../../dat_dir/gym.cgi) 有 9 筆課程及「ル／体／健／間／消／効果」等欄；[`town_lib.pl::gym_sprit` L342–345](../../town_lib.pl#L342) 是欄位解析；[`manual.html` L145–146](../../manual.html#L145) 確認體能訓練用途。在此 fork 根目錄沒有可執行的 `gym.cgi`，`unit.pl` 也未找到健身房操作入口。 | `training.mjs::parseLegacyGym` 讀資料並將「間」**暫作分鐘**、把 `extraEffect` 保留為原文。 | **目前只能驗證課程資料和 Web 的實作，不能驗證原版實際使用時的其他效果與支付流程**；不可拿「教室」的執行規則替代「健身房」。 |
-| **TR-04：獨立教室現金課程已移植（PR #23）** | [`kyushitu.cgi::kyushitu/kyushitu_go` L30–175](../../kyushitu.cgi#L30)、[`dat_dir/kyushitu.cgi` L1–5](../../dat_dir/kyushitu.cgi#L1) 的四筆獨立課程與 [`unit.pl` L152](../../unit.pl#L152) 的教室入口。 | `training.mjs::parseLegacyClassroom`、`server.mjs::/api/train`、`public/index.html::classroom-panel`、`town-home.js` 已提供原版四課與專屬地圖導覽。 | 現金課程可操作，信用商品付款仍未移植，不與 gym/school 共用冷卻；真實瀏覽器／玩家備份仍待驗收。 |
+| **TR-04：獨立教室現金課程已移植（PR #23）** | [`kyushitu.cgi::kyushitu/kyushitu_go` L30–175](../../kyushitu.cgi#L30)、[`dat_dir/kyushitu.cgi` L1–5](../../dat_dir/kyushitu.cgi#L1) 的四筆獨立課程與 [`unit.pl` L152](../../unit.pl#L152) 的教室入口。 | `training.mjs::parseLegacyClassroom`、`server.mjs::/api/train`、`public/index.html::classroom-panel`、`town-home.js` 已提供原版四課與專屬地圖導覽。 | 現金課程與已匯入有效信用卡的銀行付款皆可操作（PR #27），不與 gym/school 共用冷卻；真實瀏覽器／玩家備份仍待驗收。 |
 | **TR-05：減重與雙能量公式已移植（PR #23）** | [`kyushitu.cgi` L102–143](../../kyushitu.cgi#L102)：兩種能量、分鐘間隔、17 能力增益、減重 `(身體＋頭腦消耗)/100 kg`。 | Web `performTraining(type=classroom)` 依該公式計算，更新 BMI，並以獨立 `classroomReadyAt` 存入 SQLite；HTTP／訓練測試已涵蓋。 | Web 另保留體重最低 1kg 安全值，不應將此效果套給缺乏執行依據的健身房。 |
-| **TR-06：信用付款仍未移植** | [`kyushitu.cgi` L68–84、L108–118](../../kyushitu.cgi#L68) 顯示有效 `効果=クレジット` 商品，進教室會從銀行扣款並記帳。 | 現有教室僅支援現金，Web API 明確拒絕 `payment:credit` 等未支援值。 | 須先完成原始信用物品期限／權限、銀行餘額／帳簿的原子交易，不能把現金課程算成原版完整付款功能。 |
+| **TR-06：有效原版匯入信用卡付款已實作（PR #27；購卡未完成）** | [`kyushitu.cgi` L68–84、L108–118](../../kyushitu.cgi#L68) 僅列出 `効果=クレジット` 且未到期的本人卡片，進教室以普通存款支付並記帳；[`dat_dir/syouhin.cgi`](../../dat_dir/syouhin.cgi#L366) 原版有四種卡片。 | `src/legacy-credit.mjs` 核對本人已匯入 33 欄卡片原文、購入日、日耐久及到期；`src/server.mjs::/api/train` 在同筆 SQLite 交易扣銀行並寫帳簿；前端可選已匯入有效卡或現金。 | 原版百貨購卡及原版完整玩家舊存檔實測仍缺，不能當作新玩家可直接購卡；不複製原 CGI 允許負普通存款的風險。 |
 
 **原始四堂教室課程**（[`dat_dir/kyushitu.cgi` L2–5](../../dat_dir/kyushitu.cgi#L2)）：`フラフラダンス`（10,000 円，間隔 2 分鐘，身體 10／頭腦 10）、`フラダンス`（20,000 円，10 分鐘，20／0）、`帝王学ミニ`（5,000,000 円，50 分鐘，50／50）、`帝王学`（10,000,000 円，100 分鐘，100／100）。各課能力增益可由同一份原始 26 欄表讀取，沒有補造額外能力。
 
@@ -43,7 +43,7 @@
 
 1. **職業條件（PR #22 核心已修復）**：WK-04 的 17 項數值、玩家目前值、BMI／薪資等已接回 API/UI；接下來是 150 筆完整來源與真實瀏覽器視覺驗收。
 2. **工作結算（PR #24 核心已修復）**：WK-05 現金／銀行薪資分流及帳簿已接上；剩舊版 `shiharai` 匯入與實機驗收。WK-06 性別／身高工作時重驗的差異尚待核對，**不默默改掉既有安全檢查**。
-3. **教室（PR #23 核心現金流程已修復）**：TR-04／05 四課、雙能量、減重、分鐘冷卻及地圖入口已實作；TR-06 有效信用物品＋銀行付款尚未移植。不能挪用健身房的規則。
+3. **教室（PR #23／#27 已修復課程及有效匯入卡付款）**：TR-04／05 四課、雙能量、減重、分鐘冷卻及地圖入口已實作；TR-06 僅對本人已有有效原版匯入卡片開放普通銀行付款，原版購卡商店及真實舊存檔驗收尚未完成。不能挪用健身房的規則。
 4. **其餘原版操作**：WK-07 玩家投稿職業需獨立的審核／權限考量；SC-04～05 真實個人檔案須先確認自願公開與個資安全，無真實備份時只做來源與合成測試。
 5. **不建立功能的項目**：只有未解析效果字串、未確認實際 CGI、或無既有資料欄位的推測，**不得標成「漏移植」或安排 P0/P1/P2 工作**。
 

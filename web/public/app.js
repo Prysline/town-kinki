@@ -1190,6 +1190,8 @@ function renderDining() {
 }
 
 function renderTraining() {
+  const oldChoices=new Map([...el("classroom-lessons").querySelectorAll("select[data-lesson-key]")]
+    .map(item=>[item.dataset.lessonKey,item.value]));
   const byType = {
     school: el("school-lessons"),
     gym: el("gym-lessons"),
@@ -1203,6 +1205,7 @@ function renderTraining() {
   const classroomWait=state.classroomCooldownMs??0;
   text("classroom-status",classroomWait>0?
     "距離下次教室課程約 "+Math.ceil(classroomWait/60_000)+" 分鐘":"目前可以上課");
+  const cards=state.classroomCreditCards??[];
   for (const lesson of state.trainingLessons || []) {
     const target = byType[lesson.type];
     if (!target) continue;
@@ -1213,7 +1216,7 @@ function renderTraining() {
     const cost = document.createElement("p");
     cost.className = "small";
     cost.textContent = lesson.type==="classroom"?
-      "現金 "+money(lesson.price)+"，身體消耗 "+lesson.bodyCost+
+      "學費 "+money(lesson.price)+"，身體消耗 "+lesson.bodyCost+
       "、頭腦消耗 "+lesson.brainCost+"，體重預計減少 "+
       (lesson.weightLoss??0).toFixed(2)+" 公斤，間隔 "+
       (lesson.cooldownMs/60_000)+" 分鐘" :
@@ -1226,27 +1229,62 @@ function renderTraining() {
       .filter(([, amount]) => amount > 0)
       .map(([key, amount]) => (labels[key] || key) + " +" + amount);
     gains.textContent = values.length ? values.join("、") : "沒有額外能力增幅";
-    const action = document.createElement("button");
-    action.type = "button";
-    action.textContent = lesson.reason ? "目前不可進行" : lesson.type === "school" ? "參加課程" : "開始訓練";
-    action.disabled = Boolean(lesson.reason);
-    if (lesson.reason) {
-      const blocked = document.createElement("p");
-      blocked.className = "training-blocked";
-      blocked.textContent = lesson.reason;
-      tile.append(name, cost, gains, blocked, action);
-    } else {
-      tile.append(name, cost, gains, action);
+    const submit = document.createElement("button");
+    submit.type = "button";
+    const blocked = document.createElement("p");
+    blocked.className = "training-blocked";
+    let paymentSelect=null;
+    if(lesson.type==="classroom"&&cards.length){
+      const label=document.createElement("label");
+      label.textContent="學費付款方式";
+      paymentSelect=document.createElement("select");
+      paymentSelect.dataset.lessonKey=lesson.key;
+      const cash=document.createElement("option");
+      cash.value="cash";
+      cash.textContent="現金付款";
+      paymentSelect.append(cash);
+      for(const card of cards){
+        const opt=document.createElement("option");
+        opt.value="credit:"+card.sourceLine;
+        opt.textContent=card.name+"（普通存款扣款）";
+        paymentSelect.append(opt);
+      }
+      const previous=oldChoices.get(lesson.key);
+      if(previous&&[...paymentSelect.options].some(opt=>opt.value===previous))
+        paymentSelect.value=previous;
+      else if(lesson.cashReason&&lesson.creditReason===null)
+        paymentSelect.value="credit:"+cards[0].sourceLine;
+      label.append(paymentSelect);
+      tile.append(label);
     }
-    action.addEventListener("click", () => actionTraining(lesson.key));
+    function update(){
+      const usingCredit=paymentSelect?.value.startsWith("credit:")??false;
+      const reason=lesson.type==="classroom"?
+        (usingCredit?lesson.creditReason:lesson.cashReason):lesson.reason;
+      submit.textContent=reason?"目前不可進行":
+        lesson.type==="school"?"參加課程":"開始訓練";
+      submit.disabled=Boolean(reason);
+      blocked.textContent=reason??"";
+      blocked.hidden=!reason;
+    }
+    // 保留原版課程先說明數值、再選付款，最後提交。
+    tile.prepend(name,cost,gains);
+    tile.append(blocked,submit);
+    paymentSelect?.addEventListener("change",update);
+    update();
+    submit.addEventListener("click",()=>{
+      const value=paymentSelect?.value??"cash";
+      const payload=value.startsWith("credit:")?
+        {payment:"credit",sourceLine:Number(value.slice(7))}:{payment:"cash"};
+      actionTraining(lesson.key,payload);
+    });
     target.append(tile);
   }
 }
 
-function actionTraining(key) {
-  action("train", { key });
+function actionTraining(key,payment={payment:"cash"}) {
+  action("train", { key,...payment });
 }
-
 function updateLoanQuote() {
   const loan=state?.bankLoan;
   const selection=el("loan-plan");
@@ -1440,7 +1478,8 @@ async function action(path, data, message) {
         .filter(([, amount]) => amount > 0)
         .map(([key, amount]) => (labels[key] || key) + " +" + amount)
         .join("、");
-      notify("完成" + result.name + "，花費 " + money(result.paid) +
+      notify("完成" + result.name + "，"+
+        (result.payment==="credit"?"普通銀行存款扣除 ":"現金花費 ")+money(result.paid) +
         (gains ? "，能力提升：" + gains : "") +
         (result.weightLoss ? "，體重減少 "+result.weightLoss.toFixed(2)+" 公斤" : "") + "。");
     } else if (message) notify(message);

@@ -102,8 +102,10 @@ export function calendarDay(now = Date.now(), timeZone = "Asia/Taipei") {
   }).format(now);
 }
 
-export function trainingAvailability(character, lesson, now = Date.now(), day = calendarDay(now)) {
+export function trainingAvailability(character, lesson, now = Date.now(), day = calendarDay(now), payment = "cash") {
   if (!lesson || !["school", "gym", "classroom"].includes(lesson.type)) return "找不到訓練課程";
+  if(payment!=="cash"&&!(lesson.type==="classroom"&&payment==="credit"))
+    return "不支援的課程付款方式";
   const current = recoverEnergy(character, now);
   if (lesson.type === "school" && current.lastSchoolDay === day)
     return "今日已經上過一堂課，請明天再來";
@@ -111,7 +113,10 @@ export function trainingAvailability(character, lesson, now = Date.now(), day = 
     return "健身房還需要等待 " + Math.ceil((current.gymReadyAt - now) / 1000) + " 秒";
   if (lesson.type === "classroom" && (current.classroomReadyAt??0)>now)
     return "教室還需要等待 "+Math.ceil((current.classroomReadyAt-now)/1000)+" 秒";
-  if (current.money < lesson.price) return "現金不足";
+  if(payment==="credit"){
+    if(!Number.isSafeInteger(current.bank)||current.bank<lesson.price)
+      return "普通銀行存款不足";
+  }else if (current.money < lesson.price) return "現金不足";
   if (lesson.type === "school" && current.brainEnergy < lesson.energyCost)
     return "頭腦能量不足";
   if (lesson.type === "gym" && current.bodyEnergy < lesson.energyCost)
@@ -123,9 +128,9 @@ export function trainingAvailability(character, lesson, now = Date.now(), day = 
   return null;
 }
 
-export function performTraining(character, lesson, now = Date.now(), day = calendarDay(now)) {
+export function performTraining(character, lesson, now = Date.now(), day = calendarDay(now), payment = "cash") {
   const current = recoverEnergy(character, now);
-  const reason = trainingAvailability(current, lesson, now, day);
+  const reason = trainingAvailability(current, lesson, now, day, payment);
   if (reason) throw new Error(reason);
   const stats = { ...current.stats };
   for (const [key, amount] of Object.entries(lesson.gains)) {
@@ -147,8 +152,10 @@ export function performTraining(character, lesson, now = Date.now(), day = calen
       classroomReadyAt:now+lesson.cooldownMs,
       weight,bmi:bodyMassIndex(current.height,weight)};
   }
-  const next={...current,money:current.money-lesson.price,stats,...extra};
-  return {character:next,gained:lesson.gains,paid:lesson.price,
+  const next={...current,stats,...extra,
+    money:current.money-(payment==="cash"?lesson.price:0),
+    bank:current.bank-(payment==="credit"?lesson.price:0)};
+  return {character:next,gained:lesson.gains,paid:lesson.price,payment,
     lesson:lesson.name,weightLoss:lesson.type==="classroom"?
       Math.round((current.weight-next.weight)*100)/100:0};
 }

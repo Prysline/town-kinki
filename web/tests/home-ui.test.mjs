@@ -8,6 +8,15 @@ const html=readFileSync(new URL("../public/index.html",import.meta.url),"utf8");
 const css=readFileSync(new URL("../public/style.css",import.meta.url),"utf8");
 const script=readFileSync(new URL("../public/app.js",import.meta.url),"utf8");
 
+test("教室原版有效信用卡付款：畫面能選本人卡片、改檢查銀行餘額並送來源行號",()=>{
+  assert.match(html,/原版信用卡/);
+  assert.match(script,/state\.classroomCreditCards/);
+  assert.match(script,/paymentSelect\.dataset\.lessonKey/);
+  assert.match(script,/lesson\.creditReason/);
+  assert.match(script,/lesson\.cashReason/);
+  assert.match(script,/sourceLine:Number\(value\.slice\(7\)\)/);
+  assert.match(script,/action\("train", \{ key,\.\.\.payment \}\)/);
+});
 test("原版薪資收款方式可從工作面板儲存，銀行與現金有實際分流",()=>{
   assert.match(html,/id="salary-payment"/);
   assert.match(html,/<option value="cash">現金領取<\/option>/);

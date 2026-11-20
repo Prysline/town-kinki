@@ -144,3 +144,24 @@ test("教室獨立檢查雙能量、現金，健身房和教室不共用訓練�
   const gymDone=performTraining(p,walk,now).character;
   assert.equal(trainingAvailability(gymDone,classrooms[0],now+1_000),null);
 });
+
+test("原版教室信用付款由普通存款扣款，仍完整執行四課能力與減重規則",()=>{
+  const now=Date.UTC(2026,10,20,5);
+  const p=createCharacterData("信用學員","other",now);
+  const funded={...p,money:0,bank:30000};
+  assert.match(trainingAvailability(funded,classrooms[0],now),/現金不足/);
+  assert.equal(trainingAvailability(funded,classrooms[0],now,calendarDay(now),"credit"),null);
+  const trained=performTraining(funded,classrooms[0],now,calendarDay(now),"credit");
+  assert.equal(trained.payment,"credit");
+  assert.equal(trained.paid,10000);
+  assert.equal(trained.character.money,0);
+  assert.equal(trained.character.bank,20000);
+  assert.equal(trained.character.bodyEnergy,funded.bodyEnergy-10);
+  assert.equal(trained.character.brainEnergy,funded.brainEnergy-10);
+  assert.equal(trained.character.stats.looks,funded.stats.looks+1);
+  assert.equal(trained.character.weight,59.8);
+  assert.equal(trained.character.classroomReadyAt,now+120000);
+  assert.equal(funded.bank,30000);
+  assert.match(trainingAvailability({...funded,bank:9999},classrooms[0],now,calendarDay(now),"credit"),/普通銀行存款不足/);
+  assert.match(trainingAvailability(funded,schools[0],now,calendarDay(now),"credit"),/付款方式/);
+});

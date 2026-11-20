@@ -131,7 +131,7 @@ test("單機獨立教室：原版四課、實際雙能量扣除、減重、資�
     const lesson=lessons[0];
     assert.equal(lesson.reason,null);
     assert.equal((await api(srv.url,"train",{key:lesson.key,payment:"credit"})).status,400,
-      "尚未移植的信用付款不可偽裝現金");
+      "沒有有效的本人信用卡，不可偽裝銀行付款");
     const trained=await api(srv.url,"train",{key:lesson.key,payment:"cash"});
     assert.equal(trained.status,200);
     assert.equal(trained.result.trainingResult.paid,10000);
@@ -160,6 +160,113 @@ test("單機獨立教室：原版四課、實際雙能量扣除、減重、資�
   }finally{await srv.stop();}
 });
 
+
+test("教室信用付款：匯入有效原版卡，真正扣銀行、保留現金與帳簿，冷卻拒絕重複扣款",async()=>{
+  const srv=await start("solo");
+  try{
+    const created=await api(srv.url,"character",{
+      name:"信用教室居民",gender:"other",stats:defaultStats()
+    });
+    assert.equal(created.status,200);
+    const now=created.result.gameTimeMs;
+    const purchased=Math.floor(now/1000)-60;
+    const raw=Array(33).fill("");
+    raw[0]="日用品";raw[1]="クレジットカード";
+    raw[9]="クレジット";raw[21]="3";raw[22]="日";raw[30]=String(purchased);
+    const db=new DatabaseSync(join(srv.directory,"solo.sqlite"));
+    try{
+      const owner=db.prepare("SELECT user_id FROM characters").get().user_id;
+      db.prepare("INSERT INTO legacy_inventory_items(user_id,original_id,source_line,category,original_name,effect,durability,durability_unit,purchased_at,last_used_at,raw_fields_json) VALUES(?,?,?,?,?,?,?,?,?,?,?)")
+        .run(owner,"000001",1,"日用品","クレジットカード","クレジット",
+          3,"日",purchased,0,JSON.stringify(raw));
+    }finally{db.close();}
+    const deposit=await api(srv.url,"bank",{action:"deposit",amount:99000});
+    assert.equal(deposit.status,200);
+    const state=await api(srv.url,"state");
+    assert.equal(state.result.character.money,1000);
+    assert.equal(state.result.character.bank,99000);
+    assert.equal(state.result.classroomCreditCards.length,1);
+    assert.equal(state.result.classroomCreditCards[0].sourceLine,1);
+    const lesson=state.result.trainingLessons.find(x=>x.key==="classroom-2");
+    assert.match(lesson.cashReason,/現金不足/);
+    assert.equal(lesson.creditReason,null);
+    assert.equal(lesson.reason,null,"可用本人有效卡付款時，課程不得被整體停用");
+    assert.equal((await api(srv.url,"train",{
+      key:"classroom-2",payment:"credit",sourceLine:2
+    })).status,400);
+    const before=await api(srv.url,"state");
+    assert.equal(before.result.character.bank,99000,"不存在卡片不能改變銀行");
+    const paid=await api(srv.url,"train",{
+      key:"classroom-2",payment:"credit",sourceLine:1
+    });
+    assert.equal(paid.status,200);
+    assert.equal(paid.result.trainingResult.payment,"credit");
+    assert.equal(paid.result.trainingResult.paid,10000);
+    assert.equal(paid.result.character.money,1000);
+    assert.equal(paid.result.character.bank,89000);
+    assert.equal(paid.result.character.stats.looks,created.result.character.stats.looks+1);
+    assert.equal(paid.result.trainingResult.weightLoss,0.2);
+    const bankEntry=paid.result.bankLedger.find(x=>x.action==="教室信用付款（受講料）");
+    assert.ok(bankEntry);
+    assert.equal(bankEntry.type,"ordinary");
+    assert.equal(bankEntry.debit,10000);
+    assert.equal(bankEntry.balance,89000);
+    assert.equal((await api(srv.url,"train",{
+      key:"classroom-2",payment:"credit",sourceLine:1
+    })).status,400);
+    assert.equal((await api(srv.url,"state")).result.bankLedger
+      .filter(x=>x.action==="教室信用付款（受講料）").length,1);
+    const update=new DatabaseSync(join(srv.directory,"solo.sqlite"));
+    try{
+      const expired=Math.floor(now/1000)-4*86400;
+      const out=[...raw];out[30]=String(expired);
+      update.prepare("UPDATE legacy_inventory_items SET purchased_at=?,raw_fields_json=? WHERE source_line=1")
+        .run(expired,JSON.stringify(out));
+    }finally{update.close();}
+    const afterExpiry=await api(srv.url,"state");
+    assert.equal(afterExpiry.result.classroomCreditCards.length,0);
+  }finally{await srv.stop();}
+});
+
+test("多人教室信用卡持有人隔離：不能用其他人的原版卡片支付",async()=>{
+  const srv=await start("multi");
+  try{
+    const a=await api(srv.url,"register",{
+      username:"credit_holder",password:"credit-holder-password-123"
+    });
+    const b=await api(srv.url,"register",{
+      username:"credit_other",password:"credit-other-password-123"
+    });
+    const first=await api(srv.url,"character",{
+      name:"持卡居民",gender:"male",stats:defaultStats()
+    },a.cookie);
+    const second=await api(srv.url,"character",{
+      name:"無卡居民",gender:"female",stats:defaultStats()
+    },b.cookie);
+    assert.equal(first.status,200);
+    assert.equal(second.status,200);
+    const purchased=Math.floor(first.result.gameTimeMs/1000)-60;
+    const raw=Array(33).fill("");
+    raw[0]="日用品";raw[1]="クレジットカード";raw[9]="クレジット";
+    raw[21]="3";raw[22]="日";raw[30]=String(purchased);
+    const db=new DatabaseSync(join(srv.directory,"multi.sqlite"));
+    try{
+      const owner=db.prepare("SELECT user_id FROM characters WHERE name='持卡居民'").get().user_id;
+      db.prepare("INSERT INTO legacy_inventory_items(user_id,original_id,source_line,category,original_name,effect,durability,durability_unit,purchased_at,last_used_at,raw_fields_json) VALUES(?,?,?,?,?,?,?,?,?,?,?)")
+        .run(owner,"000002",1,"日用品","クレジットカード","クレジット",
+          3,"日",purchased,0,JSON.stringify(raw));
+    }finally{db.close();}
+    const others=await api(srv.url,"state",undefined,b.cookie);
+    assert.equal(others.result.classroomCreditCards.length,0);
+    assert.equal((await api(srv.url,"train",{
+      key:"classroom-2",payment:"credit",sourceLine:1
+    },b.cookie)).status,400);
+    const verify=await api(srv.url,"state",undefined,a.cookie);
+    assert.equal(verify.result.classroomCreditCards.length,1);
+    assert.equal(verify.result.character.money,100000);
+    assert.equal((await api(srv.url,"state",undefined,b.cookie)).result.character.money,100000);
+  }finally{await srv.stop();}
+});
 
 test("薪資去向：偏好存檔、實際銀行入帳與帳簿、重送冷卻及回切現金",async()=>{
   const srv=await start("solo");

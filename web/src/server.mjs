@@ -20,6 +20,7 @@ import { initCharacterEvents, settleDailyIllnessEvent, listCharacterEvents, getC
 import { getCockroachChallenge,claimCockroach } from "./event-cockroach.mjs";
 import { parseLegacyInsurance, initInventoryTables, inventoryOverview, hasActiveHealthInsurance, listInsurancePurchases, buyHealthInsurance } from "./inventory.mjs";
 import { listLegacyInventoryItems } from "./legacy-inventory.mjs";
+import { listValidClassroomCreditCards, requireClassroomCreditCard } from "./legacy-credit.mjs";
 import { legacyPlayerIcon } from "./appearance.mjs";
 import { initLegacyItemUseTables, listLegacyItemActions, listLegacyItemUseHistory, useLegacyItem } from "./legacy-item-use.mjs";
 import { initBankTables, settleBankInterest, bankOperation, bankOverview, bankLedger, recordBankEntry, transferToPlayer, BANK_TRANSFER_LIMIT, NEW_MEMBER_DAYS, NEW_MEMBER_TRANSFER_LIMIT, bankLoanOverview, borrowBankLoan, payoffBankLoan } from "./banking.mjs";
@@ -222,6 +223,7 @@ function snapshot(user) {
     }
   }
   const currentJob = updated?.jobId ? jobsByKey.get(updated.jobId) : null;
+  const classroomCreditCards=updated?listValidClassroomCreditCards(db,user.id,now):[];
   const ownedHouses = updated ? listHouses(db, user.id).map(h => ({
     ...h, saleRefund: getHouseSaleQuote(houseCatalog, h.townId).refund
   })) : [];
@@ -297,14 +299,21 @@ function snapshot(user) {
     schoolRemainingToday: updated ? updated.lastSchoolDay === today : false,
     gymCooldownMs: updated ? Math.max(0, updated.gymReadyAt - now) : 0,
     classroomCooldownMs: updated ? Math.max(0, (updated.classroomReadyAt??0) - now) : 0,
-    trainingLessons: updated ? trainingLessons.map(lesson => ({
-      key: lesson.key, type: lesson.type, name: lesson.name,
-      price: lesson.price, energyCost: lesson.energyCost,
-      bodyCost: lesson.bodyCost, brainCost: lesson.brainCost,
-      weightLoss: lesson.weightLoss, gains: lesson.gains,
-      cooldownMs: lesson.cooldownMs,
-      reason: trainingAvailability(updated, lesson, now, today)
-    })) : [],
+    classroomCreditCards,
+    trainingLessons: updated ? trainingLessons.map(lesson => {
+      const cashReason=trainingAvailability(updated,lesson,now,today);
+      const creditReason=lesson.type==="classroom"&&classroomCreditCards.length?
+        trainingAvailability(updated,lesson,now,today,"credit"):null;
+      return {
+        key:lesson.key,type:lesson.type,name:lesson.name,
+        price:lesson.price,energyCost:lesson.energyCost,
+        bodyCost:lesson.bodyCost,brainCost:lesson.brainCost,
+        weightLoss:lesson.weightLoss,gains:lesson.gains,
+        cooldownMs:lesson.cooldownMs,
+        cashReason,creditReason,
+        reason:cashReason&&classroomCreditCards.length&&creditReason===null?null:cashReason
+      };
+    }) : [],
     jobs: updated ? jobs.map(job => ({
       key: job.key, name: job.name, originalName: job.originalName,
       translated: job.translated, rank: job.rank,
@@ -593,22 +602,36 @@ async function handle(req, res) {
     }
 
     if (path === "/api/train") {
-      const lesson = trainingByKey.get(data.key);
-      if (!lesson) throw new HttpError(404, "找不到訓練課程");
-      // 原版教室信用商品支付尚無經驗證的持有授權與原子銀行扣款。
-      // 拒絕偽裝信用付款，而非默默當現金收費。
-      if(lesson.type==="classroom" && data.payment!==undefined && data.payment!=="cash")
-        throw new HttpError(400,"目前教室僅支援現金付款");
+      const lesson=trainingByKey.get(data.key);
+      if(!lesson)throw new HttpError(404,"找不到訓練課程");
+      const payment=data.payment??"cash";
+      if(!["cash","credit"].includes(payment)||
+          (payment==="credit"&&lesson.type!=="classroom"))
+        throw new HttpError(400,"此課程不支援指定付款方式");
       const now=gameNow();
-      const today = calendarDay(now, GAME_TIMEZONE);
-      const result = mutateCharacter(user.id, old => {
-        try { return performTraining(old, lesson, now, today); }
-        catch (error) { throw new HttpError(400, error.message); }
-      });
-      return sendJson(res, 200, { ...snapshot(user), trainingResult: {
-        name: result.lesson, gained: result.gained, paid: result.paid,
-        weightLoss:result.weightLoss
-      } });
+      const today=calendarDay(now,GAME_TIMEZONE);
+      let result;
+      try{
+        if(payment==="credit"){
+          // 在任何銀行異動前先驗證本人原版卡片、購買日與剩餘有效天數。
+          requireClassroomCreditCard(db,user.id,data.sourceLine,now);
+          // 與現有銀行交易一致，先就舊餘額完成當天利息結算。
+          settleBankInterest(db,user.id,today,now);
+        }
+        result=mutateCharacter(user.id,old=>{
+          if(payment==="credit")requireClassroomCreditCard(db,user.id,data.sourceLine,now);
+          const trained=performTraining(old,lesson,now,today,payment);
+          if(payment==="credit")
+            // 帳簿和角色餘額一起在 mutateCharacter 的 SQLite 交易內寫入。
+            recordBankEntry(db,user.id,"ordinary","教室信用付款（受講料）",
+              lesson.price,0,trained.character.bank,now);
+          return trained;
+        });
+      }catch(error){throw new HttpError(400,error.message);}
+      return sendJson(res,200,{...snapshot(user),trainingResult:{
+        name:result.lesson,gained:result.gained,paid:result.paid,
+        weightLoss:result.weightLoss,payment:result.payment
+      }});
     }
 
     if (path === "/api/bank" || path === "/api/bank/term") {

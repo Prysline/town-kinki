@@ -56,9 +56,9 @@
 | TR-01 學校原始課程與使用說明 | dat_dir/school.cgi（課程資料）；manual.html L149–150（一天一堂） | src/training.mjs::parseLegacySchool、performTraining | 部分完成（按資料與說明實作） | 原版此 fork 根目錄沒有可執行 school.cgi；有資料和使用說明，無法對照原版實際付款、增益、時鐘執行 CGI | P1（來源邊界） | 逐課比對數值；明示未能核對的原始實際操作條件，不把 Web 行為說成已證實等價 |
 | TR-02 學校每日一次 | manual.html L149–150；dat_dir/school.cgi | src/training.mjs L75–106 | 部分完成（依原版說明） | 每天一次有原始說明依據；跨日、切課、伺服器時區仍需驗證，原版 fork 無獨立 school.cgi 程式可比對 | P1 | 跨日、重啟、同時請求及兩模式隔離（31） |
 | TR-03 健身房課程資料與原版執行來源 | dat_dir/gym.cgi（9 筆課程）；town_lib.pl::gym_sprit；manual.html L145–146 | src/training.mjs::parseLegacyGym、performTraining | 部分完成（根據資料運作） | 本 fork 根目錄無可執行 gym.cgi；Web 暫把「間」作分鐘；不能將另一設施 kyushitu.cgi 的減重、信用付款等同健身房的原版效果 | P1（來源邊界） | 欄位、增益、費用、冷卻回歸；找不到實際 gym CGI 時不宣稱完整等價 |
-| TR-04 教室獨立訓練設施 | unit.pl L152；kyushitu.cgi::kyushitu／kyushitu_go L30–175；dat_dir/kyushitu.cgi（4 筆） | src/training.mjs::parseLegacyClassroom、performTraining；src/server.mjs::/api/train；public/index.html::classroom-panel | **核心現金訓練已實作（PR #23）** | 與學校／健身房不同的四課、17 項能力增益、雙能量、分鐘間隔與獨立冷卻已接入；信用商品付款另列 TR-06 | P1（部分完成） | 來源四課、SQLite 冷卻、重送、付款與能力測試；仍待玩家存檔與實機驗收 |
+| TR-04 教室獨立訓練設施 | unit.pl L152；kyushitu.cgi::kyushitu／kyushitu_go L30–175；dat_dir/kyushitu.cgi（4 筆） | src/training.mjs::parseLegacyClassroom／performTraining；src/server.mjs::/api/train；public/index.html::classroom-panel | **四課及兩種付款路徑已實作（PR #23／#27），待驗收** | 四課、17 項能力增益、雙能量、減重、分鐘間隔與獨立冷卻；現金或本人有效匯入信用卡付款，未實作購卡商店 | P1 | 原始課程與付款測試、真實原版玩家備份及瀏覽器驗收 |
 | TR-05 教室訓練減重 | kyushitu.cgi::kyushitu_go L121–143 | src/training.mjs::performTraining（type=classroom）、src/engine.mjs::bodyMassIndex | **原版核心公式已實作（PR #23）** | 減重 (身體消耗+頭腦消耗)/100 公斤、更新 BMI；Web 為安全設最低 1kg，和原版沒有下限不同；不挪用到健身房 | P1（驗收） | 四課消耗、連續操作、真實舊檔、極端低體重與 BMI 回歸 |
-| TR-06 教室信用物品付款 | kyushitu.cgi L68–84、L108–118；原版物品欄 syo_kouka=クレジット | Web 教室已支援現金；server.mjs::/api/train 明確拒絕 credit | **仍未實作：有效信用商品付款** | 需按原版物品有效期／授權核對，扣普通銀行並記帳，且不能讓無效或假造的 payment 值扣款；現金課程不能算信用已完成 | P1 | 原始信用持有物、有效期、銀行餘額、帳簿、多人隔離及交易回滾 |
+| TR-06 教室信用物品付款 | kyushitu.cgi L68–84、L108–118；dat_dir/syouhin.cgi L366–369 四種信用卡 | src/legacy-credit.mjs；src/training.mjs；src/server.mjs::/api/train；public/app.js | **有效原版匯入信用卡付款已修復（PR #27，購卡流程未移植）** | 本人已匯入的 33 欄原版卡片須符合效果、日耐久與購入日且尚未到期；銀行足額才可入課，教室付款在同筆 SQLite 交易扣普通存款並記帳。沒有原始卡片就不可憑空刷卡。原版購卡商店仍未移植 | P1（部分完成） | 有效／過期／偽造／跨玩家／銀行不足／重複請求測試通過；原始真實存檔與瀏覽器驗收待完成 |
 
 ### 04 飲食／熱量
 
@@ -75,8 +75,8 @@
 |---|---|---|---|---|---|---|
 | MP-01 四城 12×16 格與圖示 | top.pl；admin2.cgi；town_ini.cgi | src/town-map.mjs；public/town-home.js | 部分完成 | 格子和圖示有實作；原始填充街區資料需另查 | P1 | 每城尺寸、已知／未知符號、原始文件反查（31） |
 | MP-02 原版 townlog 匯入／地圖編輯 | log_dir/townlog0.cgi ～ townlog3.cgi；town_maker.cgi | src/town-storage.mjs；scripts/town-map.mjs | 部分完成 | 目前 fork 的原始地圖日誌需實際確認是否有資料，不能補造配置 | P1 | 空檔與真實檔 round-trip、權限、備份／回滾（後續） |
-| MP-03 車站／交通票券與跨城成本 | station.cgi；town_ini.cgi；商品檔 | public/app.js；src/town-map.mjs | 未實作（原版完整流程） | Web 城市切換不等於原版車站收費與物品效果 | P1 | 交通費、權限、票券扣除、跨城交易（後續） |
-| MP-04 車站六組票價及跨城移動 | unit.pl L85；station.cgi::idou L99–116、L135–169 | src/server.mjs::/api/move；public/app.js；public/town-home.js | **確定規則差異** | 原版 4 城六組票價為 950／780／1210／950／2210／1530 並扣現金；Web 有換城但無此票價流程，原版「駅」地圖格子也無入口 | P1 | 六組方向互返、現金餘額與負數保護、資料回滾及實際移動時序 |
+| MP-03 車站／交通票券與跨城成本 | station.cgi；town_ini.cgi；商品檔 | src/transport.mjs；src/server.mjs::/api/move；public/app.js；public/town-home.js | **基本車站收費已移植（PR #26），其他交通票券待驗證** | 四城六組票價與跨城扣現金已實作；實際原版其他交通券／道具是否有獨立效果仍需追來源 | P1（部分完成） | 12 種方向、同城／欠費／多人隔離已測；舊存檔與瀏覽器驗收待完成 |
+| MP-04 車站六組票價及跨城移動 | unit.pl L85；station.cgi::idou L99–116、L135–169 | src/transport.mjs；src/server.mjs::/api/move；public/app.js／town-home.js | **原版票價與地圖入口已修復（PR #26）** | 6 組雙向票價 950／780／1210／950／2210／1530 均會扣現金；拒絕同城、非法目的地與餘額不足；原版 5 秒僅前端倒數，未虛構伺服器冷卻 | P1（實機驗收） | 12 方向、SQLite 原子交易／失敗回滾與兩玩家隔離已測 |
 | MP-05 原版地圖互動入口覆蓋率 | unit.pl::get_unit L62–191（43 個表單入口）；top.pl L472–490 | src/town-map.mjs::MAP_SYMBOLS；public/town-home.js::FACILITY_PANELS | 初步路由覆蓋，非完整遊戲移植 | 43 入口中 28 個有 Web 圖示代碼、15 個未收錄；7 個映射面板，教室已獨立連至 classroom-panel（PR #23），剩餘 21 個有圖示但回報 unavailable。詳 [入口逐項稽核](phase30-entrypoint-coverage.md) | P1 | 逐入口實際交易與 CGI、真實空白 townlog、跨城及尚未移植設施 |
 
 ### 06 住宅／進階設施
@@ -214,11 +214,11 @@
 | UI-04 部署／監控／備份 | 原始 CGI 運行環境；README | web/package.json；.github/workflows/town-web.yml | 部分完成 | CI 有測試；尚無正式營運安全／備份定期還原驗證 | P2 | 部署檢查、日誌、備份和恢復演練（後續） |
 | UI-05 地圖教室獨立入口 | unit.pl L152：教室→kyushitu.cgi；dat_dir/kyushitu.cgi 四課 | public/town-home.js::FACILITY_PANELS["教室"]="classroom-panel"；public/index.html::classroom-panel | **已修正錯誤導覽（PR #23）** | 地圖教室不再誤導至學校；已與獨立教室資料及訓練連動 | P1（驗收） | home-ui.test.mjs 及 server／training 測試已涵蓋，待手機與桌面實際操作 |
 
-**實際修復後更新（2026-11-20）**：PR #22（17 項職業必要值與比較）、#23（獨立教室與錯誤地圖入口修正）、#24（現金／銀行薪資及獎金分流）已通過測試並整合；本文之前列示的「未實作」如有衝突以更新後各列為準。信用商品付款、車站原版票價、釣魚等仍是確定缺口。
+**實際修復進度（2026-11-20）**：PR #22 職業需求、#23 教室四課與導覽、#24 薪資收款、#26 車站六組票價已合併並通過 CI；PR #27 新增持有有效原版匯入信用卡的教室銀行付款（以 PR 合併狀態為最終驗收依據）。尚未完成原版購卡商店、釣魚、問卷、投稿、股票與拍賣；不以盤點文件替代實作。
 
 ## 第一輪重大發現與應先修項
 
-**新增跨領域重大缺口（逐原版入口核對）**：`unit.pl` 定義 43 個互動入口；Web 地圖只認得其中 28 個，已有 7 個對應面板且教室入口已修正（PR #23）；原版車站六組票價、釣魚、問卷、活動投稿、股票、拍賣、遊樂中心及設定皆另有來源。詳 [逐入口查核](phase30-entrypoint-coverage.md)；**已核實入口不代表每個遊戲執行函式已檢查完畢**。
+**新增跨領域重大缺口（逐原版入口核對）**：`unit.pl` 定義 43 個互動入口；Web 地圖只認得其中 28 個，已有 7 個對應面板且教室入口已修正（PR #23）；原版車站六組票價已於 PR #26 實作，釣魚、問卷、活動投稿、股票、拍賣、遊樂中心及設定仍另有來源待實作。詳 [逐入口查核](phase30-entrypoint-coverage.md)；**已核實入口不代表每個遊戲執行函式已檢查完畢**。
 
 1. **P0/體格 BMI 判定口徑（PR #12 已修正，P0-D 補半分界）**：`town_lib.pl::check_BMI` 使用 `int(weight/(height/100)^2)`；原版 `basic.cgi` 的職業門檻使用此整數。PR #12 已讓 Web 的 `eligibility` 即時運算整數 BMI，不再用舊的 `character.bmi` 一位小數值；P0-D 進一步修補 Perl `sprintf("%.1f")` 在 17.95／24.95／25.95 的半分界捨入差異。保留原有存檔欄位。
 2. **P1/健身房欄位來源**：`dat_dir/gym.cgi` 的能力增益、費用及能量欄位已對照；「間」與「効果」尚需實際執行路徑驗證。未確定的字串只保留原始資料，不視為待移植的新遊戲效果。
