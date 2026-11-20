@@ -391,6 +391,7 @@ function renderTownMap() {
             if(cell.key==="自販機")renderVending();
             if(cell.key==="装備屋")renderEquipment();
             if(cell.key==="ギフト屋")renderGiftShop();
+            if(cell.key==="リサイ")renderRecycle();
           }
           else if(destination.kind==="station"){
             el("station-heading").scrollIntoView({behavior:"smooth",block:"start"});
@@ -1750,6 +1751,99 @@ function renderGiftShop(){
   }
 }
 
+
+let pendingRecycleAction=null;
+async function submitRecycleAction(action,{sourceLine,listingId,name,price}){
+  if(!["sell","buy"].includes(action))return;
+  if(!window.confirm((action==="sell"?"確定回收出售「":"確定購買二手商品「")+
+    name+"」嗎？"+(action==="sell"?"預計得到 ":"需支付 ")+money(price)))return;
+  const id=action==="sell"?sourceLine:listingId;
+  if(!pendingRecycleAction||pendingRecycleAction.action!==action||
+    pendingRecycleAction.id!==id)
+    pendingRecycleAction={action,id,requestId:crypto.randomUUID()};
+  const requestId=pendingRecycleAction.requestId;
+  const body=action==="sell"?{sourceLine,requestId}:{listingId,requestId};
+  try{
+    state=await api("recycle/"+action,body);
+    const result=state.recycleResult;
+    pendingRecycleAction=null;
+    render();
+    notify(result.replayed?"回收交易已處理，沒有重複改變資產。":
+      (action==="sell"?"已出售「":"已購入「")+result.name+
+      "」，"+(result.amount>=0?"現金增加 ":"現金扣除 ")+
+      money(Math.abs(result.amount))+"。");
+  }catch(error){notify(error.message,true);}
+}
+function renderRecycle(){
+  if(!state?.character)return;
+  const available=state.recycleAvailable===true;
+  text("recycle-status",available?
+    "目前城鎮設有回收商店｜貨架最多 50 筆、上架 7 天；所有玩家共用。":
+    "目前城鎮沒有原版「リサイ」，只能查看本人已持有物品，不可買賣回收品。");
+  const market=el("recycle-market");
+  market.replaceChildren();
+  for(const item of state.recycleListings??[]){
+    const tile=document.createElement("div");tile.className="training-tile";
+    const title=document.createElement("strong");
+    title.textContent=item.name+"｜"+item.category;
+    const note=document.createElement("p");note.className="small";
+    note.textContent="耐久 "+item.quantity+item.unit+"｜二手售價 "+money(item.price);
+    const button=document.createElement("button");button.type="button";
+    button.disabled=state.character.money<item.price;
+    button.textContent=button.disabled?"現金不足":"購買二手品";
+    button.addEventListener("click",()=>submitRecycleAction("buy",{
+      listingId:item.id,name:item.name,price:item.price
+    }));
+    tile.append(title,note,button);
+    market.append(tile);
+  }
+  if(!market.childElementCount){
+    const empty=document.createElement("p");empty.className="small";
+    empty.textContent=available?"目前無人上架未過期的二手物品。":"所在城鎮沒有回收商店。";
+    market.append(empty);
+  }
+  const sellable=el("recycle-sellable");
+  sellable.replaceChildren();
+  for(const item of state.recycleSellable??[]){
+    const tile=document.createElement("div");tile.className="training-tile";
+    const title=document.createElement("strong");
+    title.textContent=item.name+"｜"+item.category;
+    const note=document.createElement("p");note.className="small";
+    note.textContent="剩餘 "+item.quantity+item.unit+"｜預估回收款 "+money(item.payout);
+    const button=document.createElement("button");button.type="button";
+    const wait=Math.max(0,item.readyAt-(state.gameTimeMs??0));
+    button.disabled=!available||!item.canSell;
+    button.textContent=!available?"本城無回收商店":
+      wait>0?"等待 "+Math.ceil(wait/60000)+" 分鐘":"出售整件";
+    button.addEventListener("click",()=>submitRecycleAction("sell",{
+      sourceLine:item.sourceLine,name:item.name,price:item.payout
+    }));
+    tile.append(title,note,button);
+    sellable.append(tile);
+  }
+  if(!sellable.childElementCount){
+    const note=document.createElement("p");note.className="small";
+    note.textContent="目前沒有可安全出售的本人 Web 物品，原版匯入檔保持唯讀。";
+    sellable.append(note);
+  }
+  const history=el("recycle-history");
+  history.replaceChildren();
+  const list=document.createElement("ol");list.className="health-event-list";
+  for(const entry of state.recycleHistory??[]){
+    const line=document.createElement("li");
+    line.textContent=new Date(entry.createdAt).toLocaleString("zh-TW")+"｜"+
+      (entry.action==="sell"?"出售":"購買")+"｜"+entry.name+"｜"+
+      (entry.amount>=0?"現金收入 ":"現金支出 ")+money(Math.abs(entry.amount));
+    list.append(line);
+  }
+  if(list.childElementCount)history.append(list);
+  else{
+    const note=document.createElement("p");note.className="small";
+    note.textContent="尚無回收交易紀錄。";
+    history.append(note);
+  }
+}
+
 function renderTraining() {
   const oldChoices=new Map([...el("classroom-lessons").querySelectorAll("select[data-lesson-key]")]
     .map(item=>[item.dataset.lessonKey,item.value]));
@@ -1987,6 +2081,7 @@ function render() {
   renderVending();
   renderEquipment();
   renderGiftShop();
+  renderRecycle();
   renderInsurance();
   const ready = Boolean(state.currentJob) && state.workCooldownMs === 0 &&
     state.condition?.baseExperience !== null;

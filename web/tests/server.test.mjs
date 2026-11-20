@@ -3000,3 +3000,73 @@ test("多人禮品寄送 HTTP：寄件人扣耐久、收件人得到真實ギフ
     assert.equal((await api(srv.url,"state",undefined,b.cookie)).result.giftEvents.length,0);
   }finally{await srv.stop();}
 });
+
+
+test("回收商店 HTTP：原版建築、本人出售、二手市場買回、30 分鐘拒售及防重",async()=>{
+  const srv=await start("solo");
+  try{
+    const created=await api(srv.url,"character",{
+      name:"回收二手交易玩家",gender:"other",stats:defaultStats()
+    });
+    assert.equal(created.status,200);
+    assert.equal(created.result.recycleAvailable,false);
+    const placed=await api(srv.url,"map/tile",{
+      row:0,column:0,symbol:"リサイ"
+    });
+    assert.equal(placed.status,200);
+    assert.equal(placed.result.recycleAvailable,true);
+    const fields=Array(33).fill("0");
+    fields[0]="日用品";fields[1]="二手回收測試品";fields[9]="無";
+    fields[21]="5";fields[22]="回";
+    fields[30]=String(Math.floor((placed.result.gameTimeMs-31*60000)/1000));
+    fields[31]="100";
+    const db=new DatabaseSync(join(srv.directory,"solo.sqlite"));
+    try{
+      db.prepare([
+        "INSERT INTO legacy_inventory_items(user_id,original_id,source_line,category,original_name,",
+        "effect,durability,durability_unit,purchased_at,last_used_at,raw_fields_json)",
+        "VALUES(1,'__web_retail__',1000001,'日用品','二手回收測試品','無',5,'回',?,0,?)"
+      ].join(" ")).run(Number(fields[30]),JSON.stringify(fields));
+    }finally{db.close();}
+    const ready=await api(srv.url,"state");
+    const sellable=ready.result.recycleSellable.find(x=>x.sourceLine===1000001);
+    assert.ok(sellable);
+    assert.equal(sellable.canSell,true);
+    assert.equal(sellable.payout,500);
+    const cash=ready.result.character.money;
+    const payload={sourceLine:1000001,requestId:"recycle_http_sale_first"};
+    const sold=await api(srv.url,"recycle/sell",payload);
+    assert.equal(sold.status,200);
+    assert.equal(sold.result.recycleResult.amount,500);
+    assert.equal(sold.result.character.money,cash+500);
+    assert.equal(sold.result.recycleListings.length,1);
+    assert.equal(sold.result.legacyInventory.some(x=>x.sourceLine===1000001),false);
+    const order=sold.result.recycleListings[0].id;
+    const replay=await api(srv.url,"recycle/sell",payload);
+    assert.equal(replay.status,200);
+    assert.equal(replay.result.recycleResult.replayed,true);
+    assert.equal(replay.result.character.money,cash+500);
+    const bought=await api(srv.url,"recycle/buy",{
+      listingId:order,requestId:"recycle_http_buy_back"
+    });
+    assert.equal(bought.status,200);
+    assert.equal(bought.result.recycleResult.amount,-500);
+    assert.equal(bought.result.character.money,cash);
+    assert.equal(bought.result.recycleListings.length,0);
+    assert.equal(bought.result.legacyInventory.find(x=>x.origin==="recycle").category,"リサイクル");
+    assert.equal((await api(srv.url,"recycle/buy",{
+      listingId:order,requestId:"recycle_http_buyer_twice"
+    })).status,400);
+    const removed=await api(srv.url,"map/tile",{
+      row:0,column:0,symbol:"空地"
+    });
+    assert.equal(removed.status,200);
+    assert.equal(removed.result.recycleAvailable,false);
+    const denied=await api(srv.url,"recycle/sell",{
+      sourceLine:bought.result.recycleResult.sourceLine,
+      requestId:"recycle_http_missing_shop"
+    });
+    assert.equal(denied.status,400);
+    assert.match(denied.result.error,/沒有回收商店/);
+  }finally{await srv.stop();}
+});
