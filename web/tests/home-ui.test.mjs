@@ -103,7 +103,7 @@ test("原 CGI 建築代碼只連到 Web 真正已實作的設施入口",()=>{
   const expected={
     "銀行":"bank-panel","病院":"hospital-panel","職安":"jobs-panel",
     "教室":"classroom-panel","食堂":"dining-panel","食堂２":"dining-panel",
-    "デパ":"retail-panel","デパ2":"retail-panel","建築":"housing-panel"
+    "デパ":"retail-panel","デパ2":"retail-panel","自販機":"vending-panel","建築":"housing-panel"
   };
   assert.deepEqual(FACILITY_PANELS,expected);
   for(const [key,panelId] of Object.entries(expected)){
@@ -131,6 +131,20 @@ test("百貨店實體地圖入口、商品與現金操作需連上真正交易�
   assert.match(script,/renderRetail\(\)/);
   assert.match(script,/item\.origin==="retail"/);
 });
+test("自動販賣機真實地圖入口、獨立飲料原價、庫存及結帳表單",()=>{
+  assert.deepEqual(townCellAction(describeTile("自販機")),
+    {kind:"facility",panelId:"vending-panel"});
+  for(const id of ["vending-panel","vending-status","vending-items","vending-purchases"])
+    assert.match(html,new RegExp('id="'+id+'"'));
+  assert.match(html,/dat_dir\/jihanki\.cgi/);
+  assert.match(html,/不乘百貨三倍/);
+  assert.match(script,/function renderVending\(\)/);
+  assert.match(script,/api\("retail\/buy",pendingVendingPurchase\)/);
+  assert.match(script,/state\.vendingGoods/);
+  assert.match(script,/item\.price\*quantity/);
+  assert.match(script,/if\(cell\.key==="自販機"\)renderVending\(\)/);
+});
+
 test("原版教室必須導向獨立教室，而非誤開學校或健身房",()=>{
   const result=townCellAction(describeTile("教室"));
   assert.deepEqual(result,{kind:"facility",panelId:"classroom-panel"});

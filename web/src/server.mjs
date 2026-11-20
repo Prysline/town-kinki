@@ -22,6 +22,7 @@ import { getCockroachChallenge,claimCockroach } from "./event-cockroach.mjs";
 import { parseLegacyInsurance, initInventoryTables, inventoryOverview, hasActiveHealthInsurance, listInsurancePurchases, buyHealthInsurance } from "./inventory.mjs";
 import { listLegacyInventoryItems } from "./legacy-inventory.mjs";
 import {parseLegacyRetailCatalog,initRetailTables,ensureRetailDay,listRetailStock,listRetailPurchases,buyRetailItem,RETAIL_SHOPS} from "./retail.mjs";
+import {parseLegacyVendingCatalog,initVendingTables,ensureVendingRotation,listVendingStock,vendingPeriodKey,VENDING_SYMBOL,VENDING_SHOP} from "./vending.mjs";
 import { listValidClassroomCreditCards, requireClassroomCreditCard } from "./legacy-credit.mjs";
 import { legacyPlayerIcon } from "./appearance.mjs";
 import { initLegacyItemUseTables, listLegacyItemActions, listLegacyItemUseHistory, useLegacyItem } from "./legacy-item-use.mjs";
@@ -85,6 +86,7 @@ initInventoryTables(db);
 initDiningStockTables(db);
 initLegacyItemUseTables(db);
 initRetailTables(db);
+initVendingTables(db);
 const houseCatalog = parseHouseCatalog(
   decodeLegacyText(readFileSync(resolve(REPO_ROOT, "town_ini.cgi"))),
   decodeLegacyText(readFileSync(resolve(REPO_ROOT, "command.pl")))
@@ -109,6 +111,7 @@ const meals = [
 const mealsByKey = new Map(meals.map(meal => [meal.key,meal]));
 const insuranceItem=parseLegacyInsurance(decodeLegacyText(readFileSync(resolve(REPO_ROOT,"dat_dir","syouhin.cgi"))));
 const retailCatalog=parseLegacyRetailCatalog(decodeLegacyText(readFileSync(resolve(REPO_ROOT,"dat_dir","syouhin.cgi"))));
+const vendingCatalog=parseLegacyVendingCatalog(decodeLegacyText(readFileSync(resolve(REPO_ROOT,"dat_dir","jihanki.cgi"))));
 
 const sessionHash = token => createHash("sha256").update(token).digest("hex");
 const passwordHash = (password, salt) => scryptSync(password, salt, 64).toString("hex");
@@ -250,6 +253,18 @@ function snapshot(user) {
     catch(error){db.exec("ROLLBACK");throw error;}
     retailGoods=listRetailStock(db,retailCatalog,retailAvailable);
   }
+  // 自販機獨立於百貨，販售商品來源 dat_dir/jihanki.cgi、以當地中午換檔。
+  const vendingAvailable=Boolean(retailMap?.configured&&
+    retailMap.cells.some(cell=>cell.key===VENDING_SYMBOL));
+  let vendingGoods=[];
+  if(vendingAvailable){
+    db.exec("BEGIN IMMEDIATE");
+    try{
+      ensureVendingRotation(db,vendingCatalog,now,GAME_TIMEZONE);
+      db.exec("COMMIT");
+    }catch(error){db.exec("ROLLBACK");throw error;}
+    vendingGoods=listVendingStock(db,vendingCatalog);
+  }
   const currentJob = updated?.jobId ? jobsByKey.get(updated.jobId) : null;
   const classroomCreditCards=updated?listValidClassroomCreditCards(db,user.id,now):[];
   const ownedHouses = updated ? listHouses(db, user.id).map(h => ({
@@ -304,6 +319,8 @@ function snapshot(user) {
     legacyInventory: updated ? listLegacyInventoryItems(db,user.id) : [],
     retailAvailable,retailGoods,retailDay:updated?today:null,
     retailPurchases:updated?listRetailPurchases(db,user.id):[],
+    vendingAvailable,vendingGoods,
+    vendingPeriod:vendingAvailable?vendingPeriodKey(now,GAME_TIMEZONE):null,
     legacyItemActions: updated ? listLegacyItemActions(db,user.id,updated,now) : [],
     legacyItemHistory: updated ? listLegacyItemUseHistory(db,user.id) : [],
     hunger: updated ? hungerStatus(updated.lastMealAt,now) : null,
@@ -632,11 +649,11 @@ async function handle(req, res) {
       const now=gameNow();
       let bought;
       try{
-        bought=buyRetailItem(db,user.id,retailCatalog,{
+        bought=buyRetailItem(db,user.id,data.shop===VENDING_SHOP?vendingCatalog:retailCatalog,{
           shop:data.shop,sku:data.sku,requestId:data.requestId,
           quantity:data.quantity??1,payment:data.payment??"cash",
           cardSourceLine:data.cardSourceLine,
-          now,day:calendarDay(now,GAME_TIMEZONE),
+          now,day:calendarDay(now,GAME_TIMEZONE),timeZone:GAME_TIMEZONE,
           hasBuilding:(symbol,townId)=>{
             const map=publicTownMap(db,townId,false);
             return map.configured&&map.cells.some(cell=>cell.key===symbol);

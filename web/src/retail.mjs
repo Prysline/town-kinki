@@ -1,10 +1,11 @@
 // 原版 command.pl::depart_gamen/buy_syouhin：兩間百貨店每日最多 110 種非「食」商品。
-// 首個 Web 購物切片只允許每次購買一件、現金付款；原版贈品與折扣等另行追來源。
+// 共用本人商品結帳交易；自販機獨立販售價格、上架週期與共用庫存。
 import { randomInt } from "node:crypto";
 import { LEGACY_ITEM_FIELDS,initLegacyInventoryTables } from "./legacy-inventory.mjs";
 import { requireClassroomCreditCard } from "./legacy-credit.mjs";
 import { recordBankEntry } from "./banking.mjs";
 import { initInventoryTables,insuranceCoverage,DAY_MS } from "./inventory.mjs";
+import { VENDING_SHOP,VENDING_SYMBOL,ensureVendingRotation } from "./vending.mjs";
 
 export const RETAIL_SHOPS=Object.freeze({depart1:"デパ",depart2:"デパ2"});
 export const RETAIL_DAILY_LIMIT=110;
@@ -152,10 +153,11 @@ function ownedCategory(item){
   return item.category;
 }
 export function buyRetailItem(db,userId,catalog,{
-  shop,sku,requestId,now,day,hasBuilding,quantity=1,payment="cash",cardSourceLine
+  shop,sku,requestId,now,day,hasBuilding,quantity=1,payment="cash",cardSourceLine,
+  timeZone="Asia/Taipei"
 }={}){
   if(!Number.isSafeInteger(userId)||userId<1||
-     !Object.hasOwn(RETAIL_SHOPS,shop)||typeof sku!=="string"||
+     !(Object.hasOwn(RETAIL_SHOPS,shop)||shop===VENDING_SHOP)||typeof sku!=="string"||
      typeof requestId!=="string"||!REQUEST_ID.test(requestId)||
      !Number.isSafeInteger(now)||now<=0||typeof hasBuilding!=="function"||
      !Number.isSafeInteger(quantity)||quantity<1||quantity>RETAIL_MAX_QUANTITY||
@@ -187,12 +189,16 @@ export function buyRetailItem(db,userId,catalog,{
     }
     const character=db.prepare("SELECT user_id,money,bank,town_id FROM characters WHERE user_id=?").get(userId);
     if(!character)throw new Error("請先建立角色");
-    if(!hasBuilding(RETAIL_SHOPS[shop],character.town_id))
-      throw new Error("目前所在城鎮沒有這間百貨店");
-    ensureRetailDay(db,catalog,day);
-    const available=db.prepare("SELECT remaining FROM retail_stock WHERE shop=? AND sku=?").get(shop,sku);
+    const vending=shop===VENDING_SHOP;
+    if(!hasBuilding(vending?VENDING_SYMBOL:RETAIL_SHOPS[shop],character.town_id))
+      throw new Error(vending?"目前所在城鎮沒有自動販賣機":"目前所在城鎮沒有這間百貨店");
+    if(vending)ensureVendingRotation(db,catalog,now,timeZone);
+    else ensureRetailDay(db,catalog,day);
+    const available=vending
+      ?db.prepare("SELECT remaining FROM vending_stock WHERE sku=?").get(sku)
+      :db.prepare("SELECT remaining FROM retail_stock WHERE shop=? AND sku=?").get(shop,sku);
     if(!available||available.remaining<quantity)
-      throw new Error("商品今日未上架或庫存不足");
+      throw new Error("商品本期未上架或庫存不足");
     if(payment==="cash"){
       if(character.money<total)throw new Error("現金不足");
     }else{
@@ -238,15 +244,19 @@ export function buyRetailItem(db,userId,catalog,{
     }else if(!existing&&active.filter(x=>x.category!=="ギフト"&&x.category!=="ギフト商品").length>=RETAIL_SLOT_LIMIT){
       throw new Error("一般持有物已達 25 格限制");
     }
-    if(db.prepare("UPDATE retail_stock SET remaining=remaining-? WHERE shop=? AND sku=? AND remaining>=?")
-      .run(quantity,shop,sku,quantity).changes!==1)throw new Error("商品庫存不足");
+    const stockChanged=vending
+      ?db.prepare("UPDATE vending_stock SET remaining=remaining-? WHERE sku=? AND remaining>=?")
+        .run(quantity,sku,quantity).changes
+      :db.prepare("UPDATE retail_stock SET remaining=remaining-? WHERE shop=? AND sku=? AND remaining>=?")
+        .run(quantity,shop,sku,quantity).changes;
+    if(stockChanged!==1)throw new Error("商品庫存不足");
     if(payment==="cash"){
       if(db.prepare("UPDATE characters SET money=money-? WHERE user_id=? AND money>=?")
         .run(total,userId,total).changes!==1)throw new Error("現金不足");
     }else{
       if(db.prepare("UPDATE characters SET bank=bank-? WHERE user_id=? AND bank>=?")
         .run(total,userId,total).changes!==1)throw new Error("普通銀行存款不足");
-      recordBankEntry(db,userId,"ordinary",("百貨信用付款："+item.name).slice(0,50),
+      recordBankEntry(db,userId,"ordinary",((vending?"自販機":"百貨")+"信用付款："+item.name).slice(0,50),
         total,0,character.bank-total,now);
     }
     const purchasedAt=Math.floor(now/1000);
