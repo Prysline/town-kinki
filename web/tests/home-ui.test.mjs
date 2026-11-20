@@ -158,6 +158,8 @@ test("裝備屋真實地圖、獨立 6 欄商品、購入與換裝倉庫操作�
   assert.match(script,/state\.equipmentGoods/);
   assert.match(script,/state\.equipmentItems/);
   assert.match(script,/api\("equipment\/"\+action,payload\)/);
+  assert.match(script,/const choices=\[0,1,3,5,10,15,25,50\]/);
+  assert.match(script,/submitEquipmentAction\("forge"/);
   assert.match(script,/if\(cell\.key==="装備屋"\)renderEquipment\(\)/);
 });
 

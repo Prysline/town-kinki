@@ -23,7 +23,7 @@ import { parseLegacyInsurance, initInventoryTables, inventoryOverview, hasActive
 import { listLegacyInventoryItems } from "./legacy-inventory.mjs";
 import {parseLegacyRetailCatalog,initRetailTables,ensureRetailDay,listRetailStock,listRetailPurchases,buyRetailItem,RETAIL_SHOPS} from "./retail.mjs";
 import {parseLegacyVendingCatalog,initVendingTables,ensureVendingRotation,listVendingStock,vendingPeriodKey,VENDING_SYMBOL,VENDING_SHOP} from "./vending.mjs";
-import {parseLegacyEquipmentCatalog,initEquipmentTables,listEquipmentItems,listEquipmentTransactions,buyEquipment,equipEquipment,sellEquipment,EQUIPMENT_SYMBOL} from "./equipment.mjs";
+import {parseLegacyEquipmentCatalog,initEquipmentTables,listEquipmentItems,listEquipmentTransactions,buyEquipment,equipEquipment,sellEquipment,forgeEquipment,EQUIPMENT_SYMBOL} from "./equipment.mjs";
 import { listValidClassroomCreditCards, requireClassroomCreditCard } from "./legacy-credit.mjs";
 import { legacyPlayerIcon } from "./appearance.mjs";
 import { initLegacyItemUseTables, listLegacyItemActions, listLegacyItemUseHistory, useLegacyItem } from "./legacy-item-use.mjs";
@@ -671,7 +671,7 @@ async function handle(req, res) {
       return sendJson(res,200,{...snapshot(user),retailResult:bought});
     }
     if (path === "/api/equipment/buy"||path === "/api/equipment/equip"||
-        path === "/api/equipment/sell") {
+        path === "/api/equipment/sell"||path === "/api/equipment/forge") {
       const now=gameNow();
       const guards={now,requestId:data.requestId,hasBuilding:(symbol,townId)=>{
         const map=publicTownMap(db,townId,false);
@@ -683,8 +683,11 @@ async function handle(req, res) {
           result=buyEquipment(db,user.id,equipmentCatalog,{...guards,sku:data.sku});
         else if(path === "/api/equipment/equip")
           result=equipEquipment(db,user.id,{...guards,itemId:data.itemId});
-        else
+        else if(path === "/api/equipment/sell")
           result=sellEquipment(db,user.id,equipmentCatalog,{...guards,itemId:data.itemId});
+        else result=forgeEquipment(db,user.id,{
+          ...guards,itemId:data.itemId,powerUp:data.powerUp,usesUp:data.usesUp
+        });
       }catch(error){throw new HttpError(400,error.message);}
       return sendJson(res,200,{...snapshot(user),equipmentResult:result});
     }

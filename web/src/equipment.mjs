@@ -4,6 +4,7 @@ const KIND=new Set(TYPES);
 const REQUEST_ID=/^[A-Za-z0-9_-]{8,80}$/;
 const NONNEG=/^(0|[1-9]\d*)$/;
 export const EQUIPMENT_SYMBOL="装備屋";
+export const FORGE_INCREMENTS=Object.freeze([0,1,3,5,10,15,25,50]);
 
 export function parseLegacyEquipmentCatalog(source){
   if(typeof source!=="string")throw new Error("原版裝備商品資料必須是文字");
@@ -163,5 +164,39 @@ export function sellEquipment(db,userId,catalog,{itemId,requestId,now,hasBuildin
       .run(itemId,userId);
     db.prepare("UPDATE characters SET money=money+? WHERE user_id=?").run(credit,userId);
     return {name:selected.name,itemId,amount:credit};
+  });
+}
+
+export function forgeEquipment(db,userId,{
+  itemId,powerUp=0,usesUp=0,requestId,now,hasBuilding
+}={}){
+  if(!Number.isSafeInteger(itemId)||itemId<=0||
+     !FORGE_INCREMENTS.includes(powerUp)||!FORGE_INCREMENTS.includes(usesUp)||
+     (powerUp===0&&usesUp===0))
+    throw new Error("鍛造只能選原版威力／耐久增量，至少一項須大於 0");
+  // 強化數值構成交易簽章，同一請求不能在重試時改造不同的強化內容。
+  const sku="item-"+itemId+"-power-"+powerUp+"-uses-"+usesUp;
+  return transact(db,userId,requestId,now,hasBuilding,"forge",sku,character=>{
+    if(!hasBuilding(EQUIPMENT_SYMBOL,character.town_id))
+      throw new Error("目前所在城鎮沒有裝備屋");
+    const selected=db.prepare("SELECT * FROM equipment_items WHERE user_id=? AND id=?")
+      .get(userId,itemId);
+    if(!selected||selected.status==="sold")
+      throw new Error("找不到本人持有或已穿戴的可鍛造裝備");
+    const cost=powerUp*10000+usesUp*1000;
+    if(!Number.isSafeInteger(cost)||character.money<cost)
+      throw new Error("鍛造現金不足");
+    if(!Number.isSafeInteger(selected.power+powerUp)||
+       !Number.isSafeInteger(selected.uses+usesUp)||
+       selected.power+powerUp>1000000||selected.uses+usesUp>1000000)
+      throw new Error("鍛造後裝備屬性超出安全範圍");
+    if(db.prepare("UPDATE characters SET money=money-? WHERE user_id=? AND money>=?")
+      .run(cost,userId,cost).changes!==1)throw new Error("鍛造現金不足");
+    if(db.prepare([
+      "UPDATE equipment_items SET power=power+?,uses=uses+?",
+      "WHERE user_id=? AND id=? AND status!='sold'"
+    ].join(" ")).run(powerUp,usesUp,userId,itemId).changes!==1)
+      throw new Error("裝備已不存在，鍛造取消");
+    return {name:selected.name,itemId,amount:-cost,powerUp,usesUp};
   });
 }

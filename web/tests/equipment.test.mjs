@@ -5,7 +5,7 @@ import {DatabaseSync} from "node:sqlite";
 import {decodeLegacyText} from "../src/engine.mjs";
 import {
   parseLegacyEquipmentCatalog,initEquipmentTables,listEquipmentItems,
-  listEquipmentTransactions,buyEquipment,equipEquipment,sellEquipment
+  listEquipmentTransactions,buyEquipment,equipEquipment,sellEquipment,forgeEquipment,FORGE_INCREMENTS
 } from "../src/equipment.mjs";
 
 const catalog=parseLegacyEquipmentCatalog(decodeLegacyText(readFileSync(
@@ -138,5 +138,97 @@ test("裝備購買／換裝／出售沒有地圖建築均拒絕，原裝備不�
     assert.equal(db.prepare("SELECT money FROM characters WHERE user_id=1").get().money,money);
     assert.equal(listEquipmentItems(db,1)[0].status,"stored");
     assert.equal(listEquipmentTransactions(db,1).length,1);
+  }finally{db.close();}
+});
+
+
+test("原版鍛造僅允許固定增量，費用為每威力一萬與每次耐久一千，倉庫可強化",()=>{
+  assert.match(source,/sub kajiya_do\s*\{/);
+  assert.match(source,/\$hiyou=\$in\{'iryoku_up'\}\*10000 \+ \$in\{'taikyuu_up'\}\*1000/);
+  assert.deepEqual(FORGE_INCREMENTS,[0,1,3,5,10,15,25,50]);
+  const db=fixture();try{
+    const item=buyEquipment(db,1,catalog,{
+      sku:catalog[0].sku,...opts("equipment_forge_buy")
+    });
+    const original=listEquipmentItems(db,1)[0];
+    const cash=db.prepare("SELECT money FROM characters WHERE user_id=1").get().money;
+    const forged=forgeEquipment(db,1,{
+      itemId:item.itemId,powerUp:3,usesUp:5,...opts("equipment_forge_3_5")
+    });
+    assert.equal(forged.amount,-35000);
+    assert.equal(forged.replayed,false);
+    const updated=listEquipmentItems(db,1)[0];
+    assert.equal(updated.power,original.power+3);
+    assert.equal(updated.uses,original.uses+5);
+    assert.equal(updated.level,1);
+    assert.equal(updated.experience,0);
+    assert.equal(db.prepare("SELECT money FROM characters WHERE user_id=1").get().money,cash-35000);
+    assert.equal(forgeEquipment(db,1,{
+      itemId:item.itemId,powerUp:3,usesUp:5,...opts("equipment_forge_3_5")
+    }).replayed,true);
+    assert.throws(()=>forgeEquipment(db,1,{
+      itemId:item.itemId,powerUp:5,usesUp:3,...opts("equipment_forge_3_5")
+    }),/請求編號/);
+    assert.equal(listEquipmentItems(db,1)[0].power,updated.power);
+    assert.equal(db.prepare("SELECT money FROM characters WHERE user_id=1").get().money,cash-35000);
+    assert.equal(listEquipmentTransactions(db,1).length,2);
+  }finally{db.close();}
+});
+test("已穿戴裝備仍可鍛造，換裝後威力／耐久保留且不能跨帳號鍛造",()=>{
+  const db=fixture();try{
+    const a=buyEquipment(db,1,catalog,{
+      sku:catalog[0].sku,...opts("equipment_forge_worn_buy")
+    });
+    equipEquipment(db,1,{itemId:a.itemId,...opts("equipment_forge_worn_equip")});
+    const worn=forgeEquipment(db,1,{
+      itemId:a.itemId,powerUp:1,usesUp:3,...opts("equipment_forge_worn")
+    });
+    assert.equal(worn.amount,-13000);
+    assert.equal(listEquipmentItems(db,1)[0].status,"equipped");
+    assert.equal(listEquipmentItems(db,1)[0].power,2);
+    assert.equal(listEquipmentItems(db,1)[0].uses,8);
+    assert.throws(()=>forgeEquipment(db,2,{
+      itemId:a.itemId,powerUp:1,usesUp:0,...opts("equipment_forge_other_player")
+    }),/本人/);
+    const b=buyEquipment(db,1,catalog,{
+      sku:catalog[1].sku,...opts("equipment_forge_worn_second")
+    });
+    equipEquipment(db,1,{itemId:b.itemId,...opts("equipment_forge_worn_switch")});
+    assert.equal(listEquipmentItems(db,1).find(x=>x.id===a.itemId).status,"stored");
+    assert.equal(listEquipmentItems(db,1).find(x=>x.id===a.itemId).power,2);
+    assert.equal(listEquipmentItems(db,1).find(x=>x.id===a.itemId).uses,8);
+  }finally{db.close();}
+});
+test("原版鍛造現金剛好等於費用時可成功，但非法增量、缺錢或缺建築整筆拒絕",()=>{
+  const db=fixture();try{
+    const purchased=buyEquipment(db,1,catalog,{
+      sku:catalog[0].sku,...opts("equipment_forge_exact_buy")
+    });
+    db.prepare("UPDATE characters SET money=1000 WHERE user_id=1").run();
+    const id=purchased.itemId;
+    const before=listEquipmentItems(db,1)[0];
+    for(const [up,n] of [[2,0],[-1,0],[1.5,0],[0,0],[51,0]]){
+      assert.throws(()=>forgeEquipment(db,1,{
+        itemId:id,powerUp:up,usesUp:n,...opts("equipment_forge_wrong_"+String(up).replace(".","_"))
+      }),/增量/);
+    }
+    assert.throws(()=>forgeEquipment(db,1,{
+      itemId:id,powerUp:1,usesUp:0,...opts("equipment_forge_no_building",{hasBuilding:()=>false})
+    }),/沒有裝備屋/);
+    assert.throws(()=>forgeEquipment(db,1,{
+      itemId:id,powerUp:1,usesUp:0,...opts("equipment_forge_insufficient")
+    }),/現金不足/);
+    assert.equal(db.prepare("SELECT money FROM characters WHERE user_id=1").get().money,1000);
+    assert.equal(listEquipmentItems(db,1)[0].uses,before.uses);
+    const exact=forgeEquipment(db,1,{
+      itemId:id,powerUp:0,usesUp:1,...opts("equipment_forge_exact_1000")
+    });
+    assert.equal(exact.amount,-1000);
+    assert.equal(db.prepare("SELECT money FROM characters WHERE user_id=1").get().money,0);
+    assert.equal(listEquipmentItems(db,1)[0].uses,before.uses+1);
+    assert.throws(()=>forgeEquipment(db,1,{
+      itemId:id,powerUp:0,usesUp:1,...opts("equipment_forge_after_zero")
+    }),/現金不足/);
+    assert.equal(listEquipmentTransactions(db,1).length,2);
   }finally{db.close();}
 });
