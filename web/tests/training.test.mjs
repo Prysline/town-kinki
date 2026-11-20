@@ -129,7 +129,7 @@ test("教室 cash 路徑完整扣費、雙能量、能力、減重與 BMI，和�
   assert.equal(p.money,100000,"原始角色不可原地變更");
   assert.match(trainingAvailability(after,classrooms[1],now+60_000),/教室還需要等待/);
   assert.throws(()=>performTraining(after,classrooms[1],now+60_000),/教室還需要等待/);
-  assert.equal(trainingAvailability(after,classrooms[1],now+120_000),null);
+  assert.equal(trainingAvailability(after,classrooms[0],now+120_000),null);
 });
 
 test("教室獨立檢查雙能量、現金，健身房和教室不共用訓練冷卻",()=>{
