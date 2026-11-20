@@ -58,8 +58,11 @@ test("過期、未購入、未來購入、單位不符、假冒效果及原始�
     for(const line of [2,3,4,5,6,7])
       assert.throws(()=>requireClassroomCreditCard(db,1,line,NOW),/有效/);
     const expires=SECS*1000+3*DAY_MS;
-    assert.equal(listValidClassroomCreditCards(db,1,expires-1).length,1);
-    assert.equal(listValidClassroomCreditCards(db,1,expires).length,0);
+    // 此時原本「未來購入」的另一張卡可能已生效；只核對第 1 張卡的到期邊界。
+    assert.equal(listValidClassroomCreditCards(db,1,expires-1)
+      .some(x=>x.sourceLine===1),true);
+    assert.equal(listValidClassroomCreditCards(db,1,expires)
+      .some(x=>x.sourceLine===1),false);
     assert.throws(()=>requireClassroomCreditCard(db,1,"1",NOW),/有效/);
   }finally{db.close();}
 });
