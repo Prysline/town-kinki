@@ -13,6 +13,8 @@
 - 原始 `member/<ID>/mono.cgi`、舊銀行／房屋玩家關聯紀錄、實際街區歷史存檔尚無使用者提供的真實樣本，不能虛構匯入相容性。
 - 與原版有意採用的安全模型差異（非負金額／能力、安全整數、HTTP session、Web 延伸性別）需記錄保留，未經批准不可為等價而直接退回不安全行為。
 
+**最新待辦總清冊（2026-11-20）**：[尚未深入盤點、已確認缺漏、已修待驗收與不可推定功能](phase30-open-audit-backlog.md)。包含遊樂中心子 CGI、道具／怪物投稿、市公所、活動、銷售等多層入口，以及 PR #29 後應同步的現況。此清冊僅記錄原始證據與後續工作，**不是新功能已移植**。
+
 **入口層總覆蓋對照**：[原版 `unit.pl` 全部 43 個表單入口、Web 地圖／面板與來源功能逐列查核](phase30-entrypoint-coverage.md)。此清冊以原版入口為起點，填補僅看 Web 模組導致的漏項；並不宣稱每個來源 CGI 的交易函式已完整稽核。
 
 ## 14 領域初步差異矩陣（不是全部原版設施的逐入口盤點）
@@ -42,9 +44,9 @@
 | ID／功能 | 原版來源 | Web 現況／來源 | 判定 | 差異／相依 | 優先度 | 驗收／切片 |
 |---|---|---|---|---|---|---|
 | WK-01 能量上限及自然恢復 | town_ini.cgi；game.cgi；basic.cgi | src/engine.mjs；src/server.mjs | 部分完成 | Web 有上限與恢復；需核對所有轉職／體格事件的加扣條件 | P1 | 上下限、十秒刻度、快轉／多角色隔離（31） |
-| WK-02 工作薪資、經驗、冷卻 | dat_dir/job.cgi；basic.cgi::do_work L2838–2961 | src/engine.mjs::performWork；tests/engine.test.mjs | 部分完成 | 基礎出勤、經驗與薪資存在；原版薪資可選銀行或現金（另見 WK-05），Web 目前一律現金；每次工作身高／性別重驗的差異見 WK-06 | P0/P1 | 條件、出勤、升級、精通、發薪去向與真實存檔（30/31） |
+| WK-02 工作薪資、經驗、冷卻 | dat_dir/job.cgi；basic.cgi::do_work L2838–2961 | src/engine.mjs::performWork；src/server.mjs::/api/work、/api/job/payment；src/banking.mjs；public/app.js | **核心已修（PR #24／#28／#29），待玩家實機驗收** | 出勤依職業發薪週期累積；薪資及升級獎金可依已保存偏好入現金或普通存款，銀行記帳；UI 顯示本週期出勤與精通進度，工作快捷只開分頁。仍有 WK-06 任職後身高／性別重驗差異與真實玩家存檔待核實 | P1（驗收） | 週期發薪 1／5／10 次、角色資料／工作回應、收款順序、銀行帳簿、真實玩家環境（後續） |
 | WK-03 飢餓／疾病修正工作 | top.pl L258-L273；basic.cgi | src/dining.mjs L82-L103；src/health.mjs | 部分完成 | 未用餐玩家以 provisional 5 經驗預設；非原版完整懲罰 | P1 | 舊玩家無紀錄、重症、狀態六級實測（31） |
-| WK-04 職業需求數值表及現有能力對照 | basic.cgi::job_change L2751–L2781；job.cgi::top L18–L29；dat_dir/job.cgi | src/engine.mjs::parseLegacyJobs；src/server.mjs::snapshot jobs（完整傳回 requirements／BMI／身高／性別／薪資）；public/app.js::jobRequirementsPanel／renderJobs | **核心缺漏已修復（PR #22），待真實瀏覽器驗收** | Web 現已預設列出全部職業，可展開 17 項能力目前值／要求值、BMI、性別、身高、前置精通、薪資獎金與消耗，應徵資格仍在後端檢查 | P1（驗收） | 測試已檢查來源與拒絕不合格應徵；待 375px／768px／桌面實機及 150 筆工作資料核對 |
+| WK-04 職業需求數值表及現有能力對照 | basic.cgi::job_change L2751–L2781；job.cgi::top L18–L29；dat_dir/job.cgi | src/engine.mjs::parseLegacyJobs；src/server.mjs::snapshot jobs；public/app.js::jobRequirementsPanel／renderJobs | **核心修復（PR #22），顯示精簡（PR #29），待瀏覽器驗收** | 伺服器仍提供完整 17 項原始能力與資格判定；UI 依使用者要求**只顯示需求 > 0 的能力門檻**，其他 BMI／身高／性別／前置精通有條件才顯示；不再列出一堆 0 或強制顯示當前能力值 | P1（驗收） | 150 筆職業條件、375／768px／桌面真實操作、轉職拒絕與原始數值對照 |
 | WK-05 薪資與獎金領取方式 | basic.cgi::do_work L2920–2953、L2974–2998；town_maker.cgi L142–146 | src/engine.mjs::performWork；src/server.mjs::/api/job/payment、/api/work；src/banking.mjs::recordBankEntry；public/app.js | **核心缺漏已修復（PR #24），舊偏好轉檔未完成** | 可選現金／普通存款；實際工作薪資與升級獎金按偏好分流，銀行帳簿分筆、SQLite 交易回滾；原版舊 shiharai 未保留時預設 cash，不虛構原值 | P1（舊檔／驗收） | 已有 engine、HTTP/SQLite、UI 測試；待真實原版歷史偏好轉檔、極端金額及瀏覽器驗收 |
 | WK-06 任職後工作再檢查條件 | basic.cgi::job_change L2695–2719；do_work L2867–2879 | src/engine.mjs::eligibility／performWork | 已確認行為差異 | 原版選職檢查性別／身高，但工作段落只查能力、BMI、能量；Web 實際工作還重新檢查性別／身高 | P1（行為確認） | 轉職後身高變化測試；安全差異經審核才能變更，不能隨意拿掉 Web 檢查 |
 | WK-07 工作工廠職業投稿／清單 | unit.pl L69；job.cgi::top L13–74；job.cgi::make L80–87；log_dir/joblog.cgi | Web 只載入 dat_dir/job.cgi 正式職業 | **確定缺漏** | 原版允許提交候選職業到 joblog，並顯示投稿條件；不是直接加入正式職業表；此 fork joblog 0 bytes | P2 | 投稿欄位、權限、審核邊界、顯示與真實投稿樣本（後續） |
@@ -77,7 +79,7 @@
 | MP-02 原版 townlog 匯入／地圖編輯 | log_dir/townlog0.cgi ～ townlog3.cgi；town_maker.cgi | src/town-storage.mjs；scripts/town-map.mjs | 部分完成 | 目前 fork 的原始地圖日誌需實際確認是否有資料，不能補造配置 | P1 | 空檔與真實檔 round-trip、權限、備份／回滾（後續） |
 | MP-03 車站／交通票券與跨城成本 | station.cgi；town_ini.cgi；商品檔 | src/transport.mjs；src/server.mjs::/api/move；public/app.js；public/town-home.js | **基本車站收費已移植（PR #26），其他交通票券待驗證** | 四城六組票價與跨城扣現金已實作；實際原版其他交通券／道具是否有獨立效果仍需追來源 | P1（部分完成） | 12 種方向、同城／欠費／多人隔離已測；舊存檔與瀏覽器驗收待完成 |
 | MP-04 車站六組票價及跨城移動 | unit.pl L85；station.cgi::idou L99–116、L135–169 | src/transport.mjs；src/server.mjs::/api/move；public/app.js／town-home.js | **原版票價與地圖入口已修復（PR #26）** | 6 組雙向票價 950／780／1210／950／2210／1530 均會扣現金；拒絕同城、非法目的地與餘額不足；原版 5 秒僅前端倒數，未虛構伺服器冷卻 | P1（實機驗收） | 12 方向、SQLite 原子交易／失敗回滾與兩玩家隔離已測 |
-| MP-05 原版地圖互動入口覆蓋率 | unit.pl::get_unit L62–191（43 個表單入口）；top.pl L472–490 | src/town-map.mjs::MAP_SYMBOLS；public/town-home.js::FACILITY_PANELS | 初步路由覆蓋，非完整遊戲移植 | 43 入口中 28 個有 Web 圖示代碼、15 個未收錄；7 個映射面板，教室已獨立連至 classroom-panel（PR #23），剩餘 21 個有圖示但回報 unavailable。詳 [入口逐項稽核](phase30-entrypoint-coverage.md) | P1 | 逐入口實際交易與 CGI、真實空白 townlog、跨城及尚未移植設施 |
+| MP-05 原版地圖互動入口覆蓋率 | unit.pl::get_unit L62–191（43 個表單入口）；top.pl L472–490 | src/town-map.mjs::MAP_SYMBOLS；public/town-home.js::FACILITY_PANELS／station | **入口清冊已核對；各設施未全部盤點／移植** | 43 入口中 28 個有 Web 圖示代碼、15 個未收錄；**8 個**可導入功能（7 個面板＋已修車站），**20 個**有圖示仍回報 unavailable。原版 gamerand.cgi 等入口內還有多個未逐函式盤點的子 CGI。詳 [入口表](phase30-entrypoint-coverage.md) 與 [新增待辦總清冊](phase30-open-audit-backlog.md) | P1 | 按來源逐原版執行路徑、交易、真實街區存檔、瀏覽器驗收 |
 
 ### 06 住宅／進階設施
 
@@ -183,7 +185,7 @@
 | SC-05 個人檔案搜尋／分頁／傳訊入口 | basic.cgi::prof L1738–1991；town_ini.cgi L145–146 | 尚無 Web 公開檔案搜尋 UI | **確定缺漏** | 可依名稱、性別、年齡、住所與五選項查詢，每頁 10 筆並有傳訊入口 | P2（個資） | 真正查詢條件、分頁、可見性、訊息收件者權限與資料安全 |
 | SC-06 原版問卷建立、投票及管理 | unit.pl L83；enq.cgi::top/make/setup/add/write/delete；enq.cgi L417–426 | Web 無獨立問卷投票系統 | **確定缺漏** | 原版有建立問卷、選項、投票與管理分支，不等於登入畫面的事件通知或隨機事件 | P2 | 建立與管理權限、投票防重、選項數、期限、個人資料隔離 |
 | SC-07 原版玩家投稿事件 | unit.pl L79；event.cgi::form/save L21–103；log_dir/eventlog.cgi | Web 隨機事件模組是 event.pl 的抽選；無 event.cgi 投稿流程 | **確定缺漏** | event.cgi 會寫玩家投稿文字、能力與金錢等欄，**不能混成 event.pl #01～#44 已移植**；投稿不是自動加入隨機事件表 | P2 | 欄位、內容驗證、發表權限、審核與來源檔資料分離 |
-| SC-08 原版遊樂中心卡牌遊戲入口 | unit.pl L120；gamerand.cgi L42–79 → donut.cgi 等 | Web 僅有地圖遊樂中心圖示，無設施動作 | **確定缺漏** | 原版 gamerand.cgi 至少列出三種抽卡模式與 High／Low；具體結算需逐讀 donut.cgi，不能從說明推導機率 | P2 | 各玩法賭注、原始回合判定、款項、狀態防重、未成年人與公開部署安全 |
+| SC-08 原版遊樂中心各種遊戲入口 | unit.pl L120；gamerand.cgi L42–186 → donut.cgi、loto.cgi、loto6.cgi、fukubiki.cgi、saikoro.cgi、cardw2.cgi、otakara.cgi | Web 僅有地圖遊樂中心圖示，無這些設施操作 | **確定尚缺 Web 玩法；子遊戲規則仍待逐函式盤點** | 原版至少列四種 donut 卡牌模式（含 High／Low）、樂透／六號樂透、福引、骰子、卡牌下注、寶箱；各自交易與機率未完成查核。slot.php 的連結缺檔、kuzi.cgi 表單在此 fork 被註解，不能擅自列為可玩遊戲。詳 [多層入口總清冊](phase30-open-audit-backlog.md) | P2 | 逐玩法來源／可達性、賭注及收益、資料保存、防重與營運安全後再實作 |
 
 ### 12 帳號／角色／安全
 
@@ -214,7 +216,7 @@
 | UI-04 部署／監控／備份 | 原始 CGI 運行環境；README | web/package.json；.github/workflows/town-web.yml | 部分完成 | CI 有測試；尚無正式營運安全／備份定期還原驗證 | P2 | 部署檢查、日誌、備份和恢復演練（後續） |
 | UI-05 地圖教室獨立入口 | unit.pl L152：教室→kyushitu.cgi；dat_dir/kyushitu.cgi 四課 | public/town-home.js::FACILITY_PANELS["教室"]="classroom-panel"；public/index.html::classroom-panel | **已修正錯誤導覽（PR #23）** | 地圖教室不再誤導至學校；已與獨立教室資料及訓練連動 | P1（驗收） | home-ui.test.mjs 及 server／training 測試已涵蓋，待手機與桌面實際操作 |
 
-**實際修復進度（2026-11-20）**：PR #22 職業需求、#23 教室四課與導覽、#24 薪資收款、#26 車站六組票價已合併並通過 CI；PR #27 新增持有有效原版匯入信用卡的教室銀行付款（以 PR 合併狀態為最終驗收依據）。尚未完成原版購卡商店、釣魚、問卷、投稿、股票與拍賣；不以盤點文件替代實作。
+**實際修復進度（2026-11-20）**：PR #22 職業需求、#23 教室四課與導覽、#24 薪資收款、#26 車站六組票價、#27 有效匯入信用卡付款、#28 發薪進度與偏好時序、#29 教室快轉冷卻／職業門檻精簡／精通進度／工作快捷均已合併。尚未完成原版購卡商店、食堂每日庫存、缺少五個事件、釣魚、問卷、投稿、股票、拍賣及完整遊樂中心玩法；詳 [總清冊](phase30-open-audit-backlog.md)。**CI 成功不等於玩家實機與舊存檔驗收完成；不以盤點文件替代實作**。
 
 ## 第一輪重大發現與應先修項
 
@@ -261,7 +263,7 @@
 | P1-A：餐飲日表及庫存 | `src/dining.mjs`、`src/server.mjs`、SQLite 日菜單／庫存表、tests | P0-B、每日時鐘與餐飲交易 | 隨機菜單、跨日、賣完、同城共用、重送完整回滾 | 不憑空生成原版不存在的商品或菜單 |
 | P1-B：健身資料來源核對 | `src/training.mjs`、原版 gym 相關 CGI／tests | 確認原版實際健身執行函式 | 原版費用、能力增益、課程時間及失敗回滾 | 無原版執行依據的欄位只保留資料，不建立額外效果功能 |
 | P1-C：剩餘五事件 | `src/event-effects.mjs`、`src/events.mjs`、物品交易／庫存、tests | `kifu*`、`get_itm*`、來源交易已可表示 | 每 ID 亂數、耐久、容量、日限額、多人隔離、rollback | 未有贈送/物品產生交易時不可用假獎勵替代 |
-| P1-D：職業條件原版數值展示 | src/server.mjs::snapshot、public/app.js::renderJobs、UI tests | WK-04、dat_dir/job.cgi 的 150 筆已解析數值 | 每個可選／不可選職業顯示 17 項能力要求、玩家目前值、BMI／身高／性別、薪資獎金及發薪週期 | 不因資料缺失假定職業可應徵，不改伺服器資格判定 |
+| P1-D：職業條件原版數值展示 | src/server.mjs::snapshot、public/app.js::renderJobs、UI tests | WK-04、dat_dir/job.cgi 的 150 筆已解析數值 | 每個可選／不可選職業解析完整 17 項能力，UI 只顯示需求 >0 的值（PR #29）、BMI／身高／性別、薪資獎金及發薪週期 | 不因資料缺失假定職業可應徵，不改伺服器資格判定 |
 | P1-E：薪資去向與銀行明細 | src/engine.mjs、src/server.mjs、src/banking.mjs、SQLite、tests | WK-05 原版 shiharai 與現行銀行交易模型已比對 | 現金／普通銀行領款切換、升級獎金與發薪、帳簿、多人交易防重與回滾 | 不假裝能從未保存的舊 shiharai 恢復偏好 |
 | P1-F：教室獨立訓練 | dat_dir/kyushitu.cgi、src/training.mjs／新模組、server/UI/DB/tests | TR-04～TR-06 原版完整執行分支；與 school/gym 分離 | 4 課原始增益、雙能量、分鐘冷卻、減重、現金與授信付款、多人防重／回滾 | 不把教室來源套到 gym/school；不複製原始 CGI 缺少銀行餘額檢查的風險 |
 | P2：工作工廠／真實公開個人檔案／住宅商店等 | job.cgi／unit.pl、basic.cgi::prof、原始社交與住宅 CGI | WK-07／SC-04／SC-05；真實舊檔缺資料 | 投稿、審核、個人資料公開同意、搜尋、刪改與個資保護 | 不將玩家投稿自動加入正式職業；不自動公開遊戲數值或玩家個資 |
