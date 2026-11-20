@@ -381,6 +381,10 @@ function renderTownMap() {
           if(destination.kind==="house")openRoom(destination.houseId);
           else if(destination.kind==="build"||destination.kind==="facility")
             goToFacility(destination.panelId);
+          else if(destination.kind==="station"){
+            el("station-heading").scrollIntoView({behavior:"smooth",block:"start"});
+            el("towns").querySelector("button:not(:disabled)")?.focus({preventScroll:true});
+          }
           else if(destination.kind==="unavailable")
             notify(name+"："+cell.label+" 尚未移植或尚無對應 Web 入口。");
         }
@@ -828,17 +832,25 @@ function renderHouses() {
 function renderTowns() {
   const target = el("towns");
   target.replaceChildren();
+  const fares=new Map((state.trainDestinations??[]).map(route=>[route.townId,route.fare]));
+  text("station-status","從"+(state.towns.find(t=>t.id===state.character.townId)?.name??"目前城鎮")+
+    "出發，依原版 station.cgi 的電車票價從現金支付；餘額不足時無法乘車。");
   for (const town of state.towns) {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "town" + (town.id === state.character.townId ? " active" : "");
-    button.disabled = town.id === state.character.townId;
+    const current=town.id===state.character.townId;
+    const fare=fares.get(town.id);
+    const affordable=Number.isSafeInteger(fare)&&state.character.money>=fare;
+    button.disabled = current || !affordable;
     const title = document.createElement("span");
     const hint = document.createElement("small");
     title.textContent = town.name;
-    hint.textContent = town.id === state.character.townId ? "目前所在地" : "前往這個城鎮";
+    hint.textContent = current ? "目前所在地（不需搭車）" :
+      !Number.isSafeInteger(fare) ? "暫無票價資訊" :
+      "車票 "+money(fare)+(affordable?" · 搭乘電車":" · 現金不足");
     button.append(title, hint);
-    button.addEventListener("click", () => action("move", { townId: town.id }, "已移動至" + town.name));
+    button.addEventListener("click", () => action("move", { townId: town.id }));
     target.append(button);
   }
 }
@@ -1383,7 +1395,12 @@ function render() {
 async function action(path, data, message) {
   try {
     state = await api(path, data);
-    if (path === "work") {
+    if (path === "move") {
+      const result=state.travelResult;
+      const town=state.towns.find(t=>t.id===result.toTownId);
+      notify("已搭電車抵達 "+(town?.name??"目的地")+
+        "，依原版票價支付現金 "+money(result.fare)+"。");
+    } else if (path === "work") {
       const result = state.result;
       const messages = ["工作完成（狀態："+(result.condition??"普通")+"），職業經驗 "+
         (result.experienceGain>=0?"+":"")+result.experienceGain+" 點。"];
