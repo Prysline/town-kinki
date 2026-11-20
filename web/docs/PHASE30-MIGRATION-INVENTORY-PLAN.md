@@ -4,7 +4,7 @@
 >
 > 使用者明確要求：下一輪繼續開發前，先**完整盤點原版 Perl/CGI 與 Web 實作**，逐條列清已完成、部分完成、未移植細項、實作安排與相依關係，並寫成儲存庫中可持續維護的文件。不可只在聊天中口頭承諾。
 >
-> 本文件起草於 PR #9／#10 堆疊階段；**目前** PR #9～#18 均已合併 `feature/web-dual-mode-phase1`（PR #18 整合 CI 成功），原始 `master` 未修改。**下面出現「尚未合併」「預計開始」等文字均為原始歷史規格，不是本日狀態**。
+> 本文件起草於 PR #9／#10 堆疊階段；**截至 PR #18 合併當時**，PR #9～#18 已整合 `feature/web-dual-mode-phase1`；後續實際狀態以 [GitHub PR 列表](https://github.com/Prysline/town-kinki/pulls?q=is%3Apr+is%3Amerged) 及 [整合分支](https://github.com/Prysline/town-kinki/tree/feature/web-dual-mode-phase1) 為準，原始 `master` 未修改。**下面出現「尚未合併」「預計開始」等文字均為原始歷史規格，不是本日狀態**。
 
 ## 執行順序與完成標準
 
