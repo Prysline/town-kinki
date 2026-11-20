@@ -40,14 +40,18 @@ test("原版薪資收款方式可從工作面板儲存，銀行與現金有實�
   assert.match(script,/state\.character\.salaryPayment/);
 });
 
-test("職業條件保留原版十七項數值及全部職業可展開檢視",()=>{
-  assert.match(html, /id="job-filter"><option value="all">全部職業/);
-  assert.match(script, /JOB_REQUIREMENT_KEYS/);
-  assert.match(script, /function jobRequirementsPanel\(job\)/);
-  assert.match(script, /job\.requirements\?\.\[key\]/);
-  assert.match(script, /state\.physique\?\.bmi/);
-  assert.match(script, /details\.append\(other,finance,requirements\)/);
-  assert.match(script, /button\.disabled = Boolean\(job\.reason\)/);
+test("職業條件只列真正大於零的需求，保留非零體格條件與後端資格限制",()=>{
+  assert.match(html,/id="job-filter"><option value="all">全部職業/);
+  assert.match(script,/JOB_REQUIREMENT_KEYS/);
+  assert.match(script,/function jobRequirementsPanel\(job\)/);
+  assert.match(script,/JOB_REQUIREMENT_KEYS\.filter\(key=>Number\(job\.requirements\?\.\[key\]\?\?0\)>0\)/);
+  assert.match(script,/for\(const key of demanded\)/);
+  assert.match(script,/row\.textContent=labels\[key\]\+"：要求 "\+required/);
+  assert.match(script,/if\(job\.bmiMin\|\|job\.bmiMax\)/);
+  assert.match(script,/if\(job\.minHeight>0\)/);
+  assert.match(script,/if\(job\.previousJob\)/);
+  assert.match(script,/details\.append\(finance\)/);
+  assert.match(script,/button\.disabled = Boolean\(job\.reason\)/);
 });
 test("地圖車站接回原版六組票價與真實跨城操作而非免費切換",()=>{
   assert.match(html,/id="station-heading"/);
@@ -208,6 +212,10 @@ test("單機介面：只有單機可看到四種實際等待快轉，倒數與�
   assert.match(html,/data-advance="1h"/);
   assert.match(html,/data-advance="1d"/);
   assert.match(html,/id="solo-wait-hints"/);
+  assert.match(script,/state\.schoolReadyAtMs/);
+  assert.match(script,/const schoolWait=Math\.max\(0,/);
+  assert.match(script,/學校還需約 /);
+  assert.match(script,/遊戲時間隔日 00:00 可再上課/);
   assert.match(script,/panel\.hidden=state\?\.mode!=="solo" \|\| !state\?\.character/);
   assert.match(script,/api\("solo\/time\/advance",\{preset\}\)/);
   assert.match(script,/const browserGameNow=\(\)=>syncedGameMs\+/);
