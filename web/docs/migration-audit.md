@@ -40,6 +40,7 @@
 | WK-01 能量上限及自然恢復 | town_ini.cgi；game.cgi；basic.cgi | src/engine.mjs；src/server.mjs | 部分完成 | Web 有上限與恢復；需核對所有轉職／體格事件的加扣條件 | P1 | 上下限、十秒刻度、快轉／多角色隔離（31） |
 | WK-02 工作薪資、經驗、冷卻 | dat_dir/job.cgi；basic.cgi L2869-L2961 | src/engine.mjs L194-L245；tests/engine.test.mjs | 部分完成 | 工作薪資與經驗已有；原版整數 BMI 職業限制已對齊（P0-D 補半分界），其他原始條件仍待查核 | P0 | BMI 條件、工作次數、升階、精通與固定亂數測試（30/31） |
 | WK-03 飢餓／疾病修正工作 | top.pl L258-L273；basic.cgi | src/dining.mjs L82-L103；src/health.mjs | 部分完成 | 未用餐玩家以 provisional 5 經驗預設；非原版完整懲罰 | P1 | 舊玩家無紀錄、重症、狀態六級實測（31） |
+| WK-04 職業需求數值表及現有能力對照 | basic.cgi::job_change L2751–L2781（17 項必要能力、BMI、性別、身高、薪資、獎金、發薪週期、雙能量消耗，且顯示玩家目前數值）；job.cgi::top L18–L29（滑鼠提示 17 項能力）；dat_dir/job.cgi | src/engine.mjs::parseLegacyJobs（requirements、bmiMin／Max、gender、minHeight、salary 等已解析）；src/server.mjs::snapshot jobs（未回傳 requirements 等大部分條件）；public/app.js::renderJobs（只顯示薪資、消耗與第一項不足原因） | **確定缺漏：原版清楚顯示需求數值，Web 沒有** | 不是原版沒數據；Web 後端快照省略 17 項能力需求與大多數限制，前端無法比較原版的「玩家目前數值／職業要求」。原版可應徵下拉選單與下方全條件表是不同呈現 | P1 | 補 Web jobs snapshot 的完整必要能力、BMI 範圍、性別、身高、發薪與獎金欄位，前端給全部職業可檢視的條件表或明細；無權應徵仍須禁止；比對原版 150 筆及手機可讀性 |
 
 ### 03 學校／健身房
 
@@ -194,10 +195,11 @@
 
 1. **P0/體格 BMI 判定口徑（PR #12 已修正，P0-D 補半分界）**：`town_lib.pl::check_BMI` 使用 `int(weight/(height/100)^2)`；原版 `basic.cgi` 的職業門檻使用此整數。PR #12 已讓 Web 的 `eligibility` 即時運算整數 BMI，不再用舊的 `character.bmi` 一位小數值；P0-D 進一步修補 Perl `sprintf("%.1f")` 在 17.95／24.95／25.95 的半分界捨入差異。保留原有存檔欄位。
 2. **P1/健身房欄位來源**：`dat_dir/gym.cgi` 的能力增益、費用及能量欄位已對照；「間」與「効果」尚需實際執行路徑驗證。未確定的字串只保留原始資料，不視為待移植的新遊戲效果。
-3. **P1/食堂每日菜單與庫存**：`command.pl` L919–999、L1161–1245 有更新菜單與剩餘量，Web `src/dining.mjs` 頂部承認固定展示。
-4. **P0/事件分支**：缺 #28、#36、#37、#38、#40；其中 #28、#36、#37 的 `kifu*` 要先追完整實作；#38、#40 需物品產生與背包容量。
-5. **P0/展示（PR #13 已合併）**：`public/index.html` 的 `#measurements`、`#physique-status` 已移至狀態分頁常駐體格摘要；`public/app.js` 延用相同資料流。真實瀏覽器截圖和操作驗收仍未完成。
-6. **來源警示**：`src/dining.mjs` L66 用 `2995` 日門檻，對應 `town_ini.cgi` 的 `deleteUser=3000` 與原版 `top.pl` 的 `deleteUser - 5`；數字有來源，真正不同是 Web 無用餐紀錄的 provisional 保護與原版刪角機制。
+3. **P1/職業需求數值表漏移植（已確認）**：原版 `basic.cgi::job_change` L2753–2781 明確輸出每個職業的 17 項能力與 BMI、性別、身高、薪資等，並提供玩家當前值對照；`job.cgi::top` 的滑鼠提示也有各項需求。Web 只向前端送簡化 `reason`，造成不能檢視原版具體門檻。這是 Web 移植缺口，**不是原版不存在**。
+4. **P1/食堂每日菜單與庫存**：`command.pl` L919–999、L1161–1245 有更新菜單與剩餘量，Web `src/dining.mjs` 頂部承認固定展示。
+5. **P0/事件分支**：缺 #28、#36、#37、#38、#40；其中 #28、#36、#37 的 `kifu*` 要先追完整實作；#38、#40 需物品產生與背包容量。
+6. **P0/展示（PR #13 已合併）**：`public/index.html` 的 `#measurements`、`#physique-status` 已移至狀態分頁常駐體格摘要；`public/app.js` 延用相同資料流。真實瀏覽器截圖和操作驗收仍未完成。
+7. **來源警示**：`src/dining.mjs` L66 用 `2995` 日門檻，對應 `town_ini.cgi` 的 `deleteUser=3000` 與原版 `top.pl` 的 `deleteUser - 5`；數字有來源，真正不同是 Web 無用餐紀錄的 provisional 保護與原版刪角機制。
 
 ## 第 30 階段 P0-B 體格核心追蹤：BMI 職業判定
 
