@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { createCharacterData, decodeLegacyText } from "../src/engine.mjs";
 import {
   parseLegacySchool, parseLegacyGym, parseLegacyClassroom, calendarDay,
-  trainingAvailability, performTraining
+  nextCalendarDayStartMs, trainingAvailability, performTraining
 } from "../src/training.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -164,4 +164,23 @@ test("原版教室信用付款由普通存款扣款，仍完整執行四課能�
   assert.equal(funded.bank,30000);
   assert.match(trainingAvailability({...funded,bank:9999},classrooms[0],now,calendarDay(now),"credit"),/普通銀行存款不足/);
   assert.match(trainingAvailability(funded,schools[0],now,calendarDay(now),"credit"),/付款方式/);
+});
+
+test("學校冷卻計算使用遊戲時區隔日 00:00，而非固定上課後 24 小時",()=>{
+  // 臺灣遊戲時間 2026-11-20 23:59 -> 11-21 00:00，只需 60 秒。
+  const late=Date.UTC(2026,10,20,15,59,0);
+  const midnight=Date.UTC(2026,10,20,16,0,0);
+  assert.equal(calendarDay(late,"Asia/Taipei"),"2026-11-20");
+  assert.equal(nextCalendarDayStartMs(late,"Asia/Taipei"),midnight);
+  assert.equal(nextCalendarDayStartMs(midnight,"Asia/Taipei"),midnight+86400000);
+  const afternoon=Date.UTC(2026,10,20,8,0,0);
+  assert.equal(nextCalendarDayStartMs(afternoon,"Asia/Taipei")-afternoon,8*60*60*1000);
+});
+
+test("遊戲時區具夏令時間時，學校次日午夜不誤算為固定 24 小時",()=>{
+  // 2026-03-08 01:00 EST -> 2026-03-09 00:00 EDT（當日僅 23 小時）。
+  const start=Date.UTC(2026,2,8,6,0,0);
+  assert.equal(nextCalendarDayStartMs(start,"America/New_York"),
+    Date.UTC(2026,2,9,4,0,0));
+  assert.throws(()=>nextCalendarDayStartMs(NaN,"Asia/Taipei"),/遊戲時間/);
 });
