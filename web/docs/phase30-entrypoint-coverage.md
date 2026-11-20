@@ -10,7 +10,7 @@
 
 針對 43 個互動入口，Web 目前：
 - **28 個**有明確的 [`MAP_SYMBOLS`](../src/town-map.mjs) 地圖代碼；**15 個**原版互動入口沒有被加入 Web 地圖代碼清單（匯入真實地圖時可能以未知圖示呈現，實際需要有資料驗證）。
-- **7 個**被 [`FACILITY_PANELS`](../public/town-home.js#L2) 導向某個 Web 面板；其中 **6 個**可視為與原始入口相應的部分功能，**「教室」是 1 個確定錯置**，因為目前被導向學校 `school-panel`。
+- **7 個**被 [`FACILITY_PANELS`](../public/town-home.js#L2) 導向對應 Web 面板；其中原先「教室」錯導向學校的問題已由 **PR #23 修正**，目前導向獨立 `classroom-panel`，並能實際操作四堂原版現金課程。此數量仍只是路由覆蓋，不代表其他設施全規則已移植。
 - **21 個**已有 Web 地圖代碼，卻沒有對應 `FACILITY_PANELS` 路由；現行 [`townCellAction`](../public/town-home.js#L12) 會回傳 `unavailable`，按圖示只會提示尚未移植。
 - 這些是**程式路由覆蓋率**，不是已完成功能比例；例如車站移動另有 Web 按鈕，但並未按原版 `station.cgi` 收費。
 
@@ -50,7 +50,7 @@
 | [`販売1`](../../unit.pl#L146) | `hanbai1.cgi` | `hanbai1` | 無 | Web 地圖代碼未收錄 |
 | [`リサイ`](../../unit.pl#L148) | `recycle.cgi` | `resycle` | 有 | Web 有圖示、點選不可進入 |
 | [`クーポン`](../../unit.pl#L150) | `coupon.cgi` | `coupon` | 無 | Web 地圖代碼未收錄 |
-| [`教室`](../../unit.pl#L152) | `kyushitu.cgi` | `kyushitu` | 有 | **錯誤導向學校**（應為獨立教室） |
+| [`教室`](../../unit.pl#L152) | `kyushitu.cgi` | `kyushitu` | 有 | **PR #23 已修正** → `classroom-panel`（四堂現金課程） |
 | [`職安`](../../unit.pl#L154) | `basic.cgi` | `job_change` | 有 | 有 Web 入口／僅部分對照 |
 | [`問屋`](../../unit.pl#L158) | `$script` | `orosi` | 有 | Web 有圖示、點選不可進入 |
 | [`建築`](../../unit.pl#L160) | `$script` | `kentiku` | 有 | 有 Web 入口／僅部分對照 |
@@ -71,7 +71,7 @@
 | ID | 原版實際可執行證據 | Web 對照與判定 |
 |---|---|---|
 | **MP-04 車站收費與跨城** | [`station.cgi::idou` L99–116](../../station.cgi#L99) 明列四城市間六種票價：0↔1 **950**、0↔2 **780**、0↔3 **1,210**、1↔2 **950**、1↔3 **2,210**、2↔3 **1,530**；原版扣 `money`，L135–169 顯示 5 秒移動倒數。 | Web [`/api/move`](../src/server.mjs) 有換城功能，但尚未實作原版六組交通費；地圖「駅」圖示點擊被視為未移植。**確定規則差異**；原版倒數畫面不等於一定有伺服器端 5 秒旅行冷卻。 |
-| **UI-05 教室錯誤導航** | [`unit.pl` L152](../../unit.pl#L152) 的 `教室` 指向 [`kyushitu.cgi`](../../kyushitu.cgi)，有**獨立四課資料**。 | [`town-home.js` L6](../public/town-home.js#L6) 將 `教室` 指向 `school-panel`；[Web 學校資料](../src/training.mjs) 為 `dat_dir/school.cgi`，兩者不是同一設施。**確定 Web 導覽錯置，應修正且不假裝教室已移植**。 |
+| **UI-05 教室獨立導航（已修復）** | [`unit.pl` L152](../../unit.pl#L152) 的 `教室` 指向 [`kyushitu.cgi`](../../kyushitu.cgi)，有獨立四課資料。 | [`town-home.js` L6](../public/town-home.js#L6) 已將「教室」導向 `classroom-panel`；Web 由 [`training.mjs`](../src/training.mjs) 按原版資料執行四堂現金課程。**PR #23 修正；信用付款仍待移植**。 |
 | **IT-05 原版釣魚及漁獲出售** | [`unit.pl` L77](../../unit.pl#L77) 指向 [`sea.cgi`](../../sea.cgi)；`turu` L139–186 檢查上次釣魚間隔、實際持有餌料與釣獲分支；`seri` L244–283 檢查實際漁獲並依不同類別結算售價。 | Web 沒有完整對應釣魚／漁獲出售行為；不得以現有物品封存或餐飲菜單視為完成。**確定缺漏**。 |
 | **EV-01 玩家投稿事件** | [`unit.pl` L79](../../unit.pl#L79) 的 `イベント` 指向 [`event.cgi::form/save` L21–103](../../event.cgi#L21)；`save` 將文字、能力、金錢等資料寫 `log_dir/eventlog.cgi`。 | **與 `event.pl` 的 #01～#44 隨機事件完全是兩件事**；Web 已支援部分隨機事件，但沒有此原版玩家投稿入口。投稿並非自動導入隨機事件池。**確定缺漏**。 |
 | **SV-01 玩家問卷建立、投票與管理** | [`unit.pl` L83](../../unit.pl#L83) 的 `アンケ` 指向 [`enq.cgi`](../../enq.cgi)，含 `top`、`make`、`setup`、`add`、`write`（投票）、`delete` 等模式；[`enq.cgi::write` L417](../../enq.cgi#L417) 有實際票選條件。 | Web 無獨立問卷／投票系統；與事件抽獎及聊天不可混算。**確定缺漏**。 |
