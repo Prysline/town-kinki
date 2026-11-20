@@ -102,6 +102,23 @@ export function calendarDay(now = Date.now(), timeZone = "Asia/Taipei") {
   }).format(now);
 }
 
+// 學校是「遊戲時區每日一次」，不是上課後固定等待 24 小時。
+// 找出下一次當地日期切換的 UTC 時刻，避免伺服器系統時區與夏令時間誤差。
+export function nextCalendarDayStartMs(now = Date.now(), timeZone = "Asia/Taipei") {
+  if (!Number.isFinite(now)) throw new Error("無效的遊戲時間");
+  const today=calendarDay(now,timeZone);
+  let lower=Math.floor(now);
+  let upper=lower+36*60*60*1000;
+  if(calendarDay(upper,timeZone)===today)
+    throw new Error("無法找到遊戲時區的下一日");
+  while(upper-lower>1){
+    const middle=Math.floor((lower+upper)/2);
+    if(calendarDay(middle,timeZone)===today)lower=middle;
+    else upper=middle;
+  }
+  return upper;
+}
+
 export function trainingAvailability(character, lesson, now = Date.now(), day = calendarDay(now), payment = "cash") {
   if (!lesson || !["school", "gym", "classroom"].includes(lesson.type)) return "找不到訓練課程";
   if(payment!=="cash"&&!(lesson.type==="classroom"&&payment==="credit"))
