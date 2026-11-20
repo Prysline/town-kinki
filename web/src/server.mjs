@@ -257,7 +257,13 @@ function snapshot(user) {
       maxAmount: BANK_TRANSFER_LIMIT, newMemberDays: NEW_MEMBER_DAYS,
       newMemberMaxExclusive: NEW_MEMBER_TRANSFER_LIMIT
     } : null,
-    currentJob: currentJob ? { key: currentJob.key, name: currentJob.name, salary: currentJob.salary, payEvery: currentJob.payEvery } : null,
+    currentJob: currentJob ? {
+      key:currentJob.key,name:currentJob.name,salary:currentJob.salary,
+      payEvery:currentJob.payEvery,
+      workProgress:updated.jobWorkCount % currentJob.payEvery,
+      worksUntilPayday:currentJob.payEvery-
+        (updated.jobWorkCount % currentJob.payEvery)
+    } : null,
     condition: updated ? conditionWithIllness(deriveCondition(updated,
       maxBodyEnergy(updated.stats),maxBrainEnergy(updated.stats),now),updated) : null,
     health: updated ? healthStatus(updated) : null,
@@ -551,6 +557,8 @@ async function handle(req, res) {
       } catch(error){throw new HttpError(400,error.message);}
       return sendJson(res, 200, { ...snapshot(user), result: {
         paid: result.paid, pending: result.pending,
+        payEvery:jobsByKey.get(result.character.jobId).payEvery,
+        worksUntilPayday:jobsByKey.get(result.character.jobId).payEvery-result.pending,
         experienceGain: result.experienceGain, condition:result.condition,
         jobLevel: result.jobLevel,
         leveledUp: result.leveledUp, bonus: result.bonus, mastered: result.mastered,
