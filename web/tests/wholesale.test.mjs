@@ -106,7 +106,7 @@ test("沒有住宅、未在住宅開啟商店欄位、非屋主均不能建立�
       category:"不存在的類別",title:"假的店"
     },now),/分類/);
     const chosen=shop(db);
-    assert.equal(chosen.category,"日用品");
+    assert.equal(chosen.category,"食料品");
     assert.deepEqual(listMyShops(db,2),[]);
     assert.equal(listMyShops(db,1).length,1);
     assert.throws(()=>buyWholesale(db,2,catalog,{

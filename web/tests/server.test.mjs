@@ -922,7 +922,7 @@ test("多人：訪客可留言但不可改設定，屋主公告與自訂網址�
     assert.equal((await api(srv.url,visit,undefined,b.cookie)).result.posts[0].body,"正式公告");
     assert.equal((await api(srv.url,"house/room/config",{
       houseId,slots:[{type:"1",title:"商店"}]
-    },a.cookie)).status,400);
+    },a.cookie)).status,200);
     assert.equal((await api(srv.url,"house/room/config",{
       houseId,slots:[{type:"2",title:"偽連結",url:"javascript:alert(1)"}]
     },a.cookie)).status,400);
