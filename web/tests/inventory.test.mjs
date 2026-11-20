@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {DatabaseSync} from "node:sqlite";
+import {initLegacyInventoryTables} from "../src/legacy-inventory.mjs";
 import {
   ITEM_SLOT_LIMIT,SAME_ITEM_LIMIT,DAY_MS,parseLegacyInsurance,initInventoryTables,
   inventoryOverview,hasActiveHealthInsurance,listInsurancePurchases,buyHealthInsurance
@@ -156,4 +157,45 @@ test("升級舊 Web 資料庫不重設角色金錢、保險有效期或購買歷
     assert.equal(listInsurancePurchases(db,1).length,1);
     assert.equal(listInsurancePurchases(db,1,1).length,1);
   } finally {db.close();}
+});
+
+
+test("舊版百貨已購入的真實 33 欄健康保險可被醫院辨識，續購不重複計算原有效期",()=>{
+  const db=setup();try{
+    initLegacyInventoryTables(db);
+    const raw=Array(33).fill("0");
+    raw[0]="日用品";raw[1]="健康保険";raw[9]="無";
+    raw[21]="30";raw[22]="日";raw[30]=String(NOW/1000);
+    db.prepare([
+      "INSERT INTO legacy_inventory_items(user_id,original_id,source_line,category,original_name,",
+      "effect,durability,durability_unit,purchased_at,last_used_at,raw_fields_json)",
+      "VALUES(?,?,?,?,?,?,?,?,?,?,?)"
+    ].join(" ")).run(1,"__web_retail__",1000001,"日用品","健康保険",
+      "無",30,"日",NOW/1000,0,JSON.stringify(raw));
+    assert.equal(hasActiveHealthInsurance(db,1,insurance,NOW),true);
+    assert.equal(inventoryOverview(db,1,insurance,NOW).remainingDays,30);
+    assert.equal(inventoryOverview(db,1,insurance,NOW).activeUntil,NOW+30*DAY_MS);
+    const direct=buy(db,2,"insurance_retail_merge",1,NOW);
+    assert.equal(direct.activeUntil,NOW+90*DAY_MS);
+    assert.equal(inventoryOverview(db,1,insurance,NOW).remainingDays,90);
+    assert.equal(inventoryOverview(db,1,insurance,NOW+DAY_MS).remainingDays,89);
+    assert.throws(()=>buy(db,3,"insurance_retail_over",1,NOW),/5 份/);
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM inventory_purchases WHERE user_id=1").get().n,1);
+  }finally{db.close();}
+});
+
+test("同名偽造或內容不一致的百貨保險不能取得醫院折扣",()=>{
+  const db=setup();try{
+    initLegacyInventoryTables(db);
+    const raw=Array(33).fill("0");
+    raw[0]="日用品";raw[1]="健康保険";raw[9]="無";
+    raw[21]="60";raw[22]="日";raw[30]=String(NOW/1000);
+    db.prepare([
+      "INSERT INTO legacy_inventory_items(user_id,original_id,source_line,category,original_name,",
+      "effect,durability,durability_unit,purchased_at,last_used_at,raw_fields_json)",
+      "VALUES(?,?,?,?,?,?,?,?,?,?,?)"
+    ].join(" ")).run(1,"__web_retail__",1000001,"日用品","健康保険",
+      "無",30,"日",NOW/1000,0,JSON.stringify(raw));
+    assert.equal(hasActiveHealthInsurance(db,1,insurance,NOW),false);
+  }finally{db.close();}
 });

@@ -2,7 +2,7 @@
 // 原版其他道具只封存原欄位，不執行不完整的物品效果。
 import { createHash } from "node:crypto";
 import { basename } from "node:path";
-import { DAY_MS, initInventoryTables } from "./inventory.mjs";
+import { DAY_MS, initInventoryTables, insuranceCoverage } from "./inventory.mjs";
 
 export const LEGACY_ITEM_FIELDS=Object.freeze([
   "category","name","kokugo","suugaku","rika","syakai","eigo","ongaku",
@@ -140,6 +140,8 @@ export function importLegacyInventory(db,parsed,{originalId,sourceFile,now=Date.
     ).get(originalId,userId))
       throw new Error("此原始角色的物品資料已匯入，拒絕重複匯入");
     const insurance=parsed.insurance?.active?parsed.insurance:null;
+    if(insurance&&insuranceCoverage(db,userId,now).activeUntil!==null)
+      throw new Error("角色已持有有效健康保險，拒絕重複匯入覆蓋");
     if(insurance&&db.prepare(
       "SELECT 1 FROM inventory_items WHERE user_id=? AND item_key='health-insurance'"
     ).get(userId))

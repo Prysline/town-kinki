@@ -57,21 +57,56 @@ function userIdValid(userId) {
 function nowValid(now) {
   if(!Number.isSafeInteger(now)||now<0)throw new Error("無效的購買時間");
 }
+// 第 30 階段百貨曾可購買原版健康保険，但未同步舊 Web 的保險權益。
+// 唯有來源確為本 Web 真實購買、33 欄一致的保險才接受為舊購物過渡來源。
+// 已同步的保險不重複相加，統一取真正最晚的有效期限。
+function retailInsuranceExpiry(db,userId){
+  if(!db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='legacy_inventory_items'").get())
+    return {expiresAt:0,lastPurchasedAt:null};
+  const rows=db.prepare([
+    "SELECT durability,purchased_at,category,original_name,effect,durability_unit,raw_fields_json",
+    "FROM legacy_inventory_items WHERE user_id=? AND original_id='__web_retail__'",
+    "AND category='日用品' AND original_name='健康保険' AND effect='無' AND durability_unit='日'"
+  ].join(" ")).all(userId);
+  let expiresAt=0,lastPurchasedAt=null;
+  for(const row of rows){
+    let raw;try{raw=JSON.parse(row.raw_fields_json);}catch{continue;}
+    if(!Array.isArray(raw)||raw.length!==33||
+       raw[0]!=="日用品"||raw[1]!=="健康保険"||
+       raw[9]!=="無"||raw[22]!=="日"||
+       raw[21]!==String(row.durability)||raw[30]!==String(row.purchased_at)||
+       !Number.isSafeInteger(row.durability)||row.durability<=0||
+       !Number.isSafeInteger(row.purchased_at)||row.purchased_at<=0)continue;
+    const start=row.purchased_at*1000;
+    const until=start+row.durability*DAY_MS;
+    if(!Number.isSafeInteger(start)||!Number.isSafeInteger(until))continue;
+    if(until>expiresAt){expiresAt=until;lastPurchasedAt=start;}
+  }
+  return {expiresAt,lastPurchasedAt};
+}
+export function insuranceCoverage(db,userId,now=Date.now()){
+  userIdValid(userId);nowValid(now);
+  const record=db.prepare("SELECT active_until,last_purchased_at FROM inventory_items WHERE user_id=? AND item_key='health-insurance'")
+    .get(userId);
+  const retail=retailInsuranceExpiry(db,userId);
+  const until=Math.max(record?.active_until??0,retail.expiresAt);
+  return {activeUntil:until>now?until:null,remainingMs:Math.max(0,until-now),
+    lastPurchasedAt:record?.last_purchased_at??retail.lastPurchasedAt};
+}
 export function inventoryOverview(db,userId,insurance,now=Date.now()) {
   userIdValid(userId);nowValid(now);
-  const record=db.prepare("SELECT active_until,last_purchased_at FROM inventory_items WHERE user_id=? AND item_key=?")
-    .get(userId,insurance.key);
-  const remainingMs=record?Math.max(0,record.active_until-now):0;
+  const coverage=insuranceCoverage(db,userId,now);
+  const remainingMs=coverage.remainingMs;
   return {
     itemKey:insurance.key,name:insurance.name,category:insurance.category,
     originalName:insurance.originalName,price:insurance.price,
     durationDays:insurance.days,
     maxQuantity:SAME_ITEM_LIMIT,maxSlots:ITEM_SLOT_LIMIT,
     active:remainingMs>0,
-    activeUntil:remainingMs>0?record.active_until:null,
+    activeUntil:coverage.activeUntil,
     remainingMs,remainingDays:remainingMs>0?Math.ceil(remainingMs/DAY_MS):0,
     canBuy:remainingMs+insurance.days*DAY_MS<=SAME_ITEM_LIMIT*insurance.days*DAY_MS,
-    lastPurchasedAt:record?.last_purchased_at??null
+    lastPurchasedAt:coverage.lastPurchasedAt
   };
 }
 export function hasActiveHealthInsurance(db,userId,insurance,now=Date.now()) {
@@ -112,9 +147,7 @@ export function buyHealthInsurance(db,userId,insurance,quantity,requestId,now=Da
     if(!character)throw new Error("請先建立角色");
     if(!Number.isSafeInteger(character.money)||character.money<total)
       throw new Error("現金不足以購買健康保險");
-    const record=db.prepare("SELECT active_until FROM inventory_items WHERE user_id=? AND item_key=?")
-      .get(userId,insurance.key);
-    const existing=Math.max(0,(record?.active_until??0)-now);
+    const existing=insuranceCoverage(db,userId,now).remainingMs;
     if(existing+duration>SAME_ITEM_LIMIT*insurance.days*DAY_MS)
       throw new Error("同種物品的有效耐久不得超過 5 份");
     const activeUntil=now+existing+duration;

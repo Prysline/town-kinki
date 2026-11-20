@@ -5,6 +5,7 @@ import {DatabaseSync} from "node:sqlite";
 import {decodeLegacyText} from "../src/engine.mjs";
 import {initLegacyItemUseTables,listLegacyItemActions} from "../src/legacy-item-use.mjs";
 import {initBankTables} from "../src/banking.mjs";
+import {parseLegacyInsurance,inventoryOverview,hasActiveHealthInsurance,buyHealthInsurance,DAY_MS} from "../src/inventory.mjs";
 import {parseLegacyRetailCatalog,initRetailTables,ensureRetailDay,listRetailStock,buyRetailItem,listRetailPurchases} from "../src/retail.mjs";
 const original=decodeLegacyText(readFileSync(new URL("../../dat_dir/syouhin.cgi",import.meta.url)));
 const script=decodeLegacyText(readFileSync(new URL("../../command.pl",import.meta.url)));
@@ -238,5 +239,36 @@ test("舊有購物紀錄升級補上數量及付款方式，不丟失既有訂�
     initRetailTables(db);
     const row=db.prepare("SELECT quantity,payment,merged FROM retail_purchases WHERE request_id='retail_old_purchase'").get();
     assert.deepEqual({...row},{quantity:1,payment:"cash",merged:0});
+  }finally{db.close();}
+});
+
+
+test("百貨真正買到的原版健康保険立即讓醫院辨識；直購續保統一期限與五份上限",()=>{
+  const db=fixture();try{
+    const product=catalog.find(x=>x.name==="健康保険"&&
+      x.category==="日用品"&&x.effect==="無"&&x.durabilityUnit==="日");
+    assert.ok(product);
+    const insurance=parseLegacyInsurance(original);
+    ensureRetailDay(db,[product],day,randomIndex);
+    assert.equal(hasActiveHealthInsurance(db,1,insurance,now),false);
+    const first=buyRetailItem(db,1,[product],{
+      ...options("depart1",product.sku,"retail_insurance_1"),quantity:2
+    });
+    assert.equal(first.paid,product.unitPrice*2);
+    assert.equal(hasActiveHealthInsurance(db,1,insurance,now),true);
+    assert.equal(inventoryOverview(db,1,insurance,now).remainingDays,60);
+    assert.equal(db.prepare("SELECT active_until FROM inventory_items WHERE user_id=1").get().active_until,
+      now+60*DAY_MS);
+    const direct=buyHealthInsurance(db,1,insurance,3,"retail_insurance_direct",now);
+    assert.equal(direct.activeUntil,now+150*DAY_MS);
+    assert.equal(inventoryOverview(db,1,insurance,now).remainingDays,150);
+    const cash=db.prepare("SELECT money FROM characters WHERE user_id=1").get().money;
+    const stock=listRetailStock(db,[product],["depart1"])[0].stock;
+    assert.throws(()=>buyRetailItem(db,1,[product],{
+      ...options("depart1",product.sku,"retail_insurance_over"),quantity:1
+    }),/5 份/);
+    assert.equal(db.prepare("SELECT money FROM characters WHERE user_id=1").get().money,cash);
+    assert.equal(listRetailStock(db,[product],["depart1"])[0].stock,stock);
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM retail_purchases").get().n,1);
   }finally{db.close();}
 });
