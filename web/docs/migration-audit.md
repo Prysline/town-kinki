@@ -196,6 +196,14 @@
 5. **P0/展示**：`public/index.html` 已有 `#measurements`、`#physique-status`，`public/app.js` 已更新 BMI；下一 PR 先將體格整理為可快速查看的區塊，不能說 UI 完全沒有體格。
 6. **來源警示**：`src/dining.mjs` L66 用 `2995` 日門檻，對應 `town_ini.cgi` 的 `deleteUser=3000` 與原版 `top.pl` 的 `deleteUser - 5`；數字有來源，真正不同是 Web 無用餐紀錄的 provisional 保護與原版刪角機制。
 
+## 第 30 階段 P0-B 體格核心追蹤：BMI 職業判定
+
+- **原版依據**：`basic.cgi::job_change` 與 `basic.cgi::do_work` 會先執行 `$taijuu = sprintf("%.1f",$taijuu)`，接著由 `town_lib.pl::check_BMI` 使用 `int(體重/(身高/100)^2)` 計算整數 BMI；職業上下限為包含邊界。
+- **Web 修正範圍（P0-B 開發分支）**：新增 `src/dining.mjs::legacyPhysiqueBmi`，統一 `physiqueStatus`（五種體型）與 `src/engine.mjs::eligibility`（轉職、工作）使用原版公式。保留 `bodyMassIndex` 的一位小數結果作為現有角色存檔欄位，不改表結構或批量覆寫舊存檔；職業判定由身高／體重即時計算，不信任可能陳舊的 `character.bmi`。
+- **測試**：`tests/dining.test.mjs` 涵蓋原版體重小數四捨五入前後的 18／24／26 臨界；`tests/engine.test.mjs` 涵蓋超出／剛好符合 BMI 職業上限、最低門檻、無上限、轉職與實際工作、過時存檔 BMI 不影響判定。
+- **保留差異／範圍外**：原版 Perl 的 `sprintf` 在極端浮點數／半分界的行為尚無全量對照；本修正不宣稱醫療／服裝／健身額外效果與所有職業規則已完整等價。真正瀏覽器、真實舊存檔驗證仍待執行。
+- **狀態**：已提交 P0-B 程式及測試；**CI 與 PR 最終審查狀態以 GitHub 即時結果為準**，在此文件不將其標為已合併。
+
 ## P0 → P1 → P2 切片與相依／拒絕條件
 
 | 切片／預定 PR | 目標／檔案與資料 | 前置 | 必須新增／保留的測試 | 拒絕條件 |

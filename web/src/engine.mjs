@@ -13,7 +13,7 @@ export const STARTING_BUDGETS = Object.freeze([
 ]);
 export const WORK_COOLDOWN_MS = 5 * 60 * 1000;
 export const ENERGY_RECOVERY_MS = 10 * 1000;
-import { deriveCondition } from "./dining.mjs";
+import { deriveCondition, legacyPhysiqueBmi } from "./dining.mjs";
 import { conditionWithIllness, DEFAULT_HEALTH_INDEX } from "./health.mjs";
 
 export const STAT_KEYS = [
@@ -183,7 +183,9 @@ function eligibility(character, job, checkPrerequisite = true) {
   if (checkPrerequisite && job.previousJob && job.previousJob !== character.masteredJob)
     return "需先精通：" + job.previousJob;
   if (job.gender && character.gender !== job.gender) return "不符合原始職業的性別限制";
-  if (character.bmi < job.bmiMin || (job.bmiMax && character.bmi > job.bmiMax)) return "體格指數不足";
+  // 轉職與實際工作均使用原版取整 BMI；不依賴可能陳舊的一位小數存檔欄位。
+  const originalBmi=legacyPhysiqueBmi(character.height,character.weight);
+  if (originalBmi < job.bmiMin || (job.bmiMax && originalBmi > job.bmiMax)) return "體格指數不足";
   if (character.height < job.minHeight) return "身高不足";
   for (const key of STAT_KEYS) {
     if ((character.stats[key] ?? 0) < job.requirements[key]) return STAT_LABELS[key] + "不足";
