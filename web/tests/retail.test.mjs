@@ -6,7 +6,7 @@ import {decodeLegacyText} from "../src/engine.mjs";
 import {initLegacyItemUseTables,listLegacyItemActions} from "../src/legacy-item-use.mjs";
 import {initBankTables} from "../src/banking.mjs";
 import {parseLegacyInsurance,inventoryOverview,hasActiveHealthInsurance,buyHealthInsurance,DAY_MS} from "../src/inventory.mjs";
-import {parseLegacyRetailCatalog,initRetailTables,ensureRetailDay,listRetailStock,buyRetailItem,listRetailPurchases} from "../src/retail.mjs";
+import {parseLegacyRetailCatalog,retailItemDetails,initRetailTables,ensureRetailDay,listRetailStock,buyRetailItem,listRetailPurchases} from "../src/retail.mjs";
 const original=decodeLegacyText(readFileSync(new URL("../../dat_dir/syouhin.cgi",import.meta.url)));
 const script=decodeLegacyText(readFileSync(new URL("../../command.pl",import.meta.url)));
 const catalog=parseLegacyRetailCatalog(original);
@@ -45,6 +45,45 @@ test("原版兩間百貨同日上架，單價三倍，最多各 110 件，並非
     assert.equal(listRetailStock(db,catalog,[]).length,0);
   }finally{db.close();}
 });
+test("百貨原版商品效果沒有遺失：能力、特殊欄位、能量與備註對照 33 欄",()=>{
+  const paper=catalog.find(x=>x.name==="油取り紙");
+  assert.ok(paper);
+  const details=retailItemDetails(paper);
+  assert.equal(details.effects.looks,2);
+  assert.equal(details.effectCode,"無");
+  assert.equal(details.intervalMinutes,10);
+  assert.equal(details.usage,"supported");
+  assert.equal(details.comment,"");
+  const milk=catalog.find(x=>x.name==="元気ミルク");
+  assert.ok(milk);
+  const drinking=retailItemDetails(milk);
+  assert.equal(drinking.bodyCost,-500);
+  assert.equal(drinking.calories,300);
+  assert.match(drinking.comment,/身体消費が回復/);
+  assert.equal(drinking.usage,"supported");
+  const insurance=retailItemDetails(catalog.find(x=>x.name==="健康保険"));
+  assert.equal(insurance.usage,"automatic");
+  const card=retailItemDetails(catalog.find(x=>x.name==="クレジットカード"));
+  assert.equal(card.usage,"payment");
+  assert.match(card.comment,/銀行/);
+  const db=fixture();try{
+    ensureRetailDay(db,[paper],day,randomIndex);
+    const stock=listRetailStock(db,[paper],["depart1"]);
+    assert.equal(stock[0].details.effects.looks,2);
+    assert.equal(stock[0].details.intervalMinutes,10);
+    assert.equal(stock[0].price,paper.unitPrice);
+  }finally{db.close();}
+});
+test("原版「無」不等於沒有使用效果；未支援的特殊代碼不能顯示成已實作",()=>{
+  const examples=catalog.filter(x=>x.effect==="無"&&
+    retailItemDetails(x).effects.looks!==undefined);
+  assert.ok(examples.length>0);
+  const unsupported=catalog.find(x=>x.effect==="ステータス");
+  assert.ok(unsupported);
+  assert.equal(retailItemDetails(unsupported).usage,"unsupported");
+  assert.equal(retailItemDetails(unsupported).effectCode,"ステータス");
+});
+
 test("本人現金購物、共用扣庫存與 33 欄持有物同筆儲存；重送不能扣第二次",()=>{
   const db=fixture();try{
     ensureRetailDay(db,catalog,day,randomIndex);

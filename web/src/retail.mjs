@@ -6,6 +6,7 @@ import { requireClassroomCreditCard } from "./legacy-credit.mjs";
 import { recordBankEntry } from "./banking.mjs";
 import { initInventoryTables,insuranceCoverage,DAY_MS } from "./inventory.mjs";
 import { VENDING_SHOP,VENDING_SYMBOL,ensureVendingRotation } from "./vending.mjs";
+import { supportsLegacyItemUse } from "./legacy-item-use.mjs";
 
 export const RETAIL_SHOPS=Object.freeze({depart1:"デパ",depart2:"デパ2"});
 export const RETAIL_DAILY_LIMIT=110;
@@ -101,6 +102,38 @@ export function ensureRetailDay(db,catalog,day,randomIndex=randomInt){
   db.prepare("INSERT INTO retail_day(id,day) VALUES(1,?) ON CONFLICT(id) DO UPDATE SET day=excluded.day").run(day);
   return true;
 }
+const LEGACY_STAT_FIELDS=Object.freeze([
+  ["kokugo",2],["suugaku",3],["rika",4],["syakai",5],
+  ["eigo",6],["ongaku",7],["bijutu",8],["looks",10],
+  ["tairyoku",11],["kenkou",12],["speed",13],["power",14],
+  ["wanryoku",15],["kyakuryoku",16],["love",18],
+  ["unique",19],["etti",20]
+]);
+export function retailItemDetails(item){
+  const f=item?.rawFields;
+  if(!Array.isArray(f)||f.length!==33)throw new Error("無法核對原版商品效果欄位");
+  const bonuses=Object.fromEntries(LEGACY_STAT_FIELDS.flatMap(([key,i])=>{
+    if(!/^-?\d+$/.test(f[i]))return [];
+    const n=Number(f[i]);
+    return Number.isSafeInteger(n)&&n!==0?[[key,n]]:[];
+  }));
+  const adjusted=[...f];
+  if(item.effect.includes("ギフト"))adjusted[0]="ギフト";
+  else if(item.effect.includes("食料品"))adjusted[0]="食料品";
+  else if(item.effect.includes("ファ"))adjusted[0]="ファーストフード";
+  const insurance=item.category==="日用品"&&item.name==="健康保険"&&
+    item.effect==="無"&&item.durabilityUnit==="日";
+  const payment=item.effect==="クレジット"&&item.durabilityUnit==="日";
+  const gift=adjusted[0]==="ギフト";
+  return {
+    effects:bonuses,effectCode:item.effect,comment:f[29]||"",
+    calories:Number(f[25])||0,
+    bodyCost:Number(f[27])||0,brainCost:Number(f[28])||0,
+    intervalMinutes:Number(f[23])||0,
+    usage:insurance?"automatic":payment?"payment":gift?"gift":
+      supportsLegacyItemUse(adjusted)?"supported":"unsupported"
+  };
+}
 export function listRetailStock(db,catalog,allowedShops=[]){
   const byKey=new Map(catalog.map(x=>[x.sku,x]));
   return db.prepare("SELECT shop,sku,remaining FROM retail_stock ORDER BY shop,position")
@@ -109,7 +142,8 @@ export function listRetailStock(db,catalog,allowedShops=[]){
       if(!item)throw new Error("百貨店在售商品與原版目錄不一致");
       return {shop:row.shop,sku:item.sku,name:item.name,category:item.category,
         price:item.unitPrice,stock:row.remaining,
-        durability:item.durability,unit:item.durabilityUnit};
+        durability:item.durability,unit:item.durabilityUnit,
+        details:retailItemDetails(item)};
     });
 }
 export function listRetailPurchases(db,userId,limit=25){

@@ -54,7 +54,11 @@ test("職業條件只列真正大於零的需求，保留非零體格條件與�
   assert.match(script,/function jobRequirementsPanel\(job\)/);
   assert.match(script,/JOB_REQUIREMENT_KEYS\.filter\(key=>Number\(job\.requirements\?\.\[key\]\?\?0\)>0\)/);
   assert.match(script,/for\(const key of demanded\)/);
-  assert.match(script,/row\.textContent=labels\[key\]\+"：要求 "\+required/);
+  assert.match(script,/row\.textContent=labels\[key\]\+"｜目前 "\+current\+" ／ 要求 "\+required/);
+  assert.match(script,/required-current/);
+  assert.match(script,/job-condition-met/);
+  assert.match(script,/能力已達 /);
+  assert.match(css,/\.job-condition-met/);
   assert.match(script,/if\(job\.bmiMin\|\|job\.bmiMax\)/);
   assert.match(script,/if\(job\.minHeight>0\)/);
   assert.match(script,/if\(job\.previousJob\)/);
@@ -131,6 +135,20 @@ test("百貨店實體地圖入口、商品與現金操作需連上真正交易�
   assert.match(script,/renderRetail\(\)/);
   assert.match(script,/item\.origin==="retail"/);
 });
+test("百貨結帳數量與付款欄位並排、原版能力與使用狀態可展開查閱",()=>{
+  assert.match(html,/class="filters retail-filters"/);
+  assert.match(script,/controls\.className="retail-buy-controls"/);
+  assert.match(script,/controls\.append\(qtyLabel,paymentLabel\)/);
+  assert.match(script,/retailEffectDetails\(item\)/);
+  assert.match(script,/info\.effects/);
+  assert.match(script,/info\.usage==="automatic"/);
+  assert.match(script,/info\.usage==="supported"/);
+  assert.match(script,/尚未支援直接使用/);
+  assert.match(css,/\.retail-buy-controls\{display:grid;grid-template-columns:/);
+  assert.match(css,/\.retail-filters\{display:grid;grid-template-columns:/);
+  assert.match(css,/\.retail-item-effects/);
+});
+
 test("自動販賣機真實地圖入口、獨立飲料原價、庫存及結帳表單",()=>{
   assert.deepEqual(townCellAction(describeTile("自販機")),
     {kind:"facility",panelId:"vending-panel"});

@@ -388,3 +388,21 @@ body.compact-status-active .game-shell .facility-pane{scroll-margin-top:7rem}
 .job-condition-missing{background:#fff1e9;color:#974422;font-weight:650}
 .job-finance{margin:.45rem 0}
 @media(max-width:520px){.job{gap:.4rem;flex-wrap:wrap}.job .job-main{flex-basis:100%}.job button{margin-left:auto}.job-condition-grid{grid-template-columns:1fr}}
+
+/* 百貨商品資訊與結帳欄位：桌面與小螢幕皆優先並排，而非兩個全寬下拉框直疊。 */
+.game-shell #retail-items{grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr))}
+.retail-filters{display:grid;grid-template-columns:minmax(145px,1fr) minmax(0,2fr);align-items:end;gap:.65rem}
+.retail-filters label{min-width:0}
+.retail-buy-controls{display:grid;grid-template-columns:minmax(0,0.85fr) minmax(0,1.65fr);gap:.55rem;width:100%;align-items:end}
+.retail-buy-controls label{min-width:0}
+.retail-buy-controls select{width:100%;min-width:0;text-overflow:ellipsis}
+.retail-item-effects{width:100%;padding:.25rem .45rem;border:1px solid #dce7dd;border-radius:7px;background:#f3f8f3}
+.retail-item-effects>summary{cursor:pointer;font-weight:650;font-size:.82rem;color:#235b40}
+.retail-item-effects p.small{margin:.35rem 0;overflow-wrap:anywhere}
+.game-shell .training-tile .retail-effect-preview{font-weight:600;color:#305f45;min-height:1.2rem;overflow-wrap:anywhere}
+.job-condition-met{background:#eaf5ed;border-left:3px solid #4b9369}
+.job-condition-missing{border-left:3px solid #cf8d6f}
+@media(max-width:400px){
+  .retail-filters{grid-template-columns:1fr}
+  .retail-buy-controls{grid-template-columns:minmax(0,0.8fr) minmax(0,1.4fr);gap:.35rem}
+}

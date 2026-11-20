@@ -365,16 +365,18 @@
         <section class="card" id="retail-panel">
           <div class="heading"><div><div class="eyebrow">原版建築購物</div><h2>百貨店</h2></div><span class="muted">每日上架，庫存全玩家共用</span></div>
           <details class="explain"><summary>購物規則與目前限制</summary>
-            <p class="small">依原版 command.pl::depart_gamen，百貨店一與二每日各抽選最多 110 種非食堂商品，現金價為商品原始標價三倍。玩家必須在目前城鎮的地圖中有對應百貨店才能購物；每次可購買 1～5 件（原版每種至多持有 5 組）；一般物品持有上限 25 格，購入禮品獨立上限 10 格。已有相同 Web 購入的一般商品會合併耐久，原版匯入的物品保持唯讀。可用現金或本人有效原版信用卡從普通存款付款，款項、共用庫存、帳簿與 33 欄持有物一起交易。原版購物贈券、禮品轉送及尚未支援的特殊物品效果仍待移植。</p>
+            <p class="small">依原版 command.pl::depart_gamen，百貨店一與二每日各抽選最多 110 種非食堂商品，現金價為商品原始標價三倍。玩家必須在目前城鎮的地圖中有對應百貨店才能購物；每次可購買 1～5 件（原版每種至多持有 5 組）；一般物品持有上限 25 格，購入禮品獨立上限 10 格。已有相同 Web 購入的一般商品會合併耐久，原版匯入的物品保持唯讀。可用現金或本人有效原版信用卡從普通存款付款，款項、共用庫存、帳簿與 33 欄持有物一起交易。商品卡片可檢視原始 33 欄的能力增減、特殊效果代碼、熱量、使用間隔、能量消耗及備註；這些資料不等同於 Web 都已能執行。未支援的特殊效果會另標示，不會假裝已生效。原版購物贈券及部分特殊物品行為仍待移植。</p>
           </details>
-          <div class="filters">
-            <label for="retail-shop-select">所在城鎮的百貨店</label>
-            <select id="retail-shop-select">
-              <option value="depart1">百貨店（一）</option>
-              <option value="depart2">百貨店（二）</option>
-            </select>
-            <label for="retail-search">搜尋商品名稱或種類</label>
-            <input id="retail-search" type="search" placeholder="輸入商品名稱或種類">
+          <div class="filters retail-filters">
+            <label for="retail-shop-select">所在城鎮的百貨店
+              <select id="retail-shop-select">
+                <option value="depart1">百貨店（一）</option>
+                <option value="depart2">百貨店（二）</option>
+              </select>
+            </label>
+            <label for="retail-search">搜尋商品名稱或種類
+              <input id="retail-search" type="search" placeholder="輸入商品名稱或種類">
+            </label>
           </div>
           <p class="small" id="retail-status"></p>
           <div id="retail-items" class="training-grid"></div>
