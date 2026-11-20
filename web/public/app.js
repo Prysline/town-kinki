@@ -105,14 +105,11 @@ function renderSoloTime() {
   if(state.workCooldownMs>0)remain.push("工作還需約 "+Math.ceil(state.workCooldownMs/60000)+" 分鐘");
   if(state.gymCooldownMs>0)remain.push("健身房還需約 "+Math.ceil(state.gymCooldownMs/60000)+" 分鐘");
   if(state.mealCooldownMs>0)remain.push("用餐還需約 "+Math.ceil(state.mealCooldownMs/60000)+" 分鐘");
-  const schoolWait=Math.max(0,(state.schoolReadyAtMs??0)-browserGameNow());
-  if(schoolWait>0){
-    const minutes=Math.ceil(schoolWait/60000);
-    const hours=Math.floor(minutes/60);
-    const rest=minutes%60;
-    remain.push("學校還需約 "+(hours?hours+" 小時 ":"")+
-      (rest||!hours?rest+" 分鐘":"")+"（遊戲時間隔日 00:00 可再上課）");
-  }
+  if(state.schoolRemainingToday)remain.push("學校須隔日才可再上課");
+  // 教室的間隔是實際課程完成時儲存的 classroomReadyAt，不是學校的每日重設。
+  // 用遊戲時鐘推算剩餘時間，快轉與畫面每秒更新都會同步變化。
+  const classroomWait=Math.max(0,(state.character.classroomReadyAt??0)-browserGameNow());
+  if(classroomWait>0)remain.push("教室還需約 "+Math.ceil(classroomWait/60000)+" 分鐘");
   text("solo-wait-hints",remain.length?remain.join("；")+"。":"目前沒有主要冷卻等待。");
   const blocked=timeAdvanceBusy || (
     state.cockroachChallenge?.status==="active" &&
