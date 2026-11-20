@@ -8,6 +8,15 @@ const html=readFileSync(new URL("../public/index.html",import.meta.url),"utf8");
 const css=readFileSync(new URL("../public/style.css",import.meta.url),"utf8");
 const script=readFileSync(new URL("../public/app.js",import.meta.url),"utf8");
 
+test("原版薪資收款方式可從工作面板儲存，銀行與現金有實際分流",()=>{
+  assert.match(html,/id="salary-payment"/);
+  assert.match(html,/<option value="cash">現金領取<\/option>/);
+  assert.match(html,/<option value="bank">轉入普通銀行存款<\/option>/);
+  assert.match(script,/salary-payment"\)\.addEventListener\("change"/);
+  assert.match(script,/action\("job\/payment",\{payment\}/);
+  assert.match(script,/state\.character\.salaryPayment/);
+});
+
 test("職業條件保留原版十七項數值及全部職業可展開檢視",()=>{
   assert.match(html, /id="job-filter"><option value="all">全部職業/);
   assert.match(script, /JOB_REQUIREMENT_KEYS/);

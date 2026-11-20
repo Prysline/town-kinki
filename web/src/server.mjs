@@ -21,7 +21,7 @@ import { parseLegacyInsurance, initInventoryTables, inventoryOverview, hasActive
 import { listLegacyInventoryItems } from "./legacy-inventory.mjs";
 import { legacyPlayerIcon } from "./appearance.mjs";
 import { initLegacyItemUseTables, listLegacyItemActions, listLegacyItemUseHistory, useLegacyItem } from "./legacy-item-use.mjs";
-import { initBankTables, settleBankInterest, bankOperation, bankOverview, bankLedger, transferToPlayer, BANK_TRANSFER_LIMIT, NEW_MEMBER_DAYS, NEW_MEMBER_TRANSFER_LIMIT, bankLoanOverview, borrowBankLoan, payoffBankLoan } from "./banking.mjs";
+import { initBankTables, settleBankInterest, bankOperation, bankOverview, bankLedger, recordBankEntry, transferToPlayer, BANK_TRANSFER_LIMIT, NEW_MEMBER_DAYS, NEW_MEMBER_TRANSFER_LIMIT, bankLoanOverview, borrowBankLoan, payoffBankLoan } from "./banking.mjs";
 import { initSoloClock, gameTimestamp, advanceSoloClock, soloOffset } from "./solo-clock.mjs";
 import { deleteSoloCharacter } from "./solo-character.mjs";
 
@@ -57,6 +57,7 @@ for (const [column, definition] of [
   ["last_school_day", "TEXT NOT NULL DEFAULT ''"],
   ["last_gym_at", "INTEGER NOT NULL DEFAULT 0"],
   ["classroom_ready_at", "INTEGER NOT NULL DEFAULT 0"],
+  ["salary_payment", "TEXT NOT NULL DEFAULT 'cash'"],
   ["gym_ready_at", "INTEGER NOT NULL DEFAULT 0"],
   ["created_at", "INTEGER NOT NULL DEFAULT 0"],
   ["last_meal_at", "INTEGER NOT NULL DEFAULT 0"],
@@ -150,7 +151,7 @@ function characterFromRow(row) {
     name: row.name, gender: row.gender, townId: row.town_id,
     money: row.money, bank: row.bank, bodyEnergy: row.body_energy,
     brainEnergy: row.brain_energy, recoveredAt: row.recovered_at,
-    jobId: row.job_id, workProgress: row.work_progress,
+    jobId: row.job_id, salaryPayment:row.salary_payment, workProgress: row.work_progress,
     lastWorkAt: row.last_work_at, workCount: row.work_count,
     height: row.height, weight: row.weight, bmi: row.bmi,
     jobExperience: row.job_experience, jobWorkCount: row.job_work_count,
@@ -169,12 +170,12 @@ function getCharacter(userId) {
 }
 
 function saveCharacter(userId, c) {
-  db.prepare("UPDATE characters SET town_id=?,money=?,bank=?,body_energy=?,brain_energy=?,recovered_at=?,job_id=?,work_progress=?,last_work_at=?,work_count=?,height=?,bmi=?,stats_json=?,weight=?,job_experience=?,job_work_count=?,mastered_job=?,last_school_day=?,last_gym_at=?,gym_ready_at=?,last_meal_at=?,health_index=?,last_health_day=?,last_event_day=?,classroom_ready_at=? WHERE user_id=?")
+  db.prepare("UPDATE characters SET town_id=?,money=?,bank=?,body_energy=?,brain_energy=?,recovered_at=?,job_id=?,work_progress=?,last_work_at=?,work_count=?,height=?,bmi=?,stats_json=?,weight=?,job_experience=?,job_work_count=?,mastered_job=?,last_school_day=?,last_gym_at=?,gym_ready_at=?,last_meal_at=?,health_index=?,last_health_day=?,last_event_day=?,classroom_ready_at=?,salary_payment=? WHERE user_id=?")
     .run(c.townId, c.money, c.bank, c.bodyEnergy, c.brainEnergy, c.recoveredAt,
       c.jobId, c.workProgress, c.lastWorkAt, c.workCount, c.height, c.bmi,
       JSON.stringify(c.stats), c.weight, c.jobExperience, c.jobWorkCount, c.masteredJob,
       c.lastSchoolDay, c.lastGymAt, c.gymReadyAt, c.lastMealAt ?? 0,
-      c.healthIndex ?? 50,c.lastHealthDay ?? "",c.lastEventDay ?? "",c.classroomReadyAt ?? 0,userId);
+      c.healthIndex ?? 50,c.lastHealthDay ?? "",c.lastEventDay ?? "",c.classroomReadyAt ?? 0,c.salaryPayment??"cash",userId);
 }
 
 function addCharacter(userId, c) {
@@ -504,15 +505,44 @@ async function handle(req, res) {
       return sendJson(res, 200, snapshot(user));
     }
 
+    if (path === "/api/job/payment") {
+      if(!["cash","bank"].includes(data.payment))
+        throw new HttpError(400,"薪資收款方式必須是現金或普通存款");
+      mutateCharacter(user.id,old=>({
+        character:{...old,salaryPayment:data.payment}
+      }));
+      return sendJson(res,200,snapshot(user));
+    }
+
     if (path === "/api/work") {
+      const now=gameNow();
+      const today=calendarDay(now,GAME_TIMEZONE);
       let result;
-      try { result = mutateCharacter(user.id,old=>performWork(old,jobsByKey.get(old.jobId),gameNow())); }
-      catch(error){throw new HttpError(400,error.message);}
+      try {
+        // 工作入帳前先以原有銀行存款結清本日利息。
+        // 不讓新入帳薪水在同一天第一次查詢時額外生息。
+        settleBankInterest(db,user.id,today,now);
+        result=mutateCharacter(user.id,old=>{
+          const result=performWork(old,jobsByKey.get(old.jobId),now);
+          if(result.payment==="bank"){
+            // 與角色銀行餘額更新在同一個 SQLite 交易中，不會單獨留下帳簿紀錄。
+            // 原版 bonus 先於 salary 記帳：兩筆分開，方便核對。
+            if(result.bonus>0)
+              recordBankEntry(db,user.id,"ordinary","升級獎金",0,
+                result.bonus,old.bank+result.bonus,now);
+            if(result.paid>0)
+              recordBankEntry(db,user.id,"ordinary","工作薪資",0,
+                result.paid,result.character.bank,now);
+          }
+          return result;
+        });
+      } catch(error){throw new HttpError(400,error.message);}
       return sendJson(res, 200, { ...snapshot(user), result: {
         paid: result.paid, pending: result.pending,
         experienceGain: result.experienceGain, condition:result.condition,
         jobLevel: result.jobLevel,
-        leveledUp: result.leveledUp, bonus: result.bonus, mastered: result.mastered
+        leveledUp: result.leveledUp, bonus: result.bonus, mastered: result.mastered,
+        payment:result.payment
       } });
     }
 

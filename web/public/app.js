@@ -900,6 +900,7 @@ function jobRequirementsPanel(job) {
 }
 function renderJobs() {
   if (!state?.character) return;
+  el("salary-payment").value=state.character.salaryPayment==="bank"?"bank":"cash";
   const target = el("jobs");
   const search = el("job-search").value.trim().toLocaleLowerCase("zh-TW");
   const availableOnly = el("job-filter").value === "available";
@@ -1386,8 +1387,9 @@ async function action(path, data, message) {
       const result = state.result;
       const messages = ["工作完成（狀態："+(result.condition??"普通")+"），職業經驗 "+
         (result.experienceGain>=0?"+":"")+result.experienceGain+" 點。"];
-      if (result.paid) messages.push("獲得薪資 " + money(result.paid) + "。");
-      if (result.bonus) messages.push("升級獎金 " + money(result.bonus) + "。");
+      const destination=result.payment==="bank"?"（已存入銀行普通存款）":"（已領取現金）";
+      if (result.paid) messages.push("獲得薪資 " + money(result.paid) + destination+"。");
+      if (result.bonus) messages.push("升級獎金 " + money(result.bonus) + destination+"。");
       if (result.leveledUp) messages.push("職業等級提升至 " + result.jobLevel + " 級。");
       if (result.mastered) messages.push("已精通目前職業，開放相關進階職業。");
       notify(messages.join(" "));
@@ -1770,6 +1772,11 @@ el("work").addEventListener("click", () => action("work", {}));
 selectFacilityTab(activeFacilityTab);
 el("job-search").addEventListener("input", renderJobs);
 el("job-filter").addEventListener("change", renderJobs);
+el("salary-payment").addEventListener("change",()=>{
+  const payment=el("salary-payment").value;
+  action("job/payment",{payment},
+    payment==="bank"?"往後薪資及獎金改存銀行普通存款。":"往後薪資及獎金改為領取現金。");
+});
 (async () => {
   try { state = await api("state"); render(); }
   catch (error) { notify("無法連線至遊戲伺服器：" + error.message, true); }

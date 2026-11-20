@@ -202,3 +202,21 @@ test("升遷前置職業未精通時不可就職", () => {
 test("舊日文資料可使用 UTF-8 與 Shift_JIS 解碼", () => {
   assert.equal(decodeLegacyText(new TextEncoder().encode("看護師")), "看護師");
 });
+
+test("原版薪資及升級獎金依玩家收款偏好入銀行而非現金",()=>{
+  const [original]=parseLegacyJobs(first);
+  const job={...original,bonusRate:10};
+  const player=createCharacterData("銀行領薪測試","other",100000);
+  const before={...player,jobExperience:99,salaryPayment:"bank"};
+  const result=performWork(before,job,100001,()=>0);
+  assert.equal(result.payment,"bank");
+  assert.equal(result.effectiveSalary,1050);
+  assert.equal(result.paid,1050);
+  assert.equal(result.bonus,10500);
+  assert.equal(result.character.bank,11550);
+  assert.equal(result.character.money,100000);
+  assert.equal(before.bank,0,"發薪不能原地改變玩家存檔");
+  const cash=performWork({...before,salaryPayment:"cash"},job,100001,()=>0);
+  assert.equal(cash.character.money,111550);
+  assert.equal(cash.character.bank,0);
+});

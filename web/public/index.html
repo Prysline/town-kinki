@@ -389,6 +389,13 @@
             <label class="sr-only" for="job-filter">職業篩選</label>
             <select id="job-filter"><option value="all">全部職業</option><option value="available">目前可選</option></select>
           </div>
+          <label class="salary-payment-label" for="salary-payment">下次工作薪資與升級獎金的領取方式
+            <select id="salary-payment">
+              <option value="cash">現金領取</option>
+              <option value="bank">轉入普通銀行存款</option>
+            </select>
+          </label>
+          <p class="small">此設定會保存到角色資料，自下一次工作結算生效；若選擇銀行，薪資與升級獎金會分別記入普通存款帳簿。</p>
           <div id="jobs" class="jobs"></div>
           <details class="explain"><summary>玩法與限制說明</summary><p class="small">未翻譯的職業會暫時顯示原始日文。職業經驗與精通、用餐飽足度與體型對工作狀態的影響已接入；疾病治療與事件仍待移植。</p></details>
         </section>
