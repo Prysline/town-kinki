@@ -59,7 +59,7 @@
 | [`クーポン`](../../unit.pl#L150) | `coupon.cgi` | `coupon` | 無 | Web 地圖代碼未收錄 |
 | [`教室`](../../unit.pl#L152) | `kyushitu.cgi` | `kyushitu` | 有 | **PR #23／#27 已修正** → `classroom-panel`（四堂課，現金或有效匯入信用卡） |
 | [`職安`](../../unit.pl#L154) | `basic.cgi` | `job_change` | 有 | 有 Web 入口／僅部分對照 |
-| [`問屋`](../../unit.pl#L158) | `$script` | `orosi` | 有 | 已加入 [原版問屋最多 120 種、來源庫存×2、住宅店鋪分類、普通銀行進貨、店鋪庫存與 75% 退貨](phase39-wholesale-store.md)；玩家商店對外銷售及配偶代理尚未移植 |
+| [`問屋`](../../unit.pl#L158) | `$script` | `orosi` | 有 | 已加入 [原版問屋最多 120 種、來源庫存×2、住宅店鋪分類、普通銀行進貨、店鋪庫存與 75% 退貨](phase39-wholesale-store.md)；[住宅商店對外銷售](phase40-player-store-sales.md) 已提供，配偶代理及原始歷史匯入仍待移植 |
 | [`建築`](../../unit.pl#L160) | `$script` | `kentiku` | 有 | 有 Web 入口／僅部分對照 |
 | [`競馬`](../../unit.pl#L162) | `basic.cgi` | `keiba` | 有 | Web 有圖示、點選不可進入 |
 | [`プロフ`](../../unit.pl#L164) | `basic.cgi` | `prof` | 有 | Web 有圖示、點選不可進入 |

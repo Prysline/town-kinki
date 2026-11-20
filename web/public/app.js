@@ -416,6 +416,10 @@ async function openRoom(houseId, slot = null, scroll = true) {
     const search = "houseId=" + encodeURIComponent(houseId) +
       (slot === null ? "" : "&slot=" + encodeURIComponent(slot));
     activeRoom = await api("house/visit?" + search);
+    if(activeRoom.selected?.type==="1"){
+      try{activeRoom.shop=await api("shop/visit?houseId="+encodeURIComponent(houseId));}
+      catch{activeRoom.shop=null;}
+    }
     renderRoom();
     // 房屋室內可能從地圖或玩家住宅捷徑開啟；先打開所屬分頁。
     selectFacilityTab("house");
@@ -435,6 +439,56 @@ async function roomAction(path, data, successText, resetSlot = false) {
     notify(successText);
     await openRoom(houseId, slot, false);
   } catch(error) { notify(error.message, true); }
+}
+let pendingPlayerStorePurchase=null;
+async function buyFromPlayerRoom(item,quantity,payment,cardSourceLine){
+  const houseId=activeRoom?.houseId;
+  if(!houseId)return;
+  const total=item.price*quantity;
+  if(!window.confirm("確定從「"+(activeRoom.shop?.title??"玩家商店")+
+    "」購買「"+item.name+"」×"+quantity+"，"+
+    (payment==="bank"?"使用有效信用卡扣普通存款 ":"支付現金 ")+money(total)+"嗎？"))return;
+  if(!pendingPlayerStorePurchase||
+    pendingPlayerStorePurchase.houseId!==houseId||
+    pendingPlayerStorePurchase.sku!==item.sku||
+    pendingPlayerStorePurchase.quantity!==quantity||
+    pendingPlayerStorePurchase.payment!==payment||
+    pendingPlayerStorePurchase.cardSourceLine!==cardSourceLine){
+    pendingPlayerStorePurchase={
+      houseId,sku:item.sku,quantity,payment,cardSourceLine,
+      requestId:crypto.randomUUID()
+    };
+  }
+  const data={houseId,sku:item.sku,quantity,payment,
+    requestId:pendingPlayerStorePurchase.requestId,
+    ...(payment==="bank"?{cardSourceLine}:{} )};
+  const slot=activeRoom.selectedIndex;
+  try{
+    state=await api("shop/buy",data);
+    const result=state.playerStoreResult;
+    pendingPlayerStorePurchase=null;
+    render();
+    notify(result.replayed?"這筆商店購物已完成，沒有重複扣款或出貨。":
+      "已購入「"+result.name+"」×"+quantity+"，付款 "+money(result.paid)+
+      (result.cashback?"；同城現金回饋 "+money(result.cashback):"")+
+      "，商品已入本人持有物。");
+    await openRoom(houseId,slot,false);
+  }catch(error){notify(error.message,true);}
+}
+async function setPlayerRoomPrice(item,price){
+  const houseId=activeRoom?.houseId;
+  if(!houseId)return;
+  if(!Number.isSafeInteger(price)||price<item.min||price>item.max){
+    notify("售價必須為 "+money(item.min)+"～"+money(item.max)+" 的整數",true);return;
+  }
+  if(!window.confirm("確定將「"+item.name+"」的售價設定為 "+money(price)+" 嗎？"))return;
+  const slot=activeRoom.selectedIndex;
+  try{
+    state=await api("shop/price",{houseId,sku:item.sku,price});
+    render();
+    notify("已設定「"+item.name+"」的商店單價。");
+    await openRoom(houseId,slot,false);
+  }catch(error){notify(error.message,true);}
 }
 function renderRoom() {
   const view = activeRoom;
@@ -476,21 +530,111 @@ function renderRoom() {
   } else if (current.type === "1") {
     const note=document.createElement("p");
     note.className="small";
-    const shop=(state.myShops??[]).find(x=>x.houseId===view.houseId);
+    const shop=view.shop;
     note.textContent=shop?
-      "住宅商店「"+shop.title+"」｜分類："+shop.category+
-      "｜店鋪已可向原版問屋進貨；對外零售尚未移植。":
-      "這間住宅設有原版玩家商店欄位；屋主尚未完成店鋪分類與名稱設定。";
+      "住宅商店「"+shop.title+"」｜"+shop.category+
+      "｜目前 "+shop.items.length+" 種上架商品；普通存款／現金結帳。":
+      "屋主尚未完成這間玩家商店的分類與店名設定。";
     body.append(note);
     if(view.owner){
-      const button=document.createElement("button");
-      button.type="button";button.textContent="前往問屋／設定商店";
-      button.addEventListener("click",()=>{
+      const go=document.createElement("button");
+      go.type="button";go.textContent="前往問屋／管理商店庫存";
+      go.addEventListener("click",()=>{
         selectedWholesaleHouseId=view.houseId;
         goToFacility("wholesale-panel");
         renderWholesale();
       });
-      body.append(button);
+      body.append(go);
+    }
+    for(const item of shop?.items??[]){
+      const tile=document.createElement("div");
+      tile.className="training-tile";
+      const title=document.createElement("strong");
+      title.textContent=item.name+"｜"+item.category;
+      const hint=document.createElement("p");hint.className="small";
+      hint.textContent="單價 "+money(item.price)+"｜剩餘 "+item.stock+
+        " 件｜進貨原價 "+money(item.basePrice);
+      const qtyLabel=document.createElement("label");
+      qtyLabel.textContent="購買數量";
+      const qty=document.createElement("select");
+      qty.setAttribute("aria-label",item.name+"玩家商店購買數量");
+      for(let n=1;n<=5;n++){
+        const opt=document.createElement("option");
+        opt.value=String(n);
+        opt.textContent=n+" 件";
+        opt.disabled=n>item.stock;
+        qty.append(opt);
+      }
+      qtyLabel.append(qty);
+      const payLabel=document.createElement("label");
+      payLabel.textContent="付款方式";
+      const pay=document.createElement("select");
+      const cash=document.createElement("option");
+      cash.value="cash";cash.textContent="現金";
+      pay.append(cash);
+      for(const card of state.classroomCreditCards??[]){
+        const opt=document.createElement("option");
+        opt.value="card:"+card.sourceLine;
+        opt.textContent="有效信用卡："+card.name;
+        pay.append(opt);
+      }
+      payLabel.append(pay);
+      const quote=document.createElement("p");quote.className="small";
+      const button=document.createElement("button");
+      button.type="button";
+      const update=()=>{
+        const n=Number(qty.value),cost=n*item.price;
+        const bank=pay.value.startsWith("card:");
+        const enough=Number.isSafeInteger(cost)&&
+          cost<=(bank?state.character.bank:state.character.money);
+        quote.textContent="合計 "+money(cost)+(bank?"（普通存款）":"（現金）")+
+          (!enough?"｜餘額不足":n>item.stock?"｜庫存不足":"");
+        button.disabled=!enough||n>item.stock;
+        button.textContent=button.disabled?"無法購買":"購買商品";
+      };
+      qty.addEventListener("change",update);
+      pay.addEventListener("change",update);
+      button.addEventListener("click",()=>{
+        const bank=pay.value.startsWith("card:");
+        buyFromPlayerRoom(item,Number(qty.value),bank?"bank":"cash",
+          bank?Number(pay.value.slice(5)):undefined);
+      });
+      update();
+      tile.append(title,hint,qtyLabel,payLabel,quote,button);
+      if(view.owner){
+        const priceLabel=document.createElement("label");
+        priceLabel.textContent="店主調整單價（"+money(item.min)+"～"+money(item.max)+"）";
+        const price=document.createElement("input");
+        price.type="number";price.min=String(item.min);price.max=String(item.max);
+        price.step="1";price.value=String(item.price);
+        priceLabel.append(price);
+        const set=document.createElement("button");
+        set.type="button";set.className="secondary";set.textContent="變更售價";
+        set.addEventListener("click",()=>setPlayerRoomPrice(item,Number(price.value)));
+        tile.append(priceLabel,set);
+      }
+      body.append(tile);
+    }
+    if(shop&&!shop.items.length){
+      const empty=document.createElement("p");empty.className="small";
+      empty.textContent="目前沒有貨物；屋主可先在問屋進貨後再對外販售。";
+      body.append(empty);
+    }
+    const recent=(state.playerShopSales??[]).filter(x=>x.houseId===view.houseId).slice(0,12);
+    if(recent.length){
+      const h=document.createElement("h3");
+      h.textContent="近期本人在這間店的交易";
+      const list=document.createElement("ol");
+      list.className="bank-ledger-list";
+      for(const entry of recent){
+        const li=document.createElement("li");
+        li.textContent=new Date(entry.createdAt).toLocaleString("zh-TW")+"｜"+
+          (entry.role==="seller"?"出售":"購入")+"｜"+entry.name+
+          " ×"+entry.quantity+"｜"+money(entry.paid)+
+          (entry.cashback?"｜同城回饋 "+money(entry.cashback):"");
+        list.append(li);
+      }
+      body.append(h,list);
     }
   } else if (current.type === "2") {
     const note = document.createElement("p");

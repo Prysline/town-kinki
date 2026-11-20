@@ -190,6 +190,17 @@ test("原版「リサイ」回收商店真實地圖入口、二手貨架與本�
   assert.match(script,/if\(cell\.key==="リサイ"\)renderRecycle\(\)/);
 });
 
+test("玩家住宅商店對外零售，店主售價與有效信用卡付款對應真實 API",()=>{
+  assert.match(script,/activeRoom\.shop=await api\("shop\/visit\?houseId="/);
+  assert.match(script,/function buyFromPlayerRoom|async function buyFromPlayerRoom/);
+  assert.match(script,/api\("shop\/buy",data\)/);
+  assert.match(script,/api\("shop\/price",\{houseId,sku:item\.sku,price\}\)/);
+  assert.match(script,/current\.type === "1"/);
+  assert.match(script,/state\.classroomCreditCards/);
+  assert.match(script,/pendingPlayerStorePurchase/);
+  assert.match(html,/顧客可用現金或本人有效信用卡購買/);
+});
+
 test("原版問屋入口與住宅商店設定、普通銀行結帳、倉庫及退貨 UI",()=>{
   assert.deepEqual(townCellAction(describeTile("問屋")),
     {kind:"facility",panelId:"wholesale-panel"});
