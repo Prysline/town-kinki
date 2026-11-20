@@ -4,7 +4,7 @@
 
 > **分支與驗收邊界**：原版 Perl/CGI 保留在 `master`，Web 開發及盤點合併到 [`feature/web-dual-mode-phase1`](https://github.com/Prysline/town-kinki/tree/feature/web-dual-mode-phase1)；**最新合併 PR 與 CI 狀態請查 [GitHub PR](https://github.com/Prysline/town-kinki/pulls?q=is%3Apr+is%3Amerged) 及 [Actions](https://github.com/Prysline/town-kinki/actions)**，不在此維護容易過時的「最新 PR 編號」。目前局部成果包括原版 BMI 職業門檻、捨入邊界、體格摘要、原版已匯入圖示手動預覽、來源盤點及美容物品測試；**不代表整個原版遊戲、真實玩家存檔或瀏覽器視覺驗收完成**。
 
-> **第 30 階段盤點與後續工作**：[現行原版 → Web 差異矩陣](docs/migration-audit.md)、[全 43 個原版地圖互動入口與 Web 導覽覆蓋表](docs/phase30-entrypoint-coverage.md)、[外貌與圖示來源](docs/appearance-source-audit.md)、[職業／教室／公開個人檔案](docs/phase30-jobs-training-profile-audit.md) 分別追溯原版程式與實際缺漏。**新清冊設有自動核對原版 `unit.pl` 和 Web 圖示代碼的 CI 測試**；歷史 [工作契約](docs/PHASE30-MIGRATION-INVENTORY-PLAN.md) 不是驗收證明。實際玩家資料／瀏覽器仍待驗收。
+> **第 30 階段盤點與後續工作**：[最新待辦總清冊：未深入盤點／已盤點未修／已修待驗收](docs/phase30-open-audit-backlog.md)、[現行原版 → Web 差異矩陣](docs/migration-audit.md)、[全 43 個原版地圖互動入口與 Web 導覽覆蓋表](docs/phase30-entrypoint-coverage.md)、[外貌與圖示來源](docs/appearance-source-audit.md)、[職業／教室／公開個人檔案](docs/phase30-jobs-training-profile-audit.md) 分別追溯原版程式與實際缺漏。**現有 CI 只核對入口清單／圖示，並不逐子 CGI 驗證功能**；歷史 [工作契約](docs/PHASE30-MIGRATION-INVENTORY-PLAN.md) 不是驗收證明。實際玩家資料／瀏覽器仍待驗收。
 
 ## 本階段已完成
 
