@@ -14,7 +14,7 @@ const STAT_EVENTS = Object.freeze({
     positive:"對藝術產生興趣",negative:"在美術課睡著了"}
 });
 export const NON_ITEM_EVENT_IDS = Object.freeze([
-  1,2,3,5,6,7,8,9,10,11,12,13,14,16,17,18,19,20,21,22,23,24,25,26,27,29,30,31,32,33,39,41,42,43,44
+  1,2,3,5,6,7,8,9,10,11,12,13,14,16,17,18,19,20,21,22,23,24,25,26,27,29,30,31,32,33,35,39,41,42,43,44
 ]);
 
 function draw(random,n) {
@@ -444,6 +444,34 @@ export function resolveNonItemEvent(originalId,character,random=Math.random,bonu
         const loss=-subtractEnergy("body_energy",2);
         const cost=-addMoney(-50000);
         event.description="在琵琶湖溺水，身體能量減少 "+loss+" 點，支付救援費 "+cost+" 元。";
+      }
+      break;
+    }
+    case 35:{
+      // event.pl #35: 先 int(rand(4))+1，再檢查「４次元福袋」與扣 1 次耐久。
+      // 持有福袋時，第 4 種結果在原版沒有敘述或獎勵，不能補成虛構道具。
+      const choice=draw(random,4);
+      event.key="fourDimensionalBag";event.title="四次元福袋";
+      if(bonusItem==="４次元福袋"){
+        usedItemName=bonusItem;
+        if(choice===1){
+          const earned=addMoney(100000000);
+          event.description="四次元福袋開出一億元，現金增加 "+earned+" 元。";
+        }else if(choice===2){
+          const gained=grantEnergy(10000);
+          event.description="福袋開出十張溫泉券，身體和頭腦能量分別恢復 "+
+            gained.body+"、"+gained.brain+" 點（Web 限制在現有能量上限）。";
+        }else if(choice===3){
+          couponAward=draw(random,15);
+          effects.coupons=couponAward;
+          event.description="四次元福袋開出優惠券 "+couponAward+" 張，已加入 Web 優惠券餘額。";
+        }else{
+          // 原作第 4 個結果沒有處理分支，但 motimono_kensa_ev2 已先扣耐久。
+          event.description="四次元福袋這次沒有開出獎勵（原版第 4 個分支沒有任何效果）。";
+        }
+      }else{
+        const lost=-addMoney(-10000);
+        event.description="沒找到有效的四次元福袋，因為宣稱看到聖誕老人而被罰款 "+lost+" 元。";
       }
       break;
     }
