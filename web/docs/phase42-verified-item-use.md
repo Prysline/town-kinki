@@ -17,7 +17,7 @@
 ## 實際工程界線
 
 - 仍由 `web/src/legacy-item-use.mjs` 的安全白名單管控，不改原版 `member/<ID>/mono.cgi`；`legacy_item_usage` 單獨記錄使用日期與歷史，原始物品 33 欄保持唯讀。購物、庫存、銀行付款沒有改動。
-- `supportsLegacyItemUse` 供商店在購入前查看「買入後是否支援使用」；原始商品表尚未填寫購入時間的 `日` 商品使用安全預覽日期，**不**代表可以繞過正式購買時間與到期判斷。
+- `supportsLegacyItemUse` 供商店在購入前查看「買入後是否支援使用」；原始商品表尚未填寫購入時間（可能放的是 `きょろちゃ`、`ソラ` 等製作者文字）的 `日` 商品使用安全預覽日期，**不**代表可以繞過正式購買時間與到期判斷。
 - `web/public/app.js` 現在解釋 `ステータス`、`効果` 與第三段分類標記的確切意義；未核實的 `万能,` 空數值等效果仍保留「尚未支援」，不擅自補成 0 或假設治療效果。
 - `web/tests/legacy-item-use.test.mjs` 加入真實商品表逐筆驗證、合法與仿冒恢復、食品與間隔、日制到期／重用／原始日期核對、特殊權益分流與重送防重。另增 `web/tests/retail.test.mjs` 的商店預覽用途回歸，`web/tests/server.test.mjs` 真實百貨購買→使用的 API 整合情境，`web/tests/home-ui.test.mjs` 商品用途說明測試。
 

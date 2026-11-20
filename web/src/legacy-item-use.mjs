@@ -111,7 +111,9 @@ export function supportsLegacyItemUse(rawFields){
     // 原版商品目錄尚未買入，購入時間為 0；這裡只預檢「買入後能否操作」。
     // 真正持有物必須符合本人購買時間與到期日，無法用預覽值繞過。
     const preview=[...rawFields];
-    if(preview[22]==="日"&&preview[30]==="0")preview[30]="1";
+    // 原版 syouhin.cgi 的這格可能是「きょろちゃ」「ソラ」等製作者文字，
+    // 並非購入時間。預覽只檢查可否支援，購入時會由買賣邏輯覆寫為真實時間。
+    if(preview[22]==="日")preview[30]="1";
     return Boolean(parseArchivedItem({
       category:preview[0],original_name:preview[1],
       durability:Number(preview[21]),durability_unit:preview[22],

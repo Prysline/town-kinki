@@ -526,8 +526,8 @@ test("ステータス 原版三款實際只套用能力／能量欄位，不偽�
       const expectedLooks=Number(fields[10]||0);
       assert.equal(result.changes.stats.looks??0,expectedLooks);
       assert.equal(read(db).stats.looks,1000+expectedLooks);
-      assert.equal(result.changes.bodyEnergy,-Number(fields[27]||0));
-      assert.equal(result.changes.brainEnergy,-Number(fields[28]||0));
+      assert.equal(result.changes.bodyEnergy,-Number(fields[27]||0)||0);
+      assert.equal(result.changes.brainEnergy,-Number(fields[28]||0)||0);
       assert.equal(read(db).health_index,before.health_index);
     }finally{db.close();}
   }
@@ -563,8 +563,12 @@ test("有第三段原版食物標記的體重效果會正常生效，並遵守�
       assert.equal(first.changes.food,true);
       assert.equal(first.changes.weight,weightEffect+Number(fields[25]||0)/1000);
       assert.equal(read(db).last_meal_at,NOW);
-      if(Number(fields[21])>1)
-        assert.throws(()=>use(db,1,"third-token-food-002",NOW+2000),/60 分鐘/);
+      if(Number(fields[21])>1){
+        assert.throws(()=>use(db,1,"third-token-food-002",NOW+2000),/間隔|60 分鐘/);
+        if(Number(fields[23])<60)
+          assert.throws(()=>use(db,1,"third-token-food-003",
+            NOW+(Number(fields[23])+1)*60000),/60 分鐘/);
+      }
     }finally{db.close();}
   }
 });
