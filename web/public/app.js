@@ -1419,6 +1419,18 @@ function describeOriginalRetailEffect(code){
     "ダイエット":"減少體重","身長":"增加身高","縮み":"減少身高"
   };
   if(code==="無")return "原版標記「無」；仍須查看下方能力增減值";
+  if(code==="ステータス")
+    return "依原版能力增減和能量消耗欄位生效；原版沒有額外特殊分支";
+  if(code==="効果")
+    return "原版沒有額外特殊分支；已核對的牛奶與聖代透過負能量消耗恢復能量";
+  const compound=/^([^,]+),(\d+),(食料品|ファ)$/.exec(code);
+  if(compound&&names[compound[1]]){
+    const unit=["身長","縮み"].includes(compound[1])?" cm":
+      ["ウエイトアップ","ダイエット"].includes(compound[1])?" kg":"";
+    return names[compound[1]]+" "+compound[2]+unit+
+      "｜原版分類標記："+(compound[3]==="ファ"?"速食":"食品")+
+      "（第三段不是額外能力數值）";
+  }
   const match=/^([^,]+),(\d+)$/.exec(code);
   if(match&&names[match[1]]){
     const unit=["身長","縮み"].includes(match[1])?" cm":

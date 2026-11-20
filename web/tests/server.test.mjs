@@ -2,13 +2,15 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { createServer } from "node:net";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync,readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
 import { LEGACY_CHARACTER_FIELDS } from "../src/legacy-character.mjs";
 import { initLegacyInventoryTables } from "../src/legacy-inventory.mjs";
+import { decodeLegacyText } from "../src/engine.mjs";
+import { parseLegacyRetailCatalog } from "../src/retail.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const delay = ms => new Promise(done => setTimeout(done, ms));
@@ -3273,5 +3275,78 @@ test("多人住宅商店 HTTP：店主進貨與定價，訪客付款入庫，店
     assert.equal((await api(srv.url,"shop/buy",{
       houseId,sku:pick.sku,quantity:1,payment:"cash",requestId:"store_http_sold_out"
     },guest.cookie)).status,400);
+  }finally{await srv.stop();}
+});
+
+test("HTTP：百貨買到原版日制書籍及効果甜點後真的可使用，期限不扣次數",async()=>{
+  const catalog=parseLegacyRetailCatalog(
+    decodeLegacyText(readFileSync(new URL("../../dat_dir/syouhin.cgi",import.meta.url)))
+  );
+  const book=catalog.find(x=>x.name==="こちら葛飾区亀有公園前派出所　全巻");
+  const dessert=catalog.find(x=>x.name==="元気パフェ");
+  assert.ok(book&&dessert);
+  const srv=await start("solo");
+  try{
+    assert.equal((await api(srv.url,"character",{
+      name:"日制道具實際驗收",gender:"other",stats:defaultStats()
+    })).status,200);
+    assert.equal((await api(srv.url,"map/tile",{
+      row:0,column:0,symbol:"デパ"
+    })).status,200);
+    const db=new DatabaseSync(join(srv.directory,"solo.sqlite"));
+    try{
+      const positions=new Set([book.sku,dessert.sku]);
+      for(const target of [book,dessert]){
+        const exists=db.prepare("SELECT position FROM retail_stock WHERE shop='depart1' AND sku=?")
+          .get(target.sku);
+        if(exists)continue;
+        const next=db.prepare([
+          "SELECT position FROM retail_stock WHERE shop='depart1' AND sku NOT IN (?,?)",
+          "ORDER BY position LIMIT 1"
+        ].join(" ")).get(book.sku,dessert.sku);
+        assert.ok(next);
+        db.prepare("UPDATE retail_stock SET sku=?,remaining=? WHERE shop='depart1' AND position=?")
+          .run(target.sku,target.originalStock,next.position);
+      }
+      db.prepare("UPDATE characters SET money=1000000 WHERE name='日制道具實際驗收'").run();
+    }finally{db.close();}
+    const menu=await api(srv.url,"state");
+    assert.equal(menu.status,200);
+    assert.equal(menu.result.retailGoods.find(x=>x.sku===book.sku)?.details?.usage,"supported");
+    assert.equal(menu.result.retailGoods.find(x=>x.sku===dessert.sku)?.details?.usage,"supported");
+    const purchased=[];
+    for(const [item,id] of [[book,"retail_day_book_buy"],[dessert,"retail_parfait_buy"]]){
+      const bought=await api(srv.url,"retail/buy",{
+        shop:"depart1",sku:item.sku,quantity:1,requestId:id
+      });
+      assert.equal(bought.status,200,item.name+" 應真實購買成功");
+      purchased.push(bought.result.retailResult.sourceLine);
+    }
+    const owned=(await api(srv.url,"state")).result;
+    const day=owned.legacyItemActions.find(x=>x.sourceLine===purchased[0]);
+    assert.ok(day,"購入後的 30 日書籍應有使用動作");
+    assert.equal(day.durabilityUnit,"日");
+    assert.equal(day.remaining,30);
+    const usedBook=await api(srv.url,"inventory/legacy/use",{
+      sourceLine:purchased[0],requestId:"actual_day_book_use_01"
+    });
+    assert.equal(usedBook.status,200);
+    assert.equal(usedBook.result.legacyItemActions.find(x=>x.sourceLine===purchased[0]).remaining,30);
+    assert.equal(usedBook.result.itemUseResult.replayed,false);
+    const restored=new DatabaseSync(join(srv.directory,"solo.sqlite"));
+    try{restored.prepare("UPDATE characters SET body_energy=0,recovered_at=?").run(Date.now());}
+    finally{restored.close();}
+    const usedDessert=await api(srv.url,"inventory/legacy/use",{
+      sourceLine:purchased[1],requestId:"actual_parfait_use_01"
+    });
+    assert.equal(usedDessert.status,200);
+    assert.ok(usedDessert.result.itemUseResult.changes.bodyEnergy>0);
+    assert.equal(usedDessert.result.legacyItemActions.find(x=>x.sourceLine===purchased[1]).remaining,0);
+    const again=await api(srv.url,"inventory/legacy/use",{
+      sourceLine:purchased[0],requestId:"actual_day_book_use_01"
+    });
+    assert.equal(again.status,200);
+    assert.equal(again.result.itemUseResult.replayed,true);
+    assert.equal(again.result.legacyItemActions.find(x=>x.sourceLine===purchased[0]).remaining,30);
   }finally{await srv.stop();}
 });
