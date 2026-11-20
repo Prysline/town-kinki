@@ -15,6 +15,7 @@ import { trainDestinations, travelByTrain } from "./transport.mjs";
 import { parseHouseCatalog, initHousingTables, listHouses, publicHouseCatalog, buildHouse, renameHouse, sellHouse, getHouseSaleQuote, listHouseEvents, remodelHouse, listHouseRemodelEvents } from "./housing.mjs";
 import { initRoomsTables, ROOM_TYPES, setRoomSlots, viewRoom, addRoomPost, deleteRoomPost } from "./rooms.mjs";
 import { parseLegacyMeals, eatMeal, deriveCondition, hungerStatus, physiqueStatus, MEAL_COOLDOWN_MS } from "./dining.mjs";
+import { initDiningStockTables, ensureDiningRotation, listedDiningMeals, takeDiningStock } from "./dining-stock.mjs";
 import { healthStatus, settleDailyHealth, conditionWithIllness, getTreatmentQuote, treatAtHospital } from "./health.mjs";
 import { initCharacterEvents, settleDailyIllnessEvent, listCharacterEvents, getCouponBalance } from "./events.mjs";
 import { getCockroachChallenge,claimCockroach } from "./event-cockroach.mjs";
@@ -80,6 +81,7 @@ initRoomsTables(db);
 initBankTables(db);
 initCharacterEvents(db);
 initInventoryTables(db);
+initDiningStockTables(db);
 initLegacyItemUseTables(db);
 const houseCatalog = parseHouseCatalog(
   decodeLegacyText(readFileSync(resolve(REPO_ROOT, "town_ini.cgi"))),
@@ -222,6 +224,17 @@ function snapshot(user) {
       updated = getCharacter(user.id);
     }
   }
+  // 每間食堂使用原版兩份食品來源；本遊戲伺服器上的所有玩家共用同一份
+  // SQLite 菜單與剩餘份數，避免每次查看時重新抽選或單人買光不影響別人。
+  let dailyMeals=[];
+  if(updated){
+    db.exec("BEGIN IMMEDIATE");
+    try{
+      ensureDiningRotation(db,meals,today);
+      db.exec("COMMIT");
+    }catch(error){db.exec("ROLLBACK");throw error;}
+    dailyMeals=listedDiningMeals(db,meals);
+  }
   const currentJob = updated?.jobId ? jobsByKey.get(updated.jobId) : null;
   const classroomCreditCards=updated?listValidClassroomCreditCards(db,user.id,now):[];
   const ownedHouses = updated ? listHouses(db, user.id).map(h => ({
@@ -280,12 +293,15 @@ function snapshot(user) {
     physique: updated ? physiqueStatus(updated.height,updated.weight) : null,
     mealCooldownMs: updated && updated.lastMealAt ?
       Math.max(0,MEAL_COOLDOWN_MS-(now-updated.lastMealAt)) : 0,
-    meals: updated ? meals.map(meal=>({
+    mealMenuDay: updated ? today : null,
+    meals: updated ? dailyMeals.map(meal=>({
       key:meal.key,name:meal.name,menu:meal.menu,
       price:meal.price,calories:meal.calories,gains:meal.gains,
-      reason:updated.lastMealAt && now-updated.lastMealAt<MEAL_COOLDOWN_MS
-        ? "用餐後需間隔 60 分鐘" :
-        updated.money<meal.price ? "現金不足" : null
+      stock:meal.stock,
+      reason:meal.stock<=0 ? "今日已售完" :
+        updated.lastMealAt && now-updated.lastMealAt<MEAL_COOLDOWN_MS
+          ? "用餐後需間隔 60 分鐘" :
+          updated.money<meal.price ? "現金不足" : null
     })) : [],
     maxBodyEnergy: updated ? maxBodyEnergy(updated.stats) : null,
     maxBrainEnergy: updated ? maxBrainEnergy(updated.stats) : null,
@@ -600,12 +616,18 @@ async function handle(req, res) {
       if (!meal) throw new HttpError(404,"找不到食堂餐點");
       const now=gameNow();
       const result=mutateCharacter(user.id,old=>{
-        try {return eatMeal(recoverEnergy(old,now),meal,now);}
-        catch(error){throw new HttpError(400,error.message);}
+        try {
+          // 從原始來源選中的菜單與庫存只能由伺服器認定。
+          // 角色扣款與共用庫存扣一份都在 mutateCharacter 的同一筆交易。
+          ensureDiningRotation(db,meals,calendarDay(now,GAME_TIMEZONE));
+          const eaten=eatMeal(recoverEnergy(old,now),meal,now);
+          const remaining=takeDiningStock(db,meal);
+          return {...eaten,remaining};
+        } catch(error){throw new HttpError(400,error.message);}
       });
       return sendJson(res,200,{...snapshot(user),mealResult:{
         name:result.meal,paid:result.paid,gained:result.gained,
-        weightGain:result.weightGain
+        weightGain:result.weightGain,remaining:result.remaining
       }});
     }
 
