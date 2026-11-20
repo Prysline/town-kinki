@@ -2899,3 +2899,104 @@ test("原版鍛造 HTTP：從裝備屋購入後強化、已穿戴裝備可鍛造
     assert.equal(rejected.result.error.includes("裝備屋"),true);
   }finally{await srv.stop();}
 });
+
+
+test("禮品店 HTTP：必須設置原版建築，轉換真實本人 Web 33 欄物品並只收一次 50,000 元",async()=>{
+  const srv=await start("solo");
+  try{
+    const a=await api(srv.url,"character",{name:"轉換禮品角色",gender:"other",stats:defaultStats()});
+    assert.equal(a.status,200);
+    assert.equal(a.result.giftShopAvailable,false);
+    const tile=await api(srv.url,"map/tile",{row:0,column:0,symbol:"ギフト屋"});
+    assert.equal(tile.status,200);
+    assert.equal(tile.result.giftShopAvailable,true);
+    const db=new DatabaseSync(join(srv.directory,"solo.sqlite"));
+    const fields=Array(33).fill("0");
+    fields[0]="美容";fields[1]="油取り紙";fields[9]="無";
+    fields[21]="5";fields[22]="回";fields[30]=String(Math.floor(tile.result.gameTimeMs/1000));
+    try{
+      db.prepare([
+        "INSERT INTO legacy_inventory_items(user_id,original_id,source_line,category,original_name,",
+        "effect,durability,durability_unit,purchased_at,last_used_at,raw_fields_json)",
+        "VALUES(1,'__web_retail__',1000001,'美容','油取り紙','無',5,'回',?,0,?)"
+      ].join(" ")).run(Number(fields[30]),JSON.stringify(fields));
+    }finally{db.close();}
+    const state=await api(srv.url,"state");
+    assert.equal(state.result.giftSources.find(x=>x.sourceLine===1000001).canConvert,true);
+    const cash=state.result.character.money;
+    const payload={sourceLine:1000001,quantity:2,requestId:"gift_http_convert_2"};
+    const converted=await api(srv.url,"gift/convert",payload);
+    assert.equal(converted.status,200);
+    assert.equal(converted.result.giftResult.fee,50000);
+    const giftLine=converted.result.giftResult.giftSourceLine;
+    assert.ok(giftLine>=3000000);
+    assert.equal(converted.result.character.money,cash-50000);
+    assert.equal(converted.result.giftSources.find(x=>x.sourceLine===giftLine).category,"ギフト");
+    assert.equal(converted.result.giftSources.find(x=>x.sourceLine===1000001).quantity,3);
+    const again=await api(srv.url,"gift/convert",payload);
+    assert.equal(again.status,200);
+    assert.equal(again.result.giftResult.replayed,true);
+    assert.equal(again.result.character.money,cash-50000);
+    const removed=await api(srv.url,"map/tile",{row:0,column:0,symbol:"空地"});
+    assert.equal(removed.status,200);
+    assert.equal(removed.result.giftShopAvailable,false);
+    const denied=await api(srv.url,"gift/convert",{
+      sourceLine:1000001,quantity:1,requestId:"gift_http_after_removed"
+    });
+    assert.equal(denied.status,400);
+    assert.match(denied.result.error,/沒有禮品店/);
+  }finally{await srv.stop();}
+});
+test("多人禮品寄送 HTTP：寄件人扣耐久、收件人得到真實ギフト商品，防重與其他玩家隔離",async()=>{
+  const srv=await start("multi");
+  try{
+    const a=await api(srv.url,"register",{username:"giftSenderMulti",password:"gift-sender-pass-123"});
+    const b=await api(srv.url,"register",{username:"giftReceiverMulti",password:"gift-receiver-pass-123"});
+    assert.equal(a.status,200);assert.equal(b.status,200);
+    const sender=await api(srv.url,"character",{
+      name:"送禮測試甲",gender:"other",stats:defaultStats()
+    },a.cookie);
+    const recipient=await api(srv.url,"character",{
+      name:"收禮測試乙",gender:"other",stats:defaultStats()
+    },b.cookie);
+    assert.equal(sender.status,200);assert.equal(recipient.status,200);
+    const raw=Array(33).fill("0");
+    raw[0]="ギフト";raw[1]="油取り紙";raw[9]="無";
+    raw[21]="4";raw[22]="回";raw[30]=String(Math.floor(sender.result.gameTimeMs/1000));
+    const db=new DatabaseSync(join(srv.directory,"multi.sqlite"));
+    try{
+      const senderId=db.prepare("SELECT user_id FROM characters WHERE name='送禮測試甲'").get().user_id;
+      db.prepare([
+        "INSERT INTO legacy_inventory_items(user_id,original_id,source_line,category,original_name,",
+        "effect,durability,durability_unit,purchased_at,last_used_at,raw_fields_json)",
+        "VALUES(?,'__web_retail__',1000001,'ギフト','油取り紙','無',4,'回',?,0,?)"
+      ].join(" ")).run(senderId,Number(raw[30]),JSON.stringify(raw));
+    }finally{db.close();}
+    const payload={
+      sourceLine:1000001,quantity:2,recipientName:"收禮測試乙",
+      requestId:"gift_http_multi_send"
+    };
+    const sent=await api(srv.url,"gift/send",payload,a.cookie);
+    assert.equal(sent.status,200);
+    assert.equal(sent.result.giftResult.recipientUserId>0,true);
+    assert.equal(sent.result.giftSources.find(x=>x.sourceLine===1000001).quantity,2);
+    const recv=await api(srv.url,"state",undefined,b.cookie);
+    const item=recv.result.legacyInventory.find(x=>x.name==="油取り紙");
+    assert.ok(item);
+    assert.equal(item.category,"ギフト商品");
+    assert.equal(item.durability,2);
+    assert.equal(item.readOnly,false);
+    assert.equal(item.origin,"gift");
+    assert.equal((await api(srv.url,"gift/send",payload,a.cookie)).result.giftResult.replayed,true);
+    assert.equal((await api(srv.url,"gift/send",{
+      ...payload,recipientName:"送禮測試甲",requestId:"gift_http_self_denied"
+    },a.cookie)).status,400);
+    assert.equal((await api(srv.url,"gift/send",{
+      sourceLine:item.sourceLine,quantity:1,recipientName:"送禮測試甲",
+      requestId:"gift_http_other_source"
+    },a.cookie)).status,400);
+    const finalSender=await api(srv.url,"state",undefined,a.cookie);
+    assert.equal(finalSender.result.giftSources.find(x=>x.sourceLine===1000001).quantity,2);
+    assert.equal((await api(srv.url,"state",undefined,b.cookie)).result.giftEvents.length,0);
+  }finally{await srv.stop();}
+});

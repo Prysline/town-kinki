@@ -24,6 +24,7 @@ import { listLegacyInventoryItems } from "./legacy-inventory.mjs";
 import {parseLegacyRetailCatalog,initRetailTables,ensureRetailDay,listRetailStock,listRetailPurchases,buyRetailItem,RETAIL_SHOPS} from "./retail.mjs";
 import {parseLegacyVendingCatalog,initVendingTables,ensureVendingRotation,listVendingStock,vendingPeriodKey,VENDING_SYMBOL,VENDING_SHOP} from "./vending.mjs";
 import {parseLegacyEquipmentCatalog,initEquipmentTables,listEquipmentItems,listEquipmentTransactions,buyEquipment,equipEquipment,sellEquipment,forgeEquipment,EQUIPMENT_SYMBOL} from "./equipment.mjs";
+import {initGiftTables,GIFT_SHOP_SYMBOL,listGiftSources,listGiftEvents,convertToGift,sendGift} from "./gift-shop.mjs";
 import { listValidClassroomCreditCards, requireClassroomCreditCard } from "./legacy-credit.mjs";
 import { legacyPlayerIcon } from "./appearance.mjs";
 import { initLegacyItemUseTables, listLegacyItemActions, listLegacyItemUseHistory, useLegacyItem } from "./legacy-item-use.mjs";
@@ -89,6 +90,7 @@ initLegacyItemUseTables(db);
 initRetailTables(db);
 initVendingTables(db);
 initEquipmentTables(db);
+initGiftTables(db);
 const houseCatalog = parseHouseCatalog(
   decodeLegacyText(readFileSync(resolve(REPO_ROOT, "town_ini.cgi"))),
   decodeLegacyText(readFileSync(resolve(REPO_ROOT, "command.pl")))
@@ -270,6 +272,8 @@ function snapshot(user) {
   }
   const equipmentAvailable=Boolean(retailMap?.configured&&
     retailMap.cells.some(cell=>cell.key===EQUIPMENT_SYMBOL));
+  const giftShopAvailable=Boolean(retailMap?.configured&&
+    retailMap.cells.some(cell=>cell.key===GIFT_SHOP_SYMBOL));
   const currentJob = updated?.jobId ? jobsByKey.get(updated.jobId) : null;
   const classroomCreditCards=updated?listValidClassroomCreditCards(db,user.id,now):[];
   const ownedHouses = updated ? listHouses(db, user.id).map(h => ({
@@ -329,6 +333,9 @@ function snapshot(user) {
     equipmentAvailable,equipmentGoods:equipmentAvailable?equipmentCatalog:[],
     equipmentItems:updated?listEquipmentItems(db,user.id):[],
     equipmentTransactions:updated?listEquipmentTransactions(db,user.id):[],
+    giftShopAvailable,
+    giftSources:updated?listGiftSources(db,user.id,now):[],
+    giftEvents:updated?listGiftEvents(db,user.id):[],
     legacyItemActions: updated ? listLegacyItemActions(db,user.id,updated,now) : [],
     legacyItemHistory: updated ? listLegacyItemUseHistory(db,user.id) : [],
     hunger: updated ? hungerStatus(updated.lastMealAt,now) : null,
@@ -690,6 +697,26 @@ async function handle(req, res) {
         });
       }catch(error){throw new HttpError(400,error.message);}
       return sendJson(res,200,{...snapshot(user),equipmentResult:result});
+    }
+    if(path === "/api/gift/convert"||path === "/api/gift/send"){
+      const now=gameNow();
+      let result;
+      try{
+        if(path==="/api/gift/convert")
+          result=convertToGift(db,user.id,{
+            sourceLine:data.sourceLine,quantity:data.quantity??0,
+            requestId:data.requestId,now,
+            hasBuilding:(symbol,townId)=>{
+              const map=publicTownMap(db,townId,false);
+              return map.configured&&map.cells.some(cell=>cell.key===symbol);
+            }
+          });
+        else result=sendGift(db,user.id,{
+          sourceLine:data.sourceLine,quantity:data.quantity,
+          recipientName:data.recipientName,requestId:data.requestId,now
+        });
+      }catch(error){throw new HttpError(400,error.message);}
+      return sendJson(res,200,{...snapshot(user),giftResult:result});
     }
     if (path === "/api/meal/eat") {
       const meal=mealsByKey.get(data.key);

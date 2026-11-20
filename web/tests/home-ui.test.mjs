@@ -103,7 +103,7 @@ test("原 CGI 建築代碼只連到 Web 真正已實作的設施入口",()=>{
   const expected={
     "銀行":"bank-panel","病院":"hospital-panel","職安":"jobs-panel",
     "教室":"classroom-panel","食堂":"dining-panel","食堂２":"dining-panel",
-    "デパ":"retail-panel","デパ2":"retail-panel","自販機":"vending-panel","装備屋":"equipment-panel","建築":"housing-panel"
+    "デパ":"retail-panel","デパ2":"retail-panel","自販機":"vending-panel","装備屋":"equipment-panel","ギフト屋":"gift-panel","建築":"housing-panel"
   };
   assert.deepEqual(FACILITY_PANELS,expected);
   for(const [key,panelId] of Object.entries(expected)){
@@ -113,7 +113,7 @@ test("原 CGI 建築代碼只連到 Web 真正已實作的設施入口",()=>{
     assert.match(html,new RegExp('id="'+panelId+'"'));
   }
   assert.deepEqual(townCellAction(describeTile("駅")),{kind:"station"});
-  for(const key of ["ギフト屋","ゲーセン","株"]){
+  for(const key of ["ゲーセン","株"]){
     const cell=describeTile(key);
     assert.deepEqual(townCellAction(cell),{kind:"unavailable"});
   }
@@ -163,6 +163,19 @@ test("裝備屋真實地圖、獨立 6 欄商品、購入與換裝倉庫操作�
   assert.match(script,/if\(cell\.key==="装備屋"\)renderEquipment\(\)/);
 });
 
+test("原版禮品店地圖入口、五萬元轉換、指定收件人與跨玩家寄送 UI",()=>{
+  assert.deepEqual(townCellAction(describeTile("ギフト屋")),
+    {kind:"facility",panelId:"gift-panel"});
+  for(const id of ["gift-panel","gift-status","gift-sources","gift-events"])
+    assert.match(html,new RegExp('id="'+id+'"'));
+  assert.match(html,/原版 gifutoya\.cgi/);
+  assert.match(html,/50,000 元/);
+  assert.match(script,/function renderGiftShop\(\)/);
+  assert.match(script,/state\.giftSources/);
+  assert.match(script,/state\.giftEvents/);
+  assert.match(script,/api\("gift\/"\+action,payload\)/);
+  assert.match(script,/if\(cell\.key==="ギフト屋"\)renderGiftShop\(\)/);
+});
 test("原版教室必須導向獨立教室，而非誤開學校或健身房",()=>{
   const result=townCellAction(describeTile("教室"));
   assert.deepEqual(result,{kind:"facility",panelId:"classroom-panel"});
