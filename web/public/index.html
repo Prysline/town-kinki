@@ -350,7 +350,8 @@
             <div><div class="eyebrow">日常生活</div><h2>中央食堂</h2></div>
             <span class="muted" id="meal-status">每次用餐間隔 60 分鐘</span>
           </div>
-          <details class="explain"><summary>玩法與限制說明</summary><p class="small">依原版食堂餐點資料計算價格、能力提升與體重變化。實際收費為原始標價的三倍。菜單目前固定列示，原版每日抽選與共用庫存尚未移植。</p></details>
+          <details class="explain"><summary>玩法與限制說明</summary><p class="small">依原版食品來源計算售價（原始標價三倍）、能力與體重變化。兩間食堂各每日抽選最多 30 道；所有玩家共用剩餘份數，庫存不足時重新補貨。沒有在當日菜單中的食品不能直接點餐。原版補貨判斷受玩家現金影響的部分，Web 改為依剩餘品項數量處理。</p></details>
+          <p class="small muted" id="meal-menu-day">今日菜單</p>
           <label for="meal-menu">查看菜單來源</label>
           <select id="meal-menu">
             <option value="main">中央食堂</option>
