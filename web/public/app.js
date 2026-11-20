@@ -1167,6 +1167,7 @@ function renderDining() {
   text("meal-status",wait>0 ?
     "距離下次用餐還有 " + Math.ceil(wait/60000) + " 分鐘" :
     "現在可以用餐");
+  text("meal-menu-day",(state.mealMenuDay??"—")+" 的菜單（今日供應數量全玩家共用）");
   const list=el("meal-list");
   list.replaceChildren();
   const menu=el("meal-menu").value;
@@ -1179,7 +1180,8 @@ function renderDining() {
     const desc=document.createElement("p");
     desc.className="small";
     desc.textContent="餐費："+money(meal.price)+"，熱量："+meal.calories+
-      "，體重預計增加 "+(meal.calories/1000).toFixed(2)+" 公斤";
+      "，體重預計增加 "+(meal.calories/1000).toFixed(2)+
+      " 公斤，剩餘 "+meal.stock+" 份";
     const gains=document.createElement("p");
     gains.className="small";
     const parts=Object.entries(meal.gains).filter(([,n])=>n>0)
