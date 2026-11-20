@@ -312,6 +312,65 @@ test("薪資去向：偏好存檔、實際銀行入帳與帳簿、重送冷卻�
   }finally{await srv.stop();}
 });
 
+test("便利商店五次結薪：前四次兩種帳戶皆不增加，第五次銀行正確入帳，再五次現金正確入帳",async()=>{
+  const srv=await start("solo");
+  try{
+    const created=await api(srv.url,"character",{
+      name:"五次發薪測試",gender:"other",stats:defaultStats()
+    });
+    assert.equal(created.status,200);
+    const db=new DatabaseSync(join(srv.directory,"solo.sqlite"));
+    try{
+      const stats={...defaultStats(),
+        suugaku:100,syakai:100,tairyoku:100,kenkou:100};
+      db.prepare("UPDATE characters SET job_id='legacy-3', job_work_count=0, work_progress=0, "+
+        "stats_json=?,body_energy=120,brain_energy=120").run(JSON.stringify(stats));
+    }finally{db.close();}
+    let state=await api(srv.url,"job/payment",{payment:"bank"});
+    assert.equal(state.status,200);
+    assert.equal(state.result.currentJob.payEvery,5);
+    assert.equal(state.result.currentJob.workProgress,0);
+    assert.equal(state.result.currentJob.worksUntilPayday,5);
+    const initial=state.result.character;
+    for(let i=1;i<=5;i++){
+      if(i>1)assert.equal((await api(srv.url,"solo/time/advance",{preset:"5m"})).status,200);
+      const worked=await api(srv.url,"work",{});
+      assert.equal(worked.status,200,"便利商店第 "+i+" 次出勤");
+      const result=worked.result.result;
+      assert.equal(result.payEvery,5);
+      assert.equal(result.pending,i%5);
+      assert.equal(result.worksUntilPayday,5-(i%5));
+      assert.equal(worked.result.currentJob.workProgress,i%5);
+      assert.equal(worked.result.currentJob.worksUntilPayday,5-(i%5));
+      assert.equal(result.paid,i===5?15000:0);
+      assert.equal(result.bonus,0,"五次工作內不應突然晉升");
+      assert.equal(worked.result.character.money,initial.money);
+      assert.equal(worked.result.character.bank,initial.bank+(i===5?15000:0));
+      assert.equal(worked.result.bankLedger.filter(x=>x.action==="工作薪資").length,i===5?1:0);
+    }
+    const switched=await api(srv.url,"job/payment",{payment:"cash"});
+    assert.equal(switched.status,200);
+    assert.equal(switched.result.character.salaryPayment,"cash");
+    const before=switched.result.character;
+    for(let i=1;i<=5;i++){
+      assert.equal((await api(srv.url,"solo/time/advance",{preset:"5m"})).status,200);
+      const worked=await api(srv.url,"work",{});
+      assert.equal(worked.status,200,"切現金後第 "+i+" 次出勤");
+      const result=worked.result.result;
+      assert.equal(result.payment,"cash");
+      assert.equal(result.paid>0,i===5);
+      assert.equal(worked.result.character.money,
+        before.money+(i===5?result.paid+result.bonus:0));
+      assert.equal(worked.result.character.bank,before.bank);
+      assert.equal(worked.result.bankLedger.filter(x=>x.action==="工作薪資").length,1);
+    }
+    const persisted=await api(srv.url,"state");
+    assert.equal(persisted.result.currentJob.workProgress,0);
+    assert.equal(persisted.result.currentJob.worksUntilPayday,5);
+    assert.equal(persisted.result.character.jobWorkCount,10);
+  }finally{await srv.stop();}
+});
+
 test("原版車站：四城六組票價、12 向扣款、無效／同城／餘額不足不更動資料",async()=>{
   const srv=await start("solo");
   try{

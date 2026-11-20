@@ -1412,11 +1412,19 @@ function render() {
   renderInsurance();
   const ready = Boolean(state.currentJob) && state.workCooldownMs === 0 &&
     state.condition?.baseExperience !== null;
-  el("work").disabled = !ready;
-  el("home-work").disabled = !ready;
+  el("work").disabled = !ready || savingSalaryPayment;
+  el("home-work").disabled = !ready || savingSalaryPayment;
   text("cooldown", !state.currentJob ? "請先前往職業介紹所選擇工作。" :
     state.workCooldownMs > 0 ? "距離下次工作約 " + Math.ceil(state.workCooldownMs / 1000) + " 秒。" :
       "工作冷卻時間已結束。");
+  const job=state.currentJob;
+  text("work-payday-status",!job?"尚未任職，無薪資發放週期。":
+    job.payEvery===1?"目前職業：每次完成工作即發薪；收款方式："+
+      (c.salaryPayment==="bank"?"普通銀行存款":"現金")+"。":
+    "目前職業：每 "+job.payEvery+" 次工作才發薪一次，"+
+      "本週期已出勤 "+job.workProgress+" / "+job.payEvery+
+      " 次，再完成 "+job.worksUntilPayday+" 次才會入帳。"+
+      "收款方式："+(c.salaryPayment==="bank"?"普通銀行存款":"現金")+"。");
   const attrs = el("attributes");
   attrs.replaceChildren();
   renderAbilities(c.stats);
@@ -1444,6 +1452,9 @@ async function action(path, data, message) {
         (result.experienceGain>=0?"+":"")+result.experienceGain+" 點。"];
       const destination=result.payment==="bank"?"（已存入銀行普通存款）":"（已領取現金）";
       if (result.paid) messages.push("獲得薪資 " + money(result.paid) + destination+"。");
+      else messages.push("本次尚未到發薪次數（目前 "+result.pending+
+        " / "+result.payEvery+" 次出勤；再工作 "+result.worksUntilPayday+
+        " 次發薪），所以此次沒有薪資入帳。");
       if (result.bonus) messages.push("升級獎金 " + money(result.bonus) + destination+"。");
       if (result.leveledUp) messages.push("職業等級提升至 " + result.jobLevel + " 級。");
       if (result.mastered) messages.push("已精通目前職業，開放相關進階職業。");
@@ -1828,10 +1839,24 @@ el("work").addEventListener("click", () => action("work", {}));
 selectFacilityTab(activeFacilityTab);
 el("job-search").addEventListener("input", renderJobs);
 el("job-filter").addEventListener("change", renderJobs);
-el("salary-payment").addEventListener("change",()=>{
+// 收款偏好必須先由伺服器確認儲存，才允許下一次工作；
+ // 避免使用者連續點選時，工作請求先於收款偏好請求完成。
+let savingSalaryPayment=false;
+el("salary-payment").addEventListener("change",async()=>{
+  if(savingSalaryPayment)return;
   const payment=el("salary-payment").value;
-  action("job/payment",{payment},
-    payment==="bank"?"往後薪資及獎金改存銀行普通存款。":"往後薪資及獎金改為領取現金。");
+  savingSalaryPayment=true;
+  el("salary-payment").disabled=true;
+  el("work").disabled=true;
+  el("home-work").disabled=true;
+  try {
+    await action("job/payment",{payment},
+      payment==="bank"?"往後發薪改存銀行普通存款。":"往後發薪改為領取現金。");
+  } finally {
+    savingSalaryPayment=false;
+    el("salary-payment").disabled=false;
+    render(); // 儲存失敗時恢復伺服器已確認的選項與工作按鈕
+  }
 });
 (async () => {
   try { state = await api("state"); render(); }
