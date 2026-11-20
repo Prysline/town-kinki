@@ -2,14 +2,14 @@
 
 > **版本與邊界**：原始盤點於 2026-11-20 以 `feature/web-phase29-event34-santa`（`90434f4f...`）的原版與 Web 程式開始比對，後續逐項更新。本文件是**第一輪逐項檢核、持續修正中，並非完整移植或真實玩家驗收通過聲明**。
 >
-> **最新整合狀態（2026-11-20）**：PR #9～#16 均已合併至 `feature/web-dual-mode-phase1`，最近功能合併提交為 `75fc7cc71a7360c9d36aaf30048bcf2b4c2a6d38`，合併後 GitHub Actions run `44666147616` 成功；`master` 原版未變。歷史 PR 階段請以本行及更新後的各項狀態為準。
+> **最新整合狀態（2026-11-20）**：PR #9～#17 均已合併至 `feature/web-dual-mode-phase1`，先前盤點更正 PR #17 的合併提交為 `63f0dd046de7b2f1e91d8fdd65e6d11a471e912e`，合併後 GitHub Actions run `44668430244` 成功；`master` 原版未變。歷史 PR 階段請以本行及更新後的各項狀態為準。
 >
 > 狀態用語：**已完成（限該單項公式）**、**部分完成**、**未實作**、**缺少來源無法驗證**、**暫不移植**。標示「部分完成」不代表已通過真正瀏覽器／真實舊存檔／完整 CGI 等價測試。以目前比對過的程式為準；未讀完每個 CGI 函式的欄位明寫「待逐檔核對」。
 
 ## 稽核方法與未驗證邊界
 
 - 實際讀取原版 `town_lib.pl::check_BMI`（L507–520）、`basic.cgi` 工作／物品片段、`command.pl` 食堂片段、`event.pl` #01～#46 分支、`dat_dir` 原始課程與菜單表及 Web 對應模組；樹狀目錄和 README 用於確定其餘模組的範圍。
-- PR #9～#16 已依序合併整合分支；PR #16 整合提交 `75fc7cc71...` 的 GitHub Actions run `44666147616` 為 success。**尚未以真實瀏覽器或真實玩家資料備份完成驗收**。
+- PR #9～#17 已依序合併整合分支；PR #17 整合提交 `63f0dd046...` 的 GitHub Actions run `44668430244` 為 success。**尚未以真實瀏覽器或真實玩家資料備份完成驗收**。
 - 原始 `member/<ID>/mono.cgi`、舊銀行／房屋玩家關聯紀錄、實際街區歷史存檔尚無使用者提供的真實樣本，不能虛構匯入相容性。
 - 與原版有意採用的安全模型差異（非負金額／能力、安全整數、HTTP session、Web 延伸性別）需記錄保留，未經批准不可為等價而直接退回不安全行為。
 
@@ -28,27 +28,35 @@
 | PH-05 消耗品身高／體重 | basic.cgi L2556-L2579；dat_dir/syouhin.cgi | src/legacy-item-use.mjs L146-L179 | 部分完成 | 僅可確認封存消耗品；不是原版整個物品流通與作用系統 | P0 | 效果名／回或日耐久／過期／無效商品及交易回滾（30-體格） |
 | PH-06 狀態頁集中顯示 | basic.cgi L2646-L2657；town_maker.cgi | public/index.html::physique-summary；public/app.js::renderDining | 部分完成（PR #13 已合併） | 身高／體重、體型與 BMI 已移至狀態頁常駐摘要；真實手機與桌面瀏覽器操作未驗證 | P0 | 375px／768px／桌面截圖、對照工作後及用餐後刷新（30-體格） |
 | PH-08 玩家圖示 URL／舊角色保留 | town_lib.pl::kozin_sprit（kounyuu＝アイコンURL）；game.cgi::battle | src/appearance.mjs；public/app.js::renderLegacyIcon；src/legacy-character.mjs | 部分完成（已匯入本人圖示可手動預覽） | 原版對戰可顯示 32×32 kounyuu；Web 僅由本人點擊預覽 HTTPS 已封存 URL，未支援原版對戰中對手圖示 | P1 | 真實舊存檔、玩家對戰圖示、瀏覽器與 URL 安全驗證（後續） |
-| PH-09 外貌自填／自選描述 | town_ini.cgi L148-L179；basic.cgi::prof | 尚未找到完整 Web 個人檔案對照 | 未實作 | 原版靜態形容詞與身高／體重選項是使用者自填，不是 BMI 自動分級 | P2 | 逐項核對欄位與原始個人檔資料，再設計存檔與 UI（後續） |
+| PH-09 原版公開真實個人檔案中的自選外貌描述 | town_ini.cgi L148–179；basic.cgi::prof L1682–2105 | 無完整 Web 真實個人檔案流程（詳 SC-04／SC-05） | 未實作（有原版來源） | 原版是獨立、玩家自願公開的真實個人檔案，並非從角色 looks、BMI 自動生成 | P2（個資） | 自願填寫、同意公開、編輯與搜尋的獨立驗收；不得使用遊戲數值代填 |
 | PH-10 C 聯賽自創角色圖片 | game.cgi::doukyo／c_league；member/<ID>/chara_ini.cgi | 尚無完整 Web C 聯賽資料模型 | 未實作 | ch_gazou 是另一個可自訂圖像的比賽角色，與 kounyuu 不同；需要完整遊戲模組前置 | P2 | 原始比賽角色存檔、圖片規範、參賽流程與權限驗證（後續） |
 
 **外貌原版來源對照**：[重新盤點的外貌能力、美容商品、玩家圖示、個人檔案與 C 聯賽來源](appearance-source-audit.md)。只列有原始資料或實際執行分支的功能；單憑商品名稱、備註或未解析欄位，不建立新增功能任務。
+
+**新增逐函式證據**：[職業、獨立教室、學校／健身房資料邊界、真實個人檔案來源盤點](phase30-jobs-training-profile-audit.md)，明確區分可執行 CGI、靜態原始資料與 Web 自行補出的流程。
 
 ### 02 能量與工作
 
 | ID／功能 | 原版來源 | Web 現況／來源 | 判定 | 差異／相依 | 優先度 | 驗收／切片 |
 |---|---|---|---|---|---|---|
 | WK-01 能量上限及自然恢復 | town_ini.cgi；game.cgi；basic.cgi | src/engine.mjs；src/server.mjs | 部分完成 | Web 有上限與恢復；需核對所有轉職／體格事件的加扣條件 | P1 | 上下限、十秒刻度、快轉／多角色隔離（31） |
-| WK-02 工作薪資、經驗、冷卻 | dat_dir/job.cgi；basic.cgi L2869-L2961 | src/engine.mjs L194-L245；tests/engine.test.mjs | 部分完成 | 工作薪資與經驗已有；原版整數 BMI 職業限制已對齊（P0-D 補半分界），其他原始條件仍待查核 | P0 | BMI 條件、工作次數、升階、精通與固定亂數測試（30/31） |
+| WK-02 工作薪資、經驗、冷卻 | dat_dir/job.cgi；basic.cgi::do_work L2838–2961 | src/engine.mjs::performWork；tests/engine.test.mjs | 部分完成 | 基礎出勤、經驗與薪資存在；原版薪資可選銀行或現金（另見 WK-05），Web 目前一律現金；每次工作身高／性別重驗的差異見 WK-06 | P0/P1 | 條件、出勤、升級、精通、發薪去向與真實存檔（30/31） |
 | WK-03 飢餓／疾病修正工作 | top.pl L258-L273；basic.cgi | src/dining.mjs L82-L103；src/health.mjs | 部分完成 | 未用餐玩家以 provisional 5 經驗預設；非原版完整懲罰 | P1 | 舊玩家無紀錄、重症、狀態六級實測（31） |
 | WK-04 職業需求數值表及現有能力對照 | basic.cgi::job_change L2751–L2781（17 項必要能力、BMI、性別、身高、薪資、獎金、發薪週期、雙能量消耗，且顯示玩家目前數值）；job.cgi::top L18–L29（滑鼠提示 17 項能力）；dat_dir/job.cgi | src/engine.mjs::parseLegacyJobs（requirements、bmiMin／Max、gender、minHeight、salary 等已解析）；src/server.mjs::snapshot jobs（未回傳 requirements 等大部分條件）；public/app.js::renderJobs（只顯示薪資、消耗與第一項不足原因） | **確定缺漏：原版清楚顯示需求數值，Web 沒有** | 不是原版沒數據；Web 後端快照省略 17 項能力需求與大多數限制，前端無法比較原版的「玩家目前數值／職業要求」。原版可應徵下拉選單與下方全條件表是不同呈現 | P1 | 補 Web jobs snapshot 的完整必要能力、BMI 範圍、性別、身高、發薪與獎金欄位，前端給全部職業可檢視的條件表或明細；無權應徵仍須禁止；比對原版 150 筆及手機可讀性 |
+| WK-05 薪資與獎金領取方式 | basic.cgi::do_work L2920–2953、L2974–2998；town_maker.cgi L142–146；town_lib.pl::kozin_sprit 的 shiharai | src/engine.mjs::performWork（固定入現金）；src/legacy-character.mjs（原始 shiharai 不保留） | **確定缺漏** | 原版可選銀行振込或現金；銀行收入另記帳；Web 尚無偏好、銀行薪資帳簿，原始舊選擇也未匯入 | P1 | 發薪週期、升級獎金、現金與普通存款、帳簿、失敗回滾；舊資料不可虛構恢復 |
+| WK-06 任職後工作再檢查條件 | basic.cgi::job_change L2695–2719；do_work L2867–2879 | src/engine.mjs::eligibility／performWork | 已確認行為差異 | 原版選職檢查性別／身高，但工作段落只查能力、BMI、能量；Web 實際工作還重新檢查性別／身高 | P1（行為確認） | 轉職後身高變化測試；安全差異經審核才能變更，不能隨意拿掉 Web 檢查 |
+| WK-07 工作工廠職業投稿／清單 | unit.pl L69；job.cgi::top L13–74；job.cgi::make L80–87；log_dir/joblog.cgi | Web 只載入 dat_dir/job.cgi 正式職業 | **確定缺漏** | 原版允許提交候選職業到 joblog，並顯示投稿條件；不是直接加入正式職業表；此 fork joblog 0 bytes | P2 | 投稿欄位、權限、審核邊界、顯示與真實投稿樣本（後續） |
 
-### 03 學校／健身房
+### 03 學校／健身房／教室
 
 | ID／功能 | 原版來源 | Web 現況／來源 | 判定 | 差異／相依 | 優先度 | 驗收／切片 |
 |---|---|---|---|---|---|---|
-| TR-01 原版課程／費用／能量 | dat_dir/school.cgi；dat_dir/gym.cgi | src/training.mjs L30-L66 | 部分完成 | 主表有解析；須逐課核對原始欄位及能力增幅 | P1 | 各課費用、能量扣除、能力變動快照（31） |
-| TR-02 學校每日一次 | manual.html；dat_dir/school.cgi | src/training.mjs L75-L106 | 部分完成 | 有每日限制；日期、時區與伺服器重啟須覆核 | P1 | 跨日、切換課程及兩模式無繞過（31） |
-| TR-03 健身房欄位及冷卻來源 | dat_dir/gym.cgi 首列與游泳的原始資料欄 | src/training.mjs L47-L55,L75-L106 | 部分完成（原始欄位可解析） | 資料有「間」與「効果=美」欄；尚未核對完整原版訓練執行入口，Web 將「間」暫作分鐘。不得從未解析字串建立額外效果 | P1（來源核對） | 查實際 gym 執行路徑、時間／扣款／能力增益條件；找到來源行為才補邏輯 |
+| TR-01 學校原始課程與使用說明 | dat_dir/school.cgi（課程資料）；manual.html L149–150（一天一堂） | src/training.mjs::parseLegacySchool、performTraining | 部分完成（按資料與說明實作） | 原版此 fork 根目錄沒有可執行 school.cgi；有資料和使用說明，無法對照原版實際付款、增益、時鐘執行 CGI | P1（來源邊界） | 逐課比對數值；明示未能核對的原始實際操作條件，不把 Web 行為說成已證實等價 |
+| TR-02 學校每日一次 | manual.html L149–150；dat_dir/school.cgi | src/training.mjs L75–106 | 部分完成（依原版說明） | 每天一次有原始說明依據；跨日、切課、伺服器時區仍需驗證，原版 fork 無獨立 school.cgi 程式可比對 | P1 | 跨日、重啟、同時請求及兩模式隔離（31） |
+| TR-03 健身房課程資料與原版執行來源 | dat_dir/gym.cgi（9 筆課程）；town_lib.pl::gym_sprit；manual.html L145–146 | src/training.mjs::parseLegacyGym、performTraining | 部分完成（根據資料運作） | 本 fork 根目錄無可執行 gym.cgi；Web 暫把「間」作分鐘；不能將另一設施 kyushitu.cgi 的減重、信用付款等同健身房的原版效果 | P1（來源邊界） | 欄位、增益、費用、冷卻回歸；找不到實際 gym CGI 時不宣稱完整等價 |
+| TR-04 教室獨立訓練設施 | unit.pl L152；kyushitu.cgi::kyushitu L30–90、kyushitu_go L93–175；dat_dir/kyushitu.cgi（4 筆） | src/server.mjs::trainingLessons 只讀 school.cgi 和 gym.cgi；無教室入口 | **確定缺漏** | 原版教室有獨立操作流程、17 能力增益、身體／頭腦雙消耗、分鐘間隔；不是 school 或 gym 的別名 | P1 | 四種課程、身體／頭腦能量、單人多人冷卻、原版流程及異常回滾 |
+| TR-05 教室訓練減重 | kyushitu.cgi::kyushitu_go L121–143 | Web 尚無教室模組或此減重公式 | **確定缺漏** | 原版教室明確扣減體重 (身體消耗+頭腦消耗)/100 公斤；不能套用到缺執行來源的運動健身房 | P1 | 四課原始消耗、體重/BMI、低體重保護、重送與資料回滾 |
+| TR-06 教室信用物品付款 | kyushitu.cgi L68–84、L108–118；原版物品欄 syo_kouka=クレジット | Web 無教室付款及物品授信流程 | **確定缺漏** | 原版有現金／有效信用道具選項，信用款項扣普通銀行並記帳；Web 不複製無餘額檢查造成的風險 | P1 | 原始道具有效期、付款授權、普通銀行帳簿、雙能量不足、失敗回滾 |
 
 ### 04 飲食／熱量
 
@@ -107,6 +115,8 @@
 | SC-01 私訊與玩家互動 | bbs.cgi；tag.cgi；log_dir/aisatulog.cgi | 尚無完整 Web 對應 | 未實作 | 先確認各 CGI 的權限與儲存格式 | P2 | 收發、跨帳號授權、歷史匯入、刪除與清理（後續） |
 | SC-02 戀愛／婚姻／同居／育兒 | dat_dir/love.cgi；kekkon.cgi；log_dir/couplelog.cgi；log_dir/kodomolog.cgi | 尚無完整 Web 對應 | 未實作 | 依賴角色關聯檔、多人帳號及安全同步 | P2 | 原始關係狀態／事件、隱私及回滾（後續） |
 | SC-03 決鬥／裝備／獎賞 | battle.cgi；atakka.cgi；dat_dir/battle.cgi | 尚無完整 Web 對應 | 未實作 | 裝備及傷害計算先追來源，不可發明戰鬥公式 | P2 | 傷害、冷卻、結算交易、跨帳號與重送（後續） |
+| SC-04 真實個人檔案自願登記／修改 | basic.cgi::prof L1690–1717、prof_form L1995–2105；town_ini.cgi L148–179 | 尚無 Web 個人檔案資料模型或表單 | **確定缺漏** | 原版為玩家主動填寫的真實公開資料（性別／年齡／地址、5 組選項、15 題自由填寫），不是遊戲 looks／BMI | P2（個資） | 自願公開、欄位選項、修改、遮蔽、權限及防止角色數值自動曝光 |
+| SC-05 個人檔案搜尋／分頁／傳訊入口 | basic.cgi::prof L1738–1991；town_ini.cgi L145–146 | 尚無 Web 公開檔案搜尋 UI | **確定缺漏** | 可依名稱、性別、年齡、住所與五選項查詢，每頁 10 筆並有傳訊入口 | P2（個資） | 真正查詢條件、分頁、可見性、訊息收件者權限與資料安全 |
 
 ### 12 帳號／角色／安全
 
@@ -124,6 +134,7 @@
 | DB-02 物品 33 欄匯入 | dat_dir/syouhin.cgi；member/<ID>/mono.cgi（來源未提供） | src/legacy-inventory.mjs；scripts/legacy-inventory.mjs | 部分完成 | 封存來源未能以真實 mono.cgi 回歸 | P1 | 重複匯入、原始 ID、損毀／過期、私有備份（31） |
 | DB-03 住宅／銀行／關聯歷史匯入 | log_dir/*；原始住宅與銀行資料 | src/town-storage.mjs；src/housing.mjs；src/banking.mjs | 部分完成 | 已涵蓋部分地圖資料，關聯檔非完整搬移 | P1 | 來源欄位映射、交易一致性與回滾清單（後續） |
 | DB-04 SQLite 遷移／還原 | 原始多檔保存規則 | src/server.mjs；web/data/（不納入版控） | 部分完成 | 已自動加欄；沒有自動逆遷移，須先備份 | P0 | 破壞性 schema 變更前先做 transaction 與 restore 測試（30/31） |
+| DB-05 真實個人檔案及投稿職業原始檔 | town_ini.cgi L559（log_dir/pfofilelog.cgi）；job.cgi::make L80–87（log_dir/joblog.cgi） | 尚無 Web 個人檔案／投稿職業匯入 | **缺乏真實原版歷史樣本** | 此 fork 上述兩檔都是 0 bytes；資料格式有來源，但不能宣稱實際舊玩家記錄已驗證 | P2 | 合成欄位解析測試與經授權的真實備份驗證、隱私與資料隔離 |
 
 ### 14 UI／相容／營運
 
@@ -234,7 +245,10 @@
 | P1-A：餐飲日表及庫存 | `src/dining.mjs`、`src/server.mjs`、SQLite 日菜單／庫存表、tests | P0-B、每日時鐘與餐飲交易 | 隨機菜單、跨日、賣完、同城共用、重送完整回滾 | 不憑空生成原版不存在的商品或菜單 |
 | P1-B：健身資料來源核對 | `src/training.mjs`、原版 gym 相關 CGI／tests | 確認原版實際健身執行函式 | 原版費用、能力增益、課程時間及失敗回滾 | 無原版執行依據的欄位只保留資料，不建立額外效果功能 |
 | P1-C：剩餘五事件 | `src/event-effects.mjs`、`src/events.mjs`、物品交易／庫存、tests | `kifu*`、`get_itm*`、來源交易已可表示 | 每 ID 亂數、耐久、容量、日限額、多人隔離、rollback | 未有贈送/物品產生交易時不可用假獎勵替代 |
-| P2：住宅商店／社交／戰鬥／部署 | 原始 CGI 對應表、Web 新模組、SQLite、UI | 角色資料、經濟／權限／真實舊存檔依賴 | 端到端與安全／備份演練 | 未核對規則不宣稱等價 |
+| P1-D：職業條件原版數值展示 | src/server.mjs::snapshot、public/app.js::renderJobs、UI tests | WK-04、dat_dir/job.cgi 的 150 筆已解析數值 | 每個可選／不可選職業顯示 17 項能力要求、玩家目前值、BMI／身高／性別、薪資獎金及發薪週期 | 不因資料缺失假定職業可應徵，不改伺服器資格判定 |
+| P1-E：薪資去向與銀行明細 | src/engine.mjs、src/server.mjs、src/banking.mjs、SQLite、tests | WK-05 原版 shiharai 與現行銀行交易模型已比對 | 現金／普通銀行領款切換、升級獎金與發薪、帳簿、多人交易防重與回滾 | 不假裝能從未保存的舊 shiharai 恢復偏好 |
+| P1-F：教室獨立訓練 | dat_dir/kyushitu.cgi、src/training.mjs／新模組、server/UI/DB/tests | TR-04～TR-06 原版完整執行分支；與 school/gym 分離 | 4 課原始增益、雙能量、分鐘冷卻、減重、現金與授信付款、多人防重／回滾 | 不把教室來源套到 gym/school；不複製原始 CGI 缺少銀行餘額檢查的風險 |
+| P2：工作工廠／真實公開個人檔案／住宅商店等 | job.cgi／unit.pl、basic.cgi::prof、原始社交與住宅 CGI | WK-07／SC-04／SC-05；真實舊檔缺資料 | 投稿、審核、個人資料公開同意、搜尋、刪改與個資保護 | 不將玩家投稿自動加入正式職業；不自動公開遊戲數值或玩家個資 |
 
 ### 驗收與盤點待辦
 
@@ -242,6 +256,7 @@
 - [x] 逐列列出全部可抽的 #01～#44，並指出預設不可抽的 #45／#46。
 - [x] 更新 PR #9／#10 已合併狀態，且區分原版可達／不可達事件。
 - [x] 體格優先；已找到整數 BMI 職業判定差異。
+- [x] 職業條件表、薪資去向、教室實際減重與付款、真實個人檔案來源已新增可核對項目（詳 [逐函式盤點](phase30-jobs-training-profile-audit.md)）。
 - [ ] 對每個 CGI 子函式及 44 事件做完整**數值、資料欄位、條件、相依與單元測試逐項簽核**。
 - [ ] 取得真實角色／物品／房屋／銀行備份後驗證匯入（目前沒有）。
 - [ ] 真實瀏覽器 375px、768px、桌機與鍵盤／讀屏驗收（目前未做）。
