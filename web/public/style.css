@@ -182,6 +182,15 @@ main{max-width:1100px;margin:.8rem auto;padding:0 .7rem;min-height:unset}
 .game-shell .residents-line{display:flex;align-items:baseline;gap:.5rem;flex-wrap:wrap;border-top:1px solid #d5e4d5;padding-top:.35rem;font-size:.8rem}
 .game-shell .residents-line p{margin:0}
 .game-shell .player-summary h2{margin:.1rem 0 .35rem}
+/* 原版 kounyuu 為外部圖示 URL；只有點選預覽時才由瀏覽器下載。 */
+.game-shell .legacy-icon-panel{display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;
+  padding:.35rem .45rem;margin:.35rem 0;border:1px solid #cbdccd;border-radius:4px;background:#f5f9f4}
+.game-shell .legacy-icon-panel[hidden]{display:none}
+.game-shell .legacy-icon-panel strong{font-size:.78rem;width:100%}
+.game-shell .legacy-icon-panel img{width:32px;height:32px;object-fit:contain;image-rendering:pixelated}
+.game-shell .legacy-icon-panel button{min-height:30px;font-size:.76rem}
+.game-shell .legacy-icon-panel p{margin:0;flex:1 1 100%;overflow-wrap:anywhere}
+
 .game-shell .player-summary .status-main>div{padding:.24rem 0}
 .game-shell .player-actions{display:grid;grid-template-columns:1fr 1fr;gap:.35rem;margin-top:.45rem}
 .game-shell .player-actions #cooldown{grid-column:1/-1;margin:.1rem 0 0}
