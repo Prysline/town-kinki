@@ -390,6 +390,7 @@ function renderTownMap() {
             if(cell.key==="デパ"||cell.key==="デパ2")renderRetail();
             if(cell.key==="自販機")renderVending();
             if(cell.key==="装備屋")renderEquipment();
+            if(cell.key==="ギフト屋")renderGiftShop();
           }
           else if(destination.kind==="station"){
             el("station-heading").scrollIntoView({behavior:"smooth",block:"start"});
@@ -1632,6 +1633,123 @@ function renderEquipment(){
   }
 }
 
+
+let pendingGiftAction=null;
+async function submitGiftAction(action,{sourceLine,quantity,recipientName,name}){
+  const converted=action==="convert";
+  if(!converted&&action!=="send")return;
+  if(!window.confirm(converted?
+    "確定支付 50,000 元，將「"+name+"」的"+(quantity===0?"全部剩餘":quantity+" 份")+
+    "耐久轉換成禮品嗎？":
+    "確定將「"+name+"」的 "+quantity+" 份禮品寄給「"+recipientName+"」嗎？"))return;
+  if(!pendingGiftAction||pendingGiftAction.action!==action||
+     pendingGiftAction.sourceLine!==sourceLine||
+     pendingGiftAction.quantity!==quantity||
+     pendingGiftAction.recipientName!==recipientName){
+    pendingGiftAction={action,sourceLine,quantity,recipientName,requestId:crypto.randomUUID()};
+  }
+  const payload={sourceLine,quantity,requestId:pendingGiftAction.requestId};
+  if(!converted)payload.recipientName=recipientName;
+  try{
+    state=await api("gift/"+action,payload);
+    const result=state.giftResult;
+    pendingGiftAction=null;
+    render();
+    notify(result.replayed?"禮品操作已完成，未重複改變持有物或扣款。":
+      converted?"「"+result.name+"」已轉換成禮品，手續費 "+money(result.fee)+"。":
+      "已將「"+result.name+"」×"+quantity+" 送給「"+recipientName+"」。");
+  }catch(error){notify(error.message,true);}
+}
+function renderGiftShop(){
+  if(!state?.character)return;
+  const available=state.giftShopAvailable===true;
+  text("gift-status",available?
+    "目前城鎮設有禮品店，轉換每次現金 50,000 元；本人未寄送禮品及收件方收到的禮品各有 10 格限制。":
+    "所在城鎮沒有原版「ギフト屋」；不能在此轉換物品，但已持有的禮品仍可寄送給其他角色。");
+  const target=el("gift-sources");
+  target.replaceChildren();
+  for(const item of state.giftSources??[]){
+    const tile=document.createElement("div");
+    tile.className="training-tile";
+    const heading=document.createElement("strong");
+    heading.textContent=item.name+"｜"+item.category;
+    const detail=document.createElement("p");
+    detail.className="small";
+    detail.textContent="剩餘 "+item.quantity+item.unit+"｜物品來源 #"+item.sourceLine;
+    tile.append(heading,detail);
+    if(item.canConvert&&available){
+      const label=document.createElement("label");
+      label.textContent="轉換耐久（輸入 0 表示全部）";
+      const qty=document.createElement("input");
+      qty.type="number";qty.min="0";qty.max=String(item.quantity);
+      qty.step="1";qty.value="0";
+      label.append(qty);
+      const button=document.createElement("button");
+      button.type="button";
+      button.textContent="支付 50,000 元轉換為禮品";
+      button.disabled=state.character.money<50000;
+      button.addEventListener("click",()=>{
+        const count=Number(qty.value);
+        if(!Number.isSafeInteger(count)||count<0||count>item.quantity){
+          notify("轉換數量需為 0 或不超過剩餘耐久的正整數",true);return;
+        }
+        submitGiftAction("convert",{
+          sourceLine:item.sourceLine,quantity:count,name:item.name
+        });
+      });
+      tile.append(label,button);
+    }
+    if(item.canSend){
+      const label=document.createElement("label");
+      label.textContent="收件人角色名稱";
+      const person=document.createElement("input");
+      person.type="text";person.maxLength=40;person.placeholder="輸入對方完整角色名稱";
+      label.append(person);
+      const quantityLabel=document.createElement("label");
+      quantityLabel.textContent="寄送份數";
+      const qty=document.createElement("input");
+      qty.type="number";qty.min="1";qty.max=String(item.quantity);
+      qty.step="1";qty.value="1";
+      quantityLabel.append(qty);
+      const button=document.createElement("button");
+      button.type="button";button.textContent="送出禮品";
+      button.addEventListener("click",()=>{
+        const count=Number(qty.value);
+        const to=person.value.trim();
+        if(!to||!Number.isSafeInteger(count)||count<1||count>item.quantity){
+          notify("請填寫收件人角色名稱與有效份數",true);return;
+        }
+        submitGiftAction("send",{sourceLine:item.sourceLine,
+          quantity:count,recipientName:to,name:item.name});
+      });
+      tile.append(label,quantityLabel,button);
+    }
+    target.append(tile);
+  }
+  if(!target.childElementCount){
+    const note=document.createElement("p");note.className="small";
+    note.textContent="尚無可安全轉換或寄送的本人 Web 物品；原版匯入的 33 欄封存不會直接改寫。";
+    target.append(note);
+  }
+  const history=el("gift-events");
+  history.replaceChildren();
+  const list=document.createElement("ol");list.className="health-event-list";
+  for(const event of state.giftEvents??[]){
+    const line=document.createElement("li");
+    line.textContent=new Date(event.createdAt).toLocaleString("zh-TW")+"｜"+
+      (event.action==="convert"?"轉換禮品":"寄送給 "+(event.recipientName??"收件人"))+
+      "｜"+event.name+" ×"+(event.quantity||"全部")+
+      (event.fee?"｜手續費 "+money(event.fee):"");
+    list.append(line);
+  }
+  if(list.childElementCount)history.append(list);
+  else{
+    const note=document.createElement("p");note.className="small";
+    note.textContent="尚無禮品轉換與寄送紀錄。";
+    history.append(note);
+  }
+}
+
 function renderTraining() {
   const oldChoices=new Map([...el("classroom-lessons").querySelectorAll("select[data-lesson-key]")]
     .map(item=>[item.dataset.lessonKey,item.value]));
@@ -1868,6 +1986,7 @@ function render() {
   renderRetail();
   renderVending();
   renderEquipment();
+  renderGiftShop();
   renderInsurance();
   const ready = Boolean(state.currentJob) && state.workCooldownMs === 0 &&
     state.condition?.baseExperience !== null;

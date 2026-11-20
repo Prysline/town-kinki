@@ -16,8 +16,8 @@
 
 針對 43 個互動入口，Web 目前：
 - **28 個**有明確的 [`MAP_SYMBOLS`](../src/town-map.mjs) 地圖代碼；**15 個**原版互動入口沒有被加入 Web 地圖代碼清單（匯入真實地圖時可能以未知圖示呈現，實際需要有資料驗證）。
-- **12 個**有操作入口：**11 個**由 [`FACILITY_PANELS`](../public/town-home.js#L2) 導向 Web 面板（含 PR #23 的獨立教室，PR #27 的已匯入有效信用卡付款），另 **1 個「駅」**由 [`townCellAction`](../public/town-home.js#L12) 導向車站票價與乘車選項（PR #26）。這只是入口覆蓋，不代表設施全部規則已移植。
-- **16 個**已有 Web 地圖代碼，但既未映射 `FACILITY_PANELS`，也不是車站特例；[`townCellAction`](../public/town-home.js#L12) 會回傳 `unavailable`，按圖示只會提示尚未移植。
+- **13 個**有操作入口：**12 個**由 [`FACILITY_PANELS`](../public/town-home.js#L2) 導向 Web 面板（含 PR #23 的獨立教室，PR #27 的已匯入有效信用卡付款），另 **1 個「駅」**由 [`townCellAction`](../public/town-home.js#L12) 導向車站票價與乘車選項（PR #26）。這只是入口覆蓋，不代表設施全部規則已移植。
+- **15 個**已有 Web 地圖代碼，但既未映射 `FACILITY_PANELS`，也不是車站特例；[`townCellAction`](../public/town-home.js#L12) 會回傳 `unavailable`，按圖示只會提示尚未移植。
 - 百貨兩入口、自販機與裝備屋已有各自實際購物交易，**仍不等於原版全部商店功能**。詳 [百貨店](phase31-department-checkout.md)、[自販機](phase33-vending-shopping.md) 與 [裝備屋](phase35-equipment-shop.md)。
 - 這些是**程式路由覆蓋率**，不是已完成功能比例；車站已按原版 `station.cgi` 收取四城六組雙向車資（PR #26），而真實原版地圖存檔及其他交通道具仍待核查。
 
@@ -46,7 +46,7 @@
 | [`役場`](../../unit.pl#L124) | `yakuba.cgi` | `yakuba` | 有 | Web 有圖示、點選不可進入 |
 | [`銀行`](../../unit.pl#L126) | `basic.cgi` | `ginkou` | 有 | 有 Web 入口／僅部分對照 |
 | [`病院`](../../unit.pl#L128) | `basic.cgi` | `byouin` | 有 | 有 Web 入口／僅部分對照 |
-| [`ギフト屋`](../../unit.pl#L130) | `gifutoya.cgi` | `gifutoya` | 有 | Web 有圖示、點選不可進入 |
+| [`ギフト屋`](../../unit.pl#L130) | `gifutoya.cgi` | `gifutoya` | 有 | 已接入 [原版 50,000 元禮品轉換、部分耐久分割、跨玩家ギフト商品寄送與雙側 10 格上限](phase37-gift-shop.md)；原版附信、優惠券與舊檔轉換尚未全部完成 |
 | [`株`](../../unit.pl#L132) | `kabu.cgi` | `kabu` | 有 | Web 有圖示、點選不可進入 |
 | [`食堂`](../../unit.pl#L134) | `$script` | `syokudou` | 有 | 有 Web 入口／僅部分對照 |
 | [`食堂２`](../../unit.pl#L136) | `$script` | `syokudou2` | 有 | 有 Web 入口／僅部分對照 |
