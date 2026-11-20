@@ -67,12 +67,22 @@ export function hungerStatus(lastMealAt,now=Date.now(),mealInterval=MEAL_COOLDOW
   return {key,label:HUNGER_LABELS[key],elapsedMs:delta,
     nextMealAt:lastMealAt+mealInterval,canEat:delta>=mealInterval};
 }
-// 原版 basic.cgi 在檢查職業與狀態前，先將體重 sprintf("%.1f")；
-// town_lib.pl::check_BMI 再取整數。不可直接截斷 Web 儲存的一位小數 BMI。
+// 原版 basic.cgi 先以 Perl sprintf("%.1f") 格式化體重，town_lib.pl 再 int(BMI)。
+// JS Math.round(weight*10) 在 17.95、24.95 等二進位浮點邊界與 Perl 不同。
+// Number.toFixed(1) 保留原始 IEEE-754 值的十進位捨入；只有精確中點時，
+// Perl 的 sprintf 採「五捨六入、五取偶」（round half to even），toFixed 則向上取。
+// 0.1 的精確二進位中點只會出現在 *.25 / *.75 等四分之一數值。
+function perlWeightOneDecimal(weight) {
+  const rounded=Number(weight.toFixed(1));
+  const quarters=weight*4;
+  const lowerTenth=Math.floor(weight*10);
+  return Number.isSafeInteger(quarters) && quarters%2!==0 && lowerTenth%2===0
+    ? lowerTenth/10 : rounded;
+}
 export function legacyPhysiqueBmi(height,weight) {
   if (!Number.isFinite(height)||height<=0||!Number.isFinite(weight)||weight<0)
     throw new Error("無效的身高體重");
-  const roundedWeight=Math.round(weight*10)/10;
+  const roundedWeight=perlWeightOneDecimal(weight);
   const bmi=Math.trunc(roundedWeight/((height/100)**2));
   if (!Number.isFinite(bmi)) throw new Error("無效的身高體重");
   return bmi;
