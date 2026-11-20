@@ -26,7 +26,7 @@
 | PH-03 職業 BMI 上下限 | basic.cgi L2691-L2706,L2869-L2879；dat_dir/job.cgi 首列 | src/engine.mjs L141-L142,L183-L187 | 部分完成 | 原版使用整數 $BMI；Web character.bmi 保留小數，BMI 上限邊界可能誤拒 | P0 | 職業上限 24、BMI 24.x 原版可通行的測試；匯入存檔重算口徑（30-體格） |
 | PH-04 飲食／工作增減重 | command.pl L1342-L1355；basic.cgi L2956-L2961 | src/dining.mjs L105-L125；src/engine.mjs L230-L240 | 部分完成 | 公式對齊，累積四捨五入、極低體重與未記錄用餐相容仍需驗證 | P0 | 連續吃飯／工作與重開 DB，身高變化後 BMI 再計算（30-體格） |
 | PH-05 消耗品身高／體重 | basic.cgi L2556-L2579；dat_dir/syouhin.cgi | src/legacy-item-use.mjs L146-L179 | 部分完成 | 僅可確認封存消耗品；不是原版整個物品流通與作用系統 | P0 | 效果名／回或日耐久／過期／無效商品及交易回滾（30-體格） |
-| PH-06 狀態頁集中顯示 | basic.cgi L2646-L2657；town_maker.cgi | public/index.html L176-L202；public/app.js L995-L1004 | 部分完成 | 資訊已顯示但折入 details，尚未完成手機與桌機實際操作驗收 | P0 | 狀態頁直接確認身高、體重、體型、BMI，手機 375px 與桌機截圖（30-體格） |
+| PH-06 狀態頁集中顯示 | basic.cgi L2646-L2657；town_maker.cgi | public/index.html::physique-summary；public/app.js::renderDining | 部分完成（P0-C 程式已提交） | 身高／體重、體型與 BMI 已移至狀態頁常駐摘要；真實手機與桌面瀏覽器操作未驗證 | P0 | 375px／768px／桌面截圖、對照工作後及用餐後刷新（30-體格） |
 | PH-07 體型驅動外觀 | town_lib.pl L507-L520；原始 img/ 素材 | 目前未找到對應 Web 規則 | 缺少來源無法驗證 | 需找原始外觀變形規則／對應圖片；不能將 BMI 分類當作外觀已完成 | P2 | 取得來源與素材映射才開實作 PR（待排定） |
 
 ### 02 能量與工作
@@ -203,6 +203,13 @@
 - **測試**：`tests/dining.test.mjs` 涵蓋原版體重小數四捨五入前後的 18／24／26 臨界；`tests/engine.test.mjs` 涵蓋超出／剛好符合 BMI 職業上限、最低門檻、無上限、轉職與實際工作、過時存檔 BMI 不影響判定。
 - **保留差異／範圍外**：原版 Perl 的 `sprintf` 在極端浮點數／半分界的行為尚無全量對照；本修正不宣稱醫療／服裝／健身額外效果與所有職業規則已完整等價。真正瀏覽器、真實舊存檔驗證仍待執行。
 - **狀態**：已提交 P0-B 程式及測試；**CI 與 PR 最終審查狀態以 GitHub 即時結果為準**，在此文件不將其標為已合併。
+
+## 第 30 階段 P0-C 狀態頁體格摘要（開發分支）
+
+- **修改**：`public/index.html` 將既有 `#measurements`、`#physique-status` 自「更多角色資訊」的可展開區移到「狀態」分頁常駐的 `physique-summary` 區塊；`public/style.css` 為 290px 側欄增加緊湊樣式。
+- **保持不變**：`public/app.js` 仍由現有 snapshot 更新兩個 ID；沒有新 API、SQLite 欄位、交互控制或額外減重／變形規則；體格更新來自現行角色身高、體重與原版整數 BMI。
+- **驗收**：`tests/home-ui.test.mjs` 靜態驗證摘要位於折疊區外、ID 唯一、渲染路徑不變。**尚未開啟真實瀏覽器做手機 375px、768px、桌面截圖／操作／鍵盤及讀屏測試**，不可聲稱視覺驗收已完成。
+- **狀態**：P0-C 程式與靜態測試已提交，待 CI、PR 審查與實機驗收。沒有合併主整合分支或 `master`。
 
 ## P0 → P1 → P2 切片與相依／拒絕條件
 
