@@ -12,7 +12,7 @@ function mealRow(category="食",name="牛丼",price=200,calories=720){
   f[1]=name;
   f[9]="無";
   f[11]="2";f[12]="1";f[14]="1";f[15]="1";f[16]="1";
-  f[17]=String(price);f[25]=String(calories);
+  f[17]=String(price);f[24]="7";f[25]=String(calories);
   return f.join("<>")+"<>";
 }
 const input="種類<>品目<>\n"+mealRow()+"\n"+mealRow("商店","其他")+" \n";
@@ -27,6 +27,7 @@ test("原版食堂商品資料只取食品，售價三倍，能力值與熱量�
   assert.equal(menu[0].name,"牛肉蓋飯");
   assert.equal(menu[0].price,600);
   assert.equal(menu[0].calories,720);
+  assert.equal(menu[0].stock,7);
   assert.equal(menu[0].gains.tairyoku,2);
   assert.equal(menu[0].gains.kenkou,1);
   assert.equal(menu[0].gains.power,1);

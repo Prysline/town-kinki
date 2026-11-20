@@ -66,9 +66,9 @@
 
 | ID／功能 | 原版來源 | Web 現況／來源 | 判定 | 差異／相依 | 優先度 | 驗收／切片 |
 |---|---|---|---|---|---|---|
-| FD-01 原版雙菜單與售價三倍 | dat_dir/syouhin.cgi；dat_dir/syokudou2.cgi；command.pl L1330-L1355 | src/dining.mjs L29-L50；src/server.mjs L90-L99 | 部分完成 | 兩份表解析與三倍價；原版菜單更新／庫存另列 | P1 | 各品項原始序號、售價、熱量與交易一致性（31） |
+| FD-01 原版雙菜單與售價三倍 | dat_dir/syouhin.cgi；dat_dir/syokudou2.cgi；command.pl::syokudou／syokudou2 | src/dining.mjs::parseLegacyMeals；src/dining-stock.mjs；src/server.mjs::snapshot／api/meal/eat | **雙食堂與每日菜單核心已移植（PR #31），待實機驗收** | 原版兩食品來源、三倍售價、各最多 30 道抽選及原始庫存量已接入 Web；原版全局 log 與城市 flag 的差異見 FD-03 | P1（驗收） | 食品來源欄、售價、份數、舊玩家與實際操作 |
 | FD-02 用餐 60 分鐘與熱量增重 | town_ini.cgi L73；command.pl L1330-L1355 | src/dining.mjs L52-L69,L105-L125 | 已完成（核心公式） | 原版可能涉及不同菜單的共用時段；需測試跨菜單防重 | P1 | 60 分鐘臨界、熱量÷1000、多模式同時請求（31） |
-| FD-03 每日隨機菜單與剩餘數量 | command.pl L919-L999,L1161-L1245 | src/dining.mjs L1-L2；public/index.html L330-L337 | 未實作 | 現在固定列示；原版抽選、剩餘庫存與更替規則未接 | P1 | 伺服器每日生成、同城共享、賣完／跨日／重送驗收（31） |
+| FD-03 每日隨機菜單與剩餘數量 | command.pl L920–1082、L1162–1324；syokuzisuru L1086–1159、syokuzisuru2；town_ini.cgi L84–88；town_maker.cgi L354–360 | src/dining-stock.mjs；src/server.mjs::snapshot／api/meal/eat；public/app.js／index.html | **每日抽選、共用庫存及原子扣庫存已修復（PR #31），待實機驗收** | 兩家每日各抽最多 30，道具資料第 25 欄為庫存；跨日或有庫存品項 <=25 時補貨；後端拒絕未上架／售完，UI 顯示日期／剩餘量。原版補貨判斷混入個人現金（且顯示端有額外價格乘算），Web 只依實際庫存判斷避免任意低現金玩家造成重整；原版共享 syokudoulog 與各城 flag 的關係仍待真實地圖驗證 | P1（已修／待驗收） | 單元／單機跨日／兩玩家共用／售完不扣款／SQLite 回滾已測；仍需實機及原版備份驗收 |
 | FD-04 飢餓分類與舊角色保護 | top.pl L258-L273；town_ini.cgi L71-L73 | src/dining.mjs L52-L68,L82-L103 | 部分完成 | 原版 3000 日刪角規則與 Web 保護不一致；不可直接破壞存檔 | P1 | 標記保留差異，設計遷移與玩家告知（後續） |
 
 ### 05 地圖／交通
@@ -216,7 +216,7 @@
 | UI-04 部署／監控／備份 | 原始 CGI 運行環境；README | web/package.json；.github/workflows/town-web.yml | 部分完成 | CI 有測試；尚無正式營運安全／備份定期還原驗證 | P2 | 部署檢查、日誌、備份和恢復演練（後續） |
 | UI-05 地圖教室獨立入口 | unit.pl L152：教室→kyushitu.cgi；dat_dir/kyushitu.cgi 四課 | public/town-home.js::FACILITY_PANELS["教室"]="classroom-panel"；public/index.html::classroom-panel | **已修正錯誤導覽（PR #23）** | 地圖教室不再誤導至學校；已與獨立教室資料及訓練連動 | P1（驗收） | home-ui.test.mjs 及 server／training 測試已涵蓋，待手機與桌面實際操作 |
 
-**實際修復進度（2026-11-20）**：PR #22 職業需求、#23 教室四課與導覽、#24 薪資收款、#26 車站六組票價、#27 有效匯入信用卡付款、#28 發薪進度與偏好時序、#29 教室快轉冷卻／職業門檻精簡／精通進度／工作快捷均已合併。尚未完成原版購卡商店、食堂每日庫存、缺少五個事件、釣魚、問卷、投稿、股票、拍賣及完整遊樂中心玩法；詳 [總清冊](phase30-open-audit-backlog.md)。**CI 成功不等於玩家實機與舊存檔驗收完成；不以盤點文件替代實作**。
+**實際修復進度（2026-11-20）**：PR #22 職業需求、#23 教室四課與導覽、#24 薪資收款、#26 車站六組票價、#27 有效匯入信用卡付款、#28 發薪進度與偏好時序、#29 教室快轉冷卻／職業門檻精簡／精通進度／工作快捷均已合併。PR #31 已接入原版每日食堂菜單、共用庫存及點餐交易；尚未完成原版購卡商店、缺少五個事件、釣魚、問卷、投稿、股票、拍賣及完整遊樂中心玩法；詳 [總清冊](phase30-open-audit-backlog.md)。**CI 成功不等於玩家實機與舊存檔驗收完成；不以盤點文件替代實作**。
 
 ## 第一輪重大發現與應先修項
 
@@ -225,7 +225,7 @@
 1. **P0/體格 BMI 判定口徑（PR #12 已修正，P0-D 補半分界）**：`town_lib.pl::check_BMI` 使用 `int(weight/(height/100)^2)`；原版 `basic.cgi` 的職業門檻使用此整數。PR #12 已讓 Web 的 `eligibility` 即時運算整數 BMI，不再用舊的 `character.bmi` 一位小數值；P0-D 進一步修補 Perl `sprintf("%.1f")` 在 17.95／24.95／25.95 的半分界捨入差異。保留原有存檔欄位。
 2. **P1/健身房欄位來源**：`dat_dir/gym.cgi` 的能力增益、費用及能量欄位已對照；「間」與「効果」尚需實際執行路徑驗證。未確定的字串只保留原始資料，不視為待移植的新遊戲效果。
 3. **P1/職業需求數值表（PR #22 已修復核心展示）**：原版 `basic.cgi::job_change` L2753–2781 明確輸出每個職業的 17 項能力與 BMI、性別、身高、薪資等，並提供玩家當前值對照；`job.cgi::top` 的滑鼠提示也有各項需求。舊 Web 只向前端送簡化 `reason`，PR #22 已補完整原版數值及玩家比較，**並非原版不存在**。實機驗收仍待完成。
-4. **P1/食堂每日菜單與庫存**：`command.pl` L919–999、L1161–1245 有更新菜單與剩餘量，Web `src/dining.mjs` 頂部承認固定展示。
+4. **P1/食堂每日菜單與庫存（PR #31 核心已修）**：依 `command.pl` L919–999、L1161–1245 及資料第 25 欄，兩間食堂每日各抽最多 30 道，跨玩家共用庫存；原版低現金造成重抽的漏洞沒有複製，待真實瀏覽器／原版全局食堂 log 與城市旗標驗收。
 5. **P0/事件分支**：缺 #28、#36、#37、#38、#40；其中 #28、#36、#37 的 `kifu*` 要先追完整實作；#38、#40 需物品產生與背包容量。
 6. **P0/展示（PR #13 已合併）**：`public/index.html` 的 `#measurements`、`#physique-status` 已移至狀態分頁常駐體格摘要；`public/app.js` 延用相同資料流。真實瀏覽器截圖和操作驗收仍未完成。
 7. **來源警示**：`src/dining.mjs` L66 用 `2995` 日門檻，對應 `town_ini.cgi` 的 `deleteUser=3000` 與原版 `top.pl` 的 `deleteUser - 5`；數字有來源，真正不同是 Web 無用餐紀錄的 provisional 保護與原版刪角機制。
