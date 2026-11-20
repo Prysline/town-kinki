@@ -205,6 +205,82 @@ test("薪資去向：偏好存檔、實際銀行入帳與帳簿、重送冷卻�
   }finally{await srv.stop();}
 });
 
+test("原版車站：四城六組票價、12 向扣款、無效／同城／餘額不足不更動資料",async()=>{
+  const srv=await start("solo");
+  try{
+    const created=await api(srv.url,"character",{
+      name:"電車旅客",gender:"other",stats:defaultStats()
+    });
+    assert.equal(created.status,200);
+    const routes=[[0,1,950],[0,2,780],[0,3,1210],
+      [1,2,950],[1,3,2210],[2,3,1530]];
+    const db=new DatabaseSync(join(srv.directory,"solo.sqlite"));
+    try{
+      for(const [a,b,fare] of routes){
+        for(const [from,to] of [[a,b],[b,a]]){
+          db.prepare("UPDATE characters SET town_id=?,money=100000").run(from);
+          const before=await api(srv.url,"state");
+          const choices=before.result.trainDestinations;
+          assert.equal(choices.length,4);
+          assert.equal(choices.find(x=>x.townId===to).fare,fare);
+          // 客戶端偽造出發站與費用都不可改變伺服器使用的來源。
+          const moved=await api(srv.url,"move",{
+            townId:to,fromTownId:3,maemati:3,fare:0
+          });
+          assert.equal(moved.status,200,`route ${from} -> ${to}`);
+          assert.deepEqual(moved.result.travelResult,{
+            fromTownId:from,toTownId:to,fare
+          });
+          assert.equal(moved.result.character.townId,to);
+          assert.equal(moved.result.character.money,100000-fare);
+          assert.equal(db.prepare("SELECT money,town_id FROM characters").get().money,100000-fare);
+          const repeated=await api(srv.url,"move",{townId:to});
+          assert.equal(repeated.status,400,"同城移動必須拒絕");
+          assert.equal((await api(srv.url,"state")).result.character.money,100000-fare);
+        }
+      }
+      db.prepare("UPDATE characters SET town_id=1,money=2209").run();
+      const poor=await api(srv.url,"move",{townId:3});
+      assert.equal(poor.status,400);
+      assert.match(poor.result.error,/現金不足/);
+      assert.deepEqual({...db.prepare("SELECT money,town_id FROM characters").get()},
+        {money:2209,town_id:1});
+      for(const invalid of [-1,4,1.5,"3",null]){
+        assert.equal((await api(srv.url,"move",{townId:invalid})).status,400);
+        assert.deepEqual({...db.prepare("SELECT money,town_id FROM characters").get()},
+          {money:2209,town_id:1});
+      }
+    }finally{db.close();}
+  }finally{await srv.stop();}
+});
+
+test("多人電車扣款只作用於登入玩家，不可藉請求指定其他人的出發城鎮",async()=>{
+  const srv=await start("multi");
+  try{
+    const first=await api(srv.url,"register",{
+      username:"train_first",password:"pass-for-train-first-123"
+    });
+    const second=await api(srv.url,"register",{
+      username:"train_second",password:"pass-for-train-second-123"
+    });
+    assert.equal((await api(srv.url,"character",{
+      name:"第一旅客",gender:"male",stats:defaultStats()
+    },first.cookie)).status,200);
+    assert.equal((await api(srv.url,"character",{
+      name:"第二旅客",gender:"female",stats:defaultStats()
+    },second.cookie)).status,200);
+    const moved=await api(srv.url,"move",{townId:3,fromTownId:3},first.cookie);
+    assert.equal(moved.status,200);
+    assert.equal(moved.result.travelResult.fare,1210);
+    assert.equal(moved.result.character.money,98790);
+    const untouched=await api(srv.url,"state",undefined,second.cookie);
+    assert.equal(untouched.result.character.townId,0);
+    assert.equal(untouched.result.character.money,100000);
+    assert.equal((await api(srv.url,"move",{townId:3})).status,401,
+      "未登入不得代替任何玩家搭車");
+  }finally{await srv.stop();}
+});
+
 test("多人：兩位玩家可獨立登入並看見同城居民", async () => {
   const srv = await start("multi");
   try {
@@ -535,12 +611,13 @@ test("多人：非屋主不得出售，兩個同時出售請求只退一次錢�
     ]);
     assert.deepEqual(sales.map(x=>x.status).sort((x,y)=>x-y),[200,400]);
     const after=await api(srv.url,"state",undefined,a.cookie);
-    assert.equal(after.result.character.money,5100000);
+    // 原版車站現在會扣 0→3 的 1,210 元；售屋退款不再假設免費換城。
+    assert.equal(after.result.character.money,5100000-1210);
     assert.equal(after.result.character.bank,13500000);
     assert.equal(after.result.map.cells[0].raw,"空地3");
     assert.equal(after.result.townHouses.length,0);
     assert.equal(after.result.houseEvents.filter(x=>x.action==="sold").length,1);
-    assert.equal((await api(srv.url,"state",undefined,b.cookie)).result.character.money,100000);
+    assert.equal((await api(srv.url,"state",undefined,b.cookie)).result.character.money,100000-1210);
     const repurchased=await api(srv.url,"house/build",{
       row:0,column:0,image:"house/kamakura.gif",interiorRank:3,payment:"bank"
     },b.cookie);

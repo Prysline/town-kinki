@@ -11,6 +11,7 @@ import {
 } from "./engine.mjs";
 import { parseLegacySchool, parseLegacyGym, parseLegacyClassroom, calendarDay, trainingAvailability, performTraining } from "./training.mjs";
 import { initTownMapTable, bootstrapLegacyTownMaps, publicTownMap, editTownTile } from "./town-storage.mjs";
+import { trainDestinations, travelByTrain } from "./transport.mjs";
 import { parseHouseCatalog, initHousingTables, listHouses, publicHouseCatalog, buildHouse, renameHouse, sellHouse, getHouseSaleQuote, listHouseEvents, remodelHouse, listHouseRemodelEvents } from "./housing.mjs";
 import { initRoomsTables, ROOM_TYPES, setRoomSlots, viewRoom, addRoomPost, deleteRoomPost } from "./rooms.mjs";
 import { parseLegacyMeals, eatMeal, deriveCondition, hungerStatus, physiqueStatus, MEAL_COOLDOWN_MS } from "./dining.mjs";
@@ -282,6 +283,8 @@ function snapshot(user) {
     maxBrainEnergy: updated ? maxBrainEnergy(updated.stats) : null,
     jobLevel: updated ? Math.floor(updated.jobExperience / 100) : 0,
     towns: TOWNS,
+    // 票價由原版站點對照表計算；只以角色目前城鎮為起點。
+    trainDestinations: updated ? trainDestinations(updated.townId) : [],
     map,
     houses: ownedHouses,
     houseEvents: updated ? listHouseEvents(db, user.id) : [],
@@ -717,11 +720,15 @@ async function handle(req, res) {
     }
 
     if (path === "/api/move") {
-      if (!Number.isInteger(data.townId) || !TOWNS.some(t => t.id === data.townId)) {
-        throw new HttpError(400, "不存在的城鎮");
-      }
-      mutateCharacter(user.id, old => ({ character: { ...old, townId: data.townId } }));
-      return sendJson(res, 200, snapshot(user));
+      let journey;
+      try {
+        // mutateCharacter 開啟 BEGIN IMMEDIATE；從伺服器存檔中的 townId
+        // 計算原版票價、檢查現金並同筆更新所在地與餘額。
+        journey=mutateCharacter(user.id,old=>travelByTrain(old,data.townId));
+      }catch(error){throw new HttpError(400,error.message);}
+      return sendJson(res,200,{...snapshot(user),travelResult:{
+        fromTownId:journey.fromTownId,toTownId:journey.toTownId,fare:journey.fare
+      }});
     }
     throw new HttpError(404, "找不到指定的功能");
   } catch (error) {
