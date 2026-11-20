@@ -189,6 +189,6 @@ export function listLegacyInventoryItems(db,userId,limit=50){
     sourceLine:x.source_line,category:x.category,name:x.original_name,
     durability:x.durability,unit:x.durability_unit,purchasedAt:x.purchased_at,
     readOnly:x.original_id!=="__web_retail__",
-    origin:x.original_id==="__web_retail__"?"retail":"legacy"
+    ...(x.original_id==="__web_retail__"?{origin:"retail"}:{})
   }));
 }
