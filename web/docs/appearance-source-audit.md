@@ -1,31 +1,31 @@
-# 第 30 階段：原版「外貌／角色圖示」來源與 Web 差異盤點（第一輪）
+# 第 30 階段：外貌及角色圖片原版來源稽核（重新盤點）
 
-> **盤點基準**：2026-11-20，原版 CGI／`dat_dir`／`img` 與 Web 整合分支 `feature/web-dual-mode-phase1`（PR #14 合併提交 `8419864b907a4a0b595c6af1fa4d3fd759f6f386`）。**只核對來源和現有實作，不新增外貌機制、圖片或猜測數值。**
+> **查核基準：2026-11-20**。原版 Perl／CGI、`dat_dir` 資料表，以及目前 Web 整合分支 `feature/web-dual-mode-phase1`。只把有可定位的原版**欄位、條件、執行分支或畫面**的功能列為移植對象。對只有說明文字、但未找到可執行分支的內容，不建立功能缺漏或開發排程。
 >
-> **適用限制**：已逐段閱讀本文件列出的原始函式、資料欄與 Web 模組；GitHub 樹狀清單能證明檔案存在，但不能替代實際查看圖片內容。尚無真實原版會員資料、全部 69 欄舊角色個案、C 聯賽實際存檔或瀏覽器操作結果。本文件不是原版所有 CGI 與美術素材的最終完整簽核。
+> **驗收邊界**：本次為外貌相關來源及 Web 程式重核，未使用真實原版會員、個人檔案、持有物品或 C 聯賽存檔進行端到端測試，亦未作瀏覽器實機驗收；不能以此推定全部原版 CGI 的所有行為均已驗證。
 
-## 1. 名稱相近、但必須分開的原版系統
+## 一、原版實際存在的功能與 Web 對照
 
-| 來源領域 | 原版具體證據 | Web 對照與狀態 | 不可混同之處 |
+| ID | 原版功能及可核對的來源 | Web 現況 | 真正剩餘的工作 |
 |---|---|---|---|
-| AP-01 人物外貌能力 `looks` | [game.cgi L1570–L1601](../../game.cgi#L1570)、[town_lib.pl L187–L210](../../town_lib.pl#L187)、[town_maker.cgi L1254](../../town_maker.cgi#L1254) | [engine.mjs](../src/engine.mjs) 的 `STAT_KEYS`／初始配點與 [app.js](../public/app.js) 身體能力分組已有實作；**基本數值已存在** | `looks` 是能力值，不是髮型、立繪網址或 BMI 分類 |
-| AP-02 職業外貌限制 | [town_lib.pl L325–L328](../../town_lib.pl#L325)、[basic.cgi L2697–L2718](../../basic.cgi#L2697)、[dat_dir/job.cgi](../../dat_dir/job.cgi) | `parseLegacyJobs` 將第 12 欄（索引 11）映射 `requirements.looks`，`engine.mjs::eligibility` 驗證；**此門檻已有實作** | 原始工作表共 150 筆，其中 **50 筆**要求 `looks > 0`（依原始 150 筆程式資料實算）；不代表工作會變更角色外觀圖片 |
-| AP-03 美容商品數值與特殊效果 | [dat_dir/syouhin.cgi L159–L171](../../dat_dir/syouhin.cgi#L159)、[town_lib.pl L330–L334](../../town_lib.pl#L330)、[basic.cgi L2501–L2508](../../basic.cgi#L2501) | 原版 **13 筆「美容」品項**；Web [legacy-item-use.mjs](../src/legacy-item-use.mjs) 對符合安全條件的「回」耐久封存物品會按原始能力欄增加 `looks`；**僅限有匯入的個人物品，非完整美容商店** | 「ヘアーカラー(髪染め)」資料是 `looks +5`、效果 `無`、備註「茶色」；**這不是已找到的髮色持久欄位／換裝規則** |
-| AP-04 健身房外貌 | [dat_dir/gym.cgi L1–L10](../../dat_dir/gym.cgi#L1)、[town_lib.pl L342–L345](../../town_lib.pl#L342) | [training.mjs](../src/training.mjs) 把原始「ル」解析成 `looks` 並套用訓練增益；**此來源欄位已有對照實作** | 游泳「スイミング」的明確數值是 `looks +4`，**另外**有 `効果=美`、`H=2`；Web 只保存 `extraEffect`，尚未套用，原版執行效果仍待定位 |
-| AP-05 特殊溫泉等外貌增益 | [basic.cgi L1341–L1370](../../basic.cgi#L1341)、[L1396–L1437](../../basic.cgi#L1396) | 原版銀／金之湯分支可抽 `looks_up=int(rand(20)+1)`，抽到 1～10 時提高 `looks`；**未找到對應 Web 溫泉完整模組** | 有明確原版隨機判定，但這不是外觀圖片變化；原始其他能力分支疑有拼字錯誤，未驗證前不得默默「修正」 |
-| AP-06 事件與城市活動的外貌增減 | [event.pl L290–L303](../../event.pl#L290)、[mati_contest.cgi L590–L600](../../mati_contest.cgi#L590)、[L687–L692](../../mati_contest.cgi#L687) | Web [event-cockroach.mjs](../src/event-cockroach.mjs) 已實作蟑螂挑戰 `looks -3`（但受 Web 非負保護）；原版城市貢獻可扣 `looks`、列入人氣貢獻，Web 尚無相對應完整城市比賽機制 | 不同事件不能推導出「外貌會改變照片」或持續性髮型規則 |
-| AP-07 BMI／五種體型 | [town_lib.pl L507–L520](../../town_lib.pl#L507)、[town_maker.cgi L1198–L1202](../../town_maker.cgi#L1198) | Web [dining.mjs](../src/dining.mjs) 已有原版五分類與職業 BMI 判定；身高、體重、體型與 BMI 常駐狀態頁（PR #12～#14） | **已證實原版體型「文字分類」**；在已查閱的 BMI 函式和角色顯示程式中，**尚未找到 BMI 對應頭像或立繪切換規則**。不能因此宣稱全專案不存在 |
-| AP-08 玩家本人圖示 URL：`kounyuu` | [town_lib.pl L187–L210](../../town_lib.pl#L187) 註明 `kounyuu＝アイコンURL`；[game.cgi L54–L67](../../game.cgi#L54)、[L97–L103](../../game.cgi#L97) 使用 32×32 人物圖示 | [appearance.mjs](../src/appearance.mjs) 僅從本人已封存的 `unmapped_json` 讀取並驗證 HTTPS URL；[index.html](../public/index.html)／[app.js](../public/app.js) 提供手動預覽，**部分完成（舊角色圖示檢視）** | 不會自動載入、沒有新建角色自選圖示、原版物品授予／撤銷圖示未移植；不能混用 BMI 或 C 聯賽圖片 |
-| AP-09 物品附帶新圖示 | [basic.cgi L2165–L2170](../../basic.cgi#L2165) 原版物品頁說明註明「※アイコン」的商品持有時會出現新圖示，使用後失效 | [dat_dir/syouhin.cgi](../../dat_dir/syouhin.cgi) 此次核對的表內沒有搜尋到「アイコン」文字；Web 尚無明確圖示授予／撤銷交易 | **說明文字存在，不等於已找到對應商品 ID、圖片或觸發程式**。尚需追其他商品表與原始實際物品存檔 |
-| AP-10 C 聯賽自創角色圖像：`ch_gazou` | [game.cgi L397–L429](../../game.cgi#L397)、[L532–L589](../../game.cgi#L532) 由 `member/<ID>/chara_ini.cgi` 讀寫自創角色，允許使用者填 `http://` 開頭的圖片 URL；[town_ini.cgi L135–L137](../../town_ini.cgi#L135) 圖片尺寸 32×32 | Web 目前沒有完整對應的 C 聯賽角色建立與圖片資料模型；**未移植** | 原文說的是可以另外建立、培養、參賽的「キャラクター」，不是直接更換玩家本人圖示 |
-| AP-11 個人檔案的自我外觀描述 | [town_ini.cgi L148–L179](../../town_ini.cgi#L148)：自選「かっこいい／カワイイ／キレイ／マッチョ」等描述，以及自填身高／體重形容；[basic.cgi L1682–L1750](../../basic.cgi#L1682) 有獨立個人檔案 | Web 尚未提供完整對應的個人檔案問答／自選外觀描述功能；**未移植** | 這些屬於**自填／自選個人檔案**，不是程式由 `looks` 或 BMI 自動生成 |
-| AP-12 圖像素材與體型對映 | GitHub `img/` 目錄有地圖、建築、設施、`chara_battle.gif`、`img/button/*` 等圖片 | Web 已在地圖和設施介面使用部分 `/legacy-assets/*`；尚未找到角色 BMI 五種體型的圖片對照資料 | **檔名清單不能證明圖像內容**；本輪未完成圖片逐張視覺核對，不新增體型立繪 |
+| AP-01 | **外貌能力 `looks`**：[`game.cgi` L1570–1601](../../game.cgi#L1570) 建角配點驗證；[`town_lib.pl` L187–210](../../town_lib.pl#L187) 角色紀錄；[`town_maker.cgi` L1253–1255](../../town_maker.cgi#L1253) 狀態欄。 | [`engine.mjs`](../src/engine.mjs) 的 `stats.looks`、建角配點及 [`app.js`](../public/app.js) 能力欄已有實作。 | 原始舊角色的數值相容與畫面操作仍需實測。 |
+| AP-02 | **職業外貌門檻**：[`town_lib.pl::job_sprit` L325–328](../../town_lib.pl#L325)；[`dat_dir/job.cgi`](../../dat_dir/job.cgi) 共 150 筆職業，其中 50 筆外貌要求為正數。 | [`engine.mjs::parseLegacyJobs`](../src/engine.mjs) 讀第 12 欄；`eligibility` 檢查 `looks`。 | 職業條件需連同原始其他能力、BMI、性別與身高整體驗收。 |
+| AP-03 | **美容商品的外貌與體格數值**：[`dat_dir/syouhin.cgi` L159–171](../../dat_dir/syouhin.cgi#L159) 的 13 筆「美容」商品；[`basic.cgi::item_do` L2501–2508](../../basic.cgi#L2501) 將 `syo_looks` 加至 `looks`。 | [`legacy-item-use.mjs`](../src/legacy-item-use.mjs) 支援**已匯入並通過格式驗證**的「回」耐久物品；[`legacy-item-use.test.mjs`](../tests/legacy-item-use.test.mjs) 已逐筆測試 13 筆原版商品。 | 原始商店購買、持有物取得及其他商品流通流程仍未完整移植；不能把測試商品等同新增商店。 |
+| AP-04 | **健身房外貌能力增益**：[`dat_dir/gym.cgi` L1–10](../../dat_dir/gym.cgi#L1) 的「ル」欄；游泳 +4、有氧運動 +5、舞蹈 +4。[`town_lib.pl::gym_sprit` L342–345](../../town_lib.pl#L342) 定義資料欄位。 | [`training.mjs`](../src/training.mjs) 解析及套用 `looks` 增益。 | 課程是否受其他原版前置條件限制、冷卻單位與執行流程，仍需查對真正的健身入口。 |
+| AP-05 | **特殊溫泉外貌數值**：[`basic.cgi` L1341–1370](../../basic.cgi#L1341)、[L1396–1437](../../basic.cgi#L1396) 的銀／金風呂有 `looks_up=int(rand(20)+1)`；抽得 1～10 時 `looks` 增加該值。 | 尚無完整對應 Web 溫泉系統。 | 須連同溫泉價格、恢復與成功判定等原版流程移植，不可單移一條數值。 |
+| AP-06 | **事件／城市貢獻的外貌增減**：[`event.pl`](../../event.pl) 的事件分支；[`mati_contest.cgi` L590–600](../../mati_contest.cgi#L590)、[L687–692](../../mati_contest.cgi#L687) 明確將 `looks` 列入人氣貢獻並扣除捐出的值。 | [`event-cockroach.mjs`](../src/event-cockroach.mjs) 已有蟑螂事件的 `looks -3`（Web 非負數保護）；原版城市貢獻流程未完整移植。 | 城市貢獻應與原始城鎮競賽、持久紀錄、玩家交易一併驗證。 |
+| AP-07 | **BMI 整數與五種文字體型**：[`town_lib.pl::check_BMI` L507–520](../../town_lib.pl#L507) 計算 BMI 並輸出 `taikei`；[`town_maker.cgi` L1199–1202](../../town_maker.cgi#L1199) 顯示身高、體重與分類。 | [`dining.mjs`](../src/dining.mjs) 與狀態頁顯示已實作；職業判定對齊原版整數及 Perl 體重小數捨入規則。 | 尚需真實玩家舊檔及連續飲食／工作／道具後的端到端驗證。 |
+| AP-08 | **玩家本人圖示欄位 `kounyuu`**：[`town_lib.pl` L187–210](../../town_lib.pl#L187) 註明是「アイコンURL」；[`game.cgi::battle` L54–60](../../game.cgi#L54) 在玩家與對手對戰欄顯示 32×32 圖示。 | [`legacy-character.mjs`](../src/legacy-character.mjs) 保存原始欄位；[`appearance.mjs`](../src/appearance.mjs) 與 [`app.js`](../public/app.js) 允許本人**手動預覽**符合 HTTPS 安全條件的已匯入圖示。 | 原版 URL 的實際來源、對戰中對手圖示與真實存檔可用性仍需查證；手動預覽是 Web 隱私設計，並非原版新增能力。 |
+| AP-09 | **C 聯賽可自建角色及圖像 `ch_gazou`**：[`game.cgi::doukyo` L398–429](../../game.cgi#L398)、[L532–589](../../game.cgi#L532)；資料位於 `member/<ID>/chara_ini.cgi`，圖片尺寸由[`town_ini.cgi` L135–137](../../town_ini.cgi#L135) 設定。 | Web 未移植完整的自創角色及 C 聯賽機制。 | 應先移植並核對角色建立、圖片欄位、參賽與存檔；**這是與玩家本人圖示不同的原版角色資料**。 |
+| AP-10 | **個人檔案的自選描述**：[`town_ini.cgi` L148–179](../../town_ini.cgi#L148) 含個人特色、身高／體重描述選項；[`basic.cgi::prof` L1682 起](../../basic.cgi#L1682) 實際讀寫個人檔案。 | Web 尚無完整對應的個人檔案表單與資料模型。 | 核對 `profile_file` 原始欄位與新增／修改流程，再實作資料移植。 |
 
-## 2. 原版美容商品的「實際資料」而非名稱推測
+**核對結論**：`looks`、`BMI/taikei`、`kounyuu`、`ch_gazou`、個人檔案選項都是原版中**各自獨立**的資料與行為。本表不建立它們之間沒有程式依據的連動任務。
 
-原版 [`dat_dir/syouhin.cgi` 第 159～171 行](../../dat_dir/syouhin.cgi#L159) 的 **13 筆**美容商品，`looks` 是第 11 欄（索引 10）；以下數值直接由原始資料列解析：
+## 二、原版 13 筆「美容」商品逐筆核對
 
-| 原版商品 | 使用時原始 looks 欄 | 原始額外效果欄 |
+來源：[原版 `dat_dir/syouhin.cgi` L159–171](../../dat_dir/syouhin.cgi#L159)。第 11 欄是 `looks` 增益，第 10 欄是特殊效果字串；以下不把商品名稱或備註解釋成額外遊戲狀態。
+
+| 原版商品名稱 | `looks` | 來源特殊效果 |
 |---|---:|---|
 | ヘアーカラー(髪染め) | +5 | 無 |
 | リフレッシュエステ | +10 | 無 |
@@ -41,34 +41,24 @@
 | バストアップブラ | +5 | 無 |
 | セイ・ノビール | +0 | 身長,1 |
 
-- 原版 [`basic.cgi::item_do`](../../basic.cgi#L2462) 依 `$syo_looks` 增加 `$looks`，額外效果另從 `$syo_kouka` 分流（如 `ダイエット,2`、`身長,1`）。**原始效果不等同實際頭像／髮色修改。**
-- 這 13 筆皆屬 `回` 耐久；Web 對已核實匯入的「回」耐久物品有能力／體格安全子集，[`tests/legacy-item-use.test.mjs`](../tests/legacy-item-use.test.mjs) 已加入 **13 筆原版資料逐筆使用／重送／能力／體格／耐久驗證**。這仍**不等於**美容商店、購買管道、髮型改變或全部原作物品流通已移植。
-- `dat_dir/gym.cgi` 另有 9 筆課程，前 7 筆有正數外貌增益；例如游泳 +4、有氧運動 +5、舞蹈 +4。與「効果=美」仍應獨立核對。
+- 上述 13 筆原始耐久單位皆為「回」。現有 Web 測試逐一驗證能力、體重／身高、剩餘次數、請求重送與原始封存不變。
+- `ヘアーカラー(髪染め)` 的備註是「茶色」，但 `basic.cgi::item_do` 對該商品的確定處理是 `looks +5`；沒有任何額外欄位可據此建立永久染色狀態。
+- `スリムアップビューティ` 另具原版明寫的減重數值；`セイ・ノビール` 另具原版明寫的身高變化。其他效果只按原版數值欄處理。
 
-## 3. 真正的「圖片外貌」與後續調查前置
+## 三、原始文字或欄位存在，但尚未能判定執行規則
 
-1. **玩家圖示**：目前 Web 已能對已匯入角色的 `kounyuu` 提供**僅本人點擊後的 HTTPS 32×32 預覽**，其原始封存欄保持唯讀，未支援的舊 `http://`／私有主機不顯示。仍需追查原版圖示取得、更換、有效性與商品連動；**不是新玩家自由上傳頭像或自動換裝**。
-2. **特殊物品圖示**：`basic.cgi` 有「※アイコン」商品的存在說明，但此次讀取 `dat_dir/syouhin.cgi` 沒找到具體標記；繼續追其他商品來源、持有條件與人物圖示更新邏輯，沒有證據就不建立假商品。
-3. **C 聯賽自創角色**：`ch_gazou`、`chara_ini.cgi`、`chara_x_size/y_size` 是獨立玩家可編輯圖片系統；必須連同建立、參賽和角色資料一併盤點，不能拿來代替玩家頭像或體型圖。
-4. **BMI 與圖片**：`town_lib.pl::check_BMI` 只輸出整數及五種**文字**體型；尚無原版可驗證的「BMI 改變照片／髮型／立繪」映射。需找到明確分支或素材對照才可設計。
-5. **健身游泳 `美`**：Web 目前的 `looks+4` 是原始數值欄實作，另一欄 `extraEffect=美` 沒有完整原版效果追蹤結果；不改額外效果。
-6. **Web 差異回歸**：後續若實作玩家頭像／商品圖示，必須分開測試：本人與其他玩家顯示、原始 URL 與安全載入、物品失效後撤銷、舊檔未提供欄位時的預設、多人隔離、資料交易回滾、手機與桌面瀏覽器。**這是驗收條件，不是原版有這些新規則的證明。**
+這些只保留為**原始資料核對事項**，**不列為已存在但未移植的功能**：
 
-## 4. 這輪實際完成與未完成
+| 來源 | 目前能直接確認的事實 | 處置 |
+|---|---|---|
+| [`dat_dir/gym.cgi` L2](../../dat_dir/gym.cgi#L2) | 游泳欄位有 `効果=美`、`H=2`；`looks +4` 另有數值欄。 | 保留 `extraEffect` 原始值，不從字面推導作用；取得可執行來源前不增加遊戲規則。 |
+| [`basic.cgi` L2165–2170](../../basic.cgi#L2165) | 物品頁有「備考 ※アイコン」的商品說明文字；此次核對的 [`dat_dir/syouhin.cgi`](../../dat_dir/syouhin.cgi) 沒有該標記對應商品。 | 說明文字不當成已驗證的商品、授予或撤銷機制，也不列入尚缺功能。只有確認實際資料及處理路徑，才另建來源項目。 |
 
-- [x] 直接查閱原版 `game.cgi`、`town_lib.pl`、`basic.cgi`、`town_maker.cgi`、`town_ini.cgi`、`event.pl`、`mati_contest.cgi`、`dat_dir/job.cgi`、`dat_dir/syouhin.cgi`、`dat_dir/gym.cgi`、`dat_dir/gym1.cgi`，以及 Web 引擎、訓練、事件、角色匯入、前端與 SQLite。
-- [x] 驗證原始 150 筆職業中 50 筆有 `looks` 要求；原始美容分類 13 筆商品；健身房有 9 筆課程；`gym1.cgi` 是另存的 7 筆資料，不要與正式 `gym.cgi` 混算。
-- [x] 區分 `looks` 數值、BMI 文字分類、玩家圖示 `kounyuu`、C 聯賽圖片 `ch_gazou` 和自填外貌描述。
-- [ ] 完整追查全部原始 CGI 的圖示生成／改變路徑，確認實際 `kounyuu` 值來源。
-- [ ] 逐張確認角色相關 GIF 是否對應人物造型；現有 `img/` 目錄本身不足以證明存在／不存在換裝。
-- [ ] 取得真實舊角色／物品／C 聯賽資料，驗證外貌與圖示資料往返。
-- [ ] 真人瀏覽器檢驗（尺寸、玩家圖示與狀態頁顯示）；本輪沒有宣稱完成。
+## 四、後續驗收只針對原版存在的系統
 
-## 5. 外貌移植第一切片：已匯入原版圖示與美容品回歸
+- [ ] 以有授權的實際原版 `log.cgi`、`mono.cgi` 驗證能力、身高體重、本人圖示欄位及 Web 無損封存。
+- [ ] 原版美容商品與健身增益依資料欄位核對，同時測試使用條件、耐久、冷卻、重複請求、多人隔離。
+- [ ] 查證 `profile_file` 真實欄位及 C 聯賽 `chara_ini.cgi`，分別建立各自的遷移資料模型。
+- [ ] 對 Web 已有的原版圖示本人預覽、狀態頁數值顯示，做桌面／手機實際瀏覽器操作測試。
 
-- **圖示來源**：原版 `kozin_sprit` 的 `kounyuu` 欄已存在於 `legacy_character_imports.unmapped_json`。[`src/appearance.mjs`](../src/appearance.mjs) 僅對該本人帳號查詢；沒有新 SQLite 欄位、批次改寫或伺服器主動下載圖片。
-- **載入行為**：只有存在已匯入原版圖示時顯示「原版玩家圖示」區塊。網址符合 HTTPS、無帳密、非私有主機等限制時，在本人點擊後才使用瀏覽器 `img.src` 顯示 32×32；圖片元素採 `referrerpolicy=no-referrer`，可手動隱藏。外部網站仍可能看見訪客 IP，因此明示風險。原本僅有 HTTP 的網址暫不預覽；若原檔未設圖示，不顯示新入口。
-- **狀態介面與測試**：`server.mjs::snapshot` 只在本人登入與角色存在時回傳圖示資訊；`tests/appearance.test.mjs` 覆蓋來源、非法 URL、會員資料隔離、損壞封存、新建角色無原版圖示與介面不自動請求。13 筆美容道具使用驗證在 `tests/legacy-item-use.test.mjs`。
-- **尚未移植**：原版圖示的購得、選擇、撤銷；真正的美容商店交易；`ch_gazou` C 聯賽圖片；美容道具對髮色的視覺效果（來源無此規則）；BMI 換圖（尚無來源）。真正瀏覽器、真實舊檔與外部圖片站點可用性待驗收。
-- **狀態**：本切片以功能 PR 與 GitHub CI 核對後才能視為已整合；不影響 `master`。
-
+**原始檔保持不變；未經來源證實的構想不得被記成「缺漏」「待確認的功能」或 P0／P1／P2 開發項目。**
