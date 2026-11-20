@@ -112,6 +112,21 @@ test("轉職與工作依原版整數 BMI 門檻判定，忽略存檔中的一位
   assert.equal(jobEligibility(tooHeavy,{...job,bmiMax:0}),null);
 });
 
+test("Perl 半分界體重：24.95kg 的轉職與工作仍符合 BMI 上限 24",()=>{
+  const [base]=parseLegacyJobs(first);
+  const job={...base,bmiMin:18,bmiMax:24,bodyCost:0,brainCost:0};
+  const initial=createCharacterData("Perl BMI 邊界","other",100000);
+  const valid={...initial,height:100,weight:24.95,bmi:bodyMassIndex(100,24.95)};
+  // 顯示欄位為 25.0；Perl sprintf("%.1f",24.95) 卻為 24.9 => int 24。
+  assert.equal(valid.bmi,25);
+  assert.equal(jobEligibility(valid,job),null);
+  const hired=selectJob(valid,job);
+  assert.equal(performWork(hired,job,100001,()=>0).paid,1000);
+  const invalid={...hired,weight:24.96,bmi:24};
+  assert.equal(jobEligibility(invalid,job),"體格指數不足");
+  assert.throws(()=>performWork(invalid,job,100001,()=>0),/體格指數不足/);
+});
+
 test("原版每一薪資結算週期支付薪資乘以出勤次數", () => {
   const [source] = parseLegacyJobs(first);
   const job = { ...source, payEvery: 3 };
