@@ -194,7 +194,7 @@ test("原版信用卡有效時可從普通銀行結帳並登帳；過期、他�
     assert.equal(db.prepare("SELECT money FROM characters WHERE user_id=1").get().money,cash);
     assert.equal(db.prepare("SELECT bank FROM characters WHERE user_id=1").get().bank,bank-shop.price);
     const ledger=db.prepare("SELECT debit,credit,balance FROM bank_ledger WHERE user_id=1").get();
-    assert.deepEqual(ledger,{debit:shop.price,credit:0,balance:bank-shop.price});
+    assert.deepEqual({...ledger},{debit:shop.price,credit:0,balance:bank-shop.price});
     assert.throws(()=>buyRetailItem(db,2,catalog,{
       ...options("depart1",shop.sku,"retail_credit_other"),
       payment:"bank",cardSourceLine:src
@@ -237,6 +237,6 @@ test("舊有購物紀錄升級補上數量及付款方式，不丟失既有訂�
     ].join(" ")).run(now);
     initRetailTables(db);
     const row=db.prepare("SELECT quantity,payment,merged FROM retail_purchases WHERE request_id='retail_old_purchase'").get();
-    assert.deepEqual(row,{quantity:1,payment:"cash",merged:0});
+    assert.deepEqual({...row},{quantity:1,payment:"cash",merged:0});
   }finally{db.close();}
 });
