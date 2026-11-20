@@ -3,9 +3,10 @@ import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import { readFileSync } from "node:fs";
 import { safeLegacyIconUrl, legacyPlayerIcon } from "../src/appearance.mjs";
+import { decodeLegacyText } from "../src/engine.mjs";
 
 test("原始 town_lib.pl 確認 kounyuu 是玩家圖示 URL，game.cgi::battle 是 32x32", () => {
-  const town = readFileSync(new URL("../../town_lib.pl", import.meta.url), "utf8");
+  const town = decodeLegacyText(readFileSync(new URL("../../town_lib.pl", import.meta.url)));
   const game = readFileSync(new URL("../../game.cgi", import.meta.url), "utf8");
   assert.match(town, /kounyuu＝アイコンURL/);
   assert.match(game, /<img src=\$kounyuu width=32 height=32/);
