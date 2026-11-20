@@ -2,20 +2,20 @@
 
 > **版本與邊界**：原始盤點於 2026-11-20 以 `feature/web-phase29-event34-santa`（`90434f4f...`）的原版與 Web 程式開始比對，後續逐項更新。本文件是**第一輪逐項檢核、持續修正中，並非完整移植或真實玩家驗收通過聲明**。
 >
-> **最新整合狀態（2026-11-20）**：PR #9～#17 均已合併至 `feature/web-dual-mode-phase1`，先前盤點更正 PR #17 的合併提交為 `63f0dd046de7b2f1e91d8fdd65e6d11a471e912e`，合併後 GitHub Actions run `44668430244` 成功；`master` 原版未變。歷史 PR 階段請以本行及更新後的各項狀態為準。
+> **盤點基準（2026-11-20）**：PR #9～#18 已合併至 `feature/web-dual-mode-phase1`；最近盤點合併提交 `6ce7fdbfc94d6a0344b0756499ecb41ef6f0c1d4`，合併後 GitHub Actions run `44670824358` 成功。原版 `master` 未變。此狀態是**提交與 CI** 的確認，不等同 14 領域全部執行規則已逐一驗收。
 >
 > 狀態用語：**已完成（限該單項公式）**、**部分完成**、**未實作**、**缺少來源無法驗證**、**暫不移植**。標示「部分完成」不代表已通過真正瀏覽器／真實舊存檔／完整 CGI 等價測試。以目前比對過的程式為準；未讀完每個 CGI 函式的欄位明寫「待逐檔核對」。
 
 ## 稽核方法與未驗證邊界
 
 - 實際讀取原版 `town_lib.pl::check_BMI`（L507–520）、`basic.cgi` 工作／物品片段、`command.pl` 食堂片段、`event.pl` #01～#46 分支、`dat_dir` 原始課程與菜單表及 Web 對應模組；樹狀目錄和 README 用於確定其餘模組的範圍。
-- PR #9～#17 已依序合併整合分支；PR #17 整合提交 `63f0dd046...` 的 GitHub Actions run `44668430244` 為 success。**尚未以真實瀏覽器或真實玩家資料備份完成驗收**。
+- PR #9～#18 已依序合併整合分支；PR #18 整合提交 `6ce7fdbfc...` 的 GitHub Actions run `44670824358` 為 success。**尚未以真實瀏覽器或真實玩家資料備份完成驗收**。
 - 原始 `member/<ID>/mono.cgi`、舊銀行／房屋玩家關聯紀錄、實際街區歷史存檔尚無使用者提供的真實樣本，不能虛構匯入相容性。
 - 與原版有意採用的安全模型差異（非負金額／能力、安全整數、HTTP session、Web 延伸性別）需記錄保留，未經批准不可為等價而直接退回不安全行為。
 
-## 14 領域逐項差異矩陣
+## 14 領域初步差異矩陣（不是全部原版設施的逐入口盤點）
 
-每列依序列出「原版來源｜Web 來源／測試線索｜判定｜差異／阻塞｜優先級｜驗收與下一個 PR」。其中精準行號已直接比對；未列行號者需要下一輪深入函式稽核。
+每列依序列出「原版來源｜Web 來源／測試線索｜判定｜差異／阻塞｜優先級｜驗收與下一個 PR」。有直接核對到原始執行分支才可標「確定缺漏」；只有資料表、使用手冊或未能定位實際路徑時須標「資料已存在／執行未驗證」。**14 領域是分類框架而非已覆蓋全部 CGI／每個設施的證據**。本輪後續入口盤點獨立追蹤，避免將未列設施誤判為不存在。
 
 ### 01 角色與體格
 
@@ -101,50 +101,6 @@
 | IT-03 商店、贈送、裝備與回收 | dat_dir/prezento.cgi；dat_dir/soubi.cgi；gifutoya.cgi；recycle.cgi | 尚無完整 Web 對應 | 未實作（完整流程） | 商品來源、ギフト限制、裝備效果、交易記錄互相依賴 | P1 | 依原始商品與操作逐項拆分商品、裝備與交易 PR（31/後續） |
 | IT-04 優惠券獲得與兌換 | coupon.cgi；dat_dir/coupon.cgi；event.pl #30/#35 | src/event-effects.mjs；src/events.mjs | 部分完成 | 已處理事件發券；兌換入口與商店通路不可視為完成 | P1 | 券數一致性、兌換防重、跨日／過期（31） |
 
-### 10 醫療／保險
-
-| ID／功能 | 原版來源 | Web 現況／來源 | 判定 | 差異／相依 | 優先度 | 驗收／切片 |
-|---|---|---|---|---|---|---|
-| HL-01 疾病指數、症狀、工作限制 | basic.cgi；原版疾病相關分支 | src/health.mjs；tests/health.test.mjs | 部分完成 | 病症與工作停工已有規則；需逐病例覆核原始門檻 | P1 | 各門檻、跨日、處理順序、能量交互（31） |
-| HL-02 醫院治療與原始保險 | 原始健康保險商品與醫院 CGI | src/health.mjs；src/inventory.mjs；tests/inventory.test.mjs | 部分完成 | 30 天有效期、折扣已載明；舊道具與有效期基準仍有差異 | P1 | 有效／過期、批量購買、醫院扣費、資料隔離（31） |
-
-### 11 社交／婚戀／育兒／戰鬥
-
-| ID／功能 | 原版來源 | Web 現況／來源 | 判定 | 差異／相依 | 優先度 | 驗收／切片 |
-|---|---|---|---|---|---|---|
-| SC-01 私訊與玩家互動 | bbs.cgi；tag.cgi；log_dir/aisatulog.cgi | 尚無完整 Web 對應 | 未實作 | 先確認各 CGI 的權限與儲存格式 | P2 | 收發、跨帳號授權、歷史匯入、刪除與清理（後續） |
-| SC-02 戀愛／婚姻／同居／育兒 | dat_dir/love.cgi；kekkon.cgi；log_dir/couplelog.cgi；log_dir/kodomolog.cgi | 尚無完整 Web 對應 | 未實作 | 依賴角色關聯檔、多人帳號及安全同步 | P2 | 原始關係狀態／事件、隱私及回滾（後續） |
-| SC-03 決鬥／裝備／獎賞 | battle.cgi；atakka.cgi；dat_dir/battle.cgi | 尚無完整 Web 對應 | 未實作 | 裝備及傷害計算先追來源，不可發明戰鬥公式 | P2 | 傷害、冷卻、結算交易、跨帳號與重送（後續） |
-| SC-04 真實個人檔案自願登記／修改 | basic.cgi::prof L1690–1717、prof_form L1995–2105；town_ini.cgi L148–179 | 尚無 Web 個人檔案資料模型或表單 | **確定缺漏** | 原版為玩家主動填寫的真實公開資料（性別／年齡／地址、5 組選項、15 題自由填寫），不是遊戲 looks／BMI | P2（個資） | 自願公開、欄位選項、修改、遮蔽、權限及防止角色數值自動曝光 |
-| SC-05 個人檔案搜尋／分頁／傳訊入口 | basic.cgi::prof L1738–1991；town_ini.cgi L145–146 | 尚無 Web 公開檔案搜尋 UI | **確定缺漏** | 可依名稱、性別、年齡、住所與五選項查詢，每頁 10 筆並有傳訊入口 | P2（個資） | 真正查詢條件、分頁、可見性、訊息收件者權限與資料安全 |
-
-### 12 帳號／角色／安全
-
-| ID／功能 | 原版來源 | Web 現況／來源 | 判定 | 差異／相依 | 優先度 | 驗收／切片 |
-|---|---|---|---|---|---|---|
-| AC-01 單人／多人角色與登入 | game.cgi；town_lib.pl | src/server.mjs；src/solo-character.mjs；tests/server.test.mjs | 部分完成 | HTTP-only、scrypt、帳號隔離已存在；部署安全審查未完成 | P0 | solo/multi 不互通、跨帳號拒絕、登出與 session 失效（30/31） |
-| AC-02 單人刪角／繼續遊戲 | 原版角色保存／刪除行為待逐檔確認 | src/solo-character.mjs；public/app.js | 部分完成 | Web 擴充確認流程，非原版全世界重置 | P1 | 取消/誤名/交易失敗、不刪地圖與時鐘（31） |
-| AC-03 公開部署／管理權限／速率限制 | admin.cgi；admin2.cgi；unei.pl | src/server.mjs；README 安全限制 | 部分完成 | 未有完整登入速率限制及公開部署審查；不宜公開直接部署 | P0 | 威脅模型、權限矩陣、網路與備份演練（後續） |
-
-### 13 轉檔／資料庫
-
-| ID／功能 | 原版來源 | Web 現況／來源 | 判定 | 差異／相依 | 優先度 | 驗收／切片 |
-|---|---|---|---|---|---|---|
-| DB-01 原版角色 69 欄匯入 | town_lib.pl::kozin_sprit | src/legacy-character.mjs；scripts/legacy-character.mjs | 部分完成 | 無真實玩家資料，僅可確認解析器與測試資料 | P1 | 69 欄 round-trip、未知欄保留、拒絕覆蓋（31） |
-| DB-02 物品 33 欄匯入 | dat_dir/syouhin.cgi；member/<ID>/mono.cgi（來源未提供） | src/legacy-inventory.mjs；scripts/legacy-inventory.mjs | 部分完成 | 封存來源未能以真實 mono.cgi 回歸 | P1 | 重複匯入、原始 ID、損毀／過期、私有備份（31） |
-| DB-03 住宅／銀行／關聯歷史匯入 | log_dir/*；原始住宅與銀行資料 | src/town-storage.mjs；src/housing.mjs；src/banking.mjs | 部分完成 | 已涵蓋部分地圖資料，關聯檔非完整搬移 | P1 | 來源欄位映射、交易一致性與回滾清單（後續） |
-| DB-04 SQLite 遷移／還原 | 原始多檔保存規則 | src/server.mjs；web/data/（不納入版控） | 部分完成 | 已自動加欄；沒有自動逆遷移，須先備份 | P0 | 破壞性 schema 變更前先做 transaction 與 restore 測試（30/31） |
-| DB-05 真實個人檔案及投稿職業原始檔 | town_ini.cgi L559（log_dir/pfofilelog.cgi）；job.cgi::make L80–87（log_dir/joblog.cgi） | 尚無 Web 個人檔案／投稿職業匯入 | **缺乏真實原版歷史樣本** | 此 fork 上述兩檔都是 0 bytes；資料格式有來源，但不能宣稱實際舊玩家記錄已驗證 | P2 | 合成欄位解析測試與經授權的真實備份驗證、隱私與資料隔離 |
-
-### 14 UI／相容／營運
-
-| ID／功能 | 原版來源 | Web 現況／來源 | 判定 | 差異／相依 | 優先度 | 驗收／切片 |
-|---|---|---|---|---|---|---|
-| UI-01 三欄位狀態切換與原始資訊 | town_maker.cgi::loged_gamen；top.pl | public/index.html L176-L202；public/app.js | 部分完成 | 有 ARIA tab 與原版分頁；實機 375px/768px/桌機驗收缺少 | P0 | 狀態體格、物品、能力切換不丟資料、鍵盤導覽（30/31） |
-| UI-02 事件通知及 20 秒挑戰 | top.pl；event.pl L290-L305 | public/app.js；src/event-cockroach.mjs | 部分完成 | 程式顯示與 API 存在；真實操作與動態尺寸未驗證 | P1 | 模擬快轉阻擋、失效、跨帳號、視覺遮蔽（31） |
-| UI-03 地圖、餐點與手機 RWD | top.pl；town_maker.cgi；command.pl | public/style.css；public/index.html；public/app.js | 部分完成 | UI 結構已有改善；尚無 Chrome/Safari 實際截圖 | P1 | 手機與桌面流程、捲動固定條、讀屏／鍵盤（31） |
-| UI-04 部署／監控／備份 | 原始 CGI 運行環境；README | web/package.json；.github/workflows/town-web.yml | 部分完成 | CI 有測試；尚無正式營運安全／備份定期還原驗證 | P2 | 部署檢查、日誌、備份和恢復演練（後續） |
-
 ### 09 隨機與限時事件：全部 #01～#44 獨立列示
 
 **可達性：** `event.pl` 在 L314 以 `int(rand(44))+1` 抽 #01～#44；原始碼雖有 #45（L855）及 #46（L860），但在這個抽選入口不可達，另列為「原版存在、預設不可抽」，**不得自行更改為 46 個事件**。
@@ -201,6 +157,50 @@
 **原版 #45／#46：** `event.pl` L855–863 含「遭搶劫現金減半」及「銀行帳戶扣 1/3」，但預設 44 項抽選不會選中；標記「原始碼存在、不可達」，不得計入 39/44，也不得擅自開放。
 
 **事件後續必要工作：** 逐 ID 建立分支覆蓋表，對照 `event.pl` 全部條件、`motimono_kensa_ev*`、`kifu*`、`get_itm*`、抽選權重與資產/能力上下限；以亂數固定種子驗證、同日防重、跨日、多人隔離、歷史寫入失敗 rollback、二次領獎、逾時、單機快轉。**目前只核實已存在 39 個實作分支與各自測試檔線索，不宣稱 39 個完整等價驗收。**
+
+### 10 醫療／保險
+
+| ID／功能 | 原版來源 | Web 現況／來源 | 判定 | 差異／相依 | 優先度 | 驗收／切片 |
+|---|---|---|---|---|---|---|
+| HL-01 疾病指數、症狀、工作限制 | basic.cgi；原版疾病相關分支 | src/health.mjs；tests/health.test.mjs | 部分完成 | 病症與工作停工已有規則；需逐病例覆核原始門檻 | P1 | 各門檻、跨日、處理順序、能量交互（31） |
+| HL-02 醫院治療與原始保險 | 原始健康保險商品與醫院 CGI | src/health.mjs；src/inventory.mjs；tests/inventory.test.mjs | 部分完成 | 30 天有效期、折扣已載明；舊道具與有效期基準仍有差異 | P1 | 有效／過期、批量購買、醫院扣費、資料隔離（31） |
+
+### 11 社交／婚戀／育兒／戰鬥
+
+| ID／功能 | 原版來源 | Web 現況／來源 | 判定 | 差異／相依 | 優先度 | 驗收／切片 |
+|---|---|---|---|---|---|---|
+| SC-01 私訊與玩家互動 | bbs.cgi；tag.cgi；log_dir/aisatulog.cgi | 尚無完整 Web 對應 | 未實作 | 先確認各 CGI 的權限與儲存格式 | P2 | 收發、跨帳號授權、歷史匯入、刪除與清理（後續） |
+| SC-02 戀愛／婚姻／同居／育兒 | dat_dir/love.cgi；kekkon.cgi；log_dir/couplelog.cgi；log_dir/kodomolog.cgi | 尚無完整 Web 對應 | 未實作 | 依賴角色關聯檔、多人帳號及安全同步 | P2 | 原始關係狀態／事件、隱私及回滾（後續） |
+| SC-03 決鬥／裝備／獎賞 | battle.cgi；atakka.cgi；dat_dir/battle.cgi | 尚無完整 Web 對應 | 未實作 | 裝備及傷害計算先追來源，不可發明戰鬥公式 | P2 | 傷害、冷卻、結算交易、跨帳號與重送（後續） |
+| SC-04 真實個人檔案自願登記／修改 | basic.cgi::prof L1690–1717、prof_form L1995–2105；town_ini.cgi L148–179 | 尚無 Web 個人檔案資料模型或表單 | **確定缺漏** | 原版為玩家主動填寫的真實公開資料（性別／年齡／地址、5 組選項、15 題自由填寫），不是遊戲 looks／BMI | P2（個資） | 自願公開、欄位選項、修改、遮蔽、權限及防止角色數值自動曝光 |
+| SC-05 個人檔案搜尋／分頁／傳訊入口 | basic.cgi::prof L1738–1991；town_ini.cgi L145–146 | 尚無 Web 公開檔案搜尋 UI | **確定缺漏** | 可依名稱、性別、年齡、住所與五選項查詢，每頁 10 筆並有傳訊入口 | P2（個資） | 真正查詢條件、分頁、可見性、訊息收件者權限與資料安全 |
+
+### 12 帳號／角色／安全
+
+| ID／功能 | 原版來源 | Web 現況／來源 | 判定 | 差異／相依 | 優先度 | 驗收／切片 |
+|---|---|---|---|---|---|---|
+| AC-01 單人／多人角色與登入 | game.cgi；town_lib.pl | src/server.mjs；src/solo-character.mjs；tests/server.test.mjs | 部分完成 | HTTP-only、scrypt、帳號隔離已存在；部署安全審查未完成 | P0 | solo/multi 不互通、跨帳號拒絕、登出與 session 失效（30/31） |
+| AC-02 單人刪角／繼續遊戲 | 原版角色保存／刪除行為待逐檔確認 | src/solo-character.mjs；public/app.js | 部分完成 | Web 擴充確認流程，非原版全世界重置 | P1 | 取消/誤名/交易失敗、不刪地圖與時鐘（31） |
+| AC-03 公開部署／管理權限／速率限制 | admin.cgi；admin2.cgi；unei.pl | src/server.mjs；README 安全限制 | 部分完成 | 未有完整登入速率限制及公開部署審查；不宜公開直接部署 | P0 | 威脅模型、權限矩陣、網路與備份演練（後續） |
+
+### 13 轉檔／資料庫
+
+| ID／功能 | 原版來源 | Web 現況／來源 | 判定 | 差異／相依 | 優先度 | 驗收／切片 |
+|---|---|---|---|---|---|---|
+| DB-01 原版角色 69 欄匯入 | town_lib.pl::kozin_sprit | src/legacy-character.mjs；scripts/legacy-character.mjs | 部分完成 | 無真實玩家資料，僅可確認解析器與測試資料 | P1 | 69 欄 round-trip、未知欄保留、拒絕覆蓋（31） |
+| DB-02 物品 33 欄匯入 | dat_dir/syouhin.cgi；member/<ID>/mono.cgi（來源未提供） | src/legacy-inventory.mjs；scripts/legacy-inventory.mjs | 部分完成 | 封存來源未能以真實 mono.cgi 回歸 | P1 | 重複匯入、原始 ID、損毀／過期、私有備份（31） |
+| DB-03 住宅／銀行／關聯歷史匯入 | log_dir/*；原始住宅與銀行資料 | src/town-storage.mjs；src/housing.mjs；src/banking.mjs | 部分完成 | 已涵蓋部分地圖資料，關聯檔非完整搬移 | P1 | 來源欄位映射、交易一致性與回滾清單（後續） |
+| DB-04 SQLite 遷移／還原 | 原始多檔保存規則 | src/server.mjs；web/data/（不納入版控） | 部分完成 | 已自動加欄；沒有自動逆遷移，須先備份 | P0 | 破壞性 schema 變更前先做 transaction 與 restore 測試（30/31） |
+| DB-05 真實個人檔案及投稿職業原始檔 | town_ini.cgi L559（log_dir/pfofilelog.cgi）；job.cgi::make L80–87（log_dir/joblog.cgi） | 尚無 Web 個人檔案／投稿職業匯入 | **缺乏真實原版歷史樣本** | 此 fork 上述兩檔都是 0 bytes；資料格式有來源，但不能宣稱實際舊玩家記錄已驗證 | P2 | 合成欄位解析測試與經授權的真實備份驗證、隱私與資料隔離 |
+
+### 14 UI／相容／營運
+
+| ID／功能 | 原版來源 | Web 現況／來源 | 判定 | 差異／相依 | 優先度 | 驗收／切片 |
+|---|---|---|---|---|---|---|
+| UI-01 三欄位狀態切換與原始資訊 | town_maker.cgi::loged_gamen；top.pl | public/index.html L176-L202；public/app.js | 部分完成 | 有 ARIA tab 與原版分頁；實機 375px/768px/桌機驗收缺少 | P0 | 狀態體格、物品、能力切換不丟資料、鍵盤導覽（30/31） |
+| UI-02 事件通知及 20 秒挑戰 | top.pl；event.pl L290-L305 | public/app.js；src/event-cockroach.mjs | 部分完成 | 程式顯示與 API 存在；真實操作與動態尺寸未驗證 | P1 | 模擬快轉阻擋、失效、跨帳號、視覺遮蔽（31） |
+| UI-03 地圖、餐點與手機 RWD | top.pl；town_maker.cgi；command.pl | public/style.css；public/index.html；public/app.js | 部分完成 | UI 結構已有改善；尚無 Chrome/Safari 實際截圖 | P1 | 手機與桌面流程、捲動固定條、讀屏／鍵盤（31） |
+| UI-04 部署／監控／備份 | 原始 CGI 運行環境；README | web/package.json；.github/workflows/town-web.yml | 部分完成 | CI 有測試；尚無正式營運安全／備份定期還原驗證 | P2 | 部署檢查、日誌、備份和恢復演練（後續） |
 
 ## 第一輪重大發現與應先修項
 
@@ -260,4 +260,4 @@
 - [ ] 對每個 CGI 子函式及 44 事件做完整**數值、資料欄位、條件、相依與單元測試逐項簽核**。
 - [ ] 取得真實角色／物品／房屋／銀行備份後驗證匯入（目前沒有）。
 - [ ] 真實瀏覽器 375px、768px、桌機與鍵盤／讀屏驗收（目前未做）。
-- [x] P0-A（PR #11）及後續 #12、#13 已合併整合分支、CI 通過；**仍不得宣稱 14 領域或 44 個事件已完整移植或完成真實環境驗收**。
+- [x] PR #11～#18 的相應盤點／功能提交已合併整合分支、CI 通過；**仍不得宣稱 14 領域或 44 個事件已完整移植或完成真實環境驗收**。
