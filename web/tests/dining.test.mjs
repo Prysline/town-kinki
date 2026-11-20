@@ -91,6 +91,24 @@ test("原版 BMI 先將體重四捨五入至 0.1kg，再取整數分類",()=>{
   assert.throws(()=>legacyPhysiqueBmi(170,-1),/身高體重/);
 });
 
+test("原版 Perl sprintf 四捨五入與半偶數捨入：BMI 18、24、26 邊界不可錯判",()=>{
+  // 參照原版 basic.cgi::job_change/do_work 的 sprintf("%.1f")，
+  // 在 Perl 5 / IEEE-754 以數字參數格式化的實際結果：
+  // 17.95 => 17.9；24.95 => 24.9；25.95 => 25.9。
+  assert.equal(legacyPhysiqueBmi(100,17.95),17);
+  assert.equal(legacyPhysiqueBmi(100,18.05),18);
+  assert.equal(legacyPhysiqueBmi(100,24.95),24);
+  assert.equal(legacyPhysiqueBmi(100,25.95),25);
+  assert.equal(legacyPhysiqueBmi(100,25.96),26);
+  assert.equal(physiqueStatus(100,17.95).key,"veryUnderweight");
+  assert.equal(physiqueStatus(100,24.95).key,"overweight");
+  assert.equal(physiqueStatus(100,25.95).key,"overweight");
+  assert.equal(physiqueStatus(100,25.96).key,"obese");
+  // 50.25 是可精確表示的二進位中點：Perl sprintf => 50.2，非 50.3。
+  assert.equal(legacyPhysiqueBmi(50,50.25),200);
+  assert.equal(legacyPhysiqueBmi(50,50.75),203);
+});
+
 test("用餐扣現金、增加指定能力和體重，冷卻期間不可再次用餐",()=>{
   const meal=parseLegacyMeals(input)[0],char=plain();
   const eaten=eatMeal(char,meal,NOW);
