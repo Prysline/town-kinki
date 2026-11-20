@@ -4,7 +4,8 @@ import {DatabaseSync} from "node:sqlite";
 import {readFileSync} from "node:fs";
 import {STAT_KEYS,decodeLegacyText} from "../src/engine.mjs";
 import {
-  initLegacyItemUseTables,listLegacyItemActions,listLegacyItemUseHistory,useLegacyItem
+  initLegacyItemUseTables,listLegacyItemActions,listLegacyItemUseHistory,useLegacyItem,
+  supportsLegacyItemUse
 } from "../src/legacy-item-use.mjs";
 
 const NOW=1_700_000_000_000;
@@ -64,7 +65,7 @@ function read(db,id=1){
 const use=(db,line,requestId="olditem-0001",now=NOW,userId=1)=>
   useLegacyItem(db,userId,line,requestId,now);
 
-test("只允許原版 33 欄與可確定的「回」耐久效果，特殊道具仍為唯讀",()=>{
+test("只允許原版 33 欄與已核對使用規則；未開放的特殊道具仍為唯讀",()=>{
   const db=createDb();
   try{
     addItem(db,1,archived());
@@ -440,3 +441,190 @@ test("原版 13 筆美容用品：移植外貌增益、瘦身、身高與耐久�
     }finally{db.close();}
   }
 });
+
+function originalCatalogRows(){
+  return decodeLegacyText(readFileSync(new URL("../../dat_dir/syouhin.cgi",import.meta.url)))
+    .split(/\r?\n/).map(line=>{
+      const f=line.split("<>");if(f.length===34&&f[33]==="")f.pop();
+      return f;
+    }).filter(f=>f.length===33);
+}
+function originalItem(category,name){
+  const found=originalCatalogRows().find(f=>f[0]===category&&f[1]===name);
+  assert.ok(found,"找不到原版來源："+category+"／"+name);
+  return [...found];
+}
+test("四款原始効果恢復商品包含兩款甜點：負耗能按實際欄位恢復，防重及間隔保留",()=>{
+  const items=[
+    ["ドリンク","元気ミルク",-500,0],
+    ["ドリンク","爽快ミルク",0,-500],
+    ["デザート","元気パフェ",-500,0],
+    ["デザート","爽快パフェ",0,-500]
+  ];
+  for(const [category,name,bodyCost,brainCost] of items){
+    const db=createDb();
+    try{
+      const fields=originalItem(category,name);
+      assert.equal(fields[9],"効果");
+      assert.equal(Number(fields[27]),bodyCost);
+      assert.equal(Number(fields[28]),brainCost);
+      assert.equal(supportsLegacyItemUse(fields),true);
+      db.prepare("UPDATE characters SET body_energy=0,brain_energy=0 WHERE user_id=1").run();
+      addItem(db,1,fields);
+      const result=use(db,1,"parfait-recover-001");
+      assert.equal(result.replayed,false);
+      assert.equal(result.changes.bodyEnergy>0,bodyCost<0);
+      assert.equal(result.changes.brainEnergy>0,brainCost<0);
+      assert.equal(read(db).weight,60.3);
+      assert.equal(db.prepare("SELECT remaining FROM legacy_item_usage").get().remaining,0);
+      assert.throws(()=>use(db,1,"parfait-recover-002",NOW+1000),/用盡/);
+      assert.equal(use(db,1,"parfait-recover-001",NOW+1000).replayed,true);
+    }finally{db.close();}
+  }
+});
+test("能量恢復標記必須符合原版四款品名與 -500 欄位，仿製品仍拒絕使用",()=>{
+  const db=createDb();
+  try{
+    addItem(db,1,archived({category:"デザート",name:"自製元気パフェ",
+      effect:"効果",bodyCost:-500,brainCost:0}));
+    addItem(db,2,archived({category:"デザート",name:"元気パフェ",
+      effect:"効果",bodyCost:-501,brainCost:0}));
+    addItem(db,3,archived({category:"デザート",name:"爽快パフェ",
+      effect:"効果",bodyCost:0,brainCost:-499}));
+    assert.equal(listLegacyItemActions(db,1,{
+      bodyEnergy:25,brainEnergy:35,lastMealAt:0
+    },NOW).length,0);
+    for(const [i,id] of [[1,"false-parfait-01"],[2,"false-parfait-02"],
+      [3,"false-parfait-03"]])
+      assert.throws(()=>use(db,i,id),/尚未支援/);
+    assert.equal(db.prepare("SELECT COUNT(*) n FROM legacy_item_use_history").get().n,0);
+  }finally{db.close();}
+});
+test("ステータス 原版三款實際只套用能力／能量欄位，不偽造額外特效",()=>{
+  const cases=[
+    ["関西名産店","阪神タイガースの公式チケット"],
+    ["ゲーム","バイオハザード（wiiバージョン"],
+    ["ゲーム","キングダムハーツ2ファイナルミックス＋"]
+  ];
+  for(const [category,name] of cases){
+    const db=createDb();
+    try{
+      const fields=originalItem(category,name);
+      assert.equal(fields[9],"ステータス");
+      assert.equal(supportsLegacyItemUse(fields),true);
+      if(fields[22]==="日")
+        fields[30]=String(Math.floor(NOW/1000));
+      // 遊戲道具的原版能量消耗較高；增加角色能力，讓「能量足額」可測。
+      const stronger=Object.fromEntries(STAT_KEYS.map(k=>[k,1000]));
+      db.prepare("UPDATE characters SET stats_json=?,body_energy=400,brain_energy=400 WHERE user_id=1")
+        .run(JSON.stringify(stronger));
+      addItem(db,1,fields);
+      const before=read(db);
+      const result=use(db,1,"status-effect-01");
+      assert.equal(result.replayed,false);
+      assert.equal(result.changes.healthIndex,0);
+      const expectedLooks=Number(fields[10]||0);
+      assert.equal(result.changes.stats.looks??0,expectedLooks);
+      assert.equal(read(db).stats.looks,1000+expectedLooks);
+      assert.equal(result.changes.bodyEnergy,-Number(fields[27]||0));
+      assert.equal(result.changes.brainEnergy,-Number(fields[28]||0));
+      assert.equal(read(db).health_index,before.health_index);
+    }finally{db.close();}
+  }
+  const db=createDb();
+  try{
+    addItem(db,1,archived({category:"ゲーム",name:"捏造遊戲效果",effect:"ステータス"}));
+    assert.throws(()=>use(db,1,"invalid-status-01"),/尚未支援/);
+  }finally{db.close();}
+});
+test("有第三段原版食物標記的體重效果會正常生效，並遵守食物冷卻限制",()=>{
+  const examples=[
+    ["ちゃんこ","どすこいスーパーちゃんこ","ウエイトアップ,1,食料品",1],
+    ["ちゃんこ","どすこいスーパーつまみ食い","ウエイトアップ,1,ファ",1],
+    ["スーパー","断食セット","ダイエット,30,食料品",-30]
+  ];
+  for(const [category,name,effect,weightEffect] of examples){
+    const db=createDb();
+    try{
+      const fields=originalItem(category,name);
+      assert.equal(fields[9],effect);
+      // 原版販售時會依第三段將商品分類改成食料品／ファーストフード。
+      fields[0]=effect.endsWith("ファ")?"ファーストフード":"食料品";
+      assert.equal(supportsLegacyItemUse(fields),true);
+      const needsBody=Number(fields[27]||0),needsBrain=Number(fields[28]||0);
+      if(needsBody>25||needsBrain>35){
+        const stronger=Object.fromEntries(STAT_KEYS.map(k=>[k,1000]));
+        db.prepare("UPDATE characters SET stats_json=?,body_energy=400,brain_energy=400 WHERE user_id=1")
+          .run(JSON.stringify(stronger));
+      }
+      addItem(db,1,fields);
+      const first=use(db,1,"third-token-food-001");
+      assert.equal(first.replayed,false);
+      assert.equal(first.changes.food,true);
+      assert.equal(first.changes.weight,weightEffect+Number(fields[25]||0)/1000);
+      assert.equal(read(db).last_meal_at,NOW);
+      if(Number(fields[21])>1)
+        assert.throws(()=>use(db,1,"third-token-food-002",NOW+2000),/60 分鐘/);
+    }finally{db.close();}
+  }
+});
+test("一般書籍「日」耐久以購入後已過整天數計算；期限內可冷卻後重用、不扣天數",()=>{
+  const db=createDb();
+  try{
+    const DAY=86400000;
+    const book=originalItem("書籍","こちら葛飾区亀有公園前派出所　全巻");
+    assert.equal(book[22],"日");
+    assert.equal(book[21],"30");
+    assert.equal(supportsLegacyItemUse(book),true,
+      "商品還沒買入時，商品目錄時間 0 應可預覽已支援");
+    const boughtAt=Math.floor((NOW-2*DAY)/1000);
+    book[30]=String(boughtAt);
+    addItem(db,1,book);
+    let available=listLegacyItemActions(db,1,{bodyEnergy:25,brainEnergy:35,lastMealAt:0},NOW);
+    assert.equal(available.length,1);
+    assert.equal(available[0].durabilityUnit,"日");
+    assert.equal(available[0].remaining,28);
+    const first=use(db,1,"day-book-01");
+    assert.equal(first.replayed,false);
+    assert.equal(db.prepare("SELECT remaining FROM legacy_item_usage").get().remaining,28);
+    assert.equal(listLegacyItemUseHistory(db,1).length,1);
+    assert.deepEqual(JSON.parse(db.prepare("SELECT raw_fields_json FROM legacy_inventory_items").get().raw_fields_json),book);
+    assert.throws(()=>use(db,1,"day-book-cooldown",NOW+60_000),/使用間隔/);
+    const second=use(db,1,"day-book-02",NOW+31*60_000);
+    assert.equal(second.replayed,false);
+    assert.equal(db.prepare("SELECT remaining FROM legacy_item_usage").get().remaining,28);
+    assert.equal(listLegacyItemUseHistory(db,1).length,2);
+    const deadline=NOW+28*DAY;
+    available=listLegacyItemActions(db,1,{bodyEnergy:25,brainEnergy:35,lastMealAt:0},deadline);
+    assert.equal(available[0].remaining,0);
+    assert.match(available[0].reason,/過期/);
+    assert.throws(()=>use(db,1,"day-book-expired",deadline),/過期/);
+    assert.equal(db.prepare("SELECT COUNT(*) n FROM legacy_item_use_history").get().n,2);
+  }finally{db.close();}
+});
+test("原版特殊權益的日制商品與變造日期仍不能被當成一般書籍使用",()=>{
+  const db=createDb();
+  try{
+    for(const [i,category,name] of [
+      [1,"日用品","健康保険"],[2,"日用品","クレジットカード"],
+      [3,"日用品","防犯カメラ"],[4,"ペット","ガチャピン"],
+      [5,"ギフト","船艦大和"]
+    ]){
+      const f=originalItem(category,name);
+      f[30]=String(Math.floor(NOW/1000));
+      addItem(db,i,f);
+      assert.equal(supportsLegacyItemUse(f),false);
+      assert.throws(()=>use(db,i,"restricted-day-"+i),/尚未支援/);
+    }
+    const noDate=originalItem("書籍","こちら葛飾区亀有公園前派出所　全巻");
+    addItem(db,6,noDate);
+    assert.throws(()=>use(db,6,"invalid-day-time"),/尚未支援/);
+    const forged=originalItem("書籍","こちら葛飾区亀有公園前派出所　全巻");
+    forged[30]=String(Math.floor(NOW/1000));
+    addItem(db,7,forged);
+    db.prepare("UPDATE legacy_inventory_items SET purchased_at=? WHERE source_line=7")
+      .run(Number(forged[30])+86400);
+    assert.throws(()=>use(db,7,"mismatched-day-time"),/尚未支援/);
+  }finally{db.close();}
+});
+

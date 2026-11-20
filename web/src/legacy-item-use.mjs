@@ -3,6 +3,7 @@
 import { STAT_KEYS, maxBodyEnergy, maxBrainEnergy, recoverEnergy, bodyMassIndex } from "./engine.mjs";
 import { diseaseFromIndex } from "./health.mjs";
 import { MEAL_COOLDOWN_MS } from "./dining.mjs";
+import { DAY_MS } from "./inventory.mjs";
 import { initLegacyInventoryTables } from "./legacy-inventory.mjs";
 
 export const CONSUMABLE_REJECTED_EFFECTS=Object.freeze(["ランダム品"]);
@@ -13,6 +14,23 @@ const NON_CONSUMABLE=new Set(["ギフト","武器","防具","魔法","御守"]);
 const FOOD_TYPES=new Set(["食料品","ファーストフード"]);
 const SPECIAL_TYPES=new Set(["無","万能","風邪","下痢","肺炎","結核",
   "ウエイトアップ","ダイエット","身長","縮み"]);
+// basic.cgi::item_do 的「ステータス」沒有額外特殊分支，會照一般能力與耗能欄位生效。
+// 僅對原版商品表確有證據的三款放行，避免憑名稱偽造其他不明特效。
+const STATUS_ITEMS=new Set([
+  "ゲーム\tバイオハザード（wiiバージョン",
+  "ゲーム\tキングダムハーツ2ファイナルミックス＋",
+  "関西名産店\t阪神タイガースの公式チケット"
+]);
+// 原版「日」制一般道具不限於一次，期限內按冷卻可再使用。
+// 健康保險、卡片、寵物、防犯攝影機等另有用途，不當作可反覆使用的消耗品。
+const DAY_USE_TYPES=new Set(["書籍","ゲーム","アダルト"]);
+const ENERGY_RECOVERY_ITEMS=new Map([
+  ["ドリンク\t元気ミルク","-500,0"],
+  ["ドリンク\t爽快ミルク","0,-500"],
+  ["デザート\t元気パフェ","-500,0"],
+  ["デザート\t爽快パフェ","0,-500"]
+]);
+const COMPOUND_SUFFIXES=new Set(["食料品","ファ"]);
 const ID_RE=/^[a-zA-Z0-9_-]{8,80}$/;
 
 function signedNumber(input,label,min=-1000000,max=1000000){
@@ -32,25 +50,43 @@ function parseArchivedItem(row){
     raw.some(x=>typeof x!=="string")||
     raw[0]!==row.category||raw[1]!==row.original_name)
     throw new Error("封存物品資料不完整或與索引不一致");
-  if(row.durability_unit!=="回"||raw[22]!=="回"||
-      NON_CONSUMABLE.has(row.category)||row.original_name==="ランダム品")
+  const unit=row.durability_unit;
+  if(!["回","日"].includes(unit)||raw[22]!==unit||
+     NON_CONSUMABLE.has(row.category)||row.original_name==="ランダム品")
     return null;
+  if(unit==="日"&&!DAY_USE_TYPES.has(row.category))return null;
   const parts=raw[9].split(",");
-  if(parts.length>2)return null;
+  const compound=parts.length===3&&COMPOUND_SUFFIXES.has(parts[2]);
+  if(parts.length>2&&!compound)return null;
   const effect=parts[0];
-  // basic.cgi::item_do 對「効果」沒有特殊增加值的分支。
-  // 原版兩款牛奶的第 28/29 欄是 -500 能量消耗（即恢復）；只有它們可安全使用。
-  const originalEnergyDrink=effect==="効果"&&row.category==="ドリンク"&&
-    parts.length===1&&(
-      (row.original_name==="元気ミルク"&&raw[27]==="-500"&&raw[28]==="0")||
-      (row.original_name==="爽快ミルク"&&raw[27]==="0"&&raw[28]==="-500")
-    );
-  if(!SPECIAL_TYPES.has(effect)&&!originalEnergyDrink)return null;
-  if(effect!=="無"&&!originalEnergyDrink&&
-     (parts.length!==2||!/^\d+$/.test(parts[1])))return null;
-  if((effect==="無"||originalEnergyDrink)&&parts.length!==1)return null;
-  const magnitude=effect==="無"||originalEnergyDrink?0:
+  // basic.cgi::item_do 對「効果」與「ステータス」沒有獨立特殊分支：
+  // 前者只有原版 4 款明確記載 -500 能量恢復的飲食品可安全放行。
+  const itemKey=row.category+"\t"+row.original_name;
+  const recovered=ENERGY_RECOVERY_ITEMS.get(itemKey);
+  const originalEnergyRecovery=effect==="効果"&&parts.length===1&&
+    recovered===raw[27]+","+raw[28];
+  const originalStatus=effect==="ステータス"&&parts.length===1&&
+    STATUS_ITEMS.has(itemKey);
+  if(!SPECIAL_TYPES.has(effect)&&!originalEnergyRecovery&&!originalStatus)
+    return null;
+  if(effect!=="無"&&!originalEnergyRecovery&&!originalStatus&&
+     (parts.length!==2&&!compound||!/^\d+$/.test(parts[1])))return null;
+  if(["無","効果","ステータス"].includes(effect)&&parts.length!==1)
+    return null;
+  const magnitude=effect==="無"||originalEnergyRecovery||originalStatus?0:
     nonnegative(parts[1],"特殊效果",100000);
+  let purchasedAt=null,expiresAt=null;
+  if(unit==="日"){
+    // 日期與 33 欄必須相符；拒絕無購買時間、溢位或捏造的歷史存檔。
+    const seconds=row.purchased_at;
+    if(!Number.isSafeInteger(seconds)||seconds<=0||
+       seconds>Math.floor(Number.MAX_SAFE_INTEGER/1000)||
+       raw[30]!==String(seconds))return null;
+    purchasedAt=seconds*1000;
+    const span=nonnegative(String(row.durability),"原始有效天數",1000000)*DAY_MS;
+    expiresAt=purchasedAt+span;
+    if(!Number.isSafeInteger(expiresAt))return null;
+  }
   const bonuses=Object.fromEntries(STAT_KEYS.map((key,index)=>[
     key,signedNumber(raw[STATS_INDEX[index]],key+"能力增減")
   ]));
@@ -66,16 +102,21 @@ function parseArchivedItem(row){
   return {sourceLine:row.source_line,name:row.original_name,category:row.category,
     effect,magnitude,bonuses,intervalMinutes,bodyCost,brainCost,calories,
     originalRemaining,originalLastUsedAt:lastUsedSec*1000,
-    food};
+    durabilityUnit:unit,purchasedAt,expiresAt,food};
 }
 // 供商店在「購入前」顯示目前 Web 是否支援直接使用；使用與否仍由正式交易驗證。
 export function supportsLegacyItemUse(rawFields){
   if(!Array.isArray(rawFields)||rawFields.length!==33)return false;
   try {
+    // 原版商品目錄尚未買入，購入時間為 0；這裡只預檢「買入後能否操作」。
+    // 真正持有物必須符合本人購買時間與到期日，無法用預覽值繞過。
+    const preview=[...rawFields];
+    if(preview[22]==="日"&&preview[30]==="0")preview[30]="1";
     return Boolean(parseArchivedItem({
-      category:rawFields[0],original_name:rawFields[1],
-      durability:Number(rawFields[21]),durability_unit:rawFields[22],
-      raw_fields_json:JSON.stringify(rawFields)
+      category:preview[0],original_name:preview[1],
+      durability:Number(preview[21]),durability_unit:preview[22],
+      purchased_at:Number(preview[30]),
+      raw_fields_json:JSON.stringify(preview)
     }));
   }catch{return false;}
 }
@@ -89,8 +130,17 @@ function readRows(db,userId){
     "WHERE i.user_id=? ORDER BY i.source_line LIMIT 2100"
   ].join(" ")).all(userId);
 }
+function itemRemaining(item,row,now){
+  if(item.durabilityUnit!=="日")return row.web_remaining??item.originalRemaining;
+  if(now<item.purchasedAt)return 0;
+  const elapsed=Math.floor((Math.floor(now/1000)-Math.floor(item.purchasedAt/1000))/86400);
+  return Math.max(0,item.originalRemaining-elapsed);
+}
 function status(item,character,remaining,lastUsedAt,now){
-  if(remaining<=0)return {canUse:false,reason:"原始物品耐久已用盡",readyAt:null};
+  if(item.durabilityUnit==="日"&&now<item.purchasedAt)
+    return {canUse:false,reason:"尚未到原版商品購入時間",readyAt:item.purchasedAt};
+  if(remaining<=0)return {canUse:false,reason:item.durabilityUnit==="日"?
+    "原版商品有效天數已過期":"原始物品耐久已用盡",readyAt:null};
   const readyAt=lastUsedAt+item.intervalMinutes*60000;
   if(now<readyAt)return {canUse:false,reason:"物品使用間隔尚未結束",readyAt};
   if(item.food&&character.lastMealAt>0&&
@@ -128,11 +178,12 @@ export function listLegacyItemActions(db,userId,character,now=Date.now()){
     try{item=parseArchivedItem(row);}
     catch{return [];} // 損壞或未辨識的原始檔仍可唯讀封存，不中斷角色狀態。
     if(!item)return [];
-    const remaining=row.web_remaining??item.originalRemaining;
+    const remaining=itemRemaining(item,row,now);
     const lastUsedAt=row.last_used_at_ms??item.originalLastUsedAt;
     return [{
       sourceLine:item.sourceLine,name:item.name,category:item.category,
       remaining,originalRemaining:item.originalRemaining,
+      durabilityUnit:item.durabilityUnit,expiresAt:item.expiresAt,
       intervalMinutes:item.intervalMinutes,food:item.food,
       ...status(item,character,remaining,lastUsedAt,now)
     }];
@@ -239,7 +290,7 @@ export function useLegacyItem(db,userId,sourceLine,requestId,now=Date.now()){
       height:character.height,lastMealAt:character.last_meal_at
     };
     const updated=recoverEnergy(current,now);
-    const remaining=row.web_remaining??item.originalRemaining;
+    const remaining=itemRemaining(item,row,now);
     const lastUsedAt=row.last_used_at_ms??item.originalLastUsedAt;
     const availability=status(item,updated,remaining,lastUsedAt,now);
     if(!availability.canUse)throw new Error(availability.reason);
@@ -255,7 +306,8 @@ export function useLegacyItem(db,userId,sourceLine,requestId,now=Date.now()){
       "INSERT INTO legacy_item_usage(user_id,source_line,remaining,last_used_at_ms)",
       "VALUES(?,?,?,?) ON CONFLICT(user_id,source_line) DO UPDATE",
       "SET remaining=excluded.remaining,last_used_at_ms=excluded.last_used_at_ms"
-    ].join(" ")).run(userId,sourceLine,remaining-1,now);
+    ].join(" ")).run(userId,sourceLine,
+      item.durabilityUnit==="回"?remaining-1:remaining,now);
     db.prepare([
       "INSERT INTO legacy_item_use_history(user_id,source_line,request_id,original_name,changes_json,used_at)",
       "VALUES(?,?,?,?,?,?)"

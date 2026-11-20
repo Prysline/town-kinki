@@ -135,6 +135,12 @@ test("百貨店實體地圖入口、商品與現金操作需連上真正交易�
   assert.match(script,/renderRetail\(\)/);
   assert.match(script,/item\.origin==="retail"/);
 });
+test("原版特殊代碼已可依來源區分實際使用與尚未支援",()=>{
+  assert.match(script,/code==="ステータス"/);
+  assert.match(script,/code==="効果"/);
+  assert.match(script,/原版分類標記/);
+  assert.match(script,/第三段不是額外能力數值/);
+});
 test("百貨結帳數量與付款欄位並排、原版能力與使用狀態可展開查閱",()=>{
   assert.match(html,/class="filters retail-filters"/);
   assert.match(script,/controls\.className="retail-buy-controls"/);

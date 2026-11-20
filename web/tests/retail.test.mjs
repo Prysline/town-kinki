@@ -84,6 +84,33 @@ test("原版「無」不等於沒有使用效果；未支援的特殊代碼不�
   assert.equal(retailItemDetails(unsupported).effectCode,"ステータス");
 });
 
+test("新增可實際使用的原版甜點、ステータス 道具、分類複合效果及日制書籍，在百貨顯示已支援",()=>{
+  const samples=[
+    ["元気パフェ","supported"],
+    ["爽快パフェ","supported"],
+    ["バイオハザード（wiiバージョン","supported"],
+    ["キングダムハーツ2ファイナルミックス＋","supported"],
+    ["阪神タイガースの公式チケット","supported"],
+    ["どすこいスーパーちゃんこ","supported"],
+    ["どすこいスーパーつまみ食い","supported"],
+    ["断食セット","supported"],
+    ["こちら葛飾区亀有公園前派出所　全巻","supported"]
+  ];
+  for(const [name,usage] of samples){
+    const item=catalog.find(x=>x.name===name);
+    assert.ok(item,"原版商品不存在："+name);
+    assert.equal(retailItemDetails(item).usage,usage,name);
+  }
+  for(const [name,usage] of [
+    ["無駄知識を覚える本","unsupported"],
+    ["健康保険","automatic"],["クレジットカード","payment"],
+    ["ガチャピン","unsupported"],["防犯カメラ","unsupported"]
+  ]){
+    const item=catalog.find(x=>x.name===name);
+    assert.ok(item,"原版商品不存在："+name);
+    assert.equal(retailItemDetails(item).usage,usage,name);
+  }
+});
 test("本人現金購物、共用扣庫存與 33 欄持有物同筆儲存；重送不能扣第二次",()=>{
   const db=fixture();try{
     ensureRetailDay(db,catalog,day,randomIndex);
