@@ -56,3 +56,5 @@ export const displayVendingName=name=>VENDING_ZH_TW[name]??name;
 export const displayKnownItemName=name=>
   EQUIPMENT_ZH_TW[name]??VENDING_ZH_TW[name]??name;
 export const displayEquipmentCategory=category=>EQUIPMENT_CATEGORY_ZH_TW[category]??category;
+export const displayKnownItemCategory=category=>
+  category==="ドリンク"?"飲料":displayEquipmentCategory(category);
