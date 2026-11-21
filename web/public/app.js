@@ -1442,7 +1442,8 @@ function describeOriginalRetailEffect(code){
 function retailEffectDetails(item){
   const info=item.details??{};
   const bonuses=Object.entries(info.effects??{})
-    .map(([key,value])=>(labels[key]??key)+(value>0?"+":"")+value);
+    .map(([key,value])=>(labels[key]??key)+
+      (info.randomizedEffects?" +0～+"+value:(value>0?"+":"")+value));
   const preview=document.createElement("p");
   preview.className="small retail-effect-preview";
   preview.textContent=bonuses.length?
@@ -1456,7 +1457,8 @@ function retailEffectDetails(item){
   summary.textContent="原版商品效果、備註與 Web 使用狀態";
   details.append(summary);
   const lines=[
-    "能力增減："+(bonuses.length?bonuses.join("、"):"原版欄位沒有非零能力增減"),
+    "能力增減"+(info.randomizedEffects?"（每項獨立隨機）":"")+"："+
+      (bonuses.length?bonuses.join("、"):"原版欄位沒有非零能力增減"),
     "特殊欄位："+describeOriginalRetailEffect(info.effectCode??"無"),
     "熱量："+(info.calories??0)+" kcal｜使用間隔："+(info.intervalMinutes??0)+" 分鐘",
     "身體能量消耗："+(info.bodyCost??0)+"（負數表示恢復）"+

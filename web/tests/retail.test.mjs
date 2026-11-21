@@ -339,3 +339,18 @@ test("百貨真正買到的原版健康保険立即讓醫院辨識；直購續�
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM retail_purchases").get().n,1);
   }finally{db.close();}
 });
+
+test("原版ランダム品的百貨預覽不誤寫每項固定 +10，商品仍依原價三倍販售",()=>{
+  const original=catalog.find(x=>x.category==="薬"&&x.name==="ランダム品");
+  assert.ok(original);
+  assert.equal(original.originalLine,113);
+  assert.equal(original.basePrice,2000000);
+  assert.equal(original.unitPrice,6000000);
+  const detail=retailItemDetails(original);
+  assert.equal(detail.usage,"supported");
+  assert.equal(detail.randomizedEffects,true);
+  assert.equal(Object.keys(detail.effects).length,17);
+  assert.ok(Object.values(detail.effects).every(value=>value===10));
+  const ordinary=retailItemDetails(catalog.find(x=>x.name==="油取り紙"));
+  assert.equal(ordinary.randomizedEffects,false);
+});

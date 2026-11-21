@@ -3350,3 +3350,63 @@ test("HTTP：百貨買到原版日制書籍及効果甜點後真的可使用，�
     assert.equal(again.result.legacyItemActions.find(x=>x.sourceLine===purchased[0]).remaining,30);
   }finally{await srv.stop();}
 });
+
+test("HTTP：百貨真實買入原版ランダム品後可使用，隨機增益有界且防重送",async()=>{
+  const catalog=parseLegacyRetailCatalog(
+    decodeLegacyText(readFileSync(new URL("../../dat_dir/syouhin.cgi",import.meta.url)))
+  );
+  const item=catalog.find(x=>x.category==="薬"&&x.name==="ランダム品");
+  assert.ok(item);
+  const srv=await start("solo");
+  try{
+    assert.equal((await api(srv.url,"character",{
+      name:"隨機道具驗收",gender:"other",stats:defaultStats()
+    })).status,200);
+    assert.equal((await api(srv.url,"map/tile",{
+      row:0,column:0,symbol:"デパ"
+    })).status,200);
+    const db=new DatabaseSync(join(srv.directory,"solo.sqlite"));
+    try{
+      const exists=db.prepare("SELECT position FROM retail_stock WHERE shop='depart1' AND sku=?")
+        .get(item.sku);
+      if(!exists){
+        const slot=db.prepare("SELECT position FROM retail_stock WHERE shop='depart1' AND sku<>? ORDER BY position LIMIT 1")
+          .get(item.sku);
+        assert.ok(slot);
+        db.prepare("UPDATE retail_stock SET sku=?,remaining=? WHERE shop='depart1' AND position=?")
+          .run(item.sku,item.originalStock,slot.position);
+      }
+      db.prepare("UPDATE characters SET money=10000000 WHERE name='隨機道具驗收'").run();
+    }finally{db.close();}
+    const before=(await api(srv.url,"state")).result;
+    const listed=before.retailGoods.find(x=>x.sku===item.sku);
+    assert.equal(listed?.details?.usage,"supported");
+    assert.equal(listed?.details?.randomizedEffects,true);
+    const bought=await api(srv.url,"retail/buy",{
+      shop:"depart1",sku:item.sku,quantity:1,requestId:"random_http_buy_01"
+    });
+    assert.equal(bought.status,200);
+    assert.equal(bought.result.retailResult.paid,6000000);
+    assert.equal(bought.result.character.money,4000000);
+    const line=bought.result.retailResult.sourceLine;
+    assert.equal(bought.result.legacyItemActions.find(x=>x.sourceLine===line)?.remaining,10);
+    const used=await api(srv.url,"inventory/legacy/use",{
+      sourceLine:line,requestId:"random_http_use_01"
+    });
+    assert.equal(used.status,200);
+    assert.equal(used.result.itemUseResult.replayed,false);
+    for(const [key,was] of Object.entries(bought.result.character.stats)){
+      const delta=used.result.character.stats[key]-was;
+      assert.ok(Number.isInteger(delta)&&delta>=0&&delta<=10,key+" must roll within 0..10");
+      assert.equal(used.result.itemUseResult.changes.stats[key]??0,delta);
+    }
+    assert.equal(used.result.legacyItemActions.find(x=>x.sourceLine===line)?.remaining,9);
+    const replay=await api(srv.url,"inventory/legacy/use",{
+      sourceLine:line,requestId:"random_http_use_01"
+    });
+    assert.equal(replay.status,200);
+    assert.equal(replay.result.itemUseResult.replayed,true);
+    assert.deepEqual(replay.result.itemUseResult.changes,used.result.itemUseResult.changes);
+    assert.equal(replay.result.legacyItemActions.find(x=>x.sourceLine===line)?.remaining,9);
+  }finally{await srv.stop();}
+});
