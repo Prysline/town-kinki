@@ -74,13 +74,13 @@ test("品牌、特殊商品與日常用品譯名都與原版效果相容",()=>{
 
 test("Web 顯示與搜尋使用中文，購買、使用與裝備操作仍傳原始名稱及 SKU",()=>{
   assert.match(app,/from "\.\/retail-sports-medicine-translations\.js"/);
-  assert.match(app,/const displayProductName=shopName==="自動販賣機"\?displayVendingName:displayRetailSportsMedicineName/);
+  assert.match(app,/const displayProductName=shopName==="自動販賣機"\?displayVendingName:displayRetailItemName/);
   assert.match(app,/document\.createTextNode\(displayProductName\(item\.name\)\)/);
-  assert.match(app,/name\.textContent=displayRetailSportsMedicineName\(displayKnownItemName\(item\.name\)\)/);
-  assert.match(app,/displayRetailSportsMedicineName\(item\.name\)\.toLocaleLowerCase\("zh-TW"\)\.includes\(search\)/);
-  assert.match(app,/displayRetailSportsMedicineName\(purchase\.name\)/);
-  assert.match(app,/displayRetailSportsMedicineName\(entry\.name\)/);
-  assert.match(app,/displayRetailSportsMedicineName\(stock\.name\)/);
+  assert.match(app,/name\.textContent=displayRetailItemName\(item\.name\)/);
+  assert.match(app,/displayRetailItemName\(item\.name\)\.toLocaleLowerCase\("zh-TW"\)\.includes\(search\)/);
+  assert.match(app,/displayRetailItemName\(purchase\.name\)/);
+  assert.match(app,/displayRetailItemName\(entry\.name\)/);
+  assert.match(app,/displayRetailItemName\(stock\.name\)/);
   assert.match(app,/pendingRetailPurchase=\{shop:item\.shop,sku:item\.sku,quantity,payment/);
   assert.match(app,/submitLegacyUse\(item\.sourceLine,item\.name\)/);
   assert.match(app,/const duplicate=owned\.some\(x=>x\.name===item\.name\)/);
