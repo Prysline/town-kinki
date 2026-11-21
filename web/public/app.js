@@ -1,9 +1,10 @@
 import { townCellAction } from "./town-home.js";
+import { displayRetailFoodName,displayRetailFoodCategory } from "./retail-food-translations.js";
 import { shouldShowCompactEnergy } from "./energy-visibility.js";
 import { townTimePhase } from "./time-theme.js";
 import { groupedStatLines } from "./shop-effects.js";
-import { displayRetailFoodName,displayRetailFoodCategory } from "./retail-food-translations.js";
-import { itemCooldownRemaining,itemCooldownText,itemRemainingDurability } from "./item-cooldown.js";
+import { displayEquipmentName,displayVendingName,displayKnownItemName,displayEquipmentCategory,displayKnownItemCategory } from "./item-translations.js";
+import { itemCooldownRemaining,itemCooldownText,itemRemainingDurability,formatItemCountdown } from "./item-cooldown.js";
 const el = id => document.getElementById(id);
 let state = null;
 let requestedLegacyIconUrl = null;
@@ -45,6 +46,8 @@ function renderLegacyIcon() {
     ? "此 32×32 圖片來自原版存檔所記錄的網址。"
     : "按下後才會向原版圖示的外部網站載入圖片；可能向對方透露連線資訊。");
 }
+const displayRetailItemName=name=>displayRetailFoodName(displayKnownItemName(name));
+const displayRetailItemCategory=category=>displayRetailFoodCategory(displayKnownItemCategory(category));
 
 const labels = {
   kokugo:"國語",suugaku:"數學",rika:"理科",syakai:"社會",eigo:"英語",
@@ -187,7 +190,7 @@ function renderSoloTime() {
 let publicPreview=null;
 let previewLoading=false;
 // 方案 B：一次顯示一組設施。原本的表單留在 DOM，既有事件和資料更新不受影響。
-const FACILITY_TAB_NAMES = Object.freeze(["house","dining","shops","training","jobs","bank","hospital","events","mail"]);
+const FACILITY_TAB_NAMES = Object.freeze(["house","dining","shops","games","training","jobs","bank","hospital","events","mail"]);
 const PROFILE_VIEWS = Object.freeze(["status","inventory","attributes"]);
 let activeProfileView="status";
 function selectProfileView(name,{focus=false}={}) {
@@ -522,7 +525,7 @@ async function buyFromPlayerRoom(item,quantity,payment,cardSourceLine){
   if(!houseId)return;
   const total=item.price*quantity;
   if(!window.confirm("確定從「"+(activeRoom.shop?.title??"玩家商店")+
-    "」購買「"+displayRetailFoodName(item.name)+"」×"+quantity+"，"+
+    "」購買「"+displayRetailItemName(item.name)+"」×"+quantity+"，"+
     (payment==="bank"?"使用有效信用卡扣普通存款 ":"支付現金 ")+money(total)+"嗎？"))return;
   if(!pendingPlayerStorePurchase||
     pendingPlayerStorePurchase.houseId!==houseId||
@@ -545,7 +548,7 @@ async function buyFromPlayerRoom(item,quantity,payment,cardSourceLine){
     pendingPlayerStorePurchase=null;
     render();
     notify(result.replayed?"這筆商店購物已完成，沒有重複扣款或出貨。":
-      "已購入「"+displayRetailFoodName(result.name)+"」×"+quantity+"，付款 "+money(result.paid)+
+      "已購入「"+displayRetailItemName(result.name)+"」×"+quantity+"，付款 "+money(result.paid)+
       (result.cashback?"；同城現金回饋 "+money(result.cashback):"")+
       "，商品已入本人持有物。");
     await openRoom(houseId,slot,false);
@@ -557,12 +560,12 @@ async function setPlayerRoomPrice(item,price){
   if(!Number.isSafeInteger(price)||price<item.min||price>item.max){
     notify("售價必須為 "+money(item.min)+"～"+money(item.max)+" 的整數",true);return;
   }
-  if(!window.confirm("確定將「"+displayRetailFoodName(item.name)+"」的售價設定為 "+money(price)+" 嗎？"))return;
+  if(!window.confirm("確定將「"+displayRetailItemName(item.name)+"」的售價設定為 "+money(price)+" 嗎？"))return;
   const slot=activeRoom.selectedIndex;
   try{
     state=await api("shop/price",{houseId,sku:item.sku,price});
     render();
-    notify("已設定「"+displayRetailFoodName(item.name)+"」的商店單價。");
+    notify("已設定「"+displayRetailItemName(item.name)+"」的商店單價。");
     await openRoom(houseId,slot,false);
   }catch(error){notify(error.message,true);}
 }
@@ -626,14 +629,14 @@ function renderRoom() {
       const tile=document.createElement("div");
       tile.className="training-tile";
       const title=document.createElement("strong");
-      title.textContent=displayRetailFoodName(item.name)+"｜"+displayRetailFoodCategory(item.category);
+      title.textContent=displayRetailItemName(item.name)+"｜"+displayRetailItemCategory(item.category);
       const hint=document.createElement("p");hint.className="small";
       hint.textContent="單價 "+money(item.price)+"｜剩餘 "+item.stock+
         " 件｜進貨原價 "+money(item.basePrice);
       const qtyLabel=document.createElement("label");
       qtyLabel.textContent="購買數量";
       const qty=document.createElement("select");
-      qty.setAttribute("aria-label",displayRetailFoodName(item.name)+"玩家商店購買數量");
+      qty.setAttribute("aria-label",displayRetailItemName(item.name)+"玩家商店購買數量");
       for(let n=1;n<=5;n++){
         const opt=document.createElement("option");
         opt.value=String(n);
@@ -705,7 +708,7 @@ function renderRoom() {
       for(const entry of recent){
         const li=document.createElement("li");
         li.textContent=new Date(entry.createdAt).toLocaleString("zh-TW")+"｜"+
-          (entry.role==="seller"?"出售":"購入")+"｜"+displayRetailFoodName(entry.name)+
+          (entry.role==="seller"?"出售":"購入")+"｜"+displayRetailItemName(entry.name)+
           " ×"+entry.quantity+"｜"+money(entry.paid)+
           (entry.cashback?"｜同城回饋 "+money(entry.cashback):"");
         list.append(li);
@@ -1272,7 +1275,7 @@ function renderInsurance() {
 
 let pendingLegacyUse=null;
 async function submitLegacyUse(sourceLine,name){
-  if(!window.confirm("確定使用「"+displayRetailFoodName(name)+"」一次嗎？將消耗一次原始耐久。"))return;
+  if(!window.confirm("確定使用「"+displayRetailItemName(name)+"」一次嗎？將消耗一次原始耐久。"))return;
   if(!pendingLegacyUse||pendingLegacyUse.sourceLine!==sourceLine)
     pendingLegacyUse={sourceLine,requestId:crypto.randomUUID()};
   try{
@@ -1282,7 +1285,7 @@ async function submitLegacyUse(sourceLine,name){
     render();
     notify(result.replayed?
       "相同道具使用請求已處理，沒有重複扣除耐久。" :
-      "已使用「"+displayRetailFoodName(result.name)+"」，效果已套用。");
+      "已使用「"+displayRetailItemName(result.name)+"」，效果已套用。");
   }catch(error){
     // 清單重建後再提示，避免把錯誤訊息連同舊商品元件一起刪掉。
     renderLegacyItems();
@@ -1296,6 +1299,20 @@ function updateInventoryCooldowns(){
   if(!state?.character||el("inventory-panel").hidden)return;
   const now=browserGameNow();
   let expired=false;
+  // 日制過期與回制 0 耐久的清除時間皆以伺服器給的 removeAt 為準。
+  for(const card of el("legacy-inventory-list").querySelectorAll(".inventory-item[data-remove-at]")){
+    const at=Number(card.dataset.removeAt);
+    const remaining=at-now;
+    const label=card.querySelector(".inventory-removing");
+    if(label&&remaining>0)label.textContent="已用盡，等待移除 "+formatItemCountdown(remaining);
+    if(remaining<=0){
+      card.hidden=true; // 尚未取得新的 snapshot 也不繼續展示過期道具
+      const key="remove:"+state.character.name+":"+card.dataset.sourceLine+":"+at;
+      if(!inventoryCooldownSyncRequested.has(key)){
+        inventoryCooldownSyncRequested.add(key);expired=true;
+      }
+    }
+  }
   for(const node of el("legacy-inventory-list").querySelectorAll(".inventory-cooldown[data-ready-at]")){
     const readyAt=Number(node.dataset.readyAt);
     const key=node.dataset.cooldownKey;
@@ -1348,13 +1365,17 @@ function renderLegacyItems(){
   for(const category of [...grouped.keys()].sort((x,y)=>x.localeCompare(y,"ja"))){
     const section=document.createElement("section");section.className="inventory-category";
     const heading=document.createElement("h4");heading.className="inventory-category-heading";
-    heading.textContent="▼ "+displayRetailFoodCategory(category);section.append(heading);
+    heading.textContent="▼ "+displayRetailItemCategory(category);section.append(heading);
     for(const item of grouped.get(category)){
       const card=document.createElement("article");card.className="inventory-item";
+      if(Number.isSafeInteger(item.removeAt)){
+        card.dataset.removeAt=String(item.removeAt);
+        card.dataset.sourceLine=String(item.sourceLine);
+      }
       const info=item.details??null;
       const actionInfo=actions.get(item.sourceLine);
       const head=document.createElement("div");head.className="inventory-item-heading";
-      const name=document.createElement("strong");name.textContent=displayRetailFoodName(item.name);
+      const name=document.createElement("strong");name.textContent=displayRetailItemName(item.name);
       const durability=document.createElement("span");durability.className="inventory-item-remaining";
       const amount=itemRemainingDurability(item,actionInfo,browserGameNow());
       durability.textContent="剩餘 "+amount+(item.unit??"");
@@ -1368,7 +1389,12 @@ function renderLegacyItems(){
       const controls=document.createElement("div");controls.className="inventory-item-controls";
       if(actionInfo){
         const status=document.createElement("span");status.className="small inventory-item-status";
-        if(!actionInfo.canUse&&itemCooldownRemaining(actionInfo,browserGameNow())>0){
+        if(amount<=0&&item.unit==="回"&&
+           Number.isSafeInteger(item.removeAt)&&item.removeAt>browserGameNow()){
+          status.classList.add("inventory-removing");
+          status.textContent="已用盡，等待移除 "+
+            formatItemCountdown(item.removeAt-browserGameNow());
+        }else if(!actionInfo.canUse&&itemCooldownRemaining(actionInfo,browserGameNow())>0){
           status.classList.add("inventory-cooldown");
           status.dataset.readyAt=String(actionInfo.readyAt);
           status.dataset.reason=actionInfo.reason??"";
@@ -1420,7 +1446,7 @@ function renderLegacyItems(){
     details.append(note);
     for(const gift of gifts){
       const p=document.createElement("p");p.className="small";
-      p.textContent=displayRetailFoodName(gift.name)+"｜剩餘 "+gift.durability+(gift.unit??"");
+      p.textContent=displayRetailItemName(gift.name)+"｜剩餘 "+gift.durability+(gift.unit??"");
       details.append(p);
     }
     target.append(details);
@@ -1438,7 +1464,7 @@ function renderLegacyItems(){
     for(const item of state.legacyItemHistory){
       const li=document.createElement("li");
       li.textContent=new Date(item.usedAt).toLocaleString("zh-TW")+
-        "｜"+displayRetailFoodName(item.name)+"｜能力變化 "+
+        "｜"+displayRetailItemName(item.name)+"｜能力變化 "+
         Object.entries(item.changes.stats??{}).map(([key,n])=>
           (labels[key]||key)+(n>=0?"+":"")+n).join("、")+
         "｜疾病指數 "+(item.changes.healthIndex>=0?"+":"")+item.changes.healthIndex+
@@ -1642,7 +1668,7 @@ async function submitRetailPurchase(item,quantity,payment,cardSourceLine){
   const total=item.price*quantity;
   const method=payment==="bank"?"普通銀行存款（有效信用卡）":"現金";
   if(!window.confirm("確定以"+method+"支付 "+money(total)+
-    "，購買「"+displayRetailFoodName(item.name)+"」×"+quantity+" 嗎？"))return;
+    "，購買「"+displayRetailItemName(item.name)+"」×"+quantity+" 嗎？"))return;
   if(!pendingRetailPurchase||pendingRetailPurchase.shop!==item.shop||
      pendingRetailPurchase.sku!==item.sku||
      pendingRetailPurchase.quantity!==quantity||
@@ -1657,7 +1683,7 @@ async function submitRetailPurchase(item,quantity,payment,cardSourceLine){
     pendingRetailPurchase=null;
     render();
     notify(result.replayed?"這筆購買已完成，未重複扣款。":
-      "已購入「"+displayRetailFoodName(result.name)+"」×"+result.quantity+"，"+
+      "已購入「"+displayRetailItemName(result.name)+"」×"+result.quantity+"，"+
       (result.payment==="bank"?"普通存款":"現金")+"支付 "+money(result.paid)+
       (result.merged?"；耐久已合併至原持有物。":"；物品已加入本人清單。"));
   }catch(error){notify(error.message,true);}
@@ -1744,6 +1770,8 @@ function retailEffectDetails(item){
 const shopCartSelections=new Map();
 // 原版兩種店均為「一商品一列、分類分段、選一件後統一結帳」。
 function renderShopTable(target,goods,{shopName,onPurchase,emptyText}){
+  // 商店、確認與背包顯示中文；商品 SKU 和後端原始日文資料保持不變。
+  const displayProductName=shopName==="自動販賣機"?displayVendingName:displayRetailItemName;
   target.replaceChildren();
   if(!goods.length){
     const empty=document.createElement("p");empty.className="small";
@@ -1806,7 +1834,7 @@ function renderShopTable(target,goods,{shopName,onPurchase,emptyText}){
     for(const option of qty.options)
       option.disabled=Boolean(item)&&Number(option.value)>item.stock;
     quote.textContent=!item?"先在上方表格選擇一項商品。":
-      "已選："+displayRetailFoodName(item.name)+"｜合計 "+money(total)+"（"+(bank?"普通存款":"現金")+"）"+
+      "已選："+displayProductName(item.name)+"｜合計 "+money(total)+"（"+(bank?"普通存款":"現金")+"）"+
       (!available?"｜庫存不足":!affordable?"｜餘額不足":"");
     button.disabled=!item||item.stock<=0||!available||!affordable;
     button.textContent=!item?"請先選擇商品":item.stock<=0?"售完":
@@ -1818,7 +1846,7 @@ function renderShopTable(target,goods,{shopName,onPurchase,emptyText}){
       category=item.category;
       const group=document.createElement("tr");group.className="shop-category-row";
       const th=document.createElement("th");th.scope="rowgroup";th.colSpan=5;
-      th.textContent="▼ "+displayRetailFoodCategory(category);group.append(th);body.append(group);
+      th.textContent="▼ "+(shopName==="自動販賣機"?displayKnownItemCategory(category):displayRetailItemCategory(category));group.append(th);body.append(group);
     }
     const row=document.createElement("tr");row.className="shop-product-row";
     const nameCell=document.createElement("td");
@@ -1833,7 +1861,7 @@ function renderShopTable(target,goods,{shopName,onPurchase,emptyText}){
         payment:payment.value});
       update();
     });
-    label.append(radio,document.createTextNode(displayRetailFoodName(item.name)));nameCell.append(label);
+    label.append(radio,document.createTextNode(displayProductName(item.name)));nameCell.append(label);
     const price=document.createElement("td");price.className="shop-price";
     price.textContent=money(item.price);
     const effectCell=document.createElement("td");effectCell.className="shop-effect-cell";
@@ -1878,6 +1906,282 @@ function renderShopTable(target,goods,{shopName,onPurchase,emptyText}){
   checkout.append(controls,quote,button);target.append(checkout);
   update();
 }
+let pendingArcadeDonut=null;
+let arcadeDonutSubmitting=false;
+async function submitArcadeDonut(mode,risk,winAmount,reference){
+  if(arcadeDonutSubmitting)return;
+  const label=mode==="donus"?"不同點數×1萬元":
+    mode==="donus2"?"不同點數×2萬元":"相同點數×10萬元";
+  if(!window.confirm("確認在「"+label+"」抽牌嗎？前一張 "+
+      (reference===null?"尚未設定":reference+"點")+
+      "；猜中最多獲得 "+money(winAmount)+
+      "，猜錯扣除 "+money(risk)+"。伺服器會即時依真正共用牌桌計算。"))return;
+  if(!pendingArcadeDonut||pendingArcadeDonut.mode!==mode)
+    pendingArcadeDonut={mode,requestId:crypto.randomUUID()};
+  arcadeDonutSubmitting=true;
+  el("arcade-donuts-submit").disabled=true;
+  try{
+    state=await api("arcade/donuts/draw",{
+      mode,requestId:pendingArcadeDonut.requestId
+    });
+    const result=state.arcadeDonutResult;
+    pendingArcadeDonut=null;
+    render();
+    notify(result.replayed?"這局抽牌已結算，沒有重複扣款或發獎。":
+      "原版抽牌 "+result.mode+"：前一張 "+
+      (result.previousCard??"空（首次以原版起始值比較）")+
+      "，抽中 "+result.drawnCard+" 點。"+
+      (result.won?"獲得 ":"扣除 ")+money(Math.abs(result.delta))+
+      "；牌桌目前 "+result.cardsAfter+" 張牌。");
+  }catch(error){notify(error.message,true);}
+  finally{
+    arcadeDonutSubmitting=false;
+    if(state?.character)renderArcadeDonuts();
+  }
+}
+function renderArcadeDonuts(){
+  if(!state?.character)return;
+  const info=state.arcadeDonuts??{};
+  const modes=info.modes??[];
+  const selector=el("arcade-donuts-mode");
+  const selected=modes.find(item=>item.mode===selector.value)??modes[0];
+  selector.disabled=modes.length===0;
+  selector.onchange=renderArcadeDonuts;
+  const submit=el("arcade-donuts-submit"),history=el("arcade-donuts-history");
+  if(!selected){
+    text("arcade-donuts-status","原版卡牌模式尚未載入。");
+    text("arcade-donuts-table","");
+    text("arcade-donuts-quote","");
+    text("arcade-donuts-result","");
+    submit.disabled=true;history.replaceChildren();return;
+  }
+  const available=info.available===true;
+  const wait=Math.max(0,(selected.readyAt??0)-browserGameNow());
+  const affordable=Number.isSafeInteger(selected.risk)&&
+    state.character.money>=selected.risk;
+  text("arcade-donuts-status",!available?
+    "所在城鎮沒有「ゲーセン」遊樂中心；須先建立原版建築。":
+    wait>0?"目前模式冷卻中，還需 "+Math.ceil(wait/1000)+" 秒（單機可快轉時間）。":
+      "這個模式已可抽牌。三個模式牌桌獨立，帳戶本人交易記錄隔離。");
+  const initialReference=selected.rule==="same"?1:0;
+  text("arcade-donuts-table","前一張："+(selected.previousCard===null?
+      "未設定（首次比較"+initialReference+"點）":selected.previousCard+"點")+
+    "｜桌上累積 "+selected.cardCount+" 張｜抽牌範圍 1～"+
+    selected.faces+"點｜最近牌面 "+selected.recentCards.join("、")+
+    (selected.cardCount>20?"（僅展示最近20張）":""));
+  const rule=selected.rule==="same"?"與前卡相同才中獎":"與前卡不同才中獎";
+  text("arcade-donuts-quote",rule+
+    "｜中獎收入 "+money(selected.winAmount)+
+    "｜未中扣除 "+money(selected.risk)+
+    "｜目前現金 "+money(state.character.money)+
+    (!affordable?"｜現金不足":"")+
+    (selected.mode==="donus"?"｜Web單機5秒限制":"｜10分鐘限制"));
+  submit.disabled=arcadeDonutSubmitting||!available||wait>0||!affordable;
+  submit.onclick=()=>{
+    if(!arcadeDonutSubmitting&&available&&wait<=0&&affordable)
+      submitArcadeDonut(selected.mode,selected.risk,selected.winAmount,
+        selected.previousCard);
+  };
+  const rounds=selected.history??[];
+  const recent=rounds[0];
+  text("arcade-donuts-result",recent?
+    "最近一局：前卡 "+(recent.previousCard??"未設定")+
+    "、抽到 "+recent.drawnCard+"，"+
+    (recent.won?"獲勝 +":"失敗 −")+money(Math.abs(recent.delta)):
+    "本人還沒有此模式的抽牌紀錄。");
+  history.replaceChildren();
+  if(!rounds.length){
+    const p=document.createElement("p");p.className="small";
+    p.textContent="尚無抽牌紀錄。";history.append(p);return;
+  }
+  const list=document.createElement("ol");list.className="health-event-list";
+  for(const round of rounds){
+    const li=document.createElement("li");
+    li.textContent=new Date(round.playedAt).toLocaleString("zh-TW")+
+      "｜前卡 "+(round.previousCard??"空")+" → "+round.drawnCard+
+      "｜"+(round.won?"勝 +":"敗 −")+money(Math.abs(round.delta))+
+      "｜桌上 "+round.cardsAfter+" 張";
+    list.append(li);
+  }
+  history.append(list);
+}
+
+let pendingArcadeHighLow=null;
+let arcadeHighLowSubmitting=false;
+async function submitArcadeHighLow(guess,stake,previousCard){
+  const direction=guess==="hi"?"高":"低";
+  const comparison=previousCard===null?"原版首次未設定的前卡（比較為0）":String(previousCard);
+  if(arcadeHighLowSubmitting)return;
+  if(!window.confirm("這局選擇比 "+comparison+" 更"+direction+
+      "，即將抽1～5點牌。桌面基本輸贏 "+money(stake)+
+      "；若與前卡相同則依原版設定獲勝且獎金雙倍。確認要玩嗎？"))return;
+  if(!pendingArcadeHighLow||pendingArcadeHighLow.guess!==guess)
+    pendingArcadeHighLow={guess,requestId:crypto.randomUUID()};
+  arcadeHighLowSubmitting=true;
+  el("arcade-highlow-submit").disabled=true;
+  try{
+    state=await api("arcade/highlow/play",{
+      guess,requestId:pendingArcadeHighLow.requestId
+    });
+    const result=state.arcadeHighLowResult;
+    pendingArcadeHighLow=null;
+    render();
+    notify(result.replayed?"這局 High／Low 已結算，沒有重複扣款或領獎。":
+      "High／Low 抽到 "+result.drawnCard+" 點（前卡 "+
+      (result.previousCard??"未設定，數值比較0")+"）；"+
+      (result.tie?"同點數雙倍！":"")+
+      (result.won?"獲得 ":"扣除 ")+money(Math.abs(result.delta))+
+      "；桌面目前 "+result.cardsAfter+" 張牌。");
+  }catch(error){notify(error.message,true);}
+  finally{
+    arcadeHighLowSubmitting=false;
+    if(state?.character)renderArcadeHighLow();
+  }
+}
+function renderArcadeHighLow(){
+  if(!state?.character)return;
+  const info=state.arcadeHighLow??{};
+  const available=info.available===true;
+  const wait=Math.max(0,(info.readyAt??0)-browserGameNow());
+  const stake=info.stake??0;
+  const enough=Number.isSafeInteger(stake)&&stake>0&&state.character.money>=stake;
+  text("arcade-highlow-status",!available?
+    "目前城鎮沒有「ゲーセン」遊樂中心；可使用單機地圖編輯器放置。":
+    wait>0?"High／Low 冷卻中，還有 "+Math.ceil(wait/1000)+" 秒（單機可快轉時間）。":
+      "High／Low 可進行下一局，牌桌與其他帳號共用。");
+  const previous=info.previousCard;
+  text("arcade-highlow-table","前一張："+(previous===null?"未設定（原版首次比較值0）":previous+"點")+
+    "｜累積 "+(info.cardCount??0)+" 張｜最近牌面 "+
+    (info.recentCards?.join("、")??"")+
+    ((info.cardCount??0)>20?"（只顯示最後20張）":""));
+  const guess=el("arcade-highlow-guess"),submit=el("arcade-highlow-submit");
+  function update(){
+    text("arcade-highlow-quote","本局基本輸贏 "+money(stake)+
+      "｜同點數獲勝 +"+money(stake*(info.tieMultiplier??2))+
+      "｜目前現金 "+money(state.character.money)+
+      (!enough?"｜現金不足":""));
+    submit.disabled=arcadeHighLowSubmitting||!available||wait>0||!enough;
+  }
+  guess.onchange=update;
+  submit.onclick=()=>{
+    if(["hi","low"].includes(guess.value)&&available&&wait<=0&&enough)
+      submitArcadeHighLow(guess.value,stake,previous);
+  };
+  update();
+  const history=el("arcade-highlow-history");history.replaceChildren();
+  const rounds=info.history??[];
+  const newest=rounds[0];
+  text("arcade-highlow-result",newest?
+    "最近一次：前卡 "+(newest.previousCard??"未設定")+"、抽到 "+
+    newest.drawnCard+"，"+(newest.won?"獲勝 +":"失敗 −")+
+    money(Math.abs(newest.delta)):"尚未玩過 High／Low。");
+  if(!rounds.length){
+    const empty=document.createElement("p");empty.className="small";
+    empty.textContent="目前沒有本人 High／Low 對局。";history.append(empty);
+  }else{
+    const list=document.createElement("ol");list.className="health-event-list";
+    for(const round of rounds){
+      const li=document.createElement("li");
+      li.textContent=new Date(round.playedAt).toLocaleString("zh-TW")+
+        "｜猜"+(round.guess==="hi"?"高":"低")+
+        "，前卡 "+(round.previousCard??"未設定")+" → "+round.drawnCard+
+        "｜"+(round.tie?"同點數雙倍勝利":round.won?"勝":"敗")+
+        " "+(round.won?"+":"−")+money(Math.abs(round.delta))+
+        "｜累積 "+round.cardsAfter+" 張";
+      list.append(li);
+    }
+    history.append(list);
+  }
+}
+
+let pendingArcadeDice=null;
+let arcadeDiceSubmitting=false;
+async function submitArcadeDice(guess,stake){
+  if(arcadeDiceSubmitting)return;
+  if(!window.confirm("確認下注 "+money(stake)+"，猜兩顆骰子總和是"+
+      (guess==="even"?"偶數":"奇數")+"嗎？猜中增加下注額，猜錯扣除同額。"))return;
+  const key=guess+":"+stake;
+  if(!pendingArcadeDice||pendingArcadeDice.key!==key)
+    pendingArcadeDice={key,requestId:crypto.randomUUID()};
+  arcadeDiceSubmitting=true;
+  el("arcade-dice-submit").disabled=true;
+  try{
+    state=await api("arcade/dice/play",{
+      guess,stake,requestId:pendingArcadeDice.requestId
+    });
+    const result=state.arcadeDiceResult;
+    pendingArcadeDice=null;
+    render();
+    notify(result.replayed?
+      "這局骰子遊戲已結算，不會重複扣款或領獎。":
+      "骰子結果："+result.dieOne+" ＋ "+result.dieTwo+" ＝ "+result.total+
+      "（"+(result.total%2===0?"偶數":"奇數")+"）。"+
+      (result.won?"猜中了，獲得 ":"猜錯了，扣除 ")+money(result.stake)+"。");
+  }catch(error){notify(error.message,true);}
+  finally{
+    arcadeDiceSubmitting=false;
+    if(state?.character)renderArcadeDice();
+  }
+}
+function renderArcadeDice(){
+  if(!state?.character)return;
+  const info=state.arcadeDice??{};
+  const available=info.available===true;
+  const remain=Math.max(0,(info.readyAt??0)-browserGameNow());
+  text("arcade-dice-status",!available?
+    "目前城鎮沒有「ゲーセン」遊樂中心；可使用單機地圖編輯器放置。":
+    remain>0?"骰子遊戲冷卻中，還需 "+Math.ceil(remain/1000)+" 秒（單機可快轉遊戲時間）。":
+      "遊樂中心已開放，現在可以擲骰。");
+  const stake=el("arcade-dice-stake"),previous=stake.value;
+  stake.replaceChildren();
+  for(const amount of info.rates??[]){
+    const option=document.createElement("option");
+    option.value=String(amount);
+    option.textContent=money(amount);
+    stake.append(option);
+  }
+  if((info.rates??[]).some(x=>String(x)===previous))stake.value=previous;
+  const guess=el("arcade-dice-guess"),submit=el("arcade-dice-submit");
+  function update(){
+    const amount=Number(stake.value);
+    const valid=(info.rates??[]).includes(amount);
+    const affordable=valid&&amount<=state.character.money;
+    text("arcade-dice-quote",!valid?"請選擇原版下注額。":
+      "下注 "+money(amount)+"｜猜中增加 "+money(amount)+"，猜錯扣除同額"+
+      (!affordable?"｜現金不足":""));
+    submit.disabled=arcadeDiceSubmitting||!available||remain>0||!affordable;
+  }
+  stake.onchange=update;guess.onchange=update;
+  submit.onclick=()=>{
+    const value=guess.value,amount=Number(stake.value);
+    if((value==="odd"||value==="even")&&(info.rates??[]).includes(amount)&&
+       available&&remain<=0&&amount<=state.character.money)
+      submitArcadeDice(value,amount);
+  };
+  update();
+  const history=el("arcade-dice-history");history.replaceChildren();
+  const rounds=info.history??[];
+  const newest=rounds[0];
+  text("arcade-dice-result",newest?
+    "最近一次："+newest.dieOne+" ＋ "+newest.dieTwo+" ＝ "+newest.total+
+    "，"+(newest.won?"獲勝 +":"失敗 −")+money(newest.stake):"尚無擲骰紀錄。");
+  if(!rounds.length){
+    const empty=document.createElement("p");empty.className="small";
+    empty.textContent="尚未進行骰子遊戲。";history.append(empty);
+  }else{
+    const list=document.createElement("ol");list.className="health-event-list";
+    for(const round of rounds){
+      const li=document.createElement("li");
+      li.textContent=new Date(round.playedAt).toLocaleString("zh-TW")+
+        "｜猜"+(round.guess==="even"?"偶數":"奇數")+
+        "｜"+round.dieOne+" + "+round.dieTwo+" = "+round.total+
+        "｜"+(round.won?"獲勝 +":"失敗 −")+money(round.stake);
+      list.append(li);
+    }
+    history.append(list);
+  }
+}
+
 let pendingFishingAction=null;
 async function submitFishingAction(actionName,payload,description){
   if(!window.confirm(description))return;
@@ -2082,9 +2386,9 @@ function renderRetail(){
   const search=el("retail-search").value.trim().toLocaleLowerCase("zh-TW");
   const goods=(state.retailGoods??[]).filter(item=>item.shop===shop&&
     (item.name.toLocaleLowerCase("zh-TW").includes(search)||
-     displayRetailFoodName(item.name).toLocaleLowerCase("zh-TW").includes(search)||
+     displayRetailItemName(item.name).toLocaleLowerCase("zh-TW").includes(search)||
      item.category.toLocaleLowerCase("zh-TW").includes(search)||
-     displayRetailFoodCategory(item.category).toLocaleLowerCase("zh-TW").includes(search)));
+     displayRetailItemCategory(item.category).toLocaleLowerCase("zh-TW").includes(search)));
   text("retail-status",!choices.length?
     "目前城鎮沒有已配置的百貨店。請先在地圖中找到百貨店，單機模式可配置原版建築代碼。" :
     !choices.includes(shop)?"這間百貨店不在目前城鎮。" :
@@ -2101,7 +2405,7 @@ function renderRetail(){
   for(const purchase of (state.retailPurchases??[]).filter(x=>x.shop!=="vending")){
     const line=document.createElement("li");
     line.textContent=new Date(purchase.createdAt).toLocaleString("zh-TW")+
-      "｜"+(purchase.shop==="depart2"?"百貨二":"百貨一")+"｜"+displayRetailFoodName(purchase.name)+
+      "｜"+(purchase.shop==="depart2"?"百貨二":"百貨一")+"｜"+displayRetailItemName(purchase.name)+
       " ×"+purchase.quantity+"｜"+(purchase.payment==="bank"?"信用卡／普通存款":"現金")+
       "支付 "+money(purchase.paid)+
       (purchase.merged?"｜已合併耐久":"")+
@@ -2121,7 +2425,7 @@ async function submitVendingPurchase(item,quantity,payment,cardSourceLine){
   const total=item.price*quantity;
   const method=payment==="bank"?"普通銀行存款（有效信用卡）":"現金";
   if(!window.confirm("確定在自動販賣機以"+method+"支付 "+money(total)+
-     "，購買「"+item.name+"」×"+quantity+" 嗎？"))return;
+     "，購買「"+displayVendingName(item.name)+"」×"+quantity+" 嗎？"))return;
   if(!pendingVendingPurchase||pendingVendingPurchase.sku!==item.sku||
      pendingVendingPurchase.quantity!==quantity||
      pendingVendingPurchase.payment!==payment||
@@ -2136,7 +2440,7 @@ async function submitVendingPurchase(item,quantity,payment,cardSourceLine){
     pendingVendingPurchase=null;
     render();
     notify(result.replayed?"自動販賣機的這筆購物已完成，沒有重複扣款。":
-      "已在自動販賣機買入「"+result.name+"」×"+result.quantity+
+      "已在自動販賣機買入「"+displayVendingName(result.name)+"」×"+result.quantity+
       "，"+(payment==="bank"?"普通銀行存款":"現金")+"支付 "+money(result.paid)+
       (result.merged?"；同品耐久已合併。":"；物品已入庫。"));
   }catch(error){notify(error.message,true);}
@@ -2162,7 +2466,7 @@ function renderVending(){
   for(const entry of (state.retailPurchases??[]).filter(x=>x.shop==="vending")){
     const line=document.createElement("li");
     line.textContent=new Date(entry.createdAt).toLocaleString("zh-TW")+
-      "｜"+entry.name+" ×"+entry.quantity+"｜"+
+      "｜"+displayVendingName(entry.name)+" ×"+entry.quantity+"｜"+
       (entry.payment==="bank"?"信用卡／普通存款":"現金")+"支付 "+money(entry.paid)+
       (entry.merged?"｜已合併耐久":"")+
       "｜目前對應持有物耐久 "+(entry.remaining??"?")+(entry.unit??"");
@@ -2184,7 +2488,7 @@ async function submitEquipmentAction(action,{sku,itemId,name,amount,powerUp=0,us
   if(!Object.hasOwn(captions,action))return;
   const moneyText=(action==="buy"||action==="forge")?"支付 "+money(-amount):
     action==="sell"?"收入 "+money(amount):"把同類原裝備退回倉庫";
-  if(!window.confirm("確定"+captions[action]+"「"+name+"」嗎？"+
+  if(!window.confirm("確定"+captions[action]+"「"+displayEquipmentName(name)+"」嗎？"+
     "（"+moneyText+"）"))return;
   if(!pendingEquipmentAction||pendingEquipmentAction.action!==action||
      pendingEquipmentAction.sku!==sku||pendingEquipmentAction.itemId!==itemId)
@@ -2200,7 +2504,7 @@ async function submitEquipmentAction(action,{sku,itemId,name,amount,powerUp=0,us
     pendingEquipmentAction=null;
     render();
     notify(result.replayed?"這筆裝備交易已處理，沒有重複扣款或變更裝備。":
-      "已"+captions[action]+"「"+result.name+"」。"+
+      "已"+captions[action]+"「"+displayEquipmentName(result.name)+"」。"+
       ((action==="buy"||action==="forge")?"從現金扣除 "+money(-result.amount):
         action==="sell"?"現金增加 "+money(result.amount):"同類原裝備已退回倉庫。"));
   }catch(error){notify(error.message,true);}
@@ -2218,7 +2522,7 @@ function renderEquipment(){
   for(const item of state.equipmentGoods??[]){
     const tile=document.createElement("div");tile.className="training-tile";
     const heading=document.createElement("strong");
-    heading.textContent=item.name+"｜"+item.category;
+    heading.textContent=displayEquipmentName(item.name)+"｜"+displayEquipmentCategory(item.category);
     const note=document.createElement("p");note.className="small";
     note.textContent="威力 "+item.power+"｜命中 "+item.accuracy+"%｜可使用 "+item.uses+
       " 次｜售價 "+money(item.price);
@@ -2243,7 +2547,7 @@ function renderEquipment(){
   for(const item of owned){
     const tile=document.createElement("div");tile.className="training-tile";
     const title=document.createElement("strong");
-    title.textContent=item.name+"｜"+item.category+"｜"+
+    title.textContent=displayEquipmentName(item.name)+"｜"+displayEquipmentCategory(item.category)+"｜"+
       (item.status==="equipped"?"已裝備":"倉庫");
     const note=document.createElement("p");note.className="small";
     note.textContent="威力 "+item.power+"｜命中 "+item.accuracy+"%｜剩餘使用 "+item.uses+
@@ -2274,7 +2578,7 @@ function renderEquipment(){
         const wrapper=document.createElement("label");
         wrapper.textContent=label;
         const input=document.createElement("select");
-        input.setAttribute("aria-label",item.name+"鍛造"+label);
+        input.setAttribute("aria-label",displayEquipmentName(item.name)+"鍛造"+label);
         for(const count of choices){
           const option=document.createElement("option");
           option.value=String(count);
@@ -2328,7 +2632,7 @@ function renderEquipment(){
     const row=document.createElement("li");
     const label={buy:"購買",equip:"換裝",sell:"出售",forge:"鍛造"}[tx.action]??tx.action;
     row.textContent=new Date(tx.createdAt).toLocaleString("zh-TW")+"｜"+
-      label+"｜"+tx.name+"｜"+
+      label+"｜"+displayEquipmentName(tx.name)+"｜"+
       (tx.amount<0?"現金支出 "+money(-tx.amount):
        tx.amount>0?"現金收入 "+money(tx.amount):"無金額變動");
     list.append(row);
@@ -2347,9 +2651,9 @@ async function submitGiftAction(action,{sourceLine,quantity,recipientName,name,m
   const converted=action==="convert";
   if(!converted&&action!=="send")return;
   if(!window.confirm(converted?
-    "確定支付 50,000 元，將「"+displayRetailFoodName(name)+"」的"+(quantity===0?"全部剩餘":quantity+" 份")+
+    "確定支付 50,000 元，將「"+displayRetailItemName(name)+"」的"+(quantity===0?"全部剩餘":quantity+" 份")+
     "耐久轉換成禮品嗎？":
-    "確定將「"+displayRetailFoodName(name)+"」的 "+quantity+" 份禮品寄給「"+recipientName+"」嗎？"))return;
+    "確定將「"+displayRetailItemName(name)+"」的 "+quantity+" 份禮品寄給「"+recipientName+"」嗎？"))return;
   if(!pendingGiftAction||pendingGiftAction.action!==action||
      pendingGiftAction.sourceLine!==sourceLine||
      pendingGiftAction.quantity!==quantity||
@@ -2365,8 +2669,8 @@ async function submitGiftAction(action,{sourceLine,quantity,recipientName,name,m
     pendingGiftAction=null;
     render();
     notify(result.replayed?"禮品操作已完成，未重複改變持有物或扣款。":
-      converted?"「"+displayRetailFoodName(result.name)+"」已轉換成禮品，手續費 "+money(result.fee)+"。":
-      "已將「"+displayRetailFoodName(result.name)+"」×"+quantity+" 送給「"+recipientName+"」。");
+      converted?"「"+displayRetailItemName(result.name)+"」已轉換成禮品，手續費 "+money(result.fee)+"。":
+      "已將「"+displayRetailItemName(result.name)+"」×"+quantity+" 送給「"+recipientName+"」。");
   }catch(error){notify(error.message,true);}
 }
 function renderGiftShop(){
@@ -2381,7 +2685,7 @@ function renderGiftShop(){
     const tile=document.createElement("div");
     tile.className="training-tile";
     const heading=document.createElement("strong");
-    heading.textContent=displayRetailFoodName(item.name)+"｜"+displayRetailFoodCategory(item.category);
+    heading.textContent=displayRetailItemName(item.name)+"｜"+displayRetailItemCategory(item.category);
     const detail=document.createElement("p");
     detail.className="small";
     detail.textContent="剩餘 "+item.quantity+item.unit+"｜物品來源 #"+item.sourceLine;
@@ -2532,7 +2836,7 @@ let pendingRecycleAction=null;
 async function submitRecycleAction(action,{sourceLine,listingId,name,price}){
   if(!["sell","buy"].includes(action))return;
   if(!window.confirm((action==="sell"?"確定回收出售「":"確定購買二手商品「")+
-    displayRetailFoodName(name)+"」嗎？"+(action==="sell"?"預計得到 ":"需支付 ")+money(price)))return;
+    displayRetailItemName(name)+"」嗎？"+(action==="sell"?"預計得到 ":"需支付 ")+money(price)))return;
   const id=action==="sell"?sourceLine:listingId;
   if(!pendingRecycleAction||pendingRecycleAction.action!==action||
     pendingRecycleAction.id!==id)
@@ -2545,7 +2849,7 @@ async function submitRecycleAction(action,{sourceLine,listingId,name,price}){
     pendingRecycleAction=null;
     render();
     notify(result.replayed?"回收交易已處理，沒有重複改變資產。":
-      (action==="sell"?"已出售「":"已購入「")+displayRetailFoodName(result.name)+
+      (action==="sell"?"已出售「":"已購入「")+displayRetailItemName(result.name)+
       "」，"+(result.amount>=0?"現金增加 ":"現金扣除 ")+
       money(Math.abs(result.amount))+"。");
   }catch(error){notify(error.message,true);}
@@ -2561,7 +2865,7 @@ function renderRecycle(){
   for(const item of state.recycleListings??[]){
     const tile=document.createElement("div");tile.className="training-tile";
     const title=document.createElement("strong");
-    title.textContent=displayRetailFoodName(item.name)+"｜"+displayRetailFoodCategory(item.category);
+    title.textContent=displayRetailItemName(item.name)+"｜"+displayRetailItemCategory(item.category);
     const note=document.createElement("p");note.className="small";
     note.textContent="耐久 "+item.quantity+item.unit+"｜二手售價 "+money(item.price);
     const button=document.createElement("button");button.type="button";
@@ -2583,7 +2887,7 @@ function renderRecycle(){
   for(const item of state.recycleSellable??[]){
     const tile=document.createElement("div");tile.className="training-tile";
     const title=document.createElement("strong");
-    title.textContent=displayRetailFoodName(item.name)+"｜"+displayRetailFoodCategory(item.category);
+    title.textContent=displayRetailItemName(item.name)+"｜"+displayRetailItemCategory(item.category);
     const note=document.createElement("p");note.className="small";
     note.textContent="剩餘 "+item.quantity+item.unit+"｜預估回收款 "+money(item.payout);
     const button=document.createElement("button");button.type="button";
@@ -2608,7 +2912,7 @@ function renderRecycle(){
   for(const entry of state.recycleHistory??[]){
     const line=document.createElement("li");
     line.textContent=new Date(entry.createdAt).toLocaleString("zh-TW")+"｜"+
-      (entry.action==="sell"?"出售":"購買")+"｜"+displayRetailFoodName(entry.name)+"｜"+
+      (entry.action==="sell"?"出售":"購買")+"｜"+displayRetailItemName(entry.name)+"｜"+
       (entry.amount>=0?"現金收入 ":"現金支出 ")+money(Math.abs(entry.amount));
     list.append(line);
   }
@@ -2627,7 +2931,7 @@ async function submitWholesaleAction(action,{houseId,sku,name,quantity,price}){
   if(!["buy","return"].includes(action))return;
   if(!window.confirm(
     (action==="buy"?"確定從問屋進貨「":"確定把商店貨物退回問屋「")+
-    displayRetailFoodName(name)+"」 "+(quantity===0?"全部剩餘":quantity+" 件")+"，"+
+    displayRetailItemName(name)+"」 "+(quantity===0?"全部剩餘":quantity+" 件")+"，"+
     (action==="buy"?"從普通存款支付 ":"退回普通存款 ")+money(price)+" 嗎？"
   ))return;
   if(!pendingWholesaleOrder||
@@ -2644,7 +2948,7 @@ async function submitWholesaleAction(action,{houseId,sku,name,quantity,price}){
     pendingWholesaleOrder=null;
     render();
     notify(result.replayed?"這筆問屋交易已結帳，沒有重複扣款、加貨或退貨。":
-      (action==="buy"?"已進貨「":"已退貨「")+displayRetailFoodName(result.name)+"」×"+
+      (action==="buy"?"已進貨「":"已退貨「")+displayRetailItemName(result.name)+"」×"+
       (action==="return"?(result.returned??quantity):quantity)+"，"+
       (result.amount<0?"普通存款扣除 ":"普通存款增加 ")+money(Math.abs(result.amount))+"。");
   }catch(error){notify(error.message,true);}
@@ -2671,7 +2975,7 @@ function renderWholesale(){
   category.replaceChildren();
   for(const kind of state.shopCategories??[]){
     const o=document.createElement("option");
-    o.value=kind;o.textContent=displayRetailFoodCategory(kind);
+    o.value=kind;o.textContent=displayRetailItemCategory(kind);
     category.append(o);
   }
   category.value=shop?.category??(
@@ -2685,20 +2989,20 @@ function renderWholesale(){
     "目前城鎮沒有「問屋」；可以先在自己的住宅配置玩家商店，但不能進貨。");
   text("wholesale-shop-summary",!houses.length?
     "你尚無住宅。必須先建立住宅，於室內配置中選「玩家商店」，再設定店鋪類別。":
-    shop?"已設定「"+shop.title+"」（"+displayRetailFoodCategory(shop.category)+
+    shop?"已設定「"+shop.title+"」（"+displayRetailItemCategory(shop.category)+
       "）｜店鋪倉庫 "+shop.inventory.length+"/100 種；變更類別會清除庫存。":
     "請先進入本人住宅，把至少一個室內欄位設為「玩家商店」，再於此設定店名與類別。");
   const goods=el("wholesale-goods");goods.replaceChildren();
   const search=(el("wholesale-search").value??"").trim().toLocaleLowerCase();
   const matching=(state.wholesaleGoods??[]).filter(item=>
-    (!search||(item.name+" "+item.category+" "+displayRetailFoodName(item.name)+" "+displayRetailFoodCategory(item.category)).toLocaleLowerCase().includes(search))&&
+    (!search||(item.name+" "+item.category+" "+displayRetailItemName(item.name)+" "+displayRetailItemCategory(item.category)).toLocaleLowerCase().includes(search))&&
     (!shop||shop.category==="スーパー"||
      item.category===shop.category)
   );
   for(const item of matching.slice(0,40)){
     const tile=document.createElement("div");tile.className="training-tile";
     const heading=document.createElement("strong");
-    heading.textContent=displayRetailFoodName(item.name)+"｜"+displayRetailFoodCategory(item.category);
+    heading.textContent=displayRetailItemName(item.name)+"｜"+displayRetailItemCategory(item.category);
     const note=document.createElement("p");note.className="small";
     note.textContent="原價 "+money(item.price)+"｜本期共用庫存 "+item.stock;
     const quantityLabel=document.createElement("label");
@@ -2751,7 +3055,7 @@ function renderWholesale(){
   for(const stock of shop?.inventory??[]){
     const tile=document.createElement("div");tile.className="training-tile";
     const name=document.createElement("strong");
-    name.textContent=displayRetailFoodName(stock.name)+"｜"+displayRetailFoodCategory(stock.category);
+    name.textContent=displayRetailItemName(stock.name)+"｜"+displayRetailItemCategory(stock.category);
     const note=document.createElement("p");note.className="small";
     note.textContent="店鋪庫存 "+stock.quantity+" 件｜每件進貨原價 "+money(stock.unitPrice);
     const qtyLabel=document.createElement("label");
@@ -2791,7 +3095,7 @@ function renderWholesale(){
   for(const entry of state.wholesaleHistory??[]){
     const line=document.createElement("li");
     line.textContent=new Date(entry.createdAt).toLocaleString("zh-TW")+"｜"+
-      (entry.action==="buy"?"進貨":"退貨")+"｜"+displayRetailFoodName(entry.name)+" ×"+entry.quantity+
+      (entry.action==="buy"?"進貨":"退貨")+"｜"+displayRetailItemName(entry.name)+" ×"+entry.quantity+
       "｜"+(entry.amount<0?"普通存款扣除 ":"普通存款增加 ")+
       money(Math.abs(entry.amount));
     list.append(line);
@@ -3144,6 +3448,9 @@ function render() {
   renderVending();
   renderFishing();
   renderCrafting();
+  renderArcadeDice();
+  renderArcadeHighLow();
+  renderArcadeDonuts();
   renderEquipment();
   renderGiftShop();
   renderMailbox();

@@ -140,7 +140,7 @@ test("原 CGI 建築代碼只連到 Web 真正已實作的設施入口",()=>{
   const expected={
     "銀行":"bank-panel","病院":"hospital-panel","職安":"jobs-panel",
     "教室":"classroom-panel","食堂":"dining-panel","食堂２":"dining-panel",
-    "デパ":"retail-panel","デパ2":"retail-panel","自販機":"vending-panel","装備屋":"equipment-panel","ギフト屋":"gift-panel","リサイ":"recycle-panel","クーポン":"event-panel","釣り":"fishing-panel","販売1":"fishing-panel","合成":"crafting-panel","問屋":"wholesale-panel","建築":"housing-panel"
+    "デパ":"retail-panel","デパ2":"retail-panel","自販機":"vending-panel","装備屋":"equipment-panel","ギフト屋":"gift-panel","リサイ":"recycle-panel","クーポン":"event-panel","釣り":"fishing-panel","販売1":"fishing-panel","合成":"crafting-panel","ゲーセン":"arcade-dice-panel","問屋":"wholesale-panel","建築":"housing-panel"
   };
   assert.deepEqual(FACILITY_PANELS,expected);
   for(const [key,panelId] of Object.entries(expected)){
@@ -150,7 +150,7 @@ test("原 CGI 建築代碼只連到 Web 真正已實作的設施入口",()=>{
     assert.match(html,new RegExp('id="'+panelId+'"'));
   }
   assert.deepEqual(townCellAction(describeTile("駅")),{kind:"station"});
-  for(const key of ["ゲーセン","株"]){
+  for(const key of ["株"]){
     const cell=describeTile(key);
     assert.deepEqual(townCellAction(cell),{kind:"unavailable"});
   }
@@ -363,9 +363,10 @@ const paneMap={
   bank:["bank-panel"],
   hospital:["hospital-panel"],
   events:["event-panel"],
-  mail:["mail-panel"]
+  mail:["mail-panel"],
+  games:["arcade-dice-panel"]
 };
-test("高密度主畫面：地圖摘要與九組可存取設施分頁，保留全部現有操作元件",()=>{
+test("高密度主畫面：地圖摘要與十組可存取設施分頁，保留全部現有操作元件",()=>{
   const main=html.slice(html.indexOf('id="game"'));
   assert.ok(main.indexOf('id="town-panel"')<main.indexOf('id="player-summary"'));
   assert.ok(main.indexOf('id="player-summary"')<main.indexOf('id="facility-tabs"'));
@@ -743,6 +744,59 @@ test("第54階段：原版合成屋只有真正材料才能製作，表單及資
   assert.ok(script.includes("pendingCraftingAction"));
   assert.ok(script.includes("materials"));
   assert.ok(!script.includes("innerHTML=recipe.name"));
+});
+
+test("第55階段：原版遊樂中心地圖入口與安全下注面板已接真實後端",()=>{
+  assert.deepEqual(townCellAction(describeTile("ゲーセン")),
+    {kind:"facility",panelId:"arcade-dice-panel"});
+  for(const id of ["facility-tab-games","facility-pane-games","arcade-dice-panel",
+    "arcade-dice-status","arcade-dice-guess","arcade-dice-stake",
+    "arcade-dice-quote","arcade-dice-submit","arcade-dice-result","arcade-dice-history"])
+    assert.ok(html.includes('id="'+id+'"'));
+  assert.ok(html.includes("gamerand.cgi／saikoro.cgi"));
+  assert.ok(script.includes("function renderArcadeDice(){"));
+  assert.ok(script.includes("renderArcadeDice();"));
+  assert.ok(script.includes('await api("arcade/dice/play"'));
+  assert.ok(script.includes("pendingArcadeDice"));
+  assert.ok(script.includes("arcadeDiceSubmitting"));
+  assert.ok(script.includes("document.createElement"));
+  assert.ok(!script.includes("innerHTML=round.guess"));
+});
+
+test("第56階段：遊樂中心新增HighLow真實下注、牌桌與本人紀錄，安全DOM呈現",()=>{
+  for(const id of ["arcade-highlow-panel","arcade-highlow-status",
+    "arcade-highlow-table","arcade-highlow-guess","arcade-highlow-quote",
+    "arcade-highlow-submit","arcade-highlow-result","arcade-highlow-history"])
+    assert.ok(html.includes('id="'+id+'"'));
+  assert.ok(html.includes("donut.cgi／town_ini.cgi"));
+  assert.ok(html.includes("同點數"));
+  assert.ok(script.includes("function renderArcadeHighLow(){"));
+  assert.ok(script.includes("renderArcadeHighLow();"));
+  assert.ok(script.includes('await api("arcade/highlow/play"'));
+  assert.ok(script.includes("pendingArcadeHighLow"));
+  assert.ok(script.includes("arcadeHighLowSubmitting"));
+  assert.ok(script.includes("document.createElement"));
+  assert.ok(!script.includes("innerHTML=round.drawnCard"));
+});
+
+test("第57階段：三種donus模式、原版卡牌資料與安全DOM表單皆接真實API",()=>{
+  for(const id of ["arcade-donuts-panel","arcade-donuts-status",
+    "arcade-donuts-mode","arcade-donuts-table","arcade-donuts-quote",
+    "arcade-donuts-submit","arcade-donuts-result","arcade-donuts-history"])
+    assert.ok(html.includes('id="'+id+'"'));
+  assert.ok(html.includes("gamerand.cgi／donut.cgi"));
+  for(const mode of ["donus","donus2","donus3"])
+    assert.ok(html.includes('value="'+mode+'"'));
+  assert.ok(html.includes("第一、二種"));
+  assert.ok(html.includes("第三種"));
+  assert.ok(script.includes("function renderArcadeDonuts(){"));
+  assert.ok(script.includes("renderArcadeDonuts();"));
+  assert.ok(script.includes('await api("arcade/donuts/draw"'));
+  assert.ok(script.includes("pendingArcadeDonut"));
+  assert.ok(script.includes("arcadeDonutSubmitting"));
+  assert.ok(script.includes("history.replaceChildren()"));
+  assert.ok(script.includes("document.createElement"));
+  assert.ok(!script.includes("innerHTML=round.drawnCard"));
 });
 
 test("第53階段：原版釣場與餌料商店實際有入庫交易 UI 且拒絕虛構漁獲",()=>{

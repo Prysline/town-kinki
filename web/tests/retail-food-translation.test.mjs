@@ -70,15 +70,15 @@ test("未知品項回退原名；食品類別只在顯示時翻譯",()=>{
 });
 
 test("UI 可用繁體中文搜尋食品，商品與持有物使用中文顯示，但交易保留原始 SKU 與名稱",()=>{
-  assert.match(app,/import \{ displayRetailFoodName,displayRetailFoodCategory \} from "\.\/retail-food-translations\.js"/);
-  assert.match(app,/document\.createTextNode\(displayRetailFoodName\(item\.name\)\)/);
-  assert.match(app,/name\.textContent=displayRetailFoodName\(item\.name\)/);
-  assert.match(app,/displayRetailFoodName\(item\.name\)\.toLocaleLowerCase\("zh-TW"\)\.includes\(search\)/);
-  assert.match(app,/displayRetailFoodCategory\(item\.category\)\.toLocaleLowerCase\("zh-TW"\)/);
-  assert.match(app,/displayRetailFoodName\(purchase\.name\)/);
-  assert.match(app,/displayRetailFoodName\(result\.name\)/);
-  assert.match(app,/displayRetailFoodName\(stock\.name\)/);
-  assert.match(app,/displayRetailFoodName\(entry\.name\)/);
+  assert.match(app,/import \{ displayRetailItemName,displayRetailItemCategory \} from "\.\/retail-food-translations\.js"/);
+  assert.match(app,/document\.createTextNode\(displayProductName\(item\.name\)\)/);
+  assert.match(app,/name\.textContent=displayRetailItemName\(item\.name\)/);
+  assert.match(app,/displayRetailItemName\(item\.name\)\.toLocaleLowerCase\("zh-TW"\)\.includes\(search\)/);
+  assert.match(app,/displayRetailItemCategory\(item\.category\)\.toLocaleLowerCase\("zh-TW"\)/);
+  assert.match(app,/displayRetailItemName\(purchase\.name\)/);
+  assert.match(app,/displayRetailItemName\(result\.name\)/);
+  assert.match(app,/displayRetailItemName\(stock\.name\)/);
+  assert.match(app,/displayRetailItemName\(entry\.name\)/);
   assert.match(app,/submitLegacyUse\(item\.sourceLine,item\.name\)/);
   assert.match(app,/sku:item\.sku/);
   assert.match(app,/name:item\.name/);
