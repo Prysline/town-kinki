@@ -16,19 +16,19 @@ function setup(){
 test("第50階段單機試玩街區只使用原版已知建築，明確標記 Web 來源而非假原版配置",()=>{
   const db=setup();
   try{
-    assert.equal(SOLO_STARTER_LAYOUT.length,17);
+    assert.equal(SOLO_STARTER_LAYOUT.length,19);
     const known=new Set(MAP_SYMBOLS.map(x=>x.key));
     assert.ok(SOLO_STARTER_LAYOUT.every(x=>known.has(x.symbol)));
     assert.equal(readTownMap(db,0).configured,false);
     const initialized=createSoloStarterTown(db,0);
-    assert.deepEqual(initialized,{townId:0,placed:17,source:"web-solo-starter"});
+    assert.deepEqual(initialized,{townId:0,placed:19,source:"web-solo-starter"});
     const town=readTownMap(db,0);
     assert.equal(town.configured,true);
     assert.equal(town.source,"web-solo-starter");
     assert.equal(town.tiles.length,192);
     for(const {row,column,symbol} of SOLO_STARTER_LAYOUT)
       assert.equal(town.tiles[row*16+column],symbol);
-    assert.equal(town.tiles.filter(Boolean).length,17);
+    assert.equal(town.tiles.filter(Boolean).length,19);
     assert.equal(town.tiles[4],"");
     assert.equal(town.fields,null,"不得捏造原版 259/266 欄街區資料");
     assert.equal(readTownMap(db,1).configured,false,
@@ -69,7 +69,7 @@ test("初始化資料庫寫入失敗時必須完整回滾，修復後可以再�
     assert.equal(readTownMap(db,0).configured,false);
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM town_maps").get().n,0);
     db.exec("DROP TRIGGER stop_starter");
-    assert.equal(createSoloStarterTown(db,0).placed,17);
+    assert.equal(createSoloStarterTown(db,0).placed,19);
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM town_maps").get().n,1);
   }finally{db.close();}
 });
