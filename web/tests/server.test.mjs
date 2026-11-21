@@ -5037,3 +5037,150 @@ test("第57階段多人HTTP：三模式共桌但彼此獨立，下注與本人�
     },a.cookie)).status,400);
   }finally{await srv.stop();}
 });
+
+
+test("第58階段單機HTTP：原版六位數即時樂透選號、下注結算、三分鐘冷卻、快轉與重啟",async()=>{
+  let srv=await start("solo");
+  const dir=srv.directory;
+  try{
+    assert.equal((await api(srv.url,"arcade/loto/play",{
+      stake:500,chosenDigits:[0,0,0,0,0,0],requestId:"phase58_no_character"
+    })).status,400);
+    const created=await api(srv.url,"character",{
+      name:"第58階段樂透居民",gender:"other",stats:defaultStats()
+    });
+    assert.equal(created.status,200);
+    assert.equal(created.result.instantLoto.available,false);
+    assert.deepEqual(created.result.instantLoto.rates,[500,1000,5000,10000,50000,100000]);
+    assert.deepEqual(created.result.instantLoto.multipliers,[0,2,5,20,100,500,1000]);
+    assert.equal((await api(srv.url,"arcade/loto/play",{
+      stake:500,chosenDigits:[0,0,0,0,0,0],requestId:"phase58_missing_arcade"
+    })).status,400);
+    const starter=await api(srv.url,"solo/map/starter",{});
+    assert.equal(starter.status,200);
+    assert.equal(starter.result.mapStarterResult.placed,21);
+    assert.equal(starter.result.instantLoto.available,true);
+    assert.equal(starter.result.map.cells[3*16+8].key,"ゲーセン");
+    const balance=starter.result.character.money;
+    assert.equal((await api(srv.url,"arcade/loto/play",{
+      stake:500,chosenDigits:[0,1,2,3,4],requestId:"phase58_bad_selection"
+    })).status,400);
+    assert.equal((await api(srv.url,"arcade/loto/play",{
+      stake:2500,chosenDigits:[0,1,2,3,4,5],requestId:"phase58_bad_stake"
+    })).status,400);
+    const firstPayload={stake:500,chosenDigits:[0,1,2,3,4,5],
+      requestId:"phase58_http_first"};
+    const first=await api(srv.url,"arcade/loto/play",firstPayload);
+    assert.equal(first.status,200);
+    const r=first.result.instantLotoResult;
+    assert.equal(r.stake,500);
+    assert.deepEqual(r.chosenDigits,[0,1,2,3,4,5]);
+    assert.equal(r.drawnDigits.length,6);
+    for(const digit of r.drawnDigits)assert.ok(Number.isInteger(digit)&&digit>=0&&digit<=9);
+    assert.equal(r.matches,r.drawnDigits.filter((x,i)=>x===r.chosenDigits[i]).length);
+    assert.equal(r.multiplier,[0,2,5,20,100,500,1000][r.matches]);
+    assert.equal(r.gross,500*r.multiplier);
+    assert.equal(r.delta,r.gross-500);
+    assert.equal(first.result.character.money,balance+r.delta);
+    assert.equal(first.result.instantLoto.history.length,1);
+    assert.equal(first.result.instantLoto.totalPlays,1);
+    assert.equal(first.result.instantLoto.readyAt,r.playedAt+180000);
+    const replay=await api(srv.url,"arcade/loto/play",firstPayload);
+    assert.equal(replay.status,200);
+    assert.equal(replay.result.instantLotoResult.replayed,true);
+    assert.equal(replay.result.character.money,first.result.character.money);
+    assert.equal((await api(srv.url,"arcade/loto/play",{
+      ...firstPayload,stake:1000
+    })).status,400);
+    assert.equal((await api(srv.url,"arcade/loto/play",{
+      ...firstPayload,chosenDigits:[0,1,2,3,4,4]
+    })).status,400);
+    assert.equal((await api(srv.url,"arcade/loto/play",{
+      ...firstPayload,requestId:"phase58_http_too_early"
+    })).status,400);
+    assert.equal((await api(srv.url,"solo/time/advance",{preset:"5m"})).status,200);
+    const secondPayload={stake:1000,chosenDigits:[9,9,9,9,9,9],
+      requestId:"phase58_http_second"};
+    const second=await api(srv.url,"arcade/loto/play",secondPayload);
+    assert.equal(second.status,200);
+    assert.equal(second.result.instantLotoResult.stake,1000);
+    const saved=second.result.character.money;
+    assert.equal(saved,balance+r.delta+second.result.instantLotoResult.delta);
+    assert.equal(second.result.instantLoto.history.length,2);
+    assert.equal(second.result.instantLoto.totalPlays,2);
+    await srv.stop({preserveData:true});
+    srv=await start("solo",undefined,dir);
+    const restored=await api(srv.url,"state");
+    assert.equal(restored.status,200);
+    assert.equal(restored.result.character.money,saved);
+    assert.equal(restored.result.instantLoto.history.length,2);
+    assert.equal(restored.result.instantLoto.totalPlays,2);
+    assert.deepEqual(restored.result.instantLoto.history[0].chosenDigits,[9,9,9,9,9,9]);
+    const again=await api(srv.url,"arcade/loto/play",firstPayload);
+    assert.equal(again.status,200);
+    assert.equal(again.result.instantLotoResult.replayed,true);
+    assert.equal(again.result.character.money,saved);
+  }finally{await srv.stop();}
+});
+
+test("第58階段多人HTTP：只限制連續最後玩家，其他玩家插入後可立即再玩，個人歷史隔離",async()=>{
+  const seed=dir=>{
+    const db=new DatabaseSync(join(dir,"multi.sqlite"));
+    try{
+      db.exec([
+        "CREATE TABLE town_maps(town_id INTEGER PRIMARY KEY,",
+        "original_name TEXT NOT NULL DEFAULT '',",
+        "original_record TEXT NOT NULL DEFAULT '',",
+        "source TEXT NOT NULL,tiles_json TEXT NOT NULL,",
+        "updated_at INTEGER NOT NULL);"
+      ].join(" "));
+      const tiles=Array(192).fill("");tiles[0]="ゲーセン";
+      db.prepare("INSERT INTO town_maps(town_id,original_name,source,tiles_json,updated_at) VALUES(?,?,?,?,?)")
+        .run(0,"測試街區","legacy-import",JSON.stringify(tiles),Date.now());
+    }finally{db.close();}
+  };
+  const srv=await start("multi",seed);
+  try{
+    const a=await api(srv.url,"register",{
+      username:"phase58LotoUserA",password:"phase58-strong-password-a"
+    });
+    const b=await api(srv.url,"register",{
+      username:"phase58LotoUserB",password:"phase58-strong-password-b"
+    });
+    assert.equal(a.status,200);assert.equal(b.status,200);
+    assert.equal((await api(srv.url,"character",{
+      name:"即時樂透甲",gender:"other",stats:defaultStats()
+    },a.cookie)).status,200);
+    assert.equal((await api(srv.url,"character",{
+      name:"即時樂透乙",gender:"other",stats:defaultStats()
+    },b.cookie)).status,200);
+    const request={stake:500,chosenDigits:[0,0,0,0,0,0],
+      requestId:"phase58_multi_shared_id"};
+    assert.equal((await api(srv.url,"arcade/loto/play",request)).status,401);
+    const first=await api(srv.url,"arcade/loto/play",request,a.cookie);
+    assert.equal(first.status,200);
+    assert.equal(first.result.instantLoto.totalPlays,1);
+    assert.equal((await api(srv.url,"arcade/loto/play",{
+      ...request,requestId:"phase58_multi_a_block"
+    },a.cookie)).status,400);
+    const second=await api(srv.url,"arcade/loto/play",request,b.cookie);
+    assert.equal(second.status,200);
+    assert.equal(second.result.instantLotoResult.replayed,false);
+    assert.equal(second.result.instantLoto.totalPlays,2);
+    const third=await api(srv.url,"arcade/loto/play",{
+      ...request,requestId:"phase58_multi_a_after_b"
+    },a.cookie);
+    assert.equal(third.status,200);
+    assert.equal(third.result.instantLoto.totalPlays,3);
+    const stateA=(await api(srv.url,"state",undefined,a.cookie)).result;
+    const stateB=(await api(srv.url,"state",undefined,b.cookie)).result;
+    assert.equal(stateA.instantLoto.history.length,2);
+    assert.equal(stateB.instantLoto.history.length,1);
+    assert.equal(stateA.instantLoto.totalPlays,3);
+    assert.equal(stateB.instantLoto.totalPlays,3);
+    assert.equal(stateA.instantLoto.readyAt,third.result.instantLotoResult.playedAt+180000);
+    assert.equal(stateB.instantLoto.readyAt,null);
+    assert.equal((await api(srv.url,"arcade/loto/play",request,a.cookie))
+      .result.instantLotoResult.replayed,true);
+  }finally{await srv.stop();}
+});
