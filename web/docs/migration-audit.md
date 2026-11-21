@@ -44,11 +44,11 @@
 | ID／功能 | 原版來源 | Web 現況／來源 | 判定 | 差異／相依 | 優先度 | 驗收／切片 |
 |---|---|---|---|---|---|---|
 | WK-01 能量上限及自然恢復 | town_ini.cgi；game.cgi；basic.cgi | src/engine.mjs；src/server.mjs | 部分完成 | Web 有上限與恢復；需核對所有轉職／體格事件的加扣條件 | P1 | 上下限、十秒刻度、快轉／多角色隔離（31） |
-| WK-02 工作薪資、經驗、冷卻 | dat_dir/job.cgi；basic.cgi::do_work L2838–2961 | src/engine.mjs::performWork；src/server.mjs::/api/work、/api/job/payment；src/banking.mjs；public/app.js | **核心已修（PR #24／#28／#29），待玩家實機驗收** | 出勤依職業發薪週期累積；薪資及升級獎金可依已保存偏好入現金或普通存款，銀行記帳；UI 顯示本週期出勤與精通進度，工作快捷只開分頁。仍有 WK-06 任職後身高／性別重驗差異與真實玩家存檔待核實 | P1（驗收） | 週期發薪 1／5／10 次、角色資料／工作回應、收款順序、銀行帳簿、真實玩家環境（後續） |
+| WK-02 工作薪資、經驗、冷卻 | dat_dir/job.cgi；basic.cgi::do_work L2838–2961 | src/engine.mjs::performWork；src/server.mjs::/api/work、/api/job/payment；src/banking.mjs；public/app.js | **核心已修（PR #24／#28／#29），待玩家實機驗收** | 出勤依職業發薪週期累積；薪資及升級獎金可依已保存偏好入現金或普通存款，銀行記帳；UI 顯示本週期出勤與精通進度，工作快捷只開分頁。WK-06 入職限定性別／身高誤套工作已於第48階段修正；真實玩家存檔與瀏覽器仍待核實 | P1（驗收） | 週期發薪 1／5／10 次、角色資料／工作回應、收款順序、銀行帳簿、真實玩家環境（後續） |
 | WK-03 飢餓／疾病修正工作 | top.pl L258-L273；basic.cgi | src/dining.mjs L82-L103；src/health.mjs | 部分完成 | 未用餐玩家以 provisional 5 經驗預設；非原版完整懲罰 | P1 | 舊玩家無紀錄、重症、狀態六級實測（31） |
 | WK-04 職業需求數值表及現有能力對照 | basic.cgi::job_change L2751–L2781；job.cgi::top L18–L29；dat_dir/job.cgi | src/engine.mjs::parseLegacyJobs；src/server.mjs::snapshot jobs；public/app.js::jobRequirementsPanel／renderJobs | **核心修復（PR #22），顯示精簡（PR #29），待瀏覽器驗收** | 伺服器仍提供完整 17 項原始能力與資格判定；UI 依使用者要求**只顯示需求 > 0 的能力門檻**，其他 BMI／身高／性別／前置精通有條件才顯示；不再列出一堆 0 或強制顯示當前能力值 | P1（驗收） | 150 筆職業條件、375／768px／桌面真實操作、轉職拒絕與原始數值對照 |
 | WK-05 薪資與獎金領取方式 | basic.cgi::do_work L2920–2953、L2974–2998；town_maker.cgi L142–146 | src/engine.mjs::performWork；src/server.mjs::/api/job/payment、/api/work；src/banking.mjs::recordBankEntry；public/app.js | **核心缺漏已修復（PR #24），舊偏好轉檔未完成** | 可選現金／普通存款；實際工作薪資與升級獎金按偏好分流，銀行帳簿分筆、SQLite 交易回滾；原版舊 shiharai 未保留時預設 cash，不虛構原值 | P1（舊檔／驗收） | 已有 engine、HTTP/SQLite、UI 測試；待真實原版歷史偏好轉檔、極端金額及瀏覽器驗收 |
-| WK-06 任職後工作再檢查條件 | basic.cgi::job_change L2695–2719；do_work L2867–2879 | src/engine.mjs::eligibility／performWork | 已確認行為差異 | 原版選職檢查性別／身高，但工作段落只查能力、BMI、能量；Web 實際工作還重新檢查性別／身高 | P1（行為確認） | 轉職後身高變化測試；安全差異經審核才能變更，不能隨意拿掉 Web 檢查 |
+| WK-06 任職後工作再檢查條件 | basic.cgi::job_change L2695–2719；do_work L2867–2879 | src/engine.mjs::eligibility／performWork；tests/engine.test.mjs／server.test.mjs | **第48階段已修工作重驗差異，待真實玩家與瀏覽器驗收** | 原版選職時檢查性別／身高，工作時仍查能力／BMI／能量／冷卻而不重驗性別／身高；Web 現已分離兩階段限制，保留轉職門檻與出勤其餘條件 | P1（驗收） | 真實原版職業警官在 HTTP 轉職後身高下降，重選拒絕但正式工作成功；引擎涵蓋性別變更、BMI、能量及冷卻。見 [第48階段驗收](phase48-core-gameplay-restart.md) |
 | WK-07 工作工廠職業投稿／清單 | unit.pl L69；job.cgi::top L13–74；job.cgi::make L80–87；log_dir/joblog.cgi | Web 只載入 dat_dir/job.cgi 正式職業 | **確定缺漏** | 原版允許提交候選職業到 joblog，並顯示投稿條件；不是直接加入正式職業表；此 fork joblog 0 bytes | P2 | 投稿欄位、權限、審核邊界、顯示與真實投稿樣本（後續） |
 
 ### 03 學校／健身房／教室
