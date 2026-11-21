@@ -1909,6 +1909,96 @@ function renderShopTable(target,goods,{shopName,onPurchase,emptyText}){
   checkout.append(controls,quote,button);target.append(checkout);
   update();
 }
+let pendingMultiCard=null;
+let multiCardBusy=false;
+async function submitMultiCard(course,stake){
+  if(multiCardBusy)return;
+  const chosen=state?.multiCard?.courses?.find(item=>item.course===course);
+  if(!chosen)return;
+  if(!window.confirm("確認挑戰多卡「"+money(chosen.unit)+"課程」？"+
+      "當前共用倍率 "+state.multiCard.cardCount+
+      "；成功淨得、失敗淨扣 "+money(stake)+
+      "。真實成功機率 "+chosen.actualPercent+"%。"))return;
+  if(!pendingMultiCard||pendingMultiCard.course!==course)
+    pendingMultiCard={course,requestId:crypto.randomUUID()};
+  multiCardBusy=true;
+  el("arcade-cardw-submit").disabled=true;
+  try{
+    state=await api("arcade/cardw/draw",{
+      course,requestId:pendingMultiCard.requestId
+    });
+    const r=state.multiCardResult;
+    pendingMultiCard=null;
+    render();
+    notify(r.replayed?"原本多卡請求已經結算，沒有重複扣款或獎勵。":
+      "多卡抽出 "+r.roll+"／100，"+(r.won?"成功得款 ":"失敗扣款 ")+
+      money(r.stake)+"；共用倍率 "+r.cardsBefore+" → "+r.cardsAfter+"。");
+  }catch(error){notify(error.message,true);}
+  finally{multiCardBusy=false;if(state?.character)renderMultiCard();}
+}
+function renderMultiCard(){
+  if(!state?.character)return;
+  const info=state.multiCard??{},courses=info.courses??[];
+  const selected=Number(el("arcade-cardw-course").value);
+  const course=courses.find(c=>c.course===selected)??courses[0];
+  const select=el("arcade-cardw-course");
+  const submit=el("arcade-cardw-submit");
+  select.disabled=!course;
+  select.onchange=renderMultiCard;
+  const history=el("arcade-cardw-history");
+  if(!course){
+    text("arcade-cardw-status","多卡來源尚未載入。");
+    text("arcade-cardw-quote","");
+    text("arcade-cardw-result","");
+    submit.disabled=true;history.replaceChildren();return;
+  }
+  const available=info.available===true;
+  const seconds=Math.ceil(Math.max(0,(info.readyAt??0)-browserGameNow())/1000);
+  const blocked=info.multiplayerAdjacentRepeatBlocked===true;
+  const enough=course.safe&&state.character.money>=course.stake;
+  text("arcade-cardw-status",!available?
+    "目前城鎮沒有「ゲーセン」遊樂中心。":
+    blocked?"原版禁止同一位玩家連續抽卡；請等待其他玩家抽卡。":
+    seconds>0?"單機多卡尚需等待 "+seconds+" 秒（可使用單機快轉）。":
+    "可抽卡。所有玩家共用目前倍率 "+info.cardCount+"。");
+  text("arcade-cardw-quote","目前共用倍率 "+info.cardCount+
+    "｜基本課程 "+money(course.unit)+"｜本局可能得款／扣款 "+
+    money(course.stake)+
+    "｜原版畫面機率 "+course.displayPercent+
+    "%；實際執行機率 "+course.actualPercent+"%"+
+    "｜目前現金 "+money(state.character.money)+
+    (!enough?"｜現金不足或賭注超出安全範圍":""));
+  submit.disabled=multiCardBusy||!available||blocked||seconds>0||!enough;
+  submit.onclick=()=>{
+    if(!multiCardBusy&&available&&!blocked&&seconds===0&&enough)
+      submitMultiCard(course.course,course.stake);
+  };
+  const rounds=info.history??[];
+  const latest=rounds[0];
+  text("arcade-cardw-result",latest?
+    "最近一局：第"+(latest.course+1)+"課程、抽到"+latest.roll+
+    "；"+(latest.won?"成功獲得 ":"失敗扣除 ")+money(latest.stake)+
+    "，倍率 "+latest.cardsBefore+" → "+latest.cardsAfter:
+    "尚無本人多卡抽牌紀錄。");
+  history.replaceChildren();
+  if(!rounds.length){
+    const p=document.createElement("p");
+    p.className="small";p.textContent="尚無多卡紀錄。";history.append(p);
+    return;
+  }
+  const list=document.createElement("ol");
+  list.className="health-event-list";
+  for(const r of rounds){
+    const li=document.createElement("li");
+    li.textContent=new Date(r.playedAt).toLocaleString("zh-TW")+
+      "｜課程"+(r.course+1)+" 抽到"+r.roll+
+      "｜"+(r.won?"得款 +":"扣款 −")+money(r.stake)+
+      "｜倍率 "+r.cardsBefore+" → "+r.cardsAfter;
+    list.append(li);
+  }
+  history.append(list);
+}
+
 let pendingLoto6Purchase=null;
 let loto6Busy=false;
 async function buyLoto6(random,numbers){
@@ -3703,6 +3793,7 @@ function render() {
   renderArcadeDonuts();
   renderInstantLoto();
   renderLoto6();
+  renderMultiCard();
   renderEquipment();
   renderGiftShop();
   renderMailbox();
