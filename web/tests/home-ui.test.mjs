@@ -589,6 +589,8 @@ test("表單與餘額驗證錯誤就地顯示；共用錯誤處理亦有中央�
   assert.match(script,/showResultDialog\(message,title\|\|\(error\?"操作未完成":"操作結果"\),error\)/);
   assert.match(css,/\.operation-feedback\.error/);
   assert.match(script,/source:el\("map-selection"\)/);
+  assert.match(script,/source:path==="map\/tile"\?el\("map-selection"\):undefined/);
+  assert.match(script,/renderLegacyItems\(\);\s+notify\(error\.message,true\)/);
 });
 test("電車、工作維持不同結果標題；非交易訊息不強制跳出對話框",()=>{
   assert.match(script,/title:"電車移動結果"/);
