@@ -1087,6 +1087,150 @@ function renderHouses() {
   updateHouseQuote();
 }
 
+let roadTravelBusy=false;
+let pendingRoadStart=null;
+async function startRoadJourney(destination,vehicleValue){
+  if(roadTravelBusy||state?.roadTravel?.pending)return;
+  const sourceLine=vehicleValue==="walk"?null:Number(vehicleValue);
+  const opt=state.roadTravel.choices.find(x=>x.sourceLine===sourceLine);
+  const seconds=sourceLine===null?state.roadTravel.walkingSeconds:opt?.seconds;
+  if(!Number.isSafeInteger(seconds))return;
+  const destinationName=state.towns.find(x=>x.id===destination)?.name??"目的地";
+  const vehicleName=sourceLine===null?"徒步":displayRetailItemName(opt.name);
+  if(!window.confirm("確定使用「"+vehicleName+"」前往"+destinationName+
+    "？原版路程 "+seconds+" 秒，旅行時間未滿時不可抵達；"+
+    (sourceLine===null?"步行可能增加身體能力。":
+      "有 1/10 機率發生事故，事故會扣所選載具1點耐久。")+
+    "原版的迷路分支尚未移植，Web仍會前往所選目的地。"))return;
+  const key=String(destination)+":"+String(sourceLine);
+  if(!pendingRoadStart||pendingRoadStart.key!==key)
+    pendingRoadStart={key,requestId:crypto.randomUUID()};
+  roadTravelBusy=true;el("road-travel-start").disabled=true;
+  try{
+    state=await api("road/start",{
+      toTownId:destination,vehicleSourceLine:sourceLine,
+      requestId:pendingRoadStart.requestId
+    });
+    const trip=state.roadStartResult;
+    pendingRoadStart=null;render();
+    notify(trip.replayed?"此公路旅程先前已經出發，未重複扣載具耐久。":
+      "已從目前城鎮出發，使用"+vehicleName+
+      "，原版路程 "+trip.seconds+" 秒。"+
+      "抵達時間到達後，按「完成抵達」才會更新所在地。");
+  }catch(error){notify(error.message,true);}
+  finally{roadTravelBusy=false;if(state?.character)updateRoadCountdown();}
+}
+async function finishRoadJourney(tripId){
+  if(roadTravelBusy)return;
+  roadTravelBusy=true;el("road-travel-arrive").disabled=true;
+  try{
+    state=await api("road/arrive",{tripId});
+    const trip=state.roadArrivalResult;
+    render();
+    const place=state.towns.find(x=>x.id===trip.toTownId)?.name??"目的地";
+    const exercise=Object.entries(trip.exercise??{})
+      .map(([key,v])=>(labels[key]??key)+" +"+v);
+    notify((trip.replayed?"此旅程先前已完成，未重複處理事故。":"已抵達")+place+
+      "；使用 "+displayRetailItemName(trip.vehicleName)+
+      "。"+(trip.accident?"原版交通事故：載具耐久−1，剩餘 "+
+        trip.durabilityAfter+"。":"沒有發生需要扣耐久的事故。")+
+      (exercise.length?"出發時獲得鍛鍊："+exercise.join("、")+"。":""));
+  }catch(error){notify(error.message,true);}
+  finally{roadTravelBusy=false;if(state?.character)updateRoadCountdown();}
+}
+function renderRoadTravel(){
+  if(!state?.character)return;
+  const info=state.roadTravel??{},pending=info.pending??null;
+  const destination=el("road-travel-to"),vehicle=el("road-travel-vehicle");
+  const prevDestination=destination.value,prevVehicle=vehicle.value;
+  destination.replaceChildren();
+  for(const town of state.towns){
+    const option=document.createElement("option");
+    option.value=String(town.id);option.textContent=town.name;
+    option.disabled=town.id===state.character.townId;
+    destination.append(option);
+  }
+  destination.value=state.towns.some(t=>String(t.id)===prevDestination&&
+    t.id!==state.character.townId)?prevDestination:
+    String(state.towns.find(t=>t.id!==state.character.townId)?.id??"");
+  vehicle.replaceChildren();
+  const foot=document.createElement("option");
+  foot.value="walk";foot.textContent="徒步（原版10秒，可鍛鍊）";vehicle.append(foot);
+  for(const item of info.choices??[]){
+    const option=document.createElement("option");
+    option.value=String(item.sourceLine);
+    option.textContent=displayRetailItemName(item.name)+"（"+
+      item.seconds+"秒、耐久 "+item.remaining+"）";
+    vehicle.append(option);
+  }
+  vehicle.value=([...vehicle.options].some(x=>x.value===prevVehicle))?prevVehicle:"walk";
+  destination.disabled=Boolean(pending)||roadTravelBusy;
+  vehicle.disabled=Boolean(pending)||roadTravelBusy;
+  destination.onchange=updateRoadCountdown;
+  vehicle.onchange=updateRoadCountdown;
+  const start=el("road-travel-start"),arrive=el("road-travel-arrive");
+  start.onclick=()=>{
+    const to=Number(destination.value),vehicleValue=vehicle.value;
+    if(Number.isInteger(to)&&to!==state.character.townId)
+      startRoadJourney(to,vehicleValue);
+  };
+  arrive.onclick=()=>{if(info.pending)finishRoadJourney(info.pending.id);};
+  const history=el("road-travel-history");
+  history.replaceChildren();
+  const rounds=info.history??[];
+  if(!rounds.length){
+    const p=document.createElement("p");p.className="small";
+    p.textContent="尚無已完成的公路旅程。";history.append(p);
+  }else{
+    const list=document.createElement("ol");list.className="health-event-list";
+    for(const trip of rounds){
+      const li=document.createElement("li");
+      li.textContent=new Date(trip.completedAt).toLocaleString("zh-TW")+
+        "｜"+(state.towns.find(x=>x.id===trip.fromTownId)?.name??trip.fromTownId)+
+        " → "+(state.towns.find(x=>x.id===trip.toTownId)?.name??trip.toTownId)+
+        "｜"+displayRetailItemName(trip.vehicleName)+" "+trip.seconds+"秒"+
+        (trip.accident?"｜事故耐久−1":"");
+      list.append(li);
+    }
+    history.append(list);
+  }
+  updateRoadCountdown();
+}
+function updateRoadCountdown(){
+  if(!state?.character)return;
+  const info=state.roadTravel??{},pending=info.pending??null;
+  const dest=Number(el("road-travel-to").value),
+    choice=el("road-travel-vehicle").value;
+  const found=(info.choices??[]).find(x=>String(x.sourceLine)===choice);
+  const seconds=choice==="walk"?info.walkingSeconds:found?.seconds;
+  const valid=Number.isInteger(dest)&&dest>=0&&dest<4&&
+    dest!==state.character.townId&&Number.isSafeInteger(seconds);
+  const left=pending?Math.max(0,pending.arrivalAt-browserGameNow()):0;
+  text("road-travel-status",pending?
+    "公路旅程進行中：從"+
+      (state.towns.find(t=>t.id===pending.fromTownId)?.name??"出發地")+
+      "前往"+(state.towns.find(t=>t.id===pending.toTownId)?.name??"目的地")+
+      "，搭乘 "+displayRetailItemName(pending.vehicleName)+
+      (left>0?"；距離抵達還有 "+Math.ceil(left/1000)+" 秒。":
+        "；現在可完成抵達。"):
+    "目前尚未出發。可徒步或選擇本人從原版寶箱取得的載具；出發不收車資。");
+  text("road-travel-quote",pending?
+    "已儲存行程 ID "+pending.id+"｜原版路程 "+pending.seconds+
+    " 秒｜在完成抵達之前，禁止再搭電車或開啟另一段公路旅程。":
+    "預計路程："+(valid?seconds+" 秒":"請選擇有效目的地與載具")+
+    "｜可用寶箱載具 "+(info.choices??[]).length+
+    " 件｜有載具時事故機率 1/"+(info.accidentDenominator??10)+
+    "，事故扣1耐久；徒步不扣載具。");
+  el("road-travel-start").disabled=roadTravelBusy||Boolean(pending)||!valid;
+  el("road-travel-arrive").disabled=roadTravelBusy||!pending||left>0;
+  text("road-travel-result",pending?
+    "完成抵達後才會刷新所在地；事故結果會在抵達時公布。":
+    (info.history?.length?
+      "最近一次已完成："+(state.towns.find(t=>t.id===info.history[0].toTownId)?.name??"目的地")+
+      (info.history[0].accident?"；當次事故扣載具1點耐久。":"；當次沒有事故扣耐久。"):
+      "尚無已完成行程。"));
+}
+
 function renderTowns() {
   const target = el("towns");
   target.replaceChildren();
@@ -1100,7 +1244,7 @@ function renderTowns() {
     const current=town.id===state.character.townId;
     const fare=fares.get(town.id);
     const affordable=Number.isSafeInteger(fare)&&state.character.money>=fare;
-    button.disabled = current || !affordable;
+    button.disabled = current || !affordable || Boolean(state.roadTravel?.pending);
     const title = document.createElement("span");
     const hint = document.createElement("small");
     title.textContent = town.name;
@@ -3911,6 +4055,7 @@ function render() {
   renderAbilities(c.stats);
   text("residents", state.residents.length ? state.residents.join("、") : "目前沒有其他玩家在這個城鎮。");
   renderTowns();
+  renderRoadTravel();
   renderTownMap();
   renderHouses();
   if (activeRoom && !state.townHouses.some(house => house.id === activeRoom.houseId))
@@ -4218,6 +4363,7 @@ setInterval(()=>{
   if(state?.mode==="solo"&&state?.character&&!soloAtHome)
     renderSoloTime(); // 同步顯示遊戲時鐘，限時事件結束後也恢復快轉按鈕
   updateTrainingCountdowns(); // 每秒刷新課程灰階和剩餘時間，不重建卡片。
+  updateRoadCountdown(); // 公路旅程到時間才開啟抵達按鈕。
 },1000);
 el("room-close").addEventListener("click", closeRoom);
 el("room-config-form").addEventListener("submit", event => {
