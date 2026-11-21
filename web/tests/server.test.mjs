@@ -4131,7 +4131,7 @@ test("第50階段單機首次遊玩：空白街區一鍵配置後可工作、百
     const db=new DatabaseSync(join(directory,"solo.sqlite"));
     try{
       // 僅測試住宅真正扣款／實際地圖占用；來源的建造費不靠試玩配置補貼。
-      db.prepare("UPDATE characters SET money=50000000 WHERE name=?")
+      db.prepare("UPDATE characters SET money=100000000 WHERE name=?")
         .run("單機街區初次探索者");
     }finally{db.close();}
     const built=await api(srv.url,"house/build",{
@@ -4142,7 +4142,7 @@ test("第50階段單機首次遊玩：空白街區一鍵配置後可工作、百
     assert.equal(built.result.houses[0].location,"D1");
     assert.equal(built.result.map.cells[3*16].category,"house");
     assert.ok(built.result.houseResult.quote.total>0);
-    assert.equal(built.result.character.money,50000000-built.result.houseResult.quote.total);
+    assert.equal(built.result.character.money,100000000-built.result.houseResult.quote.total);
     assert.equal((await api(srv.url,"solo/map/starter",{})).status,400,
       "已配置或已建屋時再次初始化不能毀掉玩家進度");
     assert.equal((await api(srv.url,"map/tile",{
