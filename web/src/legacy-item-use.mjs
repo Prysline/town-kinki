@@ -1,5 +1,6 @@
 // 原版 basic.cgi::item_do 的安全子集。
 // 原始 mono.cgi 封存保持唯讀，使用次數與時間另存在 Web 獨立資料表。
+import { randomInt } from "node:crypto";
 import { STAT_KEYS, maxBodyEnergy, maxBrainEnergy, recoverEnergy, bodyMassIndex } from "./engine.mjs";
 import { diseaseFromIndex } from "./health.mjs";
 import { MEAL_COOLDOWN_MS } from "./dining.mjs";
@@ -32,6 +33,15 @@ const ENERGY_RECOVERY_ITEMS=new Map([
 ]);
 const COMPOUND_SUFFIXES=new Set(["食料品","ファ"]);
 const ID_RE=/^[a-zA-Z0-9_-]{8,80}$/;
+// basic.cgi::item_do 對「ランダム品」的 17 項原版能力上限各自抽 0～10（含端點）。
+// 只接受 syouhin.cgi 真實「薬」商品的固定效果欄；已購物品的耐久、購買日及單價可改動。
+function isVerifiedRandomItem(row,raw){
+  return row.category==="薬"&&row.original_name==="ランダム品"&&
+    raw[9]==="無"&&raw[17]==="2000000"&&raw[22]==="回"&&
+    raw[23]==="3"&&raw[25]==="0"&&
+    raw[27]==="0"&&raw[28]==="0"&&raw[29]==="ランダム品"&&
+    STATS_INDEX.every(index=>raw[index]==="10");
+}
 
 function signedNumber(input,label,min=-1000000,max=1000000){
   if(!/^-?\d+$/.test(input))throw new Error(label+"不是整數");
@@ -51,8 +61,10 @@ function parseArchivedItem(row){
     raw[0]!==row.category||raw[1]!==row.original_name)
     throw new Error("封存物品資料不完整或與索引不一致");
   const unit=row.durability_unit;
+  const verifiedRandom=isVerifiedRandomItem(row,raw);
   if(!["回","日"].includes(unit)||raw[22]!==unit||
-     NON_CONSUMABLE.has(row.category)||row.original_name==="ランダム品")
+     NON_CONSUMABLE.has(row.category)||
+     (row.original_name==="ランダム品"&&!verifiedRandom))
     return null;
   if(unit==="日"&&!DAY_USE_TYPES.has(row.category))return null;
   const parts=raw[9].split(",");
@@ -102,7 +114,7 @@ function parseArchivedItem(row){
   return {sourceLine:row.source_line,name:row.original_name,category:row.category,
     effect,magnitude,bonuses,intervalMinutes,bodyCost,brainCost,calories,
     originalRemaining,originalLastUsedAt:lastUsedSec*1000,
-    durabilityUnit:unit,purchasedAt,expiresAt,food};
+    durabilityUnit:unit,purchasedAt,expiresAt,food,randomBonuses:verifiedRandom};
 }
 // 供商店在「購入前」顯示目前 Web 是否支援直接使用；使用與否仍由正式交易驗證。
 export function supportsLegacyItemUse(rawFields){
@@ -206,7 +218,9 @@ function applyEffects(character,item,now){
   const next={...current,stats:{...current.stats}};
   const gained={};
   for(let i=0;i<STAT_KEYS.length;i++){
-    const key=STAT_KEYS[i],delta=item.bonuses[key];
+    const key=STAT_KEYS[i];
+    // 原版 int(rand(上限+1))：每項能力各自重抽，使用歷史只保存實際抽中值。
+    const delta=item.randomBonuses?randomInt(item.bonuses[key]+1):item.bonuses[key];
     const previous=next.stats[key];
     if(!Number.isSafeInteger(previous)||previous<0)
       throw new Error("角色能力資料不正確");
