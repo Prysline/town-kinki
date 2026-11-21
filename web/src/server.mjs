@@ -399,7 +399,7 @@ function snapshot(user) {
     hospital: updated ? getTreatmentQuote(updated,hasActiveHealthInsurance(db,user.id,insuranceItem,now)) : null,
     insurance: updated ? inventoryOverview(db,user.id,insuranceItem,now) : null,
     insurancePurchases: updated ? listInsurancePurchases(db,user.id) : [],
-    legacyInventory: updated ? listLegacyInventoryItems(db,user.id,50,retailItemDetails) : [],
+    legacyInventory: updated ? listLegacyInventoryItems(db,user.id,50,retailItemDetails,now) : [],
     retailAvailable,retailGoods,retailDay:updated?today:null,
     retailPurchases:updated?listRetailPurchases(db,user.id):[],
     vendingAvailable,vendingGoods,
