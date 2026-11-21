@@ -96,3 +96,13 @@ test("有 readyAt 就每秒更新倒數，單機快轉重渲染並以較晚冷�
   assert.match(app,/state=await api\("solo\/time\/advance",\{preset\}\);\s*render\(\);/);
   assert.match(use,/const readyAt=Math\.max\(itemReadyAt,mealReadyAt\)/);
 });
+
+
+test("釣魚餌料與漁獲的真實剩餘次數由 Web 消耗帳本決定，而非原始購買耐久",()=>{
+  const item={sourceLine:7000000,origin:"fishing",durability:5,remaining:0,unit:"回"};
+  assert.equal(itemRemainingDurability(item,null,Date.now()),0);
+  assert.equal(itemRemainingDurability({...item,remaining:3},null,Date.now()),3);
+  assert.equal(itemRemainingDurability({...item,remaining:3},{remaining:2},Date.now()),2);
+  assert.match(app,/item\.origin==="fishing"\?"請至原版釣場/);
+  assert.match(app,/renderFishing\(\);/);
+});
