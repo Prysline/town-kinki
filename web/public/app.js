@@ -1903,6 +1903,106 @@ function renderShopTable(target,goods,{shopName,onPurchase,emptyText}){
   checkout.append(controls,quote,button);target.append(checkout);
   update();
 }
+let pendingArcadeDonut=null;
+let arcadeDonutSubmitting=false;
+async function submitArcadeDonut(mode,risk,winAmount,reference){
+  if(arcadeDonutSubmitting)return;
+  const label=mode==="donus"?"不同點數×1萬元":
+    mode==="donus2"?"不同點數×2萬元":"相同點數×10萬元";
+  if(!window.confirm("確認在「"+label+"」抽牌嗎？前一張 "+
+      (reference===null?"尚未設定":reference+"點")+
+      "；猜中最多獲得 "+money(winAmount)+
+      "，猜錯扣除 "+money(risk)+"。伺服器會即時依真正共用牌桌計算。"))return;
+  if(!pendingArcadeDonut||pendingArcadeDonut.mode!==mode)
+    pendingArcadeDonut={mode,requestId:crypto.randomUUID()};
+  arcadeDonutSubmitting=true;
+  el("arcade-donuts-submit").disabled=true;
+  try{
+    state=await api("arcade/donuts/draw",{
+      mode,requestId:pendingArcadeDonut.requestId
+    });
+    const result=state.arcadeDonutResult;
+    pendingArcadeDonut=null;
+    render();
+    notify(result.replayed?"這局抽牌已結算，沒有重複扣款或發獎。":
+      "原版抽牌 "+result.mode+"：前一張 "+
+      (result.previousCard??"空（首次以原版起始值比較）")+
+      "，抽中 "+result.drawnCard+" 點。"+
+      (result.won?"獲得 ":"扣除 ")+money(Math.abs(result.delta))+
+      "；牌桌目前 "+result.cardsAfter+" 張牌。");
+  }catch(error){notify(error.message,true);}
+  finally{
+    arcadeDonutSubmitting=false;
+    if(state?.character)renderArcadeDonuts();
+  }
+}
+function renderArcadeDonuts(){
+  if(!state?.character)return;
+  const info=state.arcadeDonuts??{};
+  const modes=info.modes??[];
+  const selector=el("arcade-donuts-mode");
+  const selected=modes.find(item=>item.mode===selector.value)??modes[0];
+  selector.disabled=modes.length===0;
+  selector.onchange=renderArcadeDonuts;
+  const submit=el("arcade-donuts-submit"),history=el("arcade-donuts-history");
+  if(!selected){
+    text("arcade-donuts-status","原版卡牌模式尚未載入。");
+    text("arcade-donuts-table","");
+    text("arcade-donuts-quote","");
+    text("arcade-donuts-result","");
+    submit.disabled=true;history.replaceChildren();return;
+  }
+  const available=info.available===true;
+  const wait=Math.max(0,(selected.readyAt??0)-browserGameNow());
+  const affordable=Number.isSafeInteger(selected.risk)&&
+    state.character.money>=selected.risk;
+  text("arcade-donuts-status",!available?
+    "所在城鎮沒有「ゲーセン」遊樂中心；須先建立原版建築。":
+    wait>0?"目前模式冷卻中，還需 "+Math.ceil(wait/1000)+" 秒（單機可快轉時間）。":
+      "這個模式已可抽牌。三個模式牌桌獨立，帳戶本人交易記錄隔離。");
+  const initialReference=selected.rule==="same"?1:0;
+  text("arcade-donuts-table","前一張："+(selected.previousCard===null?
+      "未設定（首次比較"+initialReference+"點）":selected.previousCard+"點")+
+    "｜桌上累積 "+selected.cardCount+" 張｜抽牌範圍 1～"+
+    selected.faces+"點｜最近牌面 "+selected.recentCards.join("、")+
+    (selected.cardCount>20?"（僅展示最近20張）":""));
+  const rule=selected.rule==="same"?"與前卡相同才中獎":"與前卡不同才中獎";
+  text("arcade-donuts-quote",rule+
+    "｜中獎收入 "+money(selected.winAmount)+
+    "｜未中扣除 "+money(selected.risk)+
+    "｜目前現金 "+money(state.character.money)+
+    (!affordable?"｜現金不足":"")+
+    (selected.mode==="donus"?"｜Web單機5秒限制":"｜10分鐘限制"));
+  submit.disabled=arcadeDonutSubmitting||!available||wait>0||!affordable;
+  submit.onclick=()=>{
+    if(!arcadeDonutSubmitting&&available&&wait<=0&&affordable)
+      submitArcadeDonut(selected.mode,selected.risk,selected.winAmount,
+        selected.previousCard);
+  };
+  const rounds=selected.history??[];
+  const recent=rounds[0];
+  text("arcade-donuts-result",recent?
+    "最近一局：前卡 "+(recent.previousCard??"未設定")+
+    "、抽到 "+recent.drawnCard+"，"+
+    (recent.won?"獲勝 +":"失敗 −")+money(Math.abs(recent.delta)):
+    "本人還沒有此模式的抽牌紀錄。");
+  history.replaceChildren();
+  if(!rounds.length){
+    const p=document.createElement("p");p.className="small";
+    p.textContent="尚無抽牌紀錄。";history.append(p);return;
+  }
+  const list=document.createElement("ol");list.className="health-event-list";
+  for(const round of rounds){
+    const li=document.createElement("li");
+    li.textContent=new Date(round.playedAt).toLocaleString("zh-TW")+
+      "｜前卡 "+(round.previousCard??"空")+" → "+round.drawnCard+
+      "｜"+(round.won?"勝 +":"敗 −")+money(Math.abs(round.delta))+
+      "｜桌上 "+round.cardsAfter+" 張";
+    list.append(li);
+  }
+  history.append(list);
+}
+
 let pendingArcadeHighLow=null;
 let arcadeHighLowSubmitting=false;
 async function submitArcadeHighLow(guess,stake,previousCard){
@@ -3345,6 +3445,7 @@ function render() {
   renderCrafting();
   renderArcadeDice();
   renderArcadeHighLow();
+  renderArcadeDonuts();
   renderEquipment();
   renderGiftShop();
   renderMailbox();
