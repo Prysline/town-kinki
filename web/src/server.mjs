@@ -19,6 +19,8 @@ import { parseLegacyMeals, eatMeal, deriveCondition, hungerStatus, physiqueStatu
 import { initDiningStockTables, ensureDiningRotation, listedDiningMeals, takeDiningStock } from "./dining-stock.mjs";
 import { healthStatus, settleDailyHealth, conditionWithIllness, getTreatmentQuote, treatAtHospital } from "./health.mjs";
 import { initCharacterEvents, settleDailyIllnessEvent, listCharacterEvents, getCouponBalance } from "./events.mjs";
+import {parseLegacyCouponCatalog} from "./coupon-catalog.mjs";
+import {initCouponRedemptionTables,listCouponRewards,listCouponRedemptions,redeemEventCoupon,COUPON_SHOP_SYMBOL} from "./coupon-redemption.mjs";
 import { getCockroachChallenge,claimCockroach } from "./event-cockroach.mjs";
 import { parseLegacyInsurance, initInventoryTables, inventoryOverview, hasActiveHealthInsurance, listInsurancePurchases, buyHealthInsurance } from "./inventory.mjs";
 import { listLegacyInventoryItems } from "./legacy-inventory.mjs";
@@ -93,6 +95,7 @@ initHousingTables(db);
 initRoomsTables(db);
 initBankTables(db);
 initCharacterEvents(db);
+initCouponRedemptionTables(db);
 initInventoryTables(db);
 initDiningStockTables(db);
 initLegacyItemUseTables(db);
@@ -128,6 +131,7 @@ const meals = [
 const mealsByKey = new Map(meals.map(meal => [meal.key,meal]));
 const insuranceItem=parseLegacyInsurance(decodeLegacyText(readFileSync(resolve(REPO_ROOT,"dat_dir","syouhin.cgi"))));
 const retailCatalog=parseLegacyRetailCatalog(decodeLegacyText(readFileSync(resolve(REPO_ROOT,"dat_dir","syouhin.cgi"))));
+const couponCatalog=parseLegacyCouponCatalog(decodeLegacyText(readFileSync(resolve(REPO_ROOT,"dat_dir","coupon.cgi"))));
 const wholesaleCatalog=parseWholesaleCatalog(decodeLegacyText(readFileSync(resolve(REPO_ROOT,"dat_dir","syouhin.cgi"))));
 const vendingCatalog=parseLegacyVendingCatalog(decodeLegacyText(readFileSync(resolve(REPO_ROOT,"dat_dir","jihanki.cgi"))));
 const equipmentCatalog=parseLegacyEquipmentCatalog(decodeLegacyText(readFileSync(resolve(REPO_ROOT,"dat_dir","soubi.cgi"))));
@@ -286,6 +290,8 @@ function snapshot(user) {
   }
   const equipmentAvailable=Boolean(retailMap?.configured&&
     retailMap.cells.some(cell=>cell.key===EQUIPMENT_SYMBOL));
+  const couponShopAvailable=Boolean(retailMap?.configured&&
+    retailMap.cells.some(cell=>cell.key===COUPON_SHOP_SYMBOL));
   const giftShopAvailable=Boolean(retailMap?.configured&&
     retailMap.cells.some(cell=>cell.key===GIFT_SHOP_SYMBOL));
   const recycleAvailable=Boolean(retailMap?.configured&&
@@ -347,6 +353,9 @@ function snapshot(user) {
     health: updated ? healthStatus(updated) : null,
     healthEvents: updated ? listCharacterEvents(db,user.id) : [],
     couponBalance: updated ? getCouponBalance(db,user.id) : 0,
+    couponShopAvailable,
+    couponRewards:updated?listCouponRewards(couponCatalog,getCouponBalance(db,user.id),couponShopAvailable):[],
+    couponRedemptions:updated?listCouponRedemptions(db,user.id):[],
     cockroachChallenge: updated ? getCockroachChallenge(db,user.id,now) : null,
     hospital: updated ? getTreatmentQuote(updated,hasActiveHealthInsurance(db,user.id,insuranceItem,now)) : null,
     insurance: updated ? inventoryOverview(db,user.id,insuranceItem,now) : null,
@@ -705,6 +714,17 @@ async function handle(req, res) {
           data.quantity,data.requestId,gameNow());
       } catch(error) {throw new HttpError(400,error.message);}
       return sendJson(res,200,{...snapshot(user),insuranceResult:result});
+    }
+
+    if (path === "/api/coupon/redeem") {
+      let result;
+      try{
+        result=redeemEventCoupon(db,user.id,couponCatalog,{
+          sourceIndex:data.sourceIndex,originalName:data.originalName,
+          requestId:data.requestId,now:gameNow()
+        });
+      }catch(error){throw new HttpError(400,error.message);}
+      return sendJson(res,200,{...snapshot(user),couponResult:result});
     }
 
     if (path === "/api/retail/buy") {
