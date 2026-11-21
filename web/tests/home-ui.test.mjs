@@ -299,9 +299,10 @@ const paneMap={
   jobs:["jobs-panel"],
   bank:["bank-panel"],
   hospital:["hospital-panel"],
-  events:["event-panel"]
+  events:["event-panel"],
+  mail:["mail-panel"]
 };
-test("高密度主畫面：地圖摘要與八組可存取設施分頁，保留全部現有操作元件",()=>{
+test("高密度主畫面：地圖摘要與九組可存取設施分頁，保留全部現有操作元件",()=>{
   const main=html.slice(html.indexOf('id="game"'));
   assert.ok(main.indexOf('id="town-panel"')<main.indexOf('id="player-summary"'));
   assert.ok(main.indexOf('id="player-summary"')<main.indexOf('id="facility-tabs"'));
@@ -548,17 +549,28 @@ test("空白万能治療幅度與原版負熱量有清楚說明，不會被誤�
   assert.match(script,/使用後體重減少/);
 });
 
-test("寄禮站內信 UI 允許撰寫、雙方查看，純文字輸出不做 HTML 解析",()=>{
-  assert.match(html,/id="gift-mail"/);
-  assert.match(html,/寄禮站內信（收件與寄件，共用 50 封上限）/);
-  assert.match(html,/一般無禮品的私人信件、舊版信件匯入/);
-  assert.match(script,/state\.giftMail/);
-  assert.match(script,/payload\.message=message/);
-  assert.match(script,/message\.maxLength=1000/);
+test("郵件獨立分頁與城鎮快捷：純文字信、寄禮信同一信箱，沒有 HTML 注入",()=>{
+  assert.match(html,/id="facility-tab-mail"[^>]+role="tab"/);
+  assert.match(html,/id="facility-pane-mail"/);
+  assert.match(html,/id="mail-panel"/);
+  assert.match(html,/data-facility="mail-panel"/);
+  assert.match(html,/id="mail-compose"/);
+  assert.match(html,/id="mail-recipient"/);
+  assert.match(html,/id="mail-message"[^>]*maxlength="1000"/);
+  assert.match(html,/id="mail-messages"/);
+  assert.match(html,/收件與寄件合計最多 50 封/);
+  assert.match(script,/FACILITY_TAB_NAMES = Object\.freeze\(\[[^\]]*"mail"\]/);
+  assert.match(script,/function renderMailbox\(\)/);
+  assert.match(script,/state\.mailbox/);
   assert.match(script,/body\.textContent=mail\.message/);
   assert.match(script,/gift\.textContent="禮品：/);
-  assert.match(script,/pendingGiftAction\.message!==message/);
+  assert.match(script,/await api\("mail\/send",pendingMailAction\)/);
+  assert.match(script,/await api\("mail\/delete",\{mailId\}\)/);
+  assert.match(script,/pendingMailAction\.message!==message/);
+  assert.match(script,/payload\.message=message/);
+  assert.match(script,/message\.maxLength=1000/);
   assert.doesNotMatch(script,/body\.innerHTML=mail\.message/);
+  assert.doesNotMatch(html,/id="gift-mail"/,"寄禮已統一至郵件分頁而非複製第二個信箱");
 });
 
 test("共用交易結果依原版中央呈現，玩家確認後返回操作畫面，不再使用右下角 Toast",()=>{

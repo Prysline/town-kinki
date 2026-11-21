@@ -298,7 +298,7 @@ export function listGiftMail(db,userId,limit=GIFT_MAIL_LIMIT){
   const count=Number.isSafeInteger(limit)?Math.max(1,Math.min(limit,GIFT_MAIL_LIMIT)):GIFT_MAIL_LIMIT;
   return db.prepare([
     "SELECT direction,other_name,message,gift_name,quantity,created_at",
-    "FROM gift_mail_messages WHERE user_id=?",
+    "FROM gift_mail_messages WHERE user_id=? AND event_id IS NOT NULL",
     "ORDER BY created_at DESC,id DESC LIMIT ?"
   ].join(" ")).all(userId,count).map(row=>({
     direction:row.direction,otherName:row.other_name,

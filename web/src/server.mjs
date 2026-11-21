@@ -25,6 +25,7 @@ import {parseLegacyRetailCatalog,initRetailTables,ensureRetailDay,listRetailStoc
 import {parseLegacyVendingCatalog,initVendingTables,ensureVendingRotation,listVendingStock,vendingPeriodKey,VENDING_SYMBOL,VENDING_SHOP} from "./vending.mjs";
 import {parseLegacyEquipmentCatalog,initEquipmentTables,listEquipmentItems,listEquipmentTransactions,buyEquipment,equipEquipment,sellEquipment,forgeEquipment,EQUIPMENT_SYMBOL} from "./equipment.mjs";
 import {initGiftTables,GIFT_SHOP_SYMBOL,listGiftSources,listGiftEvents,listGiftMail,convertToGift,sendGift} from "./gift-shop.mjs";
+import {initPrivateMailTables,sendPrivateMail,listMailbox,deletePrivateMailboxEntry} from "./private-mail.mjs";
 import {initRecycleTables,RECYCLE_SYMBOL,listRecycleListings,listRecycleSellable,listRecycleHistory,buyFromRecycle,sellToRecycle} from "./recycle.mjs";
 import {parseWholesaleCatalog,initWholesaleTables,ensureWholesaleDay,listWholesaleGoods,
   WHOLESALE_SYMBOL,SHOP_CATEGORIES,configurePlayerShop,listMyShops,
@@ -98,6 +99,7 @@ initRetailTables(db);
 initVendingTables(db);
 initEquipmentTables(db);
 initGiftTables(db);
+initPrivateMailTables(db);
 initRecycleTables(db);
 initWholesaleTables(db);
 initPlayerStoreTables(db);
@@ -360,6 +362,7 @@ function snapshot(user) {
     giftSources:updated?listGiftSources(db,user.id,now):[],
     giftEvents:updated?listGiftEvents(db,user.id):[],
     giftMail:updated?listGiftMail(db,user.id):[],
+    mailbox:updated?listMailbox(db,user.id):[],
     recycleAvailable,
     recycleListings:recycleAvailable?listRecycleListings(db,now):[],
     recycleSellable:updated?listRecycleSellable(db,user.id,now):[],
@@ -740,6 +743,22 @@ async function handle(req, res) {
         });
       }catch(error){throw new HttpError(400,error.message);}
       return sendJson(res,200,{...snapshot(user),equipmentResult:result});
+    }
+    if(path === "/api/mail/send"){
+      let result;
+      try{
+        result=sendPrivateMail(db,user.id,{
+          recipientName:data.recipientName,message:data.message,
+          requestId:data.requestId,now:gameNow()
+        });
+      }catch(error){throw new HttpError(400,error.message);}
+      return sendJson(res,200,{...snapshot(user),mailResult:result});
+    }
+    if(path === "/api/mail/delete"){
+      let result;
+      try{result=deletePrivateMailboxEntry(db,user.id,data.mailId);}
+      catch(error){throw new HttpError(400,error.message);}
+      return sendJson(res,200,{...snapshot(user),mailResult:result});
     }
     if(path === "/api/gift/convert"||path === "/api/gift/send"){
       const now=gameNow();

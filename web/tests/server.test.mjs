@@ -3947,3 +3947,124 @@ test("第48階段多人登入與重啟：兩帳號工作／銀行互不干涉，
     assert.equal((await api(srv.url,"state",undefined,login.cookie)).result.character.name,"跨重啟乙");
   }finally{await srv.stop();}
 });
+
+
+test("第49階段多人 HTTP：獨立信件＋禮品共用信箱，權限、刪信與重啟後收件仍在",async()=>{
+  let srv=await start("multi");
+  const dataPath=srv.directory;
+  try{
+    const a=await api(srv.url,"register",{
+      username:"phase49MailAlpha",password:"phase49-mail-alpha-123"
+    });
+    const b=await api(srv.url,"register",{
+      username:"phase49MailBeta",password:"phase49-mail-beta-123"
+    });
+    const c=await api(srv.url,"register",{
+      username:"phase49MailGamma",password:"phase49-mail-gamma-123"
+    });
+    assert.equal(a.status,200);assert.equal(b.status,200);assert.equal(c.status,200);
+    for(const [cookie,name] of [[a.cookie,"新信寄件角色"],[b.cookie,"新信收件角色"],
+      [c.cookie,"無關郵件角色"]]){
+      assert.equal((await api(srv.url,"character",{name,gender:"other",
+        stats:defaultStats()},cookie)).status,200);
+    }
+    const textBody="<img src=x onerror=alert(1)> 這裡有一封普通站內信";
+    const payload={
+      recipientName:"新信收件角色",message:textBody,requestId:"phase49_http_mail_01"
+    };
+    const sent=await api(srv.url,"mail/send",payload,a.cookie);
+    assert.equal(sent.status,200);
+    assert.equal(sent.result.mailResult.replayed,false);
+    assert.equal(sent.result.mailbox.length,1);
+    assert.equal(sent.result.mailbox[0].type,"plain");
+    assert.equal(sent.result.mailbox[0].direction,"sent");
+    assert.equal(sent.result.mailbox[0].message,textBody);
+    assert.equal(sent.result.giftMail.length,0,"不能把純文字信當成寄禮信");
+    const received=await api(srv.url,"state",undefined,b.cookie);
+    assert.equal(received.result.mailbox.length,1);
+    assert.equal(received.result.mailbox[0].direction,"inbox");
+    assert.equal(received.result.mailbox[0].message,textBody);
+    const outsider=await api(srv.url,"state",undefined,c.cookie);
+    assert.deepEqual(outsider.result.mailbox,[]);
+    assert.equal((await api(srv.url,"mail/send",payload)).status,401);
+    assert.equal((await api(srv.url,"mail/send",payload,a.cookie)).result.mailResult.replayed,true);
+    assert.equal((await api(srv.url,"mail/send",{
+      ...payload,message:"試圖改寫信件"
+    },a.cookie)).status,400);
+    assert.equal((await api(srv.url,"mail/send",{
+      ...payload,recipientName:"新信寄件角色",requestId:"phase49_http_self"
+    },a.cookie)).status,400);
+    assert.equal((await api(srv.url,"mail/send",{
+      ...payload,message:"",requestId:"phase49_http_empty"
+    },a.cookie)).status,400);
+
+    const ownSentId=sent.result.mailbox[0].id;
+    const inboxId=received.result.mailbox[0].id;
+    assert.notEqual(ownSentId,inboxId);
+    assert.equal((await api(srv.url,"mail/delete",{mailId:inboxId},a.cookie)).status,400);
+    assert.equal((await api(srv.url,"mail/delete",{mailId:inboxId},c.cookie)).status,400);
+    const deleted=await api(srv.url,"mail/delete",{mailId:ownSentId},a.cookie);
+    assert.equal(deleted.status,200);
+    assert.equal(deleted.result.mailbox.length,0);
+    assert.equal((await api(srv.url,"state",undefined,b.cookie)).result.mailbox.length,1);
+
+    const reply=await api(srv.url,"mail/send",{
+      recipientName:"新信寄件角色",message:"收到，這是回信",
+      requestId:"phase49_http_mail_reply"
+    },b.cookie);
+    assert.equal(reply.status,200);
+    assert.equal(reply.result.mailbox.length,2);
+    assert.deepEqual(reply.result.mailbox.map(m=>m.type),["plain","plain"]);
+    const raw=Array(33).fill("0");
+    raw[0]="ギフト";raw[1]="油取り紙";raw[9]="無";
+    raw[21]="2";raw[22]="回";
+    raw[30]=String(Math.floor(Date.now()/1000));
+    const db=new DatabaseSync(join(dataPath,"multi.sqlite"));
+    try{
+      const senderId=db.prepare("SELECT user_id FROM characters WHERE name=?")
+        .get("新信寄件角色").user_id;
+      db.prepare([
+        "INSERT INTO legacy_inventory_items(user_id,original_id,source_line,category,",
+        "original_name,effect,durability,durability_unit,purchased_at,last_used_at,raw_fields_json)",
+        "VALUES(?,'__web_gift__',1000049,'ギフト','油取り紙','無',2,'回',?,0,?)"
+      ].join(" ")).run(senderId,Number(raw[30]),JSON.stringify(raw));
+    }finally{db.close();}
+    const gifted=await api(srv.url,"gift/send",{
+      sourceLine:1000049,quantity:1,recipientName:"新信收件角色",
+      message:"另一封附有禮品",requestId:"phase49_http_gift_01"
+    },a.cookie);
+    assert.equal(gifted.status,200);
+    assert.equal(gifted.result.mailbox.length,2);
+    assert.equal(gifted.result.mailbox[0].type,"gift");
+    const both=await api(srv.url,"state",undefined,b.cookie);
+    assert.equal(both.result.mailbox.length,3);
+    assert.equal(both.result.giftMail.length,1);
+    assert.equal(both.result.mailbox.filter(m=>m.type==="gift").length,1);
+    assert.equal(both.result.mailbox.filter(m=>m.type==="plain").length,2);
+    assert.equal(both.result.legacyInventory.some(item=>item.name==="油取り紙"),true);
+    const deleteDb=new DatabaseSync(join(dataPath,"multi.sqlite"));
+    try{
+      deleteDb.exec("PRAGMA foreign_keys=ON");
+      const senderId=deleteDb.prepare("SELECT user_id FROM characters WHERE name=?")
+        .get("新信寄件角色").user_id;
+      deleteDb.prepare("DELETE FROM users WHERE id=?").run(senderId);
+      assert.equal(deleteDb.prepare("PRAGMA foreign_key_check").all().length,0);
+    }finally{deleteDb.close();}
+    const afterDelete=await api(srv.url,"state",undefined,b.cookie);
+    assert.equal(afterDelete.status,200);
+    assert.equal(afterDelete.result.mailbox.length,3);
+    assert.equal(afterDelete.result.mailbox[0].giftName,"油取り紙");
+    assert.equal(afterDelete.result.legacyInventory.some(item=>item.name==="油取り紙"),true);
+
+    await srv.stop({preserveData:true});
+    srv=await start("multi",undefined,dataPath);
+    const restored=await api(srv.url,"state",undefined,b.cookie);
+    assert.equal(restored.status,200);
+    assert.equal(restored.result.mailbox.length,3);
+    assert.deepEqual(restored.result.mailbox.map(m=>m.message),
+      afterDelete.result.mailbox.map(m=>m.message));
+    assert.equal(restored.result.giftMail.length,1);
+    assert.equal(restored.result.legacyInventory.some(item=>item.name==="油取り紙"),true);
+    assert.deepEqual((await api(srv.url,"state",undefined,c.cookie)).result.mailbox,[]);
+  }finally{await srv.stop();}
+});
