@@ -5377,3 +5377,163 @@ test("第59階段多人HTTP：六號樂透共用待開獎注數、各自現金�
     },b.cookie)).status,400);
   }finally{await srv.stop();}
 });
+
+
+test("第60階段單機HTTP：多卡五課程共用倍率、下注結算、五秒適配與SQLite重啟",async()=>{
+  let srv=await start("solo");
+  const dir=srv.directory;
+  try{
+    assert.equal((await api(srv.url,"arcade/cardw/draw",{
+      course:0,requestId:"phase60_missing_character"
+    })).status,400);
+    const created=await api(srv.url,"character",{
+      name:"第60階段多卡居民",gender:"other",stats:defaultStats()
+    });
+    assert.equal(created.status,200);
+    assert.equal(created.result.multiCard.available,false);
+    assert.equal(created.result.multiCard.cardCount,1);
+    assert.deepEqual(created.result.multiCard.courses.map(c=>c.unit),
+      [10000,100000,1000000,10000000,100000000]);
+    assert.deepEqual(created.result.multiCard.courses.map(c=>c.actualPercent),
+      [79,64,49,34,19]);
+    assert.equal((await api(srv.url,"arcade/cardw/draw",{
+      course:0,requestId:"phase60_no_arcade"
+    })).status,400);
+    const starter=await api(srv.url,"solo/map/starter",{});
+    assert.equal(starter.status,200);
+    assert.equal(starter.result.mapStarterResult.placed,21);
+    assert.equal(starter.result.multiCard.available,true);
+    assert.equal(starter.result.map.cells[3*16+8].key,"ゲーセン");
+    const db=new DatabaseSync(join(dir,"solo.sqlite"));
+    try{
+      db.prepare("UPDATE characters SET money=500000000 WHERE name=?")
+        .run("第60階段多卡居民");
+    }finally{db.close();}
+    const initial=(await api(srv.url,"state")).result;
+    assert.equal(initial.character.money,500000000);
+    assert.equal((await api(srv.url,"arcade/cardw/draw",{
+      course:-1,requestId:"phase60_invalid_course"
+    })).status,400);
+    assert.equal((await api(srv.url,"arcade/cardw/draw",{
+      course:1.5,requestId:"phase60_invalid_fraction"
+    })).status,400);
+    const firstPayload={course:0,requestId:"phase60_http_first"};
+    const first=await api(srv.url,"arcade/cardw/draw",firstPayload);
+    assert.equal(first.status,200);
+    const a=first.result.multiCardResult;
+    assert.equal(a.course,0);
+    assert.equal(a.cardsBefore,1);
+    assert.equal(a.stake,10000);
+    assert.ok(a.roll>=1&&a.roll<=100);
+    assert.equal(a.won,a.roll<80);
+    assert.equal(a.delta,a.won?10000:-10000);
+    assert.equal(a.cardsAfter,a.won?2:1);
+    assert.equal(first.result.character.money,500000000+a.delta);
+    assert.equal(first.result.multiCard.cardCount,a.cardsAfter);
+    assert.equal(first.result.multiCard.history.length,1);
+    const repeat=await api(srv.url,"arcade/cardw/draw",firstPayload);
+    assert.equal(repeat.status,200);
+    assert.equal(repeat.result.multiCardResult.replayed,true);
+    assert.equal(repeat.result.character.money,first.result.character.money);
+    assert.equal((await api(srv.url,"arcade/cardw/draw",{
+      course:1,requestId:"phase60_http_first"
+    })).status,400);
+    assert.equal((await api(srv.url,"arcade/cardw/draw",{
+      course:0,requestId:"phase60_cooldown"
+    })).status,400);
+    assert.equal((await api(srv.url,"solo/time/advance",{preset:"5m"})).status,200);
+    const second=await api(srv.url,"arcade/cardw/draw",{
+      course:1,requestId:"phase60_http_second"
+    });
+    assert.equal(second.status,200);
+    const b=second.result.multiCardResult;
+    assert.equal(b.course,1);
+    assert.equal(b.cardsBefore,a.cardsAfter);
+    assert.equal(b.stake,a.cardsAfter*100000);
+    assert.equal(b.won,b.roll<65);
+    assert.equal(b.delta,b.won?b.stake:-b.stake);
+    assert.equal(second.result.character.money,500000000+a.delta+b.delta);
+    const current=second.result.multiCard.cardCount;
+    assert.equal(current,b.cardsAfter);
+    assert.equal(second.result.multiCard.history.length,2);
+    const savedMoney=second.result.character.money;
+    await srv.stop({preserveData:true});
+    srv=await start("solo",undefined,dir);
+    const restored=await api(srv.url,"state");
+    assert.equal(restored.status,200);
+    assert.equal(restored.result.multiCard.cardCount,current);
+    assert.equal(restored.result.character.money,savedMoney);
+    assert.equal(restored.result.multiCard.history.length,2);
+    const replay=await api(srv.url,"arcade/cardw/draw",firstPayload);
+    assert.equal(replay.status,200);
+    assert.equal(replay.result.multiCardResult.replayed,true);
+    assert.equal(replay.result.character.money,savedMoney);
+  }finally{await srv.stop();}
+});
+
+test("第60階段多人HTTP：原版禁止同人連抽、兩位玩家承接共用倍率與本人紀錄隔離",async()=>{
+  const seed=dir=>{
+    const db=new DatabaseSync(join(dir,"multi.sqlite"));
+    try{
+      db.exec([
+        "CREATE TABLE town_maps(town_id INTEGER PRIMARY KEY,",
+        "original_name TEXT NOT NULL DEFAULT '',",
+        "original_record TEXT NOT NULL DEFAULT '',",
+        "source TEXT NOT NULL,tiles_json TEXT NOT NULL,",
+        "updated_at INTEGER NOT NULL);"
+      ].join(" "));
+      const tiles=Array(192).fill("");tiles[0]="ゲーセン";
+      db.prepare("INSERT INTO town_maps(town_id,original_name,source,tiles_json,updated_at) VALUES(?,?,?,?,?)")
+        .run(0,"測試街區","legacy-import",JSON.stringify(tiles),Date.now());
+    }finally{db.close();}
+  };
+  const srv=await start("multi",seed);
+  try{
+    const a=await api(srv.url,"register",{
+      username:"phase60CardwUserA",password:"phase60-strong-password-a"
+    });
+    const b=await api(srv.url,"register",{
+      username:"phase60CardwUserB",password:"phase60-strong-password-b"
+    });
+    assert.equal(a.status,200);assert.equal(b.status,200);
+    assert.equal((await api(srv.url,"character",{
+      name:"多卡甲",gender:"other",stats:defaultStats()
+    },a.cookie)).status,200);
+    assert.equal((await api(srv.url,"character",{
+      name:"多卡乙",gender:"other",stats:defaultStats()
+    },b.cookie)).status,200);
+    const request={course:0,requestId:"phase60_multi_shared_key"};
+    assert.equal((await api(srv.url,"arcade/cardw/draw",request)).status,401);
+    const first=await api(srv.url,"arcade/cardw/draw",request,a.cookie);
+    assert.equal(first.status,200);
+    const p=first.result.multiCardResult;
+    assert.equal(p.cardsBefore,1);
+    assert.equal(first.result.multiCard.multiplayerAdjacentRepeatBlocked,true);
+    assert.equal((await api(srv.url,"arcade/cardw/draw",{
+      course:0,requestId:"phase60_multi_a_again"
+    },a.cookie)).status,400);
+    const second=await api(srv.url,"arcade/cardw/draw",request,b.cookie);
+    assert.equal(second.status,200);
+    const q=second.result.multiCardResult;
+    assert.equal(q.cardsBefore,p.cardsAfter);
+    assert.equal(q.stake,q.cardsBefore*10000);
+    assert.equal(second.result.multiCard.multiplayerAdjacentRepeatBlocked,true);
+    const aOverview=(await api(srv.url,"state",undefined,a.cookie)).result.multiCard;
+    const bOverview=(await api(srv.url,"state",undefined,b.cookie)).result.multiCard;
+    assert.equal(aOverview.cardCount,bOverview.cardCount);
+    assert.equal(aOverview.history.length,1);
+    assert.equal(bOverview.history.length,1);
+    assert.equal(aOverview.multiplayerAdjacentRepeatBlocked,false);
+    assert.equal(bOverview.multiplayerAdjacentRepeatBlocked,true);
+    assert.equal((await api(srv.url,"arcade/cardw/draw",request,a.cookie))
+      .result.multiCardResult.replayed,true);
+    assert.equal((await api(srv.url,"arcade/cardw/draw",{
+      course:0,requestId:"phase60_multi_b_again"
+    },b.cookie)).status,400);
+    const third=await api(srv.url,"arcade/cardw/draw",{
+      course:0,requestId:"phase60_multi_a_after_b"
+    },a.cookie);
+    assert.equal(third.status,200);
+    assert.equal(third.result.multiCardResult.cardsBefore,q.cardsAfter);
+  }finally{await srv.stop();}
+});
