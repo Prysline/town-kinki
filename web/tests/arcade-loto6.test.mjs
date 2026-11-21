@@ -42,7 +42,7 @@ function buy(db,{user=1,numbers=nums,random=false,requestId="phase59_first_ticke
   now=T0,rolls=[0,1,2,3,4,5]}={}){
   let n=0;
   return buyLoto6Ticket(db,user,source,{
-    ...(random?{random:true}:{numbers,random:false}),
+    ...(random===true?{random:true}:{numbers,random}),
     requestId,now,timeZone:"Asia/Taipei",randomIndex:limit=>{
       assert.equal(limit,36);return rolls[n++%rolls.length];
     }
@@ -69,7 +69,7 @@ test("原版loto6入口與36取6、2500注、06:00或200注、每人20注、7種
   assert.deepEqual(source.prizes,[0,2500,5000,100000,1000000,10000000,100000000]);
   assert.equal(source.numberMax,36);
   assert.equal(source.choose,6);
-  assert.throws(()=>parseOriginalLoto6("",original),/入口/);
+  assert.throws(()=>parseOriginalLoto6("",original),/已變更/);
   assert.throws(()=>parseOriginalLoto6(gamerand,original.replace("$koniyukingaku = 2500","$koniyukingaku = 5000")),/已變更/);
   assert.throws(()=>parseOriginalLoto6(gamerand,original.replace("$koushinjikan = 6","$koushinjikan = 7")),/已變更/);
   assert.throws(()=>parseOriginalLoto6(gamerand,original.replace("100000000);","99999999);")),/已變更/);
