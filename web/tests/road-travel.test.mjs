@@ -263,3 +263,172 @@ test("20筆畫面紀錄上限與全量存檔，刪除角色後交易與物品外
     assert.equal(roadOverview(db,2,rules,NOW).history.length,0);
   }finally{db.close();}
 });
+
+
+test("第63階段來源：四號城出發不迷路；其他城持有ローラースルーゴーゴー必迷路，否則1/5",()=>{
+  assert.throws(()=>parseOriginalRoadTransport(ini,
+    lib.replace("if ($in{'maemati'} != 3){","if ($in{'maemati'} != 2){"),
+    maker,treasure),/已變更/);
+  assert.throws(()=>parseOriginalRoadTransport(ini,
+    lib.replace("if (int(rand(5)+1) == 1){","if (int(rand(3)+1) == 1){"),
+    maker,treasure),/已變更/);
+  assert.throws(()=>parseOriginalRoadTransport(ini,lib,
+    maker.replace("$in{'town_no'} = $no_rand;","$in{'town_no'} = 1;"),
+    treasure),/已變更/);
+});
+
+test("第63階段單純迷路無事故：原版只顯示迷路，不會真正使用 rand(4) 改寫目的地",()=>{
+  const db=setup();
+  try{
+    const journey=start(db,{toTownId:1,lostRoll:0,rerouteTown:3,
+      requestId:"phase63_lost_walking",rolls:[14,14,14,14,14]});
+    assert.equal(journey.toTownId,1);
+    assert.equal(journey.requestedToTownId,1);
+    assert.equal(journey.lost,undefined,"尚未到站不得先公布迷路");
+    assert.equal(journey.rerouted,undefined);
+    assert.equal(journey.accident,undefined);
+    const row=db.prepare("SELECT lost,rerouted,to_town,requested_to_town FROM arcade_road_trips WHERE id=?")
+      .get(journey.id);
+    assert.deepEqual(row,{lost:1,rerouted:0,to_town:1,requested_to_town:1});
+    const after=arrive(db,{tripId:journey.id,now:NOW+10000});
+    assert.equal(after.lost,true);
+    assert.equal(after.rerouted,false);
+    assert.equal(after.toTownId,1);
+    assert.equal(town(db),1);
+  }finally{db.close();}
+});
+
+test("第63階段持有輪滑車即使不選它，出發城不是3時迷路必觸發，事故才改道",()=>{
+  const db=setup();
+  try{
+    const car=giveVehicle(db,"フェラーリ",{sourceLine:3000720});
+    giveVehicle(db,"ローラースルーゴーゴー",{sourceLine:3000721});
+    const journey=start(db,{vehicleSourceLine:car,toTownId:1,
+      requestId:"phase63_roll_and_crash",rolls:[0],rerouteTown:2,lostRoll:4});
+    assert.equal(journey.toTownId,1,"待抵達時不能洩漏實際轉向位置");
+    assert.equal(journey.requestedToTownId,1);
+    assert.equal(journey.lost,undefined);
+    assert.equal(journey.accident,undefined);
+    const stored=db.prepare("SELECT lost,rerouted,to_town,requested_to_town,accident FROM arcade_road_trips WHERE id=?")
+      .get(journey.id);
+    assert.deepEqual(stored,{lost:1,rerouted:1,to_town:2,requested_to_town:1,accident:1});
+    assert.equal(roadOverview(db,1,rules,NOW).pending.toTownId,1);
+    const replay=start(db,{vehicleSourceLine:car,toTownId:1,
+      requestId:"phase63_roll_and_crash",now:NOW+1000,rolls:[9],rerouteTown:3});
+    assert.equal(replay.replayed,true);
+    assert.equal(replay.toTownId,1);
+    assert.equal(db.prepare("SELECT remaining FROM legacy_item_usage WHERE user_id=1 AND source_line=?")
+      .get(car).remaining,6,"僅法拉利原始7點耐久因事故扣1");
+    const arrived=arrive(db,{tripId:journey.id,now:NOW+2000});
+    assert.equal(arrived.toTownId,2);
+    assert.equal(arrived.requestedToTownId,1);
+    assert.equal(arrived.lost,true);
+    assert.equal(arrived.rerouted,true);
+    assert.equal(arrived.accident,true);
+    assert.equal(town(db),2);
+    assert.equal(arrive(db,{tripId:journey.id,now:NOW+2000}).replayed,true);
+    assert.equal(db.prepare("SELECT remaining FROM legacy_item_usage WHERE user_id=1 AND source_line=?")
+      .get(car).remaining,6);
+  }finally{db.close();}
+});
+
+test("第63階段從編號3出發，持有輪滑車且意外事故也不迷路",()=>{
+  const db=setup();
+  try{
+    const car=giveVehicle(db,"ローラースルーゴーゴー");
+    db.prepare("UPDATE characters SET town_id=3 WHERE user_id=1").run();
+    const trip=start(db,{toTownId:1,vehicleSourceLine:car,requestId:"phase63_from_fourth",
+      rolls:[0],lostRoll:0,rerouteTown:2});
+    assert.equal(trip.seconds,20);
+    const arrived=arrive(db,{tripId:trip.id,now:NOW+20000});
+    assert.equal(arrived.lost,false);
+    assert.equal(arrived.rerouted,false);
+    assert.equal(arrived.accident,true);
+    assert.equal(arrived.toTownId,1);
+    assert.equal(town(db),1);
+    assert.equal(arrived.durabilityAfter,3);
+  }finally{db.close();}
+});
+
+test("第63階段沒有輪滑車，車禍且1/5迷路才隨機改道；亂數恰好選原目標也須保留事故迷路記錄",()=>{
+  const db=setup();
+  try{
+    const car=giveVehicle(db,"ポルシェ");
+    const first=start(db,{vehicleSourceLine:car,requestId:"phase63_tandem",
+      lostRoll:0,rolls:[0],rerouteTown:1});
+    assert.equal(first.toTownId,1);
+    const arrived=arrive(db,{tripId:first.id,now:NOW+3000});
+    assert.equal(arrived.lost,true);
+    assert.equal(arrived.rerouted,true,"改道抽選可碰巧選中原本目標");
+    assert.equal(arrived.toTownId,1);
+    const next=start(db,{vehicleSourceLine:car,toTownId:2,
+      requestId:"phase63_no_lost",now:NOW+4000,
+      lostRoll:4,rolls:[0],rerouteTown:0});
+    const nextDone=arrive(db,{tripId:next.id,now:NOW+7000});
+    assert.equal(nextDone.lost,false);
+    assert.equal(nextDone.rerouted,false);
+    assert.equal(nextDone.accident,true);
+    assert.equal(nextDone.toTownId,2);
+  }finally{db.close();}
+});
+
+test("第63階段不合法迷路或改道亂數全部回滾，既不結案也不扣事故耐久",()=>{
+  const db=setup();
+  try{
+    const car=giveVehicle(db,"フェラーリ");
+    assert.throws(()=>start(db,{vehicleSourceLine:car,lostRoll:5,rolls:[0]}),/迷路亂數/);
+    assert.equal(trips(db),0);
+    assert.equal(db.prepare("SELECT COUNT(*) n FROM legacy_item_usage").get().n,0);
+    assert.throws(()=>start(db,{vehicleSourceLine:car,lostRoll:0,rerouteTown:4,rolls:[0]}),/改道/);
+    assert.equal(trips(db),0);
+    assert.equal(town(db),0);
+    assert.equal(db.prepare("SELECT COUNT(*) n FROM legacy_item_usage").get().n,0);
+  }finally{db.close();}
+});
+
+test("第63階段從第62階段舊SQLite無損升級：既有待抵達行程和完成歷史不重抽迷路",()=>{
+  const db=new DatabaseSync(":memory:");
+  db.exec([
+    "PRAGMA foreign_keys=ON;",
+    "CREATE TABLE users(id INTEGER PRIMARY KEY);",
+    "CREATE TABLE characters(user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,",
+    "town_id INTEGER NOT NULL,stats_json TEXT NOT NULL,money INTEGER NOT NULL);",
+    "INSERT INTO users(id) VALUES(1),(2);",
+    "CREATE TABLE arcade_road_trips(",
+    "id INTEGER PRIMARY KEY AUTOINCREMENT,",
+    "user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,",
+    "request_id TEXT NOT NULL,from_town INTEGER NOT NULL,to_town INTEGER NOT NULL,",
+    "vehicle_source_line INTEGER,vehicle_name TEXT NOT NULL,",
+    "travel_seconds INTEGER NOT NULL,started_at INTEGER NOT NULL,arrival_at INTEGER NOT NULL,",
+    "accident INTEGER NOT NULL,durability_after INTEGER,exercise_json TEXT NOT NULL,",
+    "completed_at INTEGER,UNIQUE(user_id,request_id));"
+  ].join(" "));
+  db.prepare("INSERT INTO characters VALUES(1,0,?,100000)").run(JSON.stringify(stats()));
+  db.prepare("INSERT INTO characters VALUES(2,1,?,100000)").run(JSON.stringify(stats()));
+  const insert=db.prepare([
+    "INSERT INTO arcade_road_trips(user_id,request_id,from_town,to_town,",
+    "vehicle_name,travel_seconds,started_at,arrival_at,accident,exercise_json,completed_at)",
+    "VALUES(?,?,?,?,?,?,?,?,?,?,?)"
+  ].join(" "));
+  insert.run(1,"phase62_old_pending",0,1,"徒歩",10,NOW,NOW+10000,0,"{}",null);
+  insert.run(2,"phase62_old_history",0,1,"徒歩",10,NOW-20000,NOW-10000,0,"{}",NOW-10000);
+  try{
+    initTreasureTables(db);
+    initRoadTravelTables(db);
+    initRoadTravelTables(db);
+    assert.equal(db.prepare("SELECT COUNT(*) n FROM arcade_road_trips").get().n,2);
+    assert.deepEqual(db.prepare("SELECT requested_to_town,lost,rerouted FROM arcade_road_trips WHERE user_id=1").get(),
+      {requested_to_town:1,lost:0,rerouted:0});
+    const old=roadOverview(db,1,rules,NOW);
+    assert.equal(old.pending.id,1);
+    assert.equal(old.pending.toTownId,1);
+    assert.equal(old.pending.lost,undefined);
+    const other=roadOverview(db,2,rules,NOW);
+    assert.equal(other.history.length,1);
+    assert.equal(other.history[0].lost,false);
+    assert.equal(other.history[0].requestedToTownId,1);
+    assert.equal(arrive(db,{tripId:1,now:NOW+10000}).lost,false);
+    assert.equal(town(db),1);
+    assert.equal(start(db,{toTownId:1,requestId:"phase62_old_pending"}).replayed,true);
+  }finally{db.close();}
+});
