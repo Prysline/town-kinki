@@ -54,7 +54,7 @@ test("既定食堂用語與胸罩系列統一，韓式煎餅的縮身效果不�
     "中国秘伝のたれ":"中國秘傳醬汁",
     "チヂミ":"縮縮韓式煎餅",
     "ゴディバチョコレート":"GODIVA巧克力",
-    "ビスコ":"Bisco餅乾"
+    "ビスコ":"必思可夾心餅乾"
   };
   for(const [key,value] of Object.entries(expected))
     assert.equal(displayRetailFoodName(key),value,key);
