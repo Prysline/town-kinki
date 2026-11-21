@@ -152,7 +152,7 @@ test("既有第46階段信件外鍵先升級第47階段，再無損轉為共用�
     db.exec([
       "PRAGMA foreign_keys=ON;",
       "CREATE TABLE users(id INTEGER PRIMARY KEY);",
-      "CREATE TABLE characters(user_id INTEGER PRIMARY KEY REFERENCES users(id),",
+      "CREATE TABLE characters(user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,",
       "name TEXT UNIQUE NOT NULL,town_id INTEGER NOT NULL,money INTEGER NOT NULL);",
       "INSERT INTO users(id) VALUES(1),(2);",
       "INSERT INTO characters(user_id,name,town_id,money) VALUES",
