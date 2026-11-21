@@ -13,7 +13,7 @@ const DISPLAY_THRESHOLDS=Object.freeze([80,65,50,35,20]);
 const EFFECTIVE_PERCENT=Object.freeze(DISPLAY_THRESHOLDS.map(n=>n-1));
 
 function originalArray(source,name){
-  const found=new RegExp("@"+name+"\\s*=\\s*\\(([^)]*)\\)\\s*;").exec(source);
+  const found=new RegExp("(?:^|\\n)[ \\t]*@"+name+"\\s*=\\s*\\(([^)]*)\\)\\s*;").exec(source);
   return found?.[1]?.match(/\d+/g)?.map(Number)??[];
 }
 export function parseOriginalMultiCard(gamerandSource,cardwSource,settingsSource){
