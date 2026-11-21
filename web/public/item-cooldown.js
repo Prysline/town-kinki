@@ -23,3 +23,14 @@ export function itemCooldownText(action,gameNow){
     "距離購入時間 ":"冷卻剩餘 ";
   return prefix+formatItemCountdown(remaining);
 }
+
+/* 原版以購入日計算「日」耐久的剩餘天數；沒有效日期的資料不推定。 */
+export function itemRemainingDurability(item,action,gameNow){
+  if(Number.isSafeInteger(action?.remaining))return action.remaining;
+  if(item?.unit==="日"&&Number.isSafeInteger(item.purchasedAt)&&item.purchasedAt>0&&
+     Number.isSafeInteger(item.durability)&&Number.isFinite(gameNow)){
+    const elapsed=Math.max(0,Math.floor((Math.floor(gameNow/1000)-item.purchasedAt)/86400));
+    return Math.max(0,item.durability-elapsed);
+  }
+  return item?.durability??0;
+}
