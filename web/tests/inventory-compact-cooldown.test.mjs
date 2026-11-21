@@ -49,7 +49,7 @@ test("個人物品安全取得原版效果，壞資料保留清單而不憑空�
     assert.equal(items[0].readOnly,true);
     assert.ok(!("rawFields" in items[0]));
     assert.equal(items[1].name,"損壞存檔");
-    assert.equal(items[1].details,null);
+    assert.equal(items[1].details,undefined);
   }finally{db.close();}
 });
 test("物品沿用百貨的完整能力增減格式，不使用等 X 項摘要",()=>{
