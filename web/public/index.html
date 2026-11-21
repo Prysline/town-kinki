@@ -706,6 +706,32 @@
           <h3>本人最近20局多卡紀錄</h3>
           <div id="arcade-cardw-history"></div>
         </section>
+        <section class="card" id="arcade-treasure-panel">
+          <div class="heading">
+            <div><div class="eyebrow">原版遊樂中心 · otakara.cgi</div><h2>四種寶箱</h2></div>
+            <span class="muted">原始110筆獎品 · 道具與狀態即時入帳</span>
+          </div>
+          <details class="explain">
+            <summary>原版寶箱、抽樣機率、道具入庫與安全差異</summary>
+            <p class="small">原版四種寶箱為銅箱500元、銀箱1,000元、金箱2,500,000元、特殊箱500,000元。每人每隔5分鐘可再開箱，不禁止同人連續開。獎池直接取自 dat_dir/otakara.cgi，共110筆：銅34筆、銀35筆、金39筆、特殊箱會從全部110筆中抽取。注意原版以 int(rand($#陣列)) 抽樣，最後一筆永遠不會被抽到，因此實際候選數分別為33、34、38、109，特殊箱也不會抽到獎池最後一筆的究極純白金車。原版依效果欄位直接修改能力／疾病／現金（沒有能力提升時發給獎品標價），或把原始33欄獎品真正寫入背包；金塊屬於直接現金獎品，並非背包物件。Web 保留原始抽樣、5分鐘、價格、25格一般背包上限與同類物品耐久堆疊，使用SQLite交易將扣款和真正入庫／生效以及紀錄同時完成，重送不重抽。部分原始物品雖能持有，其後續使用功能仍未完整移植，會在背包中標示不支援，不能把持有物等同功能皆可使用。</p>
+          </details>
+          <p id="arcade-treasure-status" class="small" role="status"></p>
+          <div class="filters retail-filters">
+            <label for="arcade-treasure-box">選擇寶箱
+              <select id="arcade-treasure-box">
+                <option value="copper">銅箱 · 500元</option>
+                <option value="silver">銀箱 · 1,000元</option>
+                <option value="gold">金箱 · 2,500,000元</option>
+                <option value="special">特殊箱 · 500,000元</option>
+              </select>
+            </label>
+          </div>
+          <p id="arcade-treasure-quote" class="small" role="status"></p>
+          <button type="button" id="arcade-treasure-open" disabled>確認費用並開啟寶箱</button>
+          <p id="arcade-treasure-result" class="small" aria-live="polite"></p>
+          <h3>本人最近20次寶箱紀錄</h3>
+          <div id="arcade-treasure-history"></div>
+        </section>
       </div>
       <div id="facility-pane-training" class="facility-pane" role="tabpanel" aria-labelledby="facility-tab-training" tabindex="0" hidden>
         <section class="card" id="school-panel">
