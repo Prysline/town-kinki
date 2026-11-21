@@ -1447,7 +1447,6 @@ function renderLegacyItems(){
   }
 }
 
-}
 function updateCockroachCountdown() {
   const challenge=state?.cockroachChallenge;
   const panel=el("cockroach-challenge");
