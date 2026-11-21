@@ -26,6 +26,7 @@ import {parseOriginalArcadeDice,initArcadeDiceTables,arcadeDiceOverview,playArca
 import {parseOriginalArcadeHighLow,initArcadeHighLowTables,arcadeHighLowOverview,playArcadeHighLow} from "./arcade-highlow.mjs";
 import {parseOriginalArcadeDonuts,initArcadeDonutTables,arcadeDonutsOverview,playArcadeDonut} from "./arcade-donuts.mjs";
 import {parseOriginalInstantLoto,initInstantLotoTables,instantLotoOverview,playInstantLoto} from "./arcade-loto.mjs";
+import {parseOriginalLoto6,initLoto6Tables,loto6Overview,buyLoto6Ticket,settleLoto6Draw} from "./arcade-loto6.mjs";
 import {initCouponRedemptionTables,listCouponRewards,listCouponRedemptions,redeemEventCoupon,COUPON_SHOP_SYMBOL} from "./coupon-redemption.mjs";
 import { getCockroachChallenge,claimCockroach } from "./event-cockroach.mjs";
 import { parseLegacyInsurance, initInventoryTables, inventoryOverview, hasActiveHealthInsurance, listInsurancePurchases, buyHealthInsurance } from "./inventory.mjs";
@@ -108,6 +109,7 @@ initArcadeDiceTables(db);
 initArcadeHighLowTables(db);
 initArcadeDonutTables(db);
 initInstantLotoTables(db);
+initLoto6Tables(db);
 initInventoryTables(db);
 initDiningStockTables(db);
 initLegacyItemUseTables(db);
@@ -167,6 +169,10 @@ const arcadeDonutsSource=parseOriginalArcadeDonuts(
 const instantLotoSource=parseOriginalInstantLoto(
   decodeLegacyText(readFileSync(resolve(REPO_ROOT,"gamerand.cgi"))),
   decodeLegacyText(readFileSync(resolve(REPO_ROOT,"loto.cgi")))
+);
+const loto6Source=parseOriginalLoto6(
+  decodeLegacyText(readFileSync(resolve(REPO_ROOT,"gamerand.cgi"))),
+  decodeLegacyText(readFileSync(resolve(REPO_ROOT,"loto6.cgi")))
 );
 const wholesaleCatalog=parseWholesaleCatalog(decodeLegacyText(readFileSync(resolve(REPO_ROOT,"dat_dir","syouhin.cgi"))));
 const vendingCatalog=parseLegacyVendingCatalog(decodeLegacyText(readFileSync(resolve(REPO_ROOT,"dat_dir","jihanki.cgi"))));
@@ -410,6 +416,7 @@ function snapshot(user) {
     arcadeHighLow:updated?arcadeHighLowOverview(db,user.id,arcadeHighLowSource,now):null,
     arcadeDonuts:updated?arcadeDonutsOverview(db,user.id,arcadeDonutsSource,now):null,
     instantLoto:updated?instantLotoOverview(db,user.id,instantLotoSource,now):null,
+    loto6:updated?loto6Overview(db,user.id,loto6Source,now,GAME_TIMEZONE):null,
     cockroachChallenge: updated ? getCockroachChallenge(db,user.id,now) : null,
     hospital: updated ? getTreatmentQuote(updated,hasActiveHealthInsurance(db,user.id,insuranceItem,now)) : null,
     insurance: updated ? inventoryOverview(db,user.id,insuranceItem,now) : null,
@@ -841,6 +848,28 @@ async function handle(req, res) {
         });
       }catch(error){throw new HttpError(400,error.message);}
       return sendJson(res,200,{...snapshot(user),instantLotoResult});
+    }
+
+    if(path==="/api/arcade/loto6/buy"){
+      let loto6TicketResult;
+      try{
+        loto6TicketResult=buyLoto6Ticket(db,user.id,loto6Source,{
+          numbers:data.numbers,requestId:data.requestId,
+          now:gameNow(),timeZone:GAME_TIMEZONE
+        });
+      }catch(error){throw new HttpError(400,error.message);}
+      return sendJson(res,200,{...snapshot(user),loto6TicketResult});
+    }
+
+    if(path==="/api/arcade/loto6/check"){
+      let loto6DrawResult;
+      try{
+        const now=gameNow();
+        if(!loto6Overview(db,user.id,loto6Source,now,GAME_TIMEZONE).available)
+          throw new Error("目前城鎮沒有原版遊樂中心");
+        loto6DrawResult=settleLoto6Draw(db,loto6Source,{now,timeZone:GAME_TIMEZONE});
+      }catch(error){throw new HttpError(400,error.message);}
+      return sendJson(res,200,{...snapshot(user),loto6DrawResult});
     }
 
     if (path === "/api/coupon/redeem") {
