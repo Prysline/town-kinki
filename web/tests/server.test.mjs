@@ -3559,7 +3559,7 @@ test("多人 HTTP：受贈食品可實際食用，速食共用 60 分鐘冷卻�
     const current=await api(srv.url,"state",undefined,b.cookie);
     assert.equal(current.result.legacyItemActions.find(x=>x.sourceLine===sourceLines[0]).remaining,0);
     assert.equal(current.result.legacyItemActions.find(x=>x.sourceLine===sourceLines[1]).remaining,1);
-    assert.equal(current.result.legacyItemUseHistory.length,1);
+    assert.equal(current.result.legacyItemHistory.length,1);
     const check=new DatabaseSync(join(srv.directory,"multi.sqlite"));
     try{
       const rows=check.prepare([
