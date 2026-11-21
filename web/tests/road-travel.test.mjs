@@ -57,9 +57,12 @@ function giveVehicle(db,name,{userId=1,sourceLine=3000001,remaining=null,origin=
   return sourceLine;
 }
 function start(db,{userId=1,toTownId=1,vehicleSourceLine=null,
-  requestId="phase62_road_trip",now=NOW,rolls=[14,14,14,14,14,9]}={}){
+  requestId="phase62_road_trip",now=NOW,rolls=[14,14,14,14,14,9],
+  lostRoll=4,rerouteTown=2}={}){
   let i=0;
   return beginRoadTrip(db,userId,rules,{toTownId,vehicleSourceLine,requestId,now,
+    lostRandomIndex:n=>{assert.equal(n,5);return lostRoll;},
+    rerouteRandomIndex:n=>{assert.equal(n,4);return rerouteTown;},
     randomIndex:n=>{
       const roll=rolls[i++]??9;
       assert.ok([10,15].includes(n),"原版只有15點能力與10分之1事故");
