@@ -679,7 +679,7 @@ test("第51階段：原版優惠券兌換所地圖入口、30獎品、本人事�
   assert.match(html,/id="coupon-rewards"/);
   assert.match(html,/id="coupon-shop-status"/);
   assert.match(html,/id="coupon-redemptions"/);
-  assert.match(html,/只有 Web 隨機事件所得/);
+  assert.match(html,/只可使用「Web 隨機事件所得」的優惠券點數/);
   assert.match(html,/一般持有物上限 25 格/);
   assert.match(script,/function renderCouponShop\(\)/);
   assert.match(script,/renderCouponShop\(\);/);
