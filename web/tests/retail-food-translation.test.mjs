@@ -70,7 +70,7 @@ test("未知品項回退原名；食品類別只在顯示時翻譯",()=>{
 });
 
 test("UI 可用繁體中文搜尋食品，商品與持有物使用中文顯示，但交易保留原始 SKU 與名稱",()=>{
-  assert.match(app,/import \{ displayRetailItemName,displayRetailItemCategory \} from "\.\/retail-food-translations\.js"/);
+  assert.match(app,/import \{ displayRetailFoodName,displayRetailFoodCategory \} from "\.\/retail-food-translations\.js"/);
   assert.match(app,/document\.createTextNode\(displayProductName\(item\.name\)\)/);
   assert.match(app,/name\.textContent=displayRetailItemName\(item\.name\)/);
   assert.match(app,/displayRetailItemName\(item\.name\)\.toLocaleLowerCase\("zh-TW"\)\.includes\(search\)/);
