@@ -3877,7 +3877,8 @@ test("第48階段單機完整循環：工作→銀行→百貨→使用→重啟
       "跨日結息不能因重新查看狀態重複入帳");
     assert.equal(refreshed.mealCooldownMs,0);
     assert.equal(refreshed.character.jobWorkCount,2);
-    assert.equal(refreshed.legacyItemActions.find(x=>x.sourceLine===sourceLine)?.remaining,5);
+    assert.equal(refreshed.legacyItemActions.find(x=>x.sourceLine===sourceLine)?.remaining,4,
+      "按日計效期道具跨一天應自然由五天降至四天，不可誤判為重啟失去存檔");
   }finally{await srv.stop();}
 });
 
