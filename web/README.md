@@ -6,6 +6,8 @@
 
 > **第 47 階段後的核心系統順序**：先看 [核心玩法、多人資料安全與驗收優先清冊](docs/phase47-core-system-priority.md)。舊階段的詳細來源仍見下列盤點，歷史順序不等於目前優先順序。
 
+> **第 48 階段核心工作與重啟驗收**：依原版 [工作門檻與遊戲循環重啟紀錄](docs/phase48-core-gameplay-restart.md)，已把轉職限定的性別／身高檢查與每次出勤的能力／BMI／能量／冷卻分開，並新增單機兩次真正 Node 重啟後的工作→銀行→實體百貨→商品使用→食堂→跨日結息端到端回歸，以及多人兩帳號跨伺服器重啟的會話／帳簿隔離測試。這些是 HTTP／SQLite 自動驗收，不代表真實玩家舊存檔與手機瀏覽器已全面驗證。
+
 > **第 30 階段盤點與後續工作**：[CGI 來源重盤點／偽待辦校正](docs/phase30-source-recheck.md)、[最新待辦總清冊：未深入盤點／已盤點未修／已修待驗收](docs/phase30-open-audit-backlog.md)、[現行原版 → Web 差異矩陣](docs/migration-audit.md)、[全 43 個原版地圖互動入口與 Web 導覽覆蓋表](docs/phase30-entrypoint-coverage.md)、[外貌與圖示來源](docs/appearance-source-audit.md)、[職業／教室／公開個人檔案](docs/phase30-jobs-training-profile-audit.md) 分別追溯原版程式與實際缺漏。**現有 CI 只核對入口清單／圖示，並不逐子 CGI 驗證功能**；歷史 [工作契約](docs/PHASE30-MIGRATION-INVENTORY-PLAN.md) 不是驗收證明。實際玩家資料／瀏覽器仍待驗收。
 
 ## 本階段已完成

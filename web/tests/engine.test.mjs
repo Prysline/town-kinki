@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -219,4 +220,44 @@ test("原版薪資及升級獎金依玩家收款偏好入銀行而非現金",()=
   const cash=performWork({...before,salaryPayment:"cash"},job,100001,()=>0);
   assert.equal(cash.character.money,111550);
   assert.equal(cash.character.bank,0);
+});
+
+
+test("工作 WK-06：原版只有轉職檢查性別／身高，任職後照能力／BMI／能量繼續工作",()=>{
+  // 對照 basic.cgi::job_change 與 basic.cgi::do_work 的不同判定階段。
+  const cgi=decodeLegacyText(readFileSync(new URL("../../basic.cgi",import.meta.url)));
+  const selection=cgi.slice(cgi.indexOf("sub job_change {"),cgi.indexOf("sub job_change_go {"));
+  const working=cgi.slice(cgi.indexOf("sub do_work {"),cgi.indexOf("sub do_work {")+8500);
+  assert.match(selection,/\$job_sex/);
+  assert.match(selection,/\$job_sintyou/);
+  assert.match(working,/\$job_kyakuryoku/);
+  assert.match(working,/\$job_BMI_min/);
+  assert.doesNotMatch(working,/\$job_sex|\$job_sintyou/);
+
+  const [base]=parseLegacyJobs(first);
+  const job={...base,gender:"male",minHeight:180,bmiMin:18,bmiMax:24,
+    bodyCost:1,brainCost:1};
+  const initial={...createCharacterData("任職資格測試","male",100000),
+    height:185,weight:70,bmi:bodyMassIndex(185,70)};
+  assert.equal(jobEligibility(initial,job),null);
+  const hired=selectJob(initial,job);
+  const short={...hired,height:165,weight:55,bmi:bodyMassIndex(165,55)};
+  assert.equal(jobEligibility(short,job),"身高不足","轉職時仍必須拒絕身高不符");
+  assert.equal(performWork(short,job,100001,()=>0).paid,1000,
+    "任職後的身高變化不應額外封鎖工作");
+  const otherGender={...hired,gender:"female"};
+  assert.match(jobEligibility(otherGender,job),/性別/);
+  assert.equal(performWork(otherGender,job,100001,()=>0).paid,1000,
+    "任職後不重驗原版只有在轉職時核對的性別門檻");
+  assert.throws(()=>selectJob(otherGender,job),/性別/);
+  const noStats={...short,stats:{...short.stats,kokugo:0}};
+  assert.throws(()=>performWork(noStats,{...job,requirements:{
+    ...job.requirements,kokugo:10
+  }},100001,()=>0),/國語不足/);
+  assert.throws(()=>performWork({...short,weight:100},job,100001,()=>0),
+    /體格指數不足/);
+  assert.throws(()=>performWork({...short,bodyEnergy:0,
+    recoveredAt:100001},job,100001,()=>0),/能量不足/);
+  const success=performWork(short,job,100001,()=>0);
+  assert.throws(()=>performWork(success.character,job,100002,()=>0),/等待/);
 });
