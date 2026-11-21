@@ -209,9 +209,13 @@ test("原版五份同魚類持有上限與25格上限阻止多領，新增失敗
     }
     assert.equal(held(db).filter(x=>x.original_name==="小魚").length,1);
     assert.equal(held(db).find(x=>x.original_name==="小魚").durability,5);
-    assert.throws(()=>cast(db,fish.source_line,"phase53_stack_six",now+600000,()=>0),/五份持有上限/);
-    // 六次嘗試不會在第六次扣走原來的魚當餌。
-    assert.equal(db.prepare("SELECT remaining FROM legacy_item_usage WHERE source_line=?").get(fish.source_line).remaining,5);
+    buy(db,source.bait.find(x=>x.name==="魚ルアー（小）").sku,
+      "phase53_stack_refill",now+500000);
+    const before=db.prepare("SELECT remaining FROM legacy_item_usage WHERE source_line=?").get(bait).remaining;
+    assert.throws(()=>cast(db,bait,"phase53_stack_six",now+600000,()=>0),/五份持有上限/);
+    // 第六次中魚超過持有上限時不能先扣掉魚餌或改變下一次釣魚時間。
+    assert.equal(db.prepare("SELECT remaining FROM legacy_item_usage WHERE source_line=?").get(bait).remaining,before);
+    assert.equal(db.prepare("SELECT remaining FROM legacy_item_usage WHERE source_line=?").get(fish.source_line)?.remaining??5,5);
   }finally{db.close();}
 });
 
