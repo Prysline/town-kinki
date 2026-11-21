@@ -31,7 +31,7 @@ export function parseOriginalInstantLoto(gamerandSource,lotoSource){
      multipliers.length!==MULTIPLIERS.length||
      multipliers.some((x,i)=>x!==MULTIPLIERS[i])||
      threeMinutes!==3||allowSame!==1||allowDebt!==0||oldRecordLimit!==0||
-     (lotoSource.match(/int\(rand\(10\)\)/g)??[]).length<6||
+     !Array.from({length:6},(_,i)=>new RegExp("\\$loto"+(i+1)+"\\s*=\\s*int\\(rand\\(10\\)\\)").test(lotoSource)).every(Boolean)||
      !lotoSource.includes('$loto_time + $loto_set2*60 > $now_time')||
      !lotoSource.includes('if($loto_name eq "$name")')||
      !lotoSource.includes('$money = $money - $in{\'rate\'} + $in{\'rate\'} * $bai')||
