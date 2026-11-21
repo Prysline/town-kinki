@@ -51,8 +51,9 @@ test("臺灣既有遊戲名稱及原版城鎮名稱不混淆",()=>{
     "ハローキティのおしゃべりABC":"Hello Kitty說說ABC",
     "ときめきメモリアル":"純愛手札",
     "ドラゴンクエストV 天空の花嫁":"勇者鬥惡龍V 天空的新娘",
-    "ファイナルファンタジー XII":"太空戰士XII",
+    "ファイナルファンタジー XII":"最終幻想 XII",
     "戦国無双":"戰國無雙",
+    "ダービースタリオン":"德貝賽馬",
     "逆転裁判バリューパック":"逆轉裁判超值套組",
     "ブラジャータウン":"胸罩鎮",
     "星のカービィ参上！ドロッチェ団":"星之卡比 怪盜洛切團登場！",
@@ -65,9 +66,9 @@ test("臺灣既有遊戲名稱及原版城鎮名稱不混淆",()=>{
   assert.equal(displayRetailGameName("不存在的作品"),"不存在的作品");
 });
 
-test("惡搞作品保留混搭笑點，不誤判為真正系列；未改原版效果",()=>{
-  assert.equal(displayRetailItemName("ファイナルクエスト"),"最終冒險");
-  assert.equal(displayRetailItemName("ドラゴンクファンタジー"),"勇者鬥幻想");
+test("校對後的混搭作品名稱採英文譯名，原版效果保持不變",()=>{
+  assert.equal(displayRetailItemName("ファイナルクエスト"),"Final Quest");
+  assert.equal(displayRetailItemName("ドラゴンクファンタジー"),"Dragon Fantasy");
   const spoof=rows.find(x=>x.fields[1]==="ドラゴンクファンタジー").fields;
   assert.equal(spoof[9],"ダイエット,1");
   assert.equal(spoof[29],"ダイエットに効果があります。");
