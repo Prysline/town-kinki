@@ -1909,6 +1909,138 @@ function renderShopTable(target,goods,{shopName,onPurchase,emptyText}){
   checkout.append(controls,quote,button);target.append(checkout);
   update();
 }
+let pendingLoto6Purchase=null;
+let loto6Busy=false;
+async function buyLoto6(random,numbers){
+  if(loto6Busy)return;
+  const info=state.loto6;
+  const key=random?"random":"manual:"+numbers.join(",");
+  if(!window.confirm("確認花費 "+money(info.price)+" 買一注六號樂透？"+
+      (random?"伺服器將隨機選出6個不同號碼。":
+        "所選號碼："+numbers.join("、")+"。")+
+      "開獎後獎金會存入普通銀行，不會直接變成現金。"))return;
+  if(!pendingLoto6Purchase||pendingLoto6Purchase.key!==key)
+    pendingLoto6Purchase={key,requestId:crypto.randomUUID()};
+  loto6Busy=true;
+  el("arcade-loto6-buy").disabled=true;
+  try{
+    state=await api("arcade/loto6/buy",{
+      ...(random?{random:true}:{numbers,random:false}),
+      requestId:pendingLoto6Purchase.requestId
+    });
+    const ticket=state.loto6TicketResult;
+    pendingLoto6Purchase=null;render();
+    notify(ticket.replayed?"這注彩券已購買過，不會再次扣款。":
+      "已買入六號樂透："+ticket.numbers.join("、")+
+      "；扣款 "+money(ticket.price)+
+      (ticket.drawTriggered?"。上一輪也已完成開獎。":"。等待下一輪開獎。"));
+  }catch(error){notify(error.message,true);}
+  finally{loto6Busy=false;if(state?.character)renderLoto6();}
+}
+async function checkLoto6Draw(){
+  if(loto6Busy)return;
+  loto6Busy=true;
+  el("arcade-loto6-check").disabled=true;
+  try{
+    state=await api("arcade/loto6/check",{});
+    const result=state.loto6DrawResult;
+    render();
+    notify(result.drawn?
+      "六號樂透已開獎（"+result.reason+"），中獎號碼 "+
+      result.winningNumbers.join("、")+
+      "。共結算 "+result.ticketCount+" 注，獎金合計 "+
+      money(result.totalPrize)+" 匯入各玩家的普通銀行。":
+      "目前六號樂透尚未達06:00開獎條件，也未累計200注。");
+  }catch(error){notify(error.message,true);}
+  finally{loto6Busy=false;if(state?.character)renderLoto6();}
+}
+function renderLoto6(){
+  if(!state?.character)return;
+  const info=state.loto6??{};
+  const available=info.available===true;
+  const random=el("arcade-loto6-random");
+  const selectors=Array.from({length:6},(_,i)=>el("arcade-loto6-number-"+(i+1)));
+  for(let i=0;i<selectors.length;i++){
+    const select=selectors[i],old=select.value;
+    if(select.options.length!==36){
+      select.replaceChildren();
+      for(let n=1;n<=36;n++){
+        const option=document.createElement("option");
+        option.value=String(n);option.textContent=String(n).padStart(2,"0");
+        select.append(option);
+      }
+      select.value=Number.isInteger(Number(old))&&Number(old)>=1&&Number(old)<=36?
+        old:String(i+1);
+    }
+  }
+  const buy=el("arcade-loto6-buy"),check=el("arcade-loto6-check");
+  const current=selectors.map(x=>Number(x.value));
+  const bank=state.character.bank;
+  text("arcade-loto6-status",!available?
+    "目前所在城鎮沒有「ゲーセン」遊樂中心。":
+    "目前輪次：全服待開獎 "+info.pendingCount+"/"+info.drawCap+
+    " 注；本人 "+info.myPendingCount+"/"+info.perUserLimit+
+    " 注；當地時鐘 "+String(info.hour).padStart(2,"0")+
+    " 時。"+(info.due?"已滿足開獎條件（"+
+      (info.dueReason==="06:00"?"06:00":"達200注")+"）；請按下方開獎按鈕。":
+      "尚未到新一輪開獎條件。"));
+  function update(){
+    const chosen=selectors.map(x=>Number(x.value));
+    const valid=chosen.length===6&&chosen.every(x=>Number.isInteger(x)&&x>=1&&x<=36)&&
+      new Set(chosen).size===6;
+    const enough=Number.isSafeInteger(info.price)&&state.character.money>=info.price;
+    for(const select of selectors)select.disabled=random.checked;
+    text("arcade-loto6-quote",(random.checked?"伺服器隨機選6個不重複數字":
+      "所選 "+chosen.map(x=>String(x).padStart(2,"0")).join("、")+
+      (valid?"":"（不可有重複或無效號碼）"))+
+      "｜每注 "+money(info.price??0)+
+      "｜目前現金 "+money(state.character.money)+
+      "｜普通銀行 "+money(bank)+
+      (!enough?"｜現金不足":""));
+    buy.disabled=loto6Busy||!available||!enough||
+      (info.myPendingCount??0)>=(info.perUserLimit??20)||
+      (!random.checked&&!valid);
+    check.disabled=loto6Busy||!available;
+  }
+  for(const select of selectors)select.onchange=update;
+  random.onchange=update;
+  buy.onclick=()=>{
+    const numbers=selectors.map(x=>Number(x.value));
+    const valid=numbers.length===6&&numbers.every(x=>Number.isInteger(x)&&x>=1&&x<=36)&&
+      new Set(numbers).size===6;
+    if(!loto6Busy&&available&&state.character.money>=info.price&&
+       info.myPendingCount<info.perUserLimit&&(random.checked||valid))
+      buyLoto6(random.checked,numbers);
+  };
+  check.onclick=checkLoto6Draw;
+  update();
+  text("arcade-loto6-result",info.lastDraw?
+    "最近開獎："+info.lastDraw.day+
+    "｜號碼 "+info.lastDraw.numbers.join("、")+
+    "｜"+(info.lastDraw.reason==="06:00"?"06:00時段":"200注滿額")+
+    "｜共結算 "+info.lastDraw.ticketCount+" 注":
+    "尚無六號樂透開獎紀錄。");
+  const history=el("arcade-loto6-history");history.replaceChildren();
+  const tickets=info.history??[];
+  if(!tickets.length){
+    const p=document.createElement("p");p.className="small";
+    p.textContent="尚未購買彩券。";history.append(p);
+  }else{
+    const list=document.createElement("ol");list.className="health-event-list";
+    for(const ticket of tickets){
+      const li=document.createElement("li");
+      li.textContent=new Date(ticket.boughtAt).toLocaleString("zh-TW")+
+        "｜"+ticket.numbers.join("、")+
+        (ticket.randomSelected?"（隨機選號）":"")+
+        "｜"+(ticket.pending?"待開獎":
+          "中 "+ticket.matches+" 號，普通銀行獎金 "+
+          money(ticket.prize??0));
+      list.append(li);
+    }
+    history.append(list);
+  }
+}
+
 let pendingInstantLoto=null;
 let instantLotoSubmitting=false;
 async function submitInstantLoto(stake,chosenDigits){
@@ -3570,6 +3702,7 @@ function render() {
   renderArcadeHighLow();
   renderArcadeDonuts();
   renderInstantLoto();
+  renderLoto6();
   renderEquipment();
   renderGiftShop();
   renderMailbox();
