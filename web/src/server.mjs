@@ -24,7 +24,7 @@ import { listLegacyInventoryItems } from "./legacy-inventory.mjs";
 import {parseLegacyRetailCatalog,initRetailTables,ensureRetailDay,listRetailStock,listRetailPurchases,buyRetailItem,RETAIL_SHOPS} from "./retail.mjs";
 import {parseLegacyVendingCatalog,initVendingTables,ensureVendingRotation,listVendingStock,vendingPeriodKey,VENDING_SYMBOL,VENDING_SHOP} from "./vending.mjs";
 import {parseLegacyEquipmentCatalog,initEquipmentTables,listEquipmentItems,listEquipmentTransactions,buyEquipment,equipEquipment,sellEquipment,forgeEquipment,EQUIPMENT_SYMBOL} from "./equipment.mjs";
-import {initGiftTables,GIFT_SHOP_SYMBOL,listGiftSources,listGiftEvents,convertToGift,sendGift} from "./gift-shop.mjs";
+import {initGiftTables,GIFT_SHOP_SYMBOL,listGiftSources,listGiftEvents,listGiftMail,convertToGift,sendGift} from "./gift-shop.mjs";
 import {initRecycleTables,RECYCLE_SYMBOL,listRecycleListings,listRecycleSellable,listRecycleHistory,buyFromRecycle,sellToRecycle} from "./recycle.mjs";
 import {parseWholesaleCatalog,initWholesaleTables,ensureWholesaleDay,listWholesaleGoods,
   WHOLESALE_SYMBOL,SHOP_CATEGORIES,configurePlayerShop,listMyShops,
@@ -359,6 +359,7 @@ function snapshot(user) {
     giftShopAvailable,
     giftSources:updated?listGiftSources(db,user.id,now):[],
     giftEvents:updated?listGiftEvents(db,user.id):[],
+    giftMail:updated?listGiftMail(db,user.id):[],
     recycleAvailable,
     recycleListings:recycleAvailable?listRecycleListings(db,now):[],
     recycleSellable:updated?listRecycleSellable(db,user.id,now):[],
@@ -755,7 +756,7 @@ async function handle(req, res) {
           });
         else result=sendGift(db,user.id,{
           sourceLine:data.sourceLine,quantity:data.quantity,
-          recipientName:data.recipientName,requestId:data.requestId,now
+          recipientName:data.recipientName,message:data.message,requestId:data.requestId,now
         });
       }catch(error){throw new HttpError(400,error.message);}
       return sendJson(res,200,{...snapshot(user),giftResult:result});

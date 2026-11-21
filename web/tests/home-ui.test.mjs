@@ -547,3 +547,16 @@ test("空白万能治療幅度與原版負熱量有清楚說明，不會被誤�
   assert.match(script,/\(info\.calories\?\?0\)<0/);
   assert.match(script,/使用後體重減少/);
 });
+
+test("寄禮站內信 UI 允許撰寫、雙方查看，純文字輸出不做 HTML 解析",()=>{
+  assert.match(html,/id="gift-mail"/);
+  assert.match(html,/寄禮站內信（收件與寄件，共用 50 封上限）/);
+  assert.match(html,/一般無禮品的私人信件、舊版信件匯入/);
+  assert.match(script,/state\.giftMail/);
+  assert.match(script,/payload\.message=message/);
+  assert.match(script,/message\.maxLength=1000/);
+  assert.match(script,/body\.textContent=mail\.message/);
+  assert.match(script,/gift\.textContent="禮品：/);
+  assert.match(script,/pendingGiftAction\.message!==message/);
+  assert.doesNotMatch(script,/body\.innerHTML=mail\.message/);
+});

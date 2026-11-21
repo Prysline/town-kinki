@@ -3573,3 +3573,78 @@ test("多人 HTTP：受贈食品可實際食用，速食共用 60 分鐘冷卻�
     }finally{check.close();}
   }finally{await srv.stop();}
 });
+
+test("多人 HTTP：寄送附信和禮品同筆完成，雙方信箱隔離、重送不重寄、改文不得複用 ID",async()=>{
+  const srv=await start("multi");
+  try{
+    const a=await api(srv.url,"register",{
+      username:"phase46MailSender",password:"phase46-mail-sender-123"
+    });
+    const b=await api(srv.url,"register",{
+      username:"phase46MailReader",password:"phase46-mail-reader-123"
+    });
+    const c=await api(srv.url,"register",{
+      username:"phase46MailOther",password:"phase46-mail-other-123"
+    });
+    assert.equal(a.status,200);assert.equal(b.status,200);assert.equal(c.status,200);
+    const sender=await api(srv.url,"character",{
+      name:"寄禮信件甲",gender:"other",stats:defaultStats()
+    },a.cookie);
+    const reader=await api(srv.url,"character",{
+      name:"收禮信件乙",gender:"other",stats:defaultStats()
+    },b.cookie);
+    const other=await api(srv.url,"character",{
+      name:"第三人信箱丙",gender:"other",stats:defaultStats()
+    },c.cookie);
+    assert.equal(sender.status,200);assert.equal(reader.status,200);assert.equal(other.status,200);
+    const raw=Array(33).fill("0");
+    raw[0]="ギフト";raw[1]="油取り紙";raw[9]="無";
+    raw[21]="3";raw[22]="回";
+    raw[30]=String(Math.floor(sender.result.gameTimeMs/1000));
+    const db=new DatabaseSync(join(srv.directory,"multi.sqlite"));
+    try{
+      const userId=db.prepare("SELECT user_id FROM characters WHERE name=?").get("寄禮信件甲").user_id;
+      db.prepare([
+        "INSERT INTO legacy_inventory_items(user_id,original_id,source_line,category,",
+        "original_name,effect,durability,durability_unit,purchased_at,last_used_at,raw_fields_json)",
+        "VALUES(?,'__web_gift__',1000046,'ギフト','油取り紙','無',3,'回',?,0,?)"
+      ].join(" ")).run(userId,Number(raw[30]),JSON.stringify(raw));
+    }finally{db.close();}
+    const payload={
+      sourceLine:1000046,quantity:2,recipientName:"收禮信件乙",
+      message:"這份禮品送給你，祝今天愉快！",
+      requestId:"phase46_mail_http_send"
+    };
+    const sent=await api(srv.url,"gift/send",payload,a.cookie);
+    assert.equal(sent.status,200);
+    assert.equal(sent.result.giftResult.replayed,false);
+    assert.equal(sent.result.giftMail.length,1);
+    assert.equal(sent.result.giftMail[0].direction,"sent");
+    assert.equal(sent.result.giftMail[0].otherName,"收禮信件乙");
+    assert.equal(sent.result.giftMail[0].message,payload.message);
+    assert.equal(sent.result.giftMail[0].quantity,2);
+    const recv=await api(srv.url,"state",undefined,b.cookie);
+    assert.equal(recv.result.giftMail.length,1);
+    assert.equal(recv.result.giftMail[0].direction,"inbox");
+    assert.equal(recv.result.giftMail[0].otherName,"寄禮信件甲");
+    assert.equal(recv.result.giftMail[0].message,payload.message);
+    assert.equal(recv.result.giftMail[0].giftName,"油取り紙");
+    assert.equal(recv.result.legacyInventory.find(x=>x.name==="油取り紙").durability,2);
+    const outsider=await api(srv.url,"state",undefined,c.cookie);
+    assert.deepEqual(outsider.result.giftMail,[]);
+    const replay=await api(srv.url,"gift/send",payload,a.cookie);
+    assert.equal(replay.status,200);
+    assert.equal(replay.result.giftResult.replayed,true);
+    assert.equal(replay.result.giftMail.length,1);
+    const spoof=await api(srv.url,"gift/send",{
+      ...payload,message:"企圖改寫既有送禮信件"
+    },a.cookie);
+    assert.equal(spoof.status,400);
+    assert.match(spoof.result.error,/請求編號/);
+    const verified=await api(srv.url,"state",undefined,b.cookie);
+    assert.equal(verified.result.giftMail.length,1);
+    assert.equal(verified.result.giftMail[0].message,payload.message);
+    assert.equal(verified.result.legacyInventory.filter(x=>x.name==="油取り紙").length,1);
+    assert.equal(verified.result.giftEvents.length,0);
+  }finally{await srv.stop();}
+});

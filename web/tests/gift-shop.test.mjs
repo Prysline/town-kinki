@@ -7,7 +7,7 @@ import {parseLegacyRetailCatalog} from "../src/retail.mjs";
 import {initLegacyItemUseTables} from "../src/legacy-item-use.mjs";
 import {
   initGiftTables,GIFT_CONVERSION_FEE,GIFT_SHOP_SYMBOL,
-  convertToGift,sendGift,listGiftSources,listGiftEvents
+  convertToGift,sendGift,listGiftSources,listGiftEvents,listGiftMail,GIFT_MAIL_LIMIT
 } from "../src/gift-shop.mjs";
 
 const original=decodeLegacyText(readFileSync(new URL("../../gifutoya.cgi",import.meta.url)));
@@ -206,5 +206,157 @@ test("日制道具過期不得轉換，剩餘日數轉禮品時重算起始日",
     assert.throws(()=>convertToGift(db,1,{
       sourceLine:3000100,...opt("gift_expired_item")
     }),/過期/);
+  }finally{db.close();}
+});
+
+
+test("原版 mail_do 的禮品寄件同時產生受信與送信，Web 全部在原子交易內保存",()=>{
+  assert.match(mail,/sub mail_do \{/);
+  assert.match(mail,/\$in\{'m_com'\} eq ""/);
+  assert.match(mail,/\$in\{'gift_souhu'\}/);
+  assert.match(mail,/\$new_mail = "受信<>/);
+  assert.match(mail,/\$sousin_mail = "送信<>/);
+  const town=decodeLegacyText(readFileSync(new URL("../../town_ini.cgi",import.meta.url)));
+  assert.match(town,/\$mail_hozon_gandosuu = '50'/);
+  assert.equal(GIFT_MAIL_LIMIT,50);
+  const db=fixture();
+  try{
+    seed(db,{category:"ギフト",durability:3});
+    const sent=sendGift(db,1,{
+      sourceLine:1000001,quantity:2,recipientName:"收件人",
+      message:"這份禮物請收下！",requestId:"mail_confirm_001",now
+    });
+    assert.equal(sent.replayed,false);
+    const out=listGiftMail(db,1);
+    const inbox=listGiftMail(db,2);
+    assert.equal(out.length,1);
+    assert.equal(inbox.length,1);
+    assert.deepEqual(out[0],{
+      direction:"sent",otherName:"收件人",message:"這份禮物請收下！",
+      giftName:sample.name,quantity:2,createdAt:now
+    });
+    assert.deepEqual(inbox[0],{
+      direction:"inbox",otherName:"寄件人",message:"這份禮物請收下！",
+      giftName:sample.name,quantity:2,createdAt:now
+    });
+    assert.equal(listGiftMail(db,3).length,0,"第三名玩家不能讀其他人信件");
+    assert.equal(owned(db).durability,1);
+    assert.equal(owned(db,2,sent.giftSourceLine).durability,2);
+    const again=sendGift(db,1,{
+      sourceLine:1000001,quantity:2,recipientName:"收件人",
+      message:"這份禮物請收下！",requestId:"mail_confirm_001",now:now+1000
+    });
+    assert.equal(again.replayed,true);
+    assert.equal(listGiftMail(db,1).length,1);
+    assert.equal(listGiftMail(db,2).length,1);
+    assert.throws(()=>sendGift(db,1,{
+      sourceLine:1000001,quantity:2,recipientName:"收件人",
+      message:"企圖改寫舊信件",requestId:"mail_confirm_001",now
+    }),/請求編號/);
+    assert.equal(listGiftMail(db,2)[0].message,"這份禮物請收下！");
+    assert.equal(owned(db).durability,1);
+  }finally{db.close();}
+});
+test("舊版沒有信件欄的寄禮 API 可以原有預設訊息寄送；明確空白與超長訊息拒絕",()=>{
+  const db=fixture();
+  try{
+    seed(db,{category:"ギフト",durability:5});
+    const result=sendGift(db,1,{
+      sourceLine:1000001,quantity:1,recipientName:"收件人",
+      requestId:"old_gift_mail_01",now
+    });
+    assert.equal(result.replayed,false);
+    assert.equal(listGiftMail(db,2)[0].message,"送給你的禮物");
+    assert.equal(sendGift(db,1,{
+      sourceLine:1000001,quantity:1,recipientName:"收件人",
+      requestId:"old_gift_mail_01",now:now+100
+    }).replayed,true);
+    for(const [message,id] of [["","mail_blank_message"],["   ","mail_spaces_message"],["X".repeat(1001),"mail_oversized"]]){
+      assert.throws(()=>sendGift(db,1,{
+        sourceLine:1000001,quantity:1,recipientName:"收件人",message,
+        requestId:id,now
+      }),/訊息/);
+    }
+    assert.equal(listGiftMail(db,2).length,1);
+    assert.equal(owned(db).durability,4);
+  }finally{db.close();}
+});
+test("若收或寄任一信箱寫入失敗，禮品耐久、跨玩家收件、事件及兩封信一律回滾",()=>{
+  const db=fixture();
+  try{
+    seed(db,{category:"ギフト",durability:4});
+    db.exec([
+      "CREATE TRIGGER reject_gift_sent_mail BEFORE INSERT ON gift_mail_messages",
+      "WHEN NEW.direction='sent' BEGIN",
+      "SELECT RAISE(ABORT,'mailwrite blocked'); END;"
+    ].join(" "));
+    assert.throws(()=>sendGift(db,1,{
+      sourceLine:1000001,quantity:2,recipientName:"收件人",
+      message:"測試整筆交易回滾",requestId:"giftmail_abort_01",now
+    }),/mailwrite blocked/);
+    assert.equal(owned(db).durability,4);
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM legacy_inventory_items WHERE user_id=2").get().n,0);
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM gift_events").get().n,0);
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM gift_mail_messages").get().n,0);
+    db.exec("DROP TRIGGER reject_gift_sent_mail");
+    const success=sendGift(db,1,{
+      sourceLine:1000001,quantity:2,recipientName:"收件人",
+      message:"測試整筆交易回滾",requestId:"giftmail_abort_01",now
+    });
+    assert.equal(success.replayed,false);
+    assert.equal(owned(db).durability,2);
+    assert.equal(owned(db,2,success.giftSourceLine).durability,2);
+    assert.equal(listGiftMail(db,1).length,1);
+    assert.equal(listGiftMail(db,2).length,1);
+  }finally{db.close();}
+});
+test("原版收發信合計最多 50 封，每位角色獨立裁切而不影響持有物及交易事件",()=>{
+  const db=fixture();
+  try{
+    for(let i=0;i<51;i++){
+      seed(db,{sourceLine:1000200+i,category:"ギフト",durability:1});
+      const result=sendGift(db,1,{
+        sourceLine:1000200+i,quantity:1,recipientName:"收件人",
+        message:"第 "+(i+1)+" 封文字訊息",
+        requestId:"mail_limit_"+String(i).padStart(3,"0"),
+        now:now+i*1000
+      });
+      db.prepare("DELETE FROM legacy_inventory_items WHERE user_id=2 AND source_line=?")
+        .run(result.giftSourceLine);
+    }
+    const recipient=listGiftMail(db,2);
+    const sender=listGiftMail(db,1);
+    assert.equal(recipient.length,50);
+    assert.equal(sender.length,50);
+    assert.equal(recipient[0].message,"第 51 封文字訊息");
+    assert.equal(sender[0].message,"第 51 封文字訊息");
+    assert.equal(recipient.at(-1).message,"第 2 封文字訊息");
+    assert.equal(sender.at(-1).message,"第 2 封文字訊息");
+    assert.equal(listGiftMail(db,2,3).length,3);
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM gift_events WHERE action='send'").get().n,51);
+    assert.equal(listGiftMail(db,3).length,0);
+  }finally{db.close();}
+});
+test("既有 gift_events 無 message 欄的資料庫啟動時可安全升級，不破壞舊寄送識別碼",()=>{
+  const db=new DatabaseSync(":memory:");
+  try{
+    db.exec([
+      "PRAGMA foreign_keys=ON;",
+      "CREATE TABLE users(id INTEGER PRIMARY KEY);",
+      "CREATE TABLE gift_events(",
+      "id INTEGER PRIMARY KEY AUTOINCREMENT,",
+      "user_id INTEGER NOT NULL,request_id TEXT NOT NULL,action TEXT NOT NULL,",
+      "source_line INTEGER NOT NULL,quantity INTEGER NOT NULL,recipient_user_id INTEGER,",
+      "result_source_line INTEGER NOT NULL,fee INTEGER NOT NULL,name TEXT NOT NULL,",
+      "created_at INTEGER NOT NULL,UNIQUE(user_id,request_id));",
+      "INSERT INTO users(id) VALUES(1);",
+      "INSERT INTO gift_events(user_id,request_id,action,source_line,quantity,",
+      "result_source_line,fee,name,created_at) VALUES",
+      "(1,'old_mail_request', 'send',1,1,2,0,'商品',123);"
+    ].join(" "));
+    initGiftTables(db);
+    initGiftTables(db);
+    assert.equal(db.prepare("SELECT message FROM gift_events WHERE user_id=1").get().message,"");
+    assert.ok(db.prepare("SELECT name FROM sqlite_master WHERE name='gift_mail_messages'").get());
   }finally{db.close();}
 });

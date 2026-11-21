@@ -4,6 +4,9 @@ export const GIFT_SHOP_SYMBOL="ギフト屋";
 export const GIFT_CONVERSION_FEE=50000;
 export const GIFT_PURCHASED_LIMIT=10;
 export const GIFT_RECEIVED_LIMIT=10;
+// town_ini.cgi::$mail_hozon_gandosuu=50：收信與寄件備份共用單人保留上限。
+export const GIFT_MAIL_LIMIT=50;
+const DEFAULT_GIFT_MESSAGE="送給你的禮物";
 const VALID_REQUEST=/^[A-Za-z0-9_-]{8,80}$/;
 const EDITABLE=new Set(["__web_retail__","__web_gift__","__web_recycle__","__web_store__"]);
 const DAY_MS=86400000;
@@ -22,8 +25,44 @@ export function initGiftTables(db){
     "result_source_line INTEGER NOT NULL,fee INTEGER NOT NULL,",
     "name TEXT NOT NULL,created_at INTEGER NOT NULL,",
     "UNIQUE(user_id,request_id));",
-    "CREATE INDEX IF NOT EXISTS gift_events_user_idx ON gift_events(user_id,id);"
+    "CREATE INDEX IF NOT EXISTS gift_events_user_idx ON gift_events(user_id,id);",
+    "CREATE TABLE IF NOT EXISTS gift_mail_messages(",
+    "id INTEGER PRIMARY KEY AUTOINCREMENT,",
+    "user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,",
+    "event_id INTEGER NOT NULL REFERENCES gift_events(id) ON DELETE CASCADE,",
+    "direction TEXT NOT NULL CHECK(direction IN ('inbox','sent')),",
+    "other_name TEXT NOT NULL,message TEXT NOT NULL,",
+    "gift_name TEXT NOT NULL,quantity INTEGER NOT NULL CHECK(quantity>0),",
+    "created_at INTEGER NOT NULL,",
+    "UNIQUE(event_id,direction));",
+    "CREATE INDEX IF NOT EXISTS gift_mail_user_idx",
+    "ON gift_mail_messages(user_id,created_at DESC,id DESC);"
   ].join(" "));
+  // 既有第37階段交易表保留舊資料，新增請求文字比對避免同一 ID 偷換信件。
+  if(!db.prepare("PRAGMA table_info(gift_events)").all().some(c=>c.name==="message"))
+    db.exec("ALTER TABLE gift_events ADD COLUMN message TEXT NOT NULL DEFAULT ''");
+}
+function giftMessage(message){
+  if(message===undefined)return DEFAULT_GIFT_MESSAGE; // 相容已存在、不含訊息欄的舊版 Web API
+  if(typeof message!=="string"||!message.trim()||message.length>1000)
+    throw new Error("寄禮訊息必須為 1～1,000 字元的非空文字");
+  return message.trim();
+}
+function recordGiftMail(db,eventId,sender,recipient,itemName,quantity,message,now){
+  const insert=db.prepare([
+    "INSERT INTO gift_mail_messages(user_id,event_id,direction,other_name,",
+    "message,gift_name,quantity,created_at) VALUES(?,?,?,?,?,?,?,?)"
+  ].join(" "));
+  insert.run(recipient.user_id,eventId,"inbox",sender.name,message,itemName,quantity,now);
+  insert.run(sender.user_id,eventId,"sent",recipient.name,message,itemName,quantity,now);
+  // 原版按每位角色單一 mail.cgi 檔保存收件＋寄件（合計 50 筆）。
+  const prune=db.prepare([
+    "DELETE FROM gift_mail_messages WHERE user_id=? AND id NOT IN (",
+    "SELECT id FROM gift_mail_messages WHERE user_id=?",
+    "ORDER BY created_at DESC,id DESC LIMIT ?)"
+  ].join(" "));
+  for(const userId of [sender.user_id,recipient.user_id])
+    prune.run(userId,userId,GIFT_MAIL_LIMIT);
 }
 function sourceRow(db,userId,sourceLine){
   return db.prepare([
@@ -82,7 +121,7 @@ function updateItem(db,row,fields,purchasedAt=row.purchased_at){
       .run(Number(fields[21]),row.user_id,row.source_line);
   }
 }
-function transact(db,userId,requestId,now,action,sourceLine,quantity,toUserId,work){
+function transact(db,userId,requestId,now,action,sourceLine,quantity,toUserId,work,message=""){
   requireArgs(userId,requestId,now);
   if(!Number.isSafeInteger(sourceLine)||sourceLine<=0||
      !Number.isSafeInteger(quantity)||quantity<0||quantity>1000000)
@@ -90,14 +129,16 @@ function transact(db,userId,requestId,now,action,sourceLine,quantity,toUserId,wo
   db.exec("BEGIN IMMEDIATE");
   try{
     const previous=db.prepare([
-      "SELECT action,source_line,quantity,recipient_user_id,result_source_line,fee,name",
+      "SELECT action,source_line,quantity,recipient_user_id,result_source_line,fee,name,message",
       "FROM gift_events WHERE user_id=? AND request_id=?"
     ].join(" ")).get(userId,requestId);
     if(previous){
       if(previous.action!==action||previous.source_line!==sourceLine||
          previous.quantity!==quantity||
-         (previous.recipient_user_id??null)!==(toUserId??null))
-        throw new Error("禮品請求編號已用於其他商品、數量或收件人");
+         (previous.recipient_user_id??null)!==(toUserId??null)||
+         (previous.message!==message&&!(previous.message===""&&
+           action==="send"&&message===DEFAULT_GIFT_MESSAGE)))
+        throw new Error("禮品請求編號已用於其他商品、數量、收件人或訊息");
       db.exec("COMMIT");
       return {action,sourceLine,quantity,name:previous.name,
         recipientUserId:previous.recipient_user_id??null,
@@ -106,10 +147,18 @@ function transact(db,userId,requestId,now,action,sourceLine,quantity,toUserId,wo
     const result=work();
     db.prepare([
       "INSERT INTO gift_events(user_id,request_id,action,source_line,quantity,",
-      "recipient_user_id,result_source_line,fee,name,created_at)",
-      "VALUES(?,?,?,?,?,?,?,?,?,?)"
+      "recipient_user_id,result_source_line,fee,name,created_at,message)",
+      "VALUES(?,?,?,?,?,?,?,?,?,?,?)"
     ].join(" ")).run(userId,requestId,action,sourceLine,quantity,toUserId??null,
-      result.giftSourceLine,result.fee,result.name,now);
+      result.giftSourceLine,result.fee,result.name,now,message);
+    if(action==="send"){
+      const event=db.prepare("SELECT last_insert_rowid() AS id").get().id;
+      // 建立寄件及收件資料與道具移轉共用同一個 BEGIN IMMEDIATE。
+      recordGiftMail(db,Number(event),
+        db.prepare("SELECT user_id,name FROM characters WHERE user_id=?").get(userId),
+        db.prepare("SELECT user_id,name FROM characters WHERE user_id=?").get(toUserId),
+        result.name,quantity,message,now);
+    }
     db.exec("COMMIT");
     return {action,sourceLine,quantity,...result,recipientUserId:toUserId??null,replayed:false};
   }catch(error){db.exec("ROLLBACK");throw error;}
@@ -169,8 +218,9 @@ export function convertToGift(db,userId,{
   });
 }
 export function sendGift(db,userId,{
-  sourceLine,quantity,recipientName,requestId,now
+  sourceLine,quantity,recipientName,message,requestId,now
 }={}){
+  const mailBody=giftMessage(message);
   if(typeof recipientName!=="string"||!recipientName.trim()||
      recipientName.length>40)
     throw new Error("請提供有效收件人角色名稱");
@@ -211,7 +261,20 @@ export function sendGift(db,userId,{
     }
     addItem(db,recipient.user_id,giftSourceLine,"__web_gift__",received,now);
     return {giftSourceLine,name:row.original_name,fee:0,recipientName:recipient.name};
-  });
+  },mailBody);
+}
+export function listGiftMail(db,userId,limit=GIFT_MAIL_LIMIT){
+  if(!Number.isSafeInteger(userId)||userId<1)throw new Error("無效的收件角色帳號");
+  const count=Number.isSafeInteger(limit)?Math.max(1,Math.min(limit,GIFT_MAIL_LIMIT)):GIFT_MAIL_LIMIT;
+  return db.prepare([
+    "SELECT direction,other_name,message,gift_name,quantity,created_at",
+    "FROM gift_mail_messages WHERE user_id=?",
+    "ORDER BY created_at DESC,id DESC LIMIT ?"
+  ].join(" ")).all(userId,count).map(row=>({
+    direction:row.direction,otherName:row.other_name,
+    message:row.message,giftName:row.gift_name,
+    quantity:row.quantity,createdAt:row.created_at
+  }));
 }
 export function listGiftSources(db,userId,now){
   const rows=db.prepare([
