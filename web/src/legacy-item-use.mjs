@@ -194,12 +194,14 @@ function status(item,character,remaining,lastUsedAt,now){
     return {canUse:false,reason:"尚未到原版商品購入時間",readyAt:item.purchasedAt};
   if(remaining<=0)return {canUse:false,reason:item.durabilityUnit==="日"?
     "原版商品有效天數已過期":"原始物品耐久已用盡",readyAt:null};
-  const readyAt=lastUsedAt+item.intervalMinutes*60000;
-  if(now<readyAt)return {canUse:false,reason:"物品使用間隔尚未結束",readyAt};
-  if(item.food&&character.lastMealAt>0&&
-      now-character.lastMealAt<MEAL_COOLDOWN_MS)
-    return {canUse:false,reason:"距離上次用餐未滿 60 分鐘",
-      readyAt:character.lastMealAt+MEAL_COOLDOWN_MS};
+  // 原版道具間隔與食品用餐間隔可重疊；畫面倒數須以最後結束者為準。
+  const itemReadyAt=lastUsedAt+item.intervalMinutes*60000;
+  const mealReadyAt=item.food&&character.lastMealAt>0?
+    character.lastMealAt+MEAL_COOLDOWN_MS:0;
+  const readyAt=Math.max(itemReadyAt,mealReadyAt);
+  if(now<readyAt)return {canUse:false,readyAt,
+    reason:mealReadyAt>itemReadyAt?
+      "距離上次用餐未滿 60 分鐘":"物品使用間隔尚未結束"};
   if(character.bodyEnergy<item.bodyCost||character.brainEnergy<item.brainCost)
     return {canUse:false,reason:"角色目前能量不足",readyAt:null};
   return {canUse:true,reason:null,readyAt:null};
