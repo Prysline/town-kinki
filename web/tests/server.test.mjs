@@ -3711,3 +3711,238 @@ test("多人 HTTP：寄件帳號刪除後，仍可由收件者讀取自己的信
     assert.equal(after.result.legacyInventory.some(x=>x.name==="油取り紙"),true);
   }finally{await srv.stop();}
 });
+
+
+test("第48階段 HTTP：已有原版警官職業者縮短身高後仍可工作，重選職業會被阻止",async()=>{
+  const srv=await start("solo");
+  anchorSoloTestAtNoon(srv);
+  try{
+    const created=await api(srv.url,"character",{
+      name:"任職後身高變化驗收",gender:"other",stats:defaultStats()
+    });
+    assert.equal(created.status,200);
+    const police=created.result.jobs.find(job=>job.originalName==="警官");
+    assert.ok(police);
+    assert.equal(police.minHeight,165);
+    assert.equal(police.bmiMin,19);
+    assert.equal(police.previousJob,null);
+    const db=new DatabaseSync(join(srv.directory,"solo.sqlite"));
+    try{
+      const enriched=Object.fromEntries(Object.keys(defaultStats())
+        .map(key=>[key,Math.max(200,police.requirements[key]??0)]));
+      db.prepare([
+        "UPDATE characters SET height=180,weight=65,bmi=20.1,",
+        "stats_json=?,body_energy=200,brain_energy=200",
+        "WHERE name='任職後身高變化驗收'"
+      ].join(" ")).run(JSON.stringify(enriched));
+    }finally{db.close();}
+    const ready=await api(srv.url,"state");
+    assert.equal(ready.result.jobs.find(job=>job.key===police.key).reason,null);
+    const hired=await api(srv.url,"job",{key:police.key});
+    assert.equal(hired.status,200);
+    assert.equal(hired.result.character.jobId,police.key);
+    const changedDb=new DatabaseSync(join(srv.directory,"solo.sqlite"));
+    try{
+      // 原版身高改變但保持 BMI、能力與能量門檻，重現現有 Web 額外阻止工作的狀況。
+      changedDb.prepare([
+        "UPDATE characters SET height=160,weight=51,bmi=19.9",
+        "WHERE name='任職後身高變化驗收'"
+      ].join(" ")).run();
+    }finally{changedDb.close();}
+    const shorter=await api(srv.url,"state");
+    assert.equal(shorter.result.jobs.find(job=>job.key===police.key).reason,"身高不足");
+    assert.equal((await api(srv.url,"job",{key:police.key})).status,400,
+      "重新應徵時仍必須遵守原版身高限制");
+    const worked=await api(srv.url,"work",{});
+    assert.equal(worked.status,200,"已正式任職的角色不會因身高變化而無法出勤");
+    assert.equal(worked.result.character.jobId,police.key);
+    assert.equal(worked.result.character.jobWorkCount,1);
+    assert.equal((await api(srv.url,"work",{})).status,400,
+      "不應藉門檻分流繞過原版五分鐘工作冷卻");
+  }finally{await srv.stop();}
+});
+
+test("第48階段單機完整循環：工作→銀行→百貨→使用→重啟兩次→再出勤與用餐→跨日一次結息",async()=>{
+  let srv=await start("solo");
+  anchorSoloTestAtNoon(srv);
+  const dataPath=srv.directory;
+  try{
+    const created=await api(srv.url,"character",{
+      name:"重要系統跨重啟角色",gender:"other",stats:defaultStats()
+    });
+    assert.equal(created.status,200);
+    const preference=await api(srv.url,"job/payment",{payment:"bank"});
+    assert.equal(preference.status,200);
+    const worked=await api(srv.url,"work",{});
+    assert.equal(worked.status,200);
+    assert.equal(worked.result.result.paid,1000);
+    assert.equal(worked.result.character.bank,1000);
+    assert.equal(worked.result.character.money,created.result.character.money);
+    const saved=await api(srv.url,"bank",{action:"deposit",amount:2000});
+    assert.equal(saved.status,200);
+    assert.equal(saved.result.character.bank,3000);
+    const mapped=await api(srv.url,"map/tile",{row:0,column:0,symbol:"デパ"});
+    assert.equal(mapped.status,200);
+    const catalog=parseLegacyRetailCatalog(
+      decodeLegacyText(readFileSync(new URL("../../dat_dir/syouhin.cgi",import.meta.url)))
+    );
+    const book=catalog.find(item=>item.category==="書籍"&&item.name==="無駄知識を覚える本");
+    assert.ok(book);
+    const db=new DatabaseSync(join(dataPath,"solo.sqlite"));
+    try{
+      if(!db.prepare("SELECT 1 FROM retail_stock WHERE shop='depart1' AND sku=?")
+        .get(book.sku)){
+        const free=db.prepare([
+          "SELECT position FROM retail_stock WHERE shop='depart1'",
+          "AND sku<>? ORDER BY position LIMIT 1"
+        ].join(" ")).get(book.sku);
+        assert.ok(free);
+        db.prepare([
+          "UPDATE retail_stock SET sku=?,remaining=?",
+          "WHERE shop='depart1' AND position=?"
+        ].join(" ")).run(book.sku,book.originalStock,free.position);
+      }
+    }finally{db.close();}
+    const offered=(await api(srv.url,"state")).result.retailGoods.find(g=>g.sku===book.sku);
+    assert.equal(offered?.details?.usage,"supported");
+    const purchase={shop:"depart1",sku:book.sku,quantity:1,
+      requestId:"phase48_restart_purchase"};
+    const bought=await api(srv.url,"retail/buy",purchase);
+    assert.equal(bought.status,200);
+    assert.equal(bought.result.retailResult.paid,book.unitPrice);
+    const sourceLine=bought.result.retailResult.sourceLine;
+    const usage={sourceLine,requestId:"phase48_restart_item_use"};
+    const consumed=await api(srv.url,"inventory/legacy/use",usage);
+    assert.equal(consumed.status,200);
+    assert.equal(consumed.result.itemUseResult.replayed,false);
+    const afterFirst=(await api(srv.url,"state")).result;
+    assert.equal(afterFirst.character.salaryPayment,"bank");
+    assert.equal(afterFirst.character.jobWorkCount,1);
+    assert.equal(afterFirst.legacyItemActions.find(x=>x.sourceLine===sourceLine)?.remaining,5);
+    assert.equal(afterFirst.retailPurchases.length,1);
+    assert.equal(afterFirst.bankLedger.filter(x=>x.action==="工作薪資").length,1);
+
+    await srv.stop({preserveData:true});
+    srv=await start("solo",undefined,dataPath);
+    const resumed=(await api(srv.url,"state")).result;
+    assert.equal(resumed.character.name,created.result.character.name);
+    assert.equal(resumed.character.money,afterFirst.character.money);
+    assert.equal(resumed.character.bank,afterFirst.character.bank);
+    assert.equal(resumed.character.salaryPayment,"bank");
+    assert.equal(resumed.character.jobWorkCount,1);
+    assert.deepEqual(resumed.character.stats,afterFirst.character.stats);
+    assert.equal(resumed.retailPurchases.length,1);
+    assert.equal(resumed.legacyItemActions.find(x=>x.sourceLine===sourceLine)?.remaining,5);
+    assert.equal(resumed.bankLedger.filter(x=>x.action==="工作薪資").length,1);
+    assert.equal(resumed.map.cells[0].key,"デパ");
+    assert.equal((await api(srv.url,"work",{})).status,400,
+      "重新啟動伺服器不能清除工作冷卻");
+    const purchaseReplay=await api(srv.url,"retail/buy",purchase);
+    assert.equal(purchaseReplay.status,200);
+    assert.equal(purchaseReplay.result.retailResult.replayed,true);
+    const useReplay=await api(srv.url,"inventory/legacy/use",usage);
+    assert.equal(useReplay.status,200);
+    assert.equal(useReplay.result.itemUseResult.replayed,true);
+    assert.equal(useReplay.result.character.money,resumed.character.money);
+    assert.equal(useReplay.result.legacyItemActions.find(x=>x.sourceLine===sourceLine)?.remaining,5);
+
+    const jumped=await api(srv.url,"solo/time/advance",{preset:"5m"});
+    assert.equal(jumped.status,200);
+    const again=await api(srv.url,"work",{});
+    assert.equal(again.status,200);
+    assert.equal(again.result.result.payment,"bank");
+    assert.equal(again.result.result.paid,1000);
+    assert.equal(again.result.character.jobWorkCount,2);
+    const affordable=again.result.meals.find(meal=>meal.stock>0&&
+      meal.price<=again.result.character.money);
+    assert.ok(affordable,"角色應能以實際賺得的資金購買一份食堂餐點");
+    const ate=await api(srv.url,"meal/eat",{key:affordable.key});
+    assert.equal(ate.status,200);
+    assert.ok(ate.result.mealCooldownMs>0);
+    assert.equal((await api(srv.url,"meal/eat",{key:affordable.key})).status,400);
+
+    await srv.stop({preserveData:true});
+    srv=await start("solo",undefined,dataPath);
+    const second=(await api(srv.url,"state")).result;
+    assert.equal(second.character.jobWorkCount,2);
+    assert.equal(second.character.salaryPayment,"bank");
+    assert.equal(second.bankLedger.filter(x=>x.action==="工作薪資").length,2);
+    assert.ok(second.mealCooldownMs>0,"食堂冷卻不應隨伺服器重啟消失");
+    assert.equal((await api(srv.url,"meal/eat",{key:affordable.key})).status,400);
+    const nextDay=await api(srv.url,"solo/time/advance",{preset:"1d"});
+    assert.equal(nextDay.status,200);
+    assert.equal(nextDay.result.bankLedger.filter(x=>x.action==="普通存款利息").length,1);
+    const refreshed=(await api(srv.url,"state")).result;
+    assert.equal(refreshed.bankLedger.filter(x=>x.action==="普通存款利息").length,1,
+      "跨日結息不能因重新查看狀態重複入帳");
+    assert.equal(refreshed.mealCooldownMs,0);
+    assert.equal(refreshed.character.jobWorkCount,2);
+    assert.equal(refreshed.legacyItemActions.find(x=>x.sourceLine===sourceLine)?.remaining,5);
+  }finally{await srv.stop();}
+});
+
+test("第48階段多人登入與重啟：兩帳號工作／銀行互不干涉，會話與冷卻持久化",async()=>{
+  let srv=await start("multi");
+  const dataPath=srv.directory;
+  try{
+    const a=await api(srv.url,"register",{
+      username:"phase48AccountAlpha",password:"phase48-test-alpha-123"
+    });
+    const b=await api(srv.url,"register",{
+      username:"phase48AccountBeta",password:"phase48-test-beta-123"
+    });
+    assert.equal(a.status,200);
+    assert.equal(b.status,200);
+    assert.equal((await api(srv.url,"character",{
+      name:"跨重啟甲",gender:"other",stats:defaultStats()
+    },a.cookie)).status,200);
+    assert.equal((await api(srv.url,"character",{
+      name:"跨重啟乙",gender:"other",stats:defaultStats()
+    },b.cookie)).status,200);
+    assert.equal((await api(srv.url,"job/payment",{payment:"bank"},a.cookie)).status,200);
+    const awork=await api(srv.url,"work",{},a.cookie);
+    const bwork=await api(srv.url,"work",{},b.cookie);
+    assert.equal(awork.status,200);
+    assert.equal(bwork.status,200);
+    assert.equal(awork.result.character.bank,1000);
+    assert.equal(bwork.result.character.bank,0);
+    const bank=await api(srv.url,"bank",{action:"deposit",amount:3000},b.cookie);
+    assert.equal(bank.status,200);
+    assert.equal(bank.result.character.bank,3000);
+    const beforeA=(await api(srv.url,"state",undefined,a.cookie)).result;
+    const beforeB=(await api(srv.url,"state",undefined,b.cookie)).result;
+    await srv.stop({preserveData:true});
+    srv=await start("multi",undefined,dataPath);
+    const afterA=await api(srv.url,"state",undefined,a.cookie);
+    const afterB=await api(srv.url,"state",undefined,b.cookie);
+    assert.equal(afterA.status,200);
+    assert.equal(afterB.status,200);
+    assert.equal(afterA.result.character.name,"跨重啟甲");
+    assert.equal(afterB.result.character.name,"跨重啟乙");
+    for(const [before,after] of [[beforeA,afterA.result],[beforeB,afterB.result]]){
+      assert.equal(after.character.money,before.character.money);
+      assert.equal(after.character.bank,before.character.bank);
+      assert.equal(after.character.salaryPayment,before.character.salaryPayment);
+      assert.equal(after.character.jobWorkCount,1);
+      assert.ok(after.workCooldownMs>0);
+      assert.deepEqual(after.bankLedger,before.bankLedger);
+    }
+    assert.equal(afterA.result.bankLedger.some(x=>x.action==="存款"),false);
+    assert.equal(afterA.result.bankLedger.filter(x=>x.action==="工作薪資").length,1);
+    assert.equal(afterB.result.bankLedger.filter(x=>x.action==="工作薪資").length,0);
+    assert.equal((await api(srv.url,"work",{},a.cookie)).status,400);
+    assert.equal((await api(srv.url,"work",{},b.cookie)).status,400);
+    assert.equal((await api(srv.url,"bank",{action:"withdraw",amount:3001},a.cookie)).status,400);
+    const loggedOut=await api(srv.url,"logout",{},b.cookie);
+    assert.equal(loggedOut.status,200);
+    assert.equal((await api(srv.url,"state",undefined,b.cookie)).result.user,null);
+    const login=await api(srv.url,"login",{
+      username:"phase48AccountBeta",password:"phase48-test-beta-123"
+    });
+    assert.equal(login.status,200);
+    assert.equal(login.result.character.bank,3000);
+    assert.equal(login.result.character.jobWorkCount,1);
+    assert.equal((await api(srv.url,"state",undefined,a.cookie)).result.character.bank,1000);
+    assert.equal((await api(srv.url,"state",undefined,login.cookie)).result.character.name,"跨重啟乙");
+  }finally{await srv.stop();}
+});
