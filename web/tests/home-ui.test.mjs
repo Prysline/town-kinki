@@ -539,3 +539,11 @@ test("百貨ランダム品明確標註 17 項獨立隨機 0～上限，不誤�
   assert.match(script,/info\.randomizedEffects\?" \+0～\+"\+value/);
   assert.match(script,/每項獨立隨機/);
 });
+
+test("空白万能治療幅度與原版負熱量有清楚說明，不會被誤當成治病或固定增重",()=>{
+  assert.match(script,/if\(code==="万能,"\)/);
+  assert.match(script,/原版沒有填寫治療幅度/);
+  assert.match(script,/不會推定治病加成/);
+  assert.match(script,/\(info\.calories\?\?0\)<0/);
+  assert.match(script,/使用後體重減少/);
+});
