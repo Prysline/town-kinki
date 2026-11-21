@@ -457,3 +457,57 @@ body.compact-status-active .game-shell .facility-pane{scroll-margin-top:calc(var
 .game-shell .bank-current-balances dt{font-size:.8rem;color:#4f6c59}
 .game-shell .bank-current-balances dd{margin:.2rem 0 0;font-weight:750;
   font-variant-numeric:tabular-nums;overflow-wrap:anywhere;color:#214b35}
+
+/* 原版 top.pl 城鎮背景依遊戲時段切換；地圖使用原始色碼。
+   文字量大的卡片、表單與提示窗保持淺底深字，不直接繼承深夜場景文字色。 */
+:root{
+  --town-page-bg:#fff9dc;--town-page-ink:#342f25;--town-page-muted:#685838;
+  --town-map-bg:#ffff99;--town-map-border:#b7ac73;--town-map-hover:#f3ebb5;
+  --town-header-bg:#5b4c2e;--town-action-bg:#425e70;
+  --town-panel-bg:#fffefa;--town-panel-ink:#23352d;--town-panel-border:#d8cdb4;
+  --town-map-axis-bg:#fffdea;--town-map-axis-ink:#30352f;
+}
+:root[data-town-time="morning"]{
+  --town-page-bg:#fff0c9;--town-page-ink:#382e21;--town-page-muted:#715439;
+  --town-map-bg:#ffcc66;--town-map-border:#b38741;--town-map-hover:#ffe5a8;
+  --town-header-bg:#654d2c;--town-action-bg:#465f75;
+}
+:root[data-town-time="sunset"]{
+  --town-page-bg:#ffe3d4;--town-page-ink:#3d2d30;--town-page-muted:#734d4c;
+  --town-map-bg:#ff9966;--town-map-border:#b9664f;--town-map-hover:#ffc3a2;
+  --town-header-bg:#673c41;--town-action-bg:#68546b;
+}
+:root[data-town-time="evening"]{
+  --town-page-bg:#34334f;--town-page-ink:#f6f3ff;--town-page-muted:#e0ddef;
+  --town-map-bg:#666699;--town-map-border:#a2a1c8;--town-map-hover:#a4a3cb;
+  --town-header-bg:#272742;--town-action-bg:#465d77;
+  --town-panel-bg:#fafbff;--town-panel-border:#a4a7c0;
+  --town-map-axis-bg:#f4f3ff;--town-map-axis-ink:#29283d;
+}
+:root[data-town-time="night"]{
+  --town-page-bg:#1c2240;--town-page-ink:#f5f4ff;--town-page-muted:#cbd3ee;
+  --town-map-bg:#333366;--town-map-border:#8290ba;--town-map-hover:#7276a7;
+  --town-header-bg:#14192f;--town-action-bg:#3c596f;
+  --town-panel-bg:#f9faff;--town-panel-border:#9aa8c4;
+  --town-map-axis-bg:#f1f2ff;--town-map-axis-ink:#222b44;
+}
+:root{background:var(--town-page-bg);color:var(--town-page-ink)}
+body{background:var(--town-page-bg);color:var(--town-page-ink)}
+.header,.game-shell .compact-status{background:var(--town-header-bg);color:#fff}
+.header .mode{background:#ffffff24;color:#fff}
+button{background:var(--town-action-bg);color:#fff}
+.game-shell .facility-tabs button[aria-selected="true"],
+.game-shell .profile-view-tabs button[aria-selected="true"]{
+  background:var(--town-action-bg);border-color:var(--town-action-bg);color:#fff
+}
+.card,.game-shell .facility-shell{
+  background:var(--town-panel-bg);color:var(--town-panel-ink);border-color:var(--town-panel-border)
+}
+.game-shell .facility-pane>.card{background:transparent}
+.result-dialog,.game-shell .event-popup{color:var(--town-panel-ink)}
+input,select,textarea{background-color:#fff;color:#23352d}
+.map-scroll{background:var(--town-map-bg);border-color:var(--town-map-border)}
+.town-map{background-color:var(--town-map-bg)}
+.map-axis{background:var(--town-map-axis-bg);color:var(--town-map-axis-ink)}
+.map-cell:hover{background:var(--town-map-hover)}
+footer{color:var(--town-page-muted)}
