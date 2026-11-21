@@ -47,7 +47,9 @@ test("試玩初始化只允許全新空白城鎮：不可覆蓋已用過的編�
     storeTownMap(db,1,{tiles:blank},"web-edited");
     assert.throws(()=>createSoloStarterTown(db,1),/已有街區配置/);
     assert.deepEqual(readTownMap(db,1).tiles,blank);
-    storeTownMap(db,2,{tiles:[..."銀行",...blank].slice(0,192)},"legacy-import");
+    const imported=[...blank];
+    imported[0]="銀行";
+    storeTownMap(db,2,{tiles:imported},"legacy-import");
     assert.throws(()=>createSoloStarterTown(db,2),/已有街區配置/);
     db.prepare("INSERT INTO houses(id,town_id) VALUES(?,?)").run(5,3);
     assert.throws(()=>createSoloStarterTown(db,3),/已有住宅/);
