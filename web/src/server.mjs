@@ -22,6 +22,7 @@ import { initCharacterEvents, settleDailyIllnessEvent, listCharacterEvents, getC
 import {parseLegacyCouponCatalog} from "./coupon-catalog.mjs";
 import {parseOriginalFishing,initFishingTables,ensureFishingStock,fishingOverview,buyFishingBait,castFishing,sellFishingCatch} from "./fishing.mjs";
 import {parseOriginalCrafting,initCraftingTables,craftingOverview,craftItem} from "./crafting.mjs";
+import {parseOriginalArcadeDice,initArcadeDiceTables,arcadeDiceOverview,playArcadeDice} from "./arcade-dice.mjs";
 import {initCouponRedemptionTables,listCouponRewards,listCouponRedemptions,redeemEventCoupon,COUPON_SHOP_SYMBOL} from "./coupon-redemption.mjs";
 import { getCockroachChallenge,claimCockroach } from "./event-cockroach.mjs";
 import { parseLegacyInsurance, initInventoryTables, inventoryOverview, hasActiveHealthInsurance, listInsurancePurchases, buyHealthInsurance } from "./inventory.mjs";
@@ -100,6 +101,7 @@ initCharacterEvents(db);
 initCouponRedemptionTables(db);
 initFishingTables(db);
 initCraftingTables(db);
+initArcadeDiceTables(db);
 initInventoryTables(db);
 initDiningStockTables(db);
 initLegacyItemUseTables(db);
@@ -142,6 +144,10 @@ const fishingCatalog=parseOriginalFishing(
   decodeLegacyText(readFileSync(resolve(REPO_ROOT,"hanbai1.cgi")))
 );
 const craftingCatalog=parseOriginalCrafting(decodeLegacyText(readFileSync(resolve(REPO_ROOT,"dat_dir","gousei.cgi"))));
+const arcadeDiceSource=parseOriginalArcadeDice(
+  decodeLegacyText(readFileSync(resolve(REPO_ROOT,"gamerand.cgi"))),
+  decodeLegacyText(readFileSync(resolve(REPO_ROOT,"saikoro.cgi")))
+);
 const wholesaleCatalog=parseWholesaleCatalog(decodeLegacyText(readFileSync(resolve(REPO_ROOT,"dat_dir","syouhin.cgi"))));
 const vendingCatalog=parseLegacyVendingCatalog(decodeLegacyText(readFileSync(resolve(REPO_ROOT,"dat_dir","jihanki.cgi"))));
 const equipmentCatalog=parseLegacyEquipmentCatalog(decodeLegacyText(readFileSync(resolve(REPO_ROOT,"dat_dir","soubi.cgi"))));
@@ -380,6 +386,7 @@ function snapshot(user) {
     couponRedemptions:updated?listCouponRedemptions(db,user.id):[],
     fishing:updated?fishingOverview(db,user.id,fishingCatalog,now,today):null,
     crafting:updated?craftingOverview(db,user.id,craftingCatalog):null,
+    arcadeDice:updated?arcadeDiceOverview(db,user.id,arcadeDiceSource,now):null,
     cockroachChallenge: updated ? getCockroachChallenge(db,user.id,now) : null,
     hospital: updated ? getTreatmentQuote(updated,hasActiveHealthInsurance(db,user.id,insuranceItem,now)) : null,
     insurance: updated ? inventoryOverview(db,user.id,insuranceItem,now) : null,
@@ -769,6 +776,17 @@ async function handle(req, res) {
         });
       }catch(error){throw new HttpError(400,error.message);}
       return sendJson(res,200,{...snapshot(user),craftingResult});
+    }
+
+    if(path==="/api/arcade/dice/play"){
+      let arcadeDiceResult;
+      try{
+        arcadeDiceResult=playArcadeDice(db,user.id,arcadeDiceSource,{
+          guess:data.guess,stake:data.stake,
+          requestId:data.requestId,now:gameNow()
+        });
+      }catch(error){throw new HttpError(400,error.message);}
+      return sendJson(res,200,{...snapshot(user),arcadeDiceResult});
     }
 
     if (path === "/api/coupon/redeem") {

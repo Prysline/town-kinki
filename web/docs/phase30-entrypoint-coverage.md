@@ -18,8 +18,8 @@
 
 針對 43 個互動入口，Web 目前：
 - **30 個**有明確的 [`MAP_SYMBOLS`](../src/town-map.mjs) 地圖代碼；**13 個**原版互動入口沒有被加入 Web 地圖代碼清單（如未來製作這些原版建築，須以 `unit.pl` 及來源函式核對，不能亂畫入口）。
-- **19 個**有操作入口：**18 個**由 [`FACILITY_PANELS`](../public/town-home.js#L2) 導向 Web 面板（含 PR #23 的獨立教室，PR #27 的已匯入有效信用卡付款），另 **1 個「駅」**由 [`townCellAction`](../public/town-home.js#L12) 導向車站票價與乘車選項（PR #26）。這只是入口覆蓋，不代表設施全部規則已移植。
-- **13 個**已有 Web 地圖代碼，但既未映射 `FACILITY_PANELS`，也不是車站特例；[`townCellAction`](../public/town-home.js#L12) 會回傳 `unavailable`，按圖示只會提示尚未移植。
+- **20 個**有操作入口：**19 個**由 [`FACILITY_PANELS`](../public/town-home.js#L2) 導向 Web 面板（含 PR #23 的獨立教室，PR #27 的已匯入有效信用卡付款），另 **1 個「駅」**由 [`townCellAction`](../public/town-home.js#L12) 導向車站票價與乘車選項（PR #26）。這只是入口覆蓋，不代表設施全部規則已移植。
+- **12 個**已有 Web 地圖代碼，但既未映射 `FACILITY_PANELS`，也不是車站特例；[`townCellAction`](../public/town-home.js#L12) 會回傳 `unavailable`，按圖示只會提示尚未移植。
 - 百貨兩入口、自販機與裝備屋已有各自實際購物交易，**仍不等於原版全部商店功能**。詳 [百貨店](phase31-department-checkout.md)、[自販機](phase33-vending-shopping.md) 與 [裝備屋](phase35-equipment-shop.md)。
 - 這些是**程式路由覆蓋率**，不是已完成功能比例；車站已按原版 `station.cgi` 收取四城六組雙向車資（PR #26），而真實原版地圖存檔及其他交通道具仍待核查。
 
@@ -43,7 +43,7 @@
 | [`駅`](../../unit.pl#L85) | `station.cgi` | `map` | 有 | **PR #26 已修復** → 點車站可查看六組原版票價並實際跨城扣現金；其他交通券未核實 |
 | [`おばちゃん`](../../unit.pl#L116) | `obatyan.cgi` | `week` | 無 | Web 地圖代碼未收錄 |
 | [`おばちゃん強`](../../unit.pl#L118) | `obatyan.cgi` | `strong` | 無 | Web 地圖代碼未收錄 |
-| [`ゲーセン`](../../unit.pl#L120) | `gamerand.cgi` | `—` | 有 | Web 有圖示、點選不可進入 |
+| [`ゲーセン`](../../unit.pl#L120) | `gamerand.cgi` | `—` | 有 | **第55階段已接可操作遊樂中心：目前只含 `saikoro.cgi` 的雙骰猜奇偶**；五種原版下注額、5分鐘冷卻、本人現金原子結算及防重送；卡牌、樂透、福引、寶箱等尚未移植。詳 [第55階段](phase55-arcade-dice.md) |
 | [`アイテム`](../../unit.pl#L122) | `item.cgi` | `item_make` | 無 | Web 地圖代碼未收錄 |
 | [`役場`](../../unit.pl#L124) | `yakuba.cgi` | `yakuba` | 有 | Web 有圖示、點選不可進入 |
 | [`銀行`](../../unit.pl#L126) | `basic.cgi` | `ginkou` | 有 | 有 Web 入口／僅部分對照 |
@@ -88,7 +88,7 @@
 | **SV-01 玩家問卷建立、投票與管理** | [`unit.pl` L83](../../unit.pl#L83) 的 `アンケ` 指向 [`enq.cgi`](../../enq.cgi)，含 `top`、`make`、`setup`、`add`、`write`（投票）、`delete` 等模式；[`enq.cgi::write` L417](../../enq.cgi#L417) 有實際票選條件。 | Web 無獨立問卷／投票系統；與事件抽獎及聊天不可混算。**確定缺漏**。 |
 | **BK-05 五種股票及交易記錄** | [`unit.pl` L132](../../unit.pl#L132) 指向 [`kabu.cgi::kabu` L36–108](../../kabu.cgi#L36)；使用 `log_dir/kab_hendou.cgi` 的 A～E 股價與 `member/<ID>` 個人持股記錄，具交易／清算分支。 | Web [`banking.mjs`](../src/banking.mjs) 是存提款／貸款，沒有原版 A～E 股價市場或持股資料模型。**確定缺漏**，不能因有銀行而算股票已完成。 |
 | **IT-06 拍賣刊登及結算** | [`unit.pl` L189](../../unit.pl#L189) 指向 [`auction.cgi`](../../auction.cgi)；`auction` L49 起讀拍賣記錄，另有 `syupin`、`syupin_do`、`ukewatashi` 分支。 | Web 尚無此拍賣流程；不可和原版店舖買賣、回收商店、物品封存混成同項。**確定缺漏**。 |
-| **GM-01 遊樂中心與卡牌遊戲** | [`unit.pl` L120](../../unit.pl#L120) 的 `ゲーセン` 進入 [`gamerand.cgi` L42–79](../../gamerand.cgi#L42)，其原版畫面直接連至 `donut.cgi` 的卡牌遊戲與 High／Low 玩法、賭注各有提示。 | Web `MAP_SYMBOLS` 只存圖示，沒有該設施路由或對應原版遊戲機制。**確定缺漏**；投注／獎金要另讀 `donut.cgi` 執行分支後才能定數值。 |
+| **GM-01 遊樂中心與卡牌遊戲** | [`unit.pl` L120](../../unit.pl#L120) 的 `ゲーセン` 進入 `gamerand.cgi`，另連 `donut.cgi` 卡牌／High-Low、`saikoro.cgi` 雙骰等子遊戲。 | **第55階段僅完成 `saikoro.cgi` 雙骰猜奇偶**；其餘 `donut.cgi` 卡牌、樂透、福引和寶箱仍未實作，不能把地圖入口視為整座遊樂中心已完成。詳 [第55階段](phase55-arcade-dice.md)。 |
 | **AC-04 個人設定／備忘錄／死亡通知** | [`town_maker.cgi` L647–649](../../town_maker.cgi#L647) 的首頁快捷鍵進入 [`setup.cgi`](../../setup.cgi)；模式有 `change`、`friend`、`memo`、`die`；[`setup.cgi::memo` L334–348](../../setup.cgi#L334) 寫個人備忘錄，`die` L354 起有密碼驗證、角色檔案處理。 | Web 有獨立 `solo` 刪角色操作，**不能當作原版 `setup.cgi::die` 已完整移植**；朋友清單、備忘錄與字體／聲音偏好另需對照。**確定缺漏／部分重疊**。 |
 
 ## 四、首頁快速入口也要盤點，不能只看地圖

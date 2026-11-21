@@ -4088,12 +4088,12 @@ test("第50階段單機首次遊玩：空白街區一鍵配置後可工作、百
     const first=await api(srv.url,"solo/map/starter",{townId:3});
     assert.equal(first.status,200);
     assert.deepEqual(first.result.mapStarterResult,{
-      townId:0,placed:20,source:"web-solo-starter"
+      townId:0,placed:21,source:"web-solo-starter"
     },"初始化只能配置伺服器上的目前城鎮，不接受客戶端冒填城鎮");
     assert.equal(first.result.map.source,"web-solo-starter");
     assert.equal(first.result.map.configured,true);
     assert.equal(first.result.map.cells.length,192);
-    assert.equal(first.result.map.cells.filter(x=>x.raw).length,20);
+    assert.equal(first.result.map.cells.filter(x=>x.raw).length,21);
     const expected=[
       [0,0,"駅"],[0,1,"職安"],[0,2,"銀行"],[0,3,"病院"],
       [1,0,"食堂"],[1,1,"食堂２"],[1,2,"デパ"],[1,3,"デパ2"],
@@ -4365,7 +4365,7 @@ test("第53階段單機 HTTP：買真正原版魚餌→釣魚耗餌及100秒冷�
     assert.deepEqual(created.result.fishing.baitGoods,[]);
     const starter=await api(srv.url,"solo/map/starter",{});
     assert.equal(starter.status,200);
-    assert.equal(starter.result.mapStarterResult.placed,20);
+    assert.equal(starter.result.mapStarterResult.placed,21);
     assert.equal(starter.result.map.cells[3*16+5].key,"販売1");
     assert.equal(starter.result.map.cells[3*16+6].key,"釣り");
     assert.equal(starter.result.fishing.fishingAvailable,true);
@@ -4475,7 +4475,7 @@ test("第54階段單機 HTTP：原版合成屋→真正扣材料→成品33欄�
     })).status,400);
     const starter=await api(srv.url,"solo/map/starter",{});
     assert.equal(starter.status,200);
-    assert.equal(starter.result.mapStarterResult.placed,20);
+    assert.equal(starter.result.mapStarterResult.placed,21);
     assert.equal(starter.result.map.cells[3*16+7].key,"合成");
     assert.equal(starter.result.crafting.available,true);
     assert.equal(starter.result.crafting.recipes.length,12);
@@ -4558,5 +4558,137 @@ test("第54階段單機 HTTP：原版合成屋→真正扣材料→成品33欄�
     assert.equal(restored.result.character.money,starter.result.character.money);
     assert.equal(restored.result.legacyInventory.find(x=>x.sourceLine===sourceLine).remaining,2);
     assert.equal((await api(srv.url,"crafting/make",request)).result.craftingResult.replayed,true);
+  }finally{await srv.stop();}
+});
+
+
+test("第55階段單機 HTTP：骰子遊戲建築→原版奇偶下注→5分鐘限制→重送→重啟存檔",async()=>{
+  let srv=await start("solo");
+  const dir=srv.directory;
+  try{
+    const missing=await api(srv.url,"arcade/dice/play",{
+      guess:"even",stake:10000,requestId:"phase55_no_character"
+    });
+    assert.equal(missing.status,400);
+    const created=await api(srv.url,"character",{
+      name:"第55階段擲骰玩家",gender:"other",stats:defaultStats()
+    });
+    assert.equal(created.status,200);
+    assert.equal(created.result.arcadeDice.available,false);
+    assert.deepEqual(created.result.arcadeDice.rates,[10000,50000,100000,500000,1000000]);
+    assert.equal((await api(srv.url,"arcade/dice/play",{
+      guess:"even",stake:10000,requestId:"phase55_no_game_build"
+    })).status,400);
+    const starter=await api(srv.url,"solo/map/starter",{});
+    assert.equal(starter.status,200);
+    assert.equal(starter.result.mapStarterResult.placed,21);
+    assert.equal(starter.result.map.cells[3*16+8].key,"ゲーセン");
+    assert.equal(starter.result.arcadeDice.available,true);
+    assert.equal(starter.result.arcadeDice.cooldownMs,300000);
+    const startMoney=starter.result.character.money;
+    const payload={guess:"even",stake:10000,requestId:"phase55_http_first_dice"};
+    assert.equal((await api(srv.url,"arcade/dice/play",{
+      ...payload,stake:10001
+    })).status,400);
+    assert.equal((await api(srv.url,"arcade/dice/play",{
+      ...payload,guess:"both"
+    })).status,400);
+    const first=await api(srv.url,"arcade/dice/play",payload);
+    assert.equal(first.status,200);
+    const dice=first.result.arcadeDiceResult;
+    assert.ok(dice.dieOne>=1&&dice.dieOne<=6);
+    assert.ok(dice.dieTwo>=1&&dice.dieTwo<=6);
+    assert.equal(dice.total,dice.dieOne+dice.dieTwo);
+    assert.equal(dice.won,dice.total%2===0);
+    assert.equal(dice.delta,dice.won?10000:-10000);
+    assert.equal(first.result.character.money,startMoney+dice.delta);
+    assert.equal(first.result.arcadeDice.history.length,1);
+    assert.equal(first.result.arcadeDice.history[0].total,dice.total);
+    assert.equal(first.result.arcadeDice.readyAt,dice.playedAt+300000);
+    const replay=await api(srv.url,"arcade/dice/play",payload);
+    assert.equal(replay.status,200);
+    assert.equal(replay.result.arcadeDiceResult.replayed,true);
+    assert.equal(replay.result.character.money,first.result.character.money);
+    assert.equal((await api(srv.url,"arcade/dice/play",{
+      ...payload,guess:"odd"
+    })).status,400);
+    assert.equal((await api(srv.url,"arcade/dice/play",{
+      guess:"odd",stake:50000,requestId:"phase55_http_too_soon"
+    })).status,400);
+    assert.equal((await api(srv.url,"solo/time/advance",{preset:"5m"})).status,200);
+    const second=await api(srv.url,"arcade/dice/play",{
+      guess:"odd",stake:50000,requestId:"phase55_http_second_dice"
+    });
+    assert.equal(second.status,200);
+    assert.equal(second.result.arcadeDiceResult.stake,50000);
+    assert.equal(second.result.arcadeDice.history.length,2);
+    const savedMoney=second.result.character.money;
+    const firstBalance=first.result.character.money;
+    assert.equal(savedMoney,firstBalance+second.result.arcadeDiceResult.delta);
+    await srv.stop({preserveData:true});
+    srv=await start("solo",undefined,dir);
+    const restored=await api(srv.url,"state");
+    assert.equal(restored.status,200);
+    assert.equal(restored.result.arcadeDice.available,true);
+    assert.equal(restored.result.arcadeDice.history.length,2);
+    assert.equal(restored.result.character.money,savedMoney);
+    assert.equal(restored.result.map.cells[3*16+8].key,"ゲーセン");
+    assert.equal((await api(srv.url,"arcade/dice/play",payload)).result.arcadeDiceResult.replayed,true);
+    assert.equal((await api(srv.url,"state")).result.character.money,savedMoney);
+  }finally{await srv.stop();}
+});
+
+test("第55階段多人 HTTP：遊樂中心骰子紀錄、下注與冷卻只屬於本人，其他帳號不可借用",async()=>{
+  const seed=dir=>{
+    const db=new DatabaseSync(join(dir,"multi.sqlite"));
+    try{
+      db.exec([
+        "CREATE TABLE town_maps(town_id INTEGER PRIMARY KEY,",
+        "original_name TEXT NOT NULL DEFAULT '',",
+        "original_record TEXT NOT NULL DEFAULT '',",
+        "source TEXT NOT NULL,tiles_json TEXT NOT NULL,",
+        "updated_at INTEGER NOT NULL);"
+      ].join(" "));
+      const tiles=Array(192).fill("");tiles[0]="ゲーセン";
+      db.prepare("INSERT INTO town_maps(town_id,original_name,source,tiles_json,updated_at) VALUES(?,?,?,?,?)")
+        .run(0,"測試城鎮","legacy-import",JSON.stringify(tiles),Date.now());
+    }finally{db.close();}
+  };
+  const srv=await start("multi",seed);
+  try{
+    const a=await api(srv.url,"register",{
+      username:"phase55DiceAlpha",password:"phase55-dice-alpha-pass-123"
+    });
+    const b=await api(srv.url,"register",{
+      username:"phase55DiceBeta",password:"phase55-dice-beta-pass-123"
+    });
+    assert.equal(a.status,200);assert.equal(b.status,200);
+    assert.equal((await api(srv.url,"character",{
+      name:"擲骰多人甲",gender:"other",stats:defaultStats()
+    },a.cookie)).status,200);
+    assert.equal((await api(srv.url,"character",{
+      name:"擲骰多人乙",gender:"other",stats:defaultStats()
+    },b.cookie)).status,200);
+    const payload={guess:"even",stake:10000,requestId:"phase55_shared_request"};
+    assert.equal((await api(srv.url,"arcade/dice/play",payload)).status,401);
+    const first=await api(srv.url,"arcade/dice/play",payload,a.cookie);
+    assert.equal(first.status,200);
+    const second=await api(srv.url,"arcade/dice/play",payload,b.cookie);
+    assert.equal(second.status,200,"不同帳號可以使用自己的相同請求碼");
+    assert.equal(first.result.arcadeDice.history.length,1);
+    assert.equal(second.result.arcadeDice.history.length,1);
+    assert.equal((await api(srv.url,"arcade/dice/play",{
+      ...payload,requestId:"phase55_alpha_cooldown"
+    },a.cookie)).status,400);
+    assert.equal((await api(srv.url,"arcade/dice/play",{
+      ...payload,requestId:"phase55_beta_cooldown"
+    },b.cookie)).status,400);
+    assert.equal((await api(srv.url,"arcade/dice/play",payload,b.cookie)).result.arcadeDiceResult.replayed,true);
+    const afterA=(await api(srv.url,"state",undefined,a.cookie)).result;
+    const afterB=(await api(srv.url,"state",undefined,b.cookie)).result;
+    assert.equal(afterA.arcadeDice.history.length,1);
+    assert.equal(afterB.arcadeDice.history.length,1);
+    assert.equal(afterA.arcadeDice.history[0].delta,first.result.arcadeDiceResult.delta);
+    assert.equal(afterB.arcadeDice.history[0].delta,second.result.arcadeDiceResult.delta);
   }finally{await srv.stop();}
 });
