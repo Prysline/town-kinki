@@ -120,7 +120,7 @@ function renderSoloTime() {
 let publicPreview=null;
 let previewLoading=false;
 // 方案 B：一次顯示一組設施。原本的表單留在 DOM，既有事件和資料更新不受影響。
-const FACILITY_TAB_NAMES = Object.freeze(["house","dining","shops","training","jobs","bank","hospital","events"]);
+const FACILITY_TAB_NAMES = Object.freeze(["house","dining","shops","training","jobs","bank","hospital","events","mail"]);
 const PROFILE_VIEWS = Object.freeze(["status","inventory","attributes"]);
 let activeProfileView="status";
 function selectProfileView(name,{focus=false}={}) {
@@ -2001,9 +2001,38 @@ function renderGiftShop(){
     note.textContent="尚無禮品轉換與寄送紀錄。";
     history.append(note);
   }
-  const mailbox=el("gift-mail");
+}
+
+let pendingMailAction=null;
+async function submitPrivateMail(recipientName,message){
+  if(!pendingMailAction||pendingMailAction.recipientName!==recipientName||
+     pendingMailAction.message!==message)
+    pendingMailAction={recipientName,message,requestId:crypto.randomUUID()};
+  try{
+    state=await api("mail/send",pendingMailAction);
+    const result=state.mailResult;
+    pendingMailAction=null;
+    el("mail-compose").reset();
+    render();
+    notify(result.replayed?"郵件已送達，沒有重複寄送。":
+      "已寄送私人站內信給「"+result.recipientName+"」。");
+  }catch(error){notify(error.message,true);}
+}
+async function deleteMailboxMessage(mailId){
+  if(!Number.isSafeInteger(mailId)||mailId<1)return;
+  if(!window.confirm("確定刪除這封自己信箱內的信件嗎？對方的副本不會受影響。"))return;
+  try{
+    state=await api("mail/delete",{mailId});
+    render();
+    notify("已刪除自己的信件。");
+  }catch(error){notify(error.message,true);}
+}
+function renderMailbox(){
+  if(!state?.character)return;
+  const mails=state.mailbox??[];
+  text("mail-status","目前保留 "+mails.length+"／50 封郵件，收／寄、純文字與寄禮信共用上限。");
+  const mailbox=el("mail-messages");
   mailbox.replaceChildren();
-  const mails=state.giftMail??[];
   if(mails.length){
     const entries=document.createElement("ol");entries.className="health-event-list";
     for(const mail of mails){
@@ -2013,17 +2042,25 @@ function renderGiftShop(){
         mail.otherName+"｜"+new Date(mail.createdAt).toLocaleString("zh-TW");
       const body=document.createElement("p");body.className="small";
       body.textContent=mail.message;
-      const gift=document.createElement("p");gift.className="small";
-      gift.textContent="禮品：「"+mail.giftName+"」×"+mail.quantity+" 回（日）";
-      item.append(heading,body,gift);
+      item.append(heading,body);
+      if(mail.type==="gift"&&mail.giftName){
+        const gift=document.createElement("p");gift.className="small";
+        gift.textContent="禮品：「"+mail.giftName+"」×"+mail.quantity+" 回（日）";
+        item.append(gift);
+      }
+      const remove=document.createElement("button");
+      remove.type="button";remove.textContent="刪除這封信";
+      remove.addEventListener("click",()=>deleteMailboxMessage(mail.id));
+      item.append(remove);
       entries.append(item);
     }
     mailbox.append(entries);
   }else{
     const note=document.createElement("p");note.className="small";
-    note.textContent="目前沒有經由 Web 寄禮產生的收件或寄件紀錄。";
+    note.textContent="信箱目前沒有收件或寄件紀錄。";
     mailbox.append(note);
   }
+
 }
 
 
@@ -2565,6 +2602,7 @@ function render() {
   renderVending();
   renderEquipment();
   renderGiftShop();
+  renderMailbox();
   renderRecycle();
   renderWholesale();
   renderInsurance();
@@ -2951,6 +2989,15 @@ el("profile-view-tabs").addEventListener("keydown",event=>{
     (index+(event.key==="ArrowRight"?1:-1)+PROFILE_VIEWS.length)%PROFILE_VIEWS.length;
   event.preventDefault();
   selectProfileView(PROFILE_VIEWS[next],{focus:true});
+});
+el("mail-compose").addEventListener("submit",event=>{
+  event.preventDefault();
+  const values=formValues(event.currentTarget);
+  const recipientName=String(values.recipientName??"").trim();
+  const message=String(values.message??"").trim();
+  if(!recipientName||recipientName.length>40||!message||message.length>1000)
+    return notify("請輸入收件角色名稱與 1～1,000 字的訊息。",true);
+  submitPrivateMail(recipientName,message);
 });
 el("facility-shortcuts").addEventListener("click",event=>{
   const button=event.target.closest("button[data-facility]");
