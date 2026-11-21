@@ -13,6 +13,8 @@ export const FACILITY_PANELS=Object.freeze({
   "ギフト屋":"gift-panel",
   "リサイ":"recycle-panel",
   "クーポン":"event-panel",
+  "釣り":"fishing-panel",
+  "販売1":"fishing-panel",
   "問屋":"wholesale-panel",
   "建築":"housing-panel"
 });

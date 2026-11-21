@@ -11,7 +11,7 @@ export const CONSUMABLE_REJECTED_EFFECTS=Object.freeze(["ランダム品"]);
 const STATS_INDEX=Object.freeze([
   2,3,4,5,6,7,8,10,11,12,13,14,15,16,18,19,20
 ]);
-const NON_CONSUMABLE=new Set(["ギフト","武器","防具","魔法","御守"]);
+const NON_CONSUMABLE=new Set(["ギフト","武器","防具","魔法","御守","魚","幻の魚","餌"]);
 const FOOD_TYPES=new Set(["食料品","ファーストフード"]);
 const SPECIAL_TYPES=new Set(["無","万能","風邪","下痢","肺炎","結核",
   "ウエイトアップ","ダイエット","身長","縮み"]);

@@ -20,6 +20,7 @@ import { initDiningStockTables, ensureDiningRotation, listedDiningMeals, takeDin
 import { healthStatus, settleDailyHealth, conditionWithIllness, getTreatmentQuote, treatAtHospital } from "./health.mjs";
 import { initCharacterEvents, settleDailyIllnessEvent, listCharacterEvents, getCouponBalance } from "./events.mjs";
 import {parseLegacyCouponCatalog} from "./coupon-catalog.mjs";
+import {parseOriginalFishing,initFishingTables,ensureFishingStock,fishingOverview,buyFishingBait,castFishing,sellFishingCatch} from "./fishing.mjs";
 import {initCouponRedemptionTables,listCouponRewards,listCouponRedemptions,redeemEventCoupon,COUPON_SHOP_SYMBOL} from "./coupon-redemption.mjs";
 import { getCockroachChallenge,claimCockroach } from "./event-cockroach.mjs";
 import { parseLegacyInsurance, initInventoryTables, inventoryOverview, hasActiveHealthInsurance, listInsurancePurchases, buyHealthInsurance } from "./inventory.mjs";
@@ -96,6 +97,7 @@ initRoomsTables(db);
 initBankTables(db);
 initCharacterEvents(db);
 initCouponRedemptionTables(db);
+initFishingTables(db);
 initInventoryTables(db);
 initDiningStockTables(db);
 initLegacyItemUseTables(db);
@@ -132,6 +134,11 @@ const mealsByKey = new Map(meals.map(meal => [meal.key,meal]));
 const insuranceItem=parseLegacyInsurance(decodeLegacyText(readFileSync(resolve(REPO_ROOT,"dat_dir","syouhin.cgi"))));
 const retailCatalog=parseLegacyRetailCatalog(decodeLegacyText(readFileSync(resolve(REPO_ROOT,"dat_dir","syouhin.cgi"))));
 const couponCatalog=parseLegacyCouponCatalog(decodeLegacyText(readFileSync(resolve(REPO_ROOT,"dat_dir","coupon.cgi"))));
+const fishingCatalog=parseOriginalFishing(
+  decodeLegacyText(readFileSync(resolve(REPO_ROOT,"dat_dir","syouhin.cgi"))),
+  decodeLegacyText(readFileSync(resolve(REPO_ROOT,"sea.cgi"))),
+  decodeLegacyText(readFileSync(resolve(REPO_ROOT,"hanbai1.cgi")))
+);
 const wholesaleCatalog=parseWholesaleCatalog(decodeLegacyText(readFileSync(resolve(REPO_ROOT,"dat_dir","syouhin.cgi"))));
 const vendingCatalog=parseLegacyVendingCatalog(decodeLegacyText(readFileSync(resolve(REPO_ROOT,"dat_dir","jihanki.cgi"))));
 const equipmentCatalog=parseLegacyEquipmentCatalog(decodeLegacyText(readFileSync(resolve(REPO_ROOT,"dat_dir","soubi.cgi"))));
@@ -292,6 +299,14 @@ function snapshot(user) {
       ...good,details:retailItemDetails(bySku.get(good.sku))
     }));
   }
+  const baitShopIsHere=Boolean(retailMap?.configured&&retailMap.cells.some(cell=>cell.key==="販売1"));
+  if(baitShopIsHere){
+    db.exec("BEGIN IMMEDIATE");
+    try{
+      ensureFishingStock(db,fishingCatalog.bait,today);
+      db.exec("COMMIT");
+    }catch(error){db.exec("ROLLBACK");throw error;}
+  }
   const equipmentAvailable=Boolean(retailMap?.configured&&
     retailMap.cells.some(cell=>cell.key===EQUIPMENT_SYMBOL));
   const couponShopAvailable=Boolean(retailMap?.configured&&
@@ -360,6 +375,7 @@ function snapshot(user) {
     couponShopAvailable,
     couponRewards:updated?listCouponRewards(couponCatalog,getCouponBalance(db,user.id),couponShopAvailable):[],
     couponRedemptions:updated?listCouponRedemptions(db,user.id):[],
+    fishing:updated?fishingOverview(db,user.id,fishingCatalog,now,today):null,
     cockroachChallenge: updated ? getCockroachChallenge(db,user.id,now) : null,
     hospital: updated ? getTreatmentQuote(updated,hasActiveHealthInsurance(db,user.id,insuranceItem,now)) : null,
     insurance: updated ? inventoryOverview(db,user.id,insuranceItem,now) : null,
@@ -718,6 +734,26 @@ async function handle(req, res) {
           data.quantity,data.requestId,gameNow());
       } catch(error) {throw new HttpError(400,error.message);}
       return sendJson(res,200,{...snapshot(user),insuranceResult:result});
+    }
+
+    if(path==="/api/fishing/bait/buy"||path==="/api/fishing/cast"||path==="/api/fishing/sell"){
+      let fishingResult;
+      const now=gameNow();
+      try{
+        if(path==="/api/fishing/bait/buy")
+          fishingResult=buyFishingBait(db,user.id,fishingCatalog,{
+            sku:data.sku,requestId:data.requestId,
+            now,day:calendarDay(now,GAME_TIMEZONE)
+          });
+        else if(path==="/api/fishing/cast")
+          fishingResult=castFishing(db,user.id,fishingCatalog,{
+            sourceLine:data.sourceLine,requestId:data.requestId,now
+          });
+        else fishingResult=sellFishingCatch(db,user.id,{
+          sourceLine:data.sourceLine,requestId:data.requestId,now
+        });
+      }catch(error){throw new HttpError(400,error.message);}
+      return sendJson(res,200,{...snapshot(user),fishingResult});
     }
 
     if (path === "/api/coupon/redeem") {

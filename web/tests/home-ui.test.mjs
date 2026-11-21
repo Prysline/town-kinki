@@ -140,7 +140,7 @@ test("原 CGI 建築代碼只連到 Web 真正已實作的設施入口",()=>{
   const expected={
     "銀行":"bank-panel","病院":"hospital-panel","職安":"jobs-panel",
     "教室":"classroom-panel","食堂":"dining-panel","食堂２":"dining-panel",
-    "デパ":"retail-panel","デパ2":"retail-panel","自販機":"vending-panel","装備屋":"equipment-panel","ギフト屋":"gift-panel","リサイ":"recycle-panel","クーポン":"event-panel","問屋":"wholesale-panel","建築":"housing-panel"
+    "デパ":"retail-panel","デパ2":"retail-panel","自販機":"vending-panel","装備屋":"equipment-panel","ギフト屋":"gift-panel","リサイ":"recycle-panel","クーポン":"event-panel","釣り":"fishing-panel","販売1":"fishing-panel","問屋":"wholesale-panel","建築":"housing-panel"
   };
   assert.deepEqual(FACILITY_PANELS,expected);
   for(const [key,panelId] of Object.entries(expected)){
@@ -166,7 +166,7 @@ test("百貨店實體地圖入口、商品與現金操作需連上真正交易�
   assert.match(script,/api\("retail\/buy",pendingRetailPurchase\)/);
   assert.match(script,/item\.stock<=0/);
   assert.match(script,/renderRetail\(\)/);
-  assert.match(script,/item\.readOnly\?"原始存檔":"Web 購入或轉換"/);
+  assert.match(script,/item\.readOnly\?"歷史來源封存":item\.origin==="fishing"/);
 });
 test("原版特殊代碼已可依來源區分實際使用與尚未支援",()=>{
   assert.match(script,/code==="ステータス"/);
@@ -726,4 +726,30 @@ test("第51階段：原版優惠券兌換所地圖入口、30獎品、本人事�
   assert.match(script,/pendingCouponRedemption\.originalName!==reward\.originalName/);
   assert.match(script,/window\.confirm\("確定使用 "/);
   assert.doesNotMatch(script,/heading\.innerHTML=reward\.originalName/);
+});
+
+
+test("第53階段：原版釣場與餌料商店實際有入庫交易 UI 且拒絕虛構漁獲",()=>{
+  for(const key of ["釣り","販売1"])
+    assert.deepEqual(townCellAction(describeTile(key)),{
+      kind:"facility",panelId:"fishing-panel"
+    });
+  for(const id of ["fishing-panel","fishing-status","fishing-shop-status",
+    "fishing-bait-goods","fishing-bait-select","fishing-sell-select",
+    "fishing-cast","fishing-sell","fishing-history","fishing-cooldown"])
+    assert.match(html,new RegExp('id="'+id+'"'));
+  assert.match(html,/原版 sea\.cgi／hanbai1\.cgi/);
+  assert.match(html,/每次釣魚消耗 1 次/);
+  assert.match(html,/int\(rand\(3\)\)/);
+  assert.match(script,/function renderFishing\(\)/);
+  assert.match(script,/renderFishing\(\);/);
+  assert.match(script,/state\.fishing\?\?/);
+  assert.match(script,/submitFishingAction\("bait\/buy"/);
+  assert.match(script,/submitFishingAction\("cast"/);
+  assert.match(script,/submitFishingAction\("sell"/);
+  assert.match(script,/await api\("fishing\/"\+actionName,data\)/);
+  assert.match(script,/crypto\.randomUUID\(\)/);
+  assert.match(script,/button\.disabled|buy\.disabled=!canBuy/);
+  assert.match(script,/item\.origin==="fishing"/);
+  assert.doesNotMatch(script,/innerHTML\s*=\s*item\.name/);
 });

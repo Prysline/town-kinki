@@ -292,8 +292,8 @@
               <div id="legacy-item-use-history"></div>
             </details>
             <details class="inventory-secondary" id="inventory-source-info">
-              <summary>原始存檔與支援範圍</summary>
-              <p class="small">舊版 mono.cgi 匯入資料的原始 33 欄保持封存；Web 已核對的物品可透過獨立使用紀錄執行。未支援的效果只顯示原版資料，不會假裝已生效。裝備使用獨立裝備欄；寄送用禮品請至禮品店或郵件操作。</p>
+              <summary>原版商品格式與支援範圍</summary>
+              <p class="small">新 Web 角色從商店、事件、釣魚及優惠券獲得的原版 33 欄商品會持久保存，已核實的物品透過獨立使用紀錄與正式設施操作。未支援的效果只顯示原版資料，不會假裝已生效。裝備使用獨立裝備欄；寄送用禮品請至禮品店或郵件操作。</p>
             </details>
           </section>
           <section class="card attributes-panel" id="attributes-panel" role="tabpanel" aria-labelledby="profile-tab-attributes" hidden>
@@ -397,7 +397,7 @@
         <section class="card" id="retail-panel">
           <div class="heading"><div><div class="eyebrow">原版建築購物</div><h2>百貨店</h2></div><span class="muted">每日上架，庫存全玩家共用</span></div>
           <details class="explain"><summary>購物規則與目前限制</summary>
-            <p class="small">依原版 command.pl::depart_gamen，百貨店一與二每日各抽選最多 110 種非食堂商品，現金價為商品原始標價三倍。玩家必須在目前城鎮的地圖中有對應百貨店才能購物；每次可購買 1～5 件（原版每種至多持有 5 組）；一般物品持有上限 25 格，購入禮品獨立上限 10 格。已有相同 Web 購入的一般商品會合併耐久，原版匯入的物品保持唯讀。可用現金或本人有效原版信用卡從普通存款付款，款項、共用庫存、帳簿與 33 欄持有物一起交易。商品表格可直接比較完整的能力增減，展開明細可檢視原始 33 欄的能力增減、特殊效果代碼、熱量、使用間隔、能量消耗及備註；這些資料不等同於 Web 都已能執行。未支援的特殊效果會另標示，不會假裝已生效。原版購物贈券及部分特殊物品行為仍待移植。</p>
+            <p class="small">依原版 command.pl::depart_gamen，百貨店一與二每日各抽選最多 110 種非食堂商品，現金價為商品原始標價三倍。玩家必須在目前城鎮的地圖中有對應百貨店才能購物；每次可購買 1～5 件（原版每種至多持有 5 組）；一般物品持有上限 25 格，購入禮品獨立上限 10 格。已有相同 Web 購入的一般商品會合併耐久，不需要原版舊玩家持有物匯入。可用現金或本人有效原版信用卡從普通存款付款，款項、共用庫存、帳簿與 33 欄持有物一起交易。商品表格可直接比較完整的能力增減，展開明細可檢視原始 33 欄的能力增減、特殊效果代碼、熱量、使用間隔、能量消耗及備註；這些資料不等同於 Web 都已能執行。未支援的特殊效果會另標示，不會假裝已生效。原版購物贈券及部分特殊物品行為仍待移植。</p>
           </details>
           <div class="filters retail-filters">
             <label for="retail-shop-select">所在城鎮的百貨店
@@ -414,6 +414,33 @@
           <div id="retail-items" class="shop-list"></div>
           <h3>近期百貨購物紀錄</h3>
           <div id="retail-purchases"></div>
+        </section>
+        <section class="card" id="fishing-panel">
+          <div class="heading">
+            <div><div class="eyebrow">單機生活 · 原版海邊</div><h2>釣魚與魚餌商店</h2></div>
+            <span class="muted">原版 sea.cgi／hanbai1.cgi</span>
+          </div>
+          <p id="fishing-status" class="small" role="status"></p>
+          <details class="explain">
+            <summary>原版釣魚與競價規則</summary>
+            <p class="small">須在城鎮有「販売1」原版商店才能買魚餌，有「釣り」才可釣魚或出售。買餌依原版定價並扣現金，商店品項由 dat_dir/syouhin.cgi 的「餌」類別直接核對；Web 版每天重新補充原版庫存。每次釣魚消耗 1 次實際持有的魚餌／魚，100 秒後可再釣；空手不能釣。原版先抽三種魚，再按不同餌料的原始中獎率決定釣獲，未中魚也會消耗魚餌。漁獲為真實 33 欄物品，原版可每種持有至多五份、總背包 25 格。可把一般魚當魚餌或在競價市場出售，也可出售稀有魚；售出後魚會扣除 1 次耐久並按原版範圍隨機獲得現金。原始碼每組雖列四件獎品，但 int(rand(3)) 實際只會抽前三件；Web 不會虛構第四件獎品。</p>
+          </details>
+          <h3>餌料商店「販売1」</h3>
+          <p id="fishing-shop-status" class="small"></p>
+          <div id="fishing-bait-goods" class="training-grid"></div>
+          <h3>釣魚區「釣り」</h3>
+          <p id="fishing-cooldown" class="small"></p>
+          <label for="fishing-bait-select">使用哪件本人持有的魚餌／漁獲
+            <select id="fishing-bait-select"></select>
+          </label>
+          <button id="fishing-cast" type="button">開始釣魚（消耗一回）</button>
+          <h3>漁獲競價市場</h3>
+          <label for="fishing-sell-select">選擇要賣出的魚（消耗一回）
+            <select id="fishing-sell-select"></select>
+          </label>
+          <button id="fishing-sell" type="button">將漁獲出售</button>
+          <h3>最近釣魚紀錄</h3>
+          <div id="fishing-history"></div>
         </section>
         <section class="card" id="vending-panel">
           <div class="heading"><div><div class="eyebrow">原版獨立建築</div><h2>自動販賣機</h2></div><span class="muted">獨立飲料貨架</span></div>
@@ -441,7 +468,7 @@
         <section class="card" id="gift-panel">
           <div class="heading"><div><div class="eyebrow">原版獨立建築</div><h2>禮品店</h2></div><span class="muted">將持有物轉換成禮品</span></div>
           <details class="explain"><summary>轉換與寄送規則</summary>
-            <p class="small">原版 gifutoya.cgi：只能在有「ギフト屋」的城鎮轉換；每次收取現金 50,000 元。可把本人 Web 持有物的全部剩餘耐久轉成「ギフト」，或切出指定的回數／日數。未寄送禮品最多持有 10 格。轉送可指定另一名角色和正整數份數；對方收到的是「ギフト商品」，最多持有 10 格。舊版原始匯入資料保持唯讀，優惠券仍未移植。Web 寄禮會同步寫入雙方各自的站內信；可於「郵件」分頁閱讀、刪除，也能不附禮物寄送純文字信件。所有收／寄、純文字與寄禮信每人合計最多 50 封。舊版信件匯入、K 點數附件及優惠券特例尚未移植，不能透過此頁轉送優惠券。</p>
+            <p class="small">原版 gifutoya.cgi：只能在有「ギフト屋」的城鎮轉換；每次收取現金 50,000 元。可把本人 Web 持有物的全部剩餘耐久轉成「ギフト」，或切出指定的回數／日數。未寄送禮品最多持有 10 格。轉送可指定另一名角色和正整數份數；對方收到的是「ギフト商品」，最多持有 10 格。只處理新 Web 玩家自己取得的物品；優惠券已另設真實兌換所。Web 寄禮會同步寫入雙方各自的站內信；可於「郵件」分頁閱讀、刪除，也能不附禮物寄送純文字信件。所有收／寄、純文字與寄禮信每人合計最多 50 封。K 點數附件及優惠券送禮特例尚未移植（原版舊玩家信件不需匯入），不能透過此頁轉送優惠券。</p>
           </details>
           <p id="gift-status" class="small"></p>
           <h3>可轉換與可寄送物品</h3>

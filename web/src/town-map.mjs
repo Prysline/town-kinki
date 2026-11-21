@@ -33,6 +33,7 @@ const BASE = [
   ["ギフト屋", "禮品店", "gift.gif", "facility"],
   ["株", "股票交易所", "kabu.gif", "facility"],
   ["釣り", "釣魚", "blank.gif", "facility"],
+  ["販売1", "餌料商店", "house/house1.gif", "facility"],
   ["斡旋", "交友介紹所", "assenjo.gif", "facility"],
   ["プロフ", "個人檔案", "prof.gif", "facility"],
   ["アンケ", "問卷", "enq.gif", "facility"],
