@@ -556,7 +556,7 @@
           <p id="arcade-dice-status" class="small" role="status"></p>
           <details class="explain">
             <summary>原始骰子遊戲規則與 Web 安全差異</summary>
-            <p class="small">原版每次擲兩顆六面骰：先從 0～35 等機率抽一個整數，再推算兩顆骰面。猜總和是奇數或偶數；猜中增加所選下注額，猜錯扣除同額現金。可下注 10,000、50,000、100,000、500,000 或 1,000,000 元，同一玩家每局間隔 5 分鐘。Web 版需在所在城鎮有「ゲーセン」建築、下注現金必須足夠；原版可在現金不足時下注，但 Web 為保護現金存檔而拒絕。結果以伺服器擲骰、本人 SQLite 原子交易結算，重複請求不會重複輸贏。只顯示本人的最近 20 局；High／Low 已於下方面板開放，其他卡牌、樂透、福引和寶箱尚未移植。</p>
+            <p class="small">原版每次擲兩顆六面骰：先從 0～35 等機率抽一個整數，再推算兩顆骰面。猜總和是奇數或偶數；猜中增加所選下注額，猜錯扣除同額現金。可下注 10,000、50,000、100,000、500,000 或 1,000,000 元，同一玩家每局間隔 5 分鐘。Web 版需在所在城鎮有「ゲーセン」建築、下注現金必須足夠；原版可在現金不足時下注，但 Web 為保護現金存檔而拒絕。結果以伺服器擲骰、本人 SQLite 原子交易結算，重複請求不會重複輸贏。只顯示本人的最近 20 局；High／Low 及三種抽牌已於下方面板開放，樂透、福引及寶箱等仍未移植。</p>
           </details>
           <div class="filters retail-filters">
             <label for="arcade-dice-guess">猜測總和
@@ -599,6 +599,32 @@
           <p id="arcade-highlow-result" class="small" aria-live="polite"></p>
           <h3>本人最近 20 局 High／Low 紀錄</h3>
           <div id="arcade-highlow-history"></div>
+        </section>
+        <section class="card" id="arcade-donuts-panel">
+          <div class="heading">
+            <div><div class="eyebrow">原版卡牌遊戲 · donus／donus2／donus3</div><h2>三種抽牌遊戲</h2></div>
+            <span class="muted">gamerand.cgi／donut.cgi</span>
+          </div>
+          <details class="explain">
+            <summary>三種原版抽牌規則及 Web 單機適配</summary>
+            <p class="small">三種遊戲各有自己一張跨玩家共用牌桌，從原版空白紀錄初始化為一張「1」牌。第一種「不同點數×1萬元」抽1～5點，與前一張不同時獲得累積張數×10,000元，相同時扣同額並重置牌桌；原版沒有啟用卡牌10分鐘限制，但禁止同一玩家連續抽牌，Web 單機改採原版5秒全域行動限制後可再抽。第二種「不同點數×2萬元」同樣抽1～5點，收益與損失均為累積張數×20,000元，原版每人10分鐘間隔。第三種「相同點數×10萬元」抽1～3點，相同時獲得累積張數×100,000元並重置牌桌；不同則固定扣除100,000元、牌串再增加一張，原版每人10分鐘間隔。原始空桌的前一張：第一、二種未設定，Perl數值比較0，因此首次抽牌必為「不同」；第三種明訂首次比較點數1。Web 版讓單機玩家達到限制時間後接續牌桌、必須有足額現金，使用伺服器抽牌、SQLite原子結算與防重送；本人紀錄最多顯示20局。多帳號共用三張不同的桌面，但交易紀錄仍分開。原版連抽旗標未確認為啟用狀態，不宣稱兩者完全等價。</p>
+          </details>
+          <p id="arcade-donuts-status" class="small" role="status"></p>
+          <div class="filters retail-filters">
+            <label for="arcade-donuts-mode">選擇卡牌玩法
+              <select id="arcade-donuts-mode">
+                <option value="donus">不同點數 × 1萬元</option>
+                <option value="donus2">不同點數 × 2萬元</option>
+                <option value="donus3">相同點數 × 10萬元</option>
+              </select>
+            </label>
+          </div>
+          <p id="arcade-donuts-table" class="small"></p>
+          <p id="arcade-donuts-quote" class="small" role="status"></p>
+          <button type="button" id="arcade-donuts-submit" disabled>確認承擔風險並抽一張牌</button>
+          <p id="arcade-donuts-result" class="small" aria-live="polite"></p>
+          <h3>所選模式：本人最近20局紀錄</h3>
+          <div id="arcade-donuts-history"></div>
         </section>
       </div>
       <div id="facility-pane-training" class="facility-pane" role="tabpanel" aria-labelledby="facility-tab-training" tabindex="0" hidden>
