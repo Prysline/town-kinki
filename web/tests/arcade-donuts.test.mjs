@@ -202,12 +202,17 @@ test("無角色／無建築／錯誤模式、短請求碼、非法亂數及現�
     assert.throws(()=>draw(db,{userId:3,requestId:"phase57_no_player"}),/請先建立角色/);
     assert.throws(()=>draw(db,{mode:"donus4",requestId:"phase57_bad_mode"}),/格式或模式/);
     assert.throws(()=>draw(db,{requestId:"short"}),/格式或模式/);
-    for(const roll of [-1,5,0.1,NaN,Infinity])
-      assert.throws(()=>draw(db,{roll,requestId:"phase57_bad_roll"}),/亂數/);
     assert.equal(count(db,"donus"),0);
     assert.equal(table(db,"donus").card_chain,"1");
     assert.equal(cash(db),9999);
   }finally{db.close();}
+  const checked=setup();
+  try{
+    for(const roll of [-1,5,0.1,NaN,Infinity])
+      assert.throws(()=>draw(checked,{roll,requestId:"phase57_bad_roll"}),/亂數/);
+    assert.equal(count(checked,"donus"),0);
+    assert.equal(cash(checked),5000000);
+  }finally{checked.close();}
   const without=setup({building:false});
   try{
     assert.equal(arcadeDonutsOverview(without,1,source,NOW).available,false);
