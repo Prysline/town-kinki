@@ -64,7 +64,7 @@ test("商店、背包、裝備與購買紀錄使用中文顯示，提交 API 保
   assert.match(app,/document\.createTextNode\(displayProductName\(item\.name\)\)/);
   assert.match(app,/displayVendingName\(entry\.name\)/);
   assert.match(app,/displayVendingName\(result\.name\)/);
-  assert.match(app,/name\.textContent=displayKnownItemName\(item\.name\)/);
+  assert.match(app,/name\.textContent=displayDessertFastFoodName\(displayKnownItemName\(item\.name\)\)/);
   assert.match(app,/displayEquipmentName\(item\.name\)/);
   assert.match(app,/displayEquipmentName\(tx\.name\)/);
   assert.match(app,/displayEquipmentName\(result\.name\)/);
