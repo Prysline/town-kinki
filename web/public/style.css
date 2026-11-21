@@ -415,7 +415,55 @@ body.compact-status-active .game-shell .facility-pane{scroll-margin-top:7rem}
 .job .job-eligibility.locked{color:#965032}
 
 /* 百貨商品資訊與結帳欄位：桌面與小螢幕皆優先並排，而非兩個全寬下拉框直疊。 */
-.game-shell #retail-items{grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr))}
+.game-shell #retail-items,.game-shell #vending-items{display:grid;grid-template-columns:minmax(0,1fr);gap:.55rem;min-width:0}
+.shop-table-scroll{max-width:100%;overflow-x:auto;overscroll-behavior-inline:contain;border:1px solid #d6c88f;border-radius:4px;background:#fffdf2}
+.shop-catalog{border-collapse:collapse;width:100%;table-layout:fixed;font-size:.81rem;color:#26382b}
+.shop-catalog th,.shop-catalog td{border:1px solid #e1dcc3;padding:.4rem .5rem;vertical-align:top;overflow-wrap:anywhere}
+.shop-catalog thead{background:#e7b656;color:#32281f}
+.shop-catalog thead th:nth-child(1){width:22%}
+.shop-catalog thead th:nth-child(2){width:12%}
+.shop-catalog thead th:nth-child(3){width:40%}
+.shop-catalog thead th:nth-child(4){width:16%}
+.shop-catalog thead th:nth-child(5){width:10%}
+.shop-catalog .shop-category-row th{background:#fff0a8;color:#4f3b1e;text-align:left;font-weight:750}
+.shop-catalog .shop-product-row{background:#fffdf2}
+.shop-catalog .shop-product-row:nth-of-type(even){background:#fff8e3}
+.shop-product-name{display:flex;align-items:flex-start;gap:.35rem;font-weight:650;color:#253b2c;cursor:pointer;min-width:0}
+.shop-product-name input{width:auto;min-width:auto;margin:.14rem 0 0;flex:0 0 auto;accent-color:#3c5d48}
+.shop-price{font-weight:650;font-variant-numeric:tabular-nums}
+.shop-stock{font-variant-numeric:tabular-nums;color:#485448}
+.shop-expand .shop-detail-toggle{width:100%;min-width:0;min-height:30px;padding:.28rem .2rem;font-size:.75rem;white-space:normal}
+.shop-catalog .shop-detail-row td{padding:.45rem .7rem;background:#f9f8ef}
+.shop-detail-row .retail-item-effects{max-width:100%;border:0;background:transparent;padding:0}
+.shop-detail-row .retail-item-effects summary{display:none}
+.shop-detail-row .retail-item-effects p.small{font-size:.8rem;margin:.25rem 0}
+.shop-effect-cell .retail-effect-preview{display:grid;gap:.16rem;min-width:0}
+.shop-effect-cell .retail-effect-preview p.small{font-weight:600;color:#2a553c;margin:0;line-height:1.5;overflow-wrap:anywhere}
+.shop-checkout{position:sticky;bottom:0;z-index:2;border:1px solid #c5b685;border-radius:4px;background:#fffdf4;padding:.55rem .75rem;color:#253a2a;box-shadow:0 -2px 10px #392a211c}
+.shop-checkout .retail-buy-controls{max-width:480px}
+.shop-checkout>button{min-width:140px;min-height:38px}
+.shop-checkout .small{margin:.4rem 0;color:#314b3b}
+@media(max-width:650px){
+  .shop-table-scroll{overflow:visible;border:0;background:transparent}
+  .shop-catalog,.shop-catalog tbody{display:block;width:100%;min-width:0}
+  .shop-catalog thead{display:none}
+  .shop-catalog tbody .shop-category-row{display:block}
+  .shop-catalog .shop-category-row th{display:block;padding:.4rem .5rem;border:1px solid #d8c18a;margin-top:.45rem}
+  .shop-catalog tbody .shop-product-row{display:grid;grid-template-columns:minmax(0,1fr) auto;
+    gap:.18rem .45rem;border:1px solid #d9cba6;border-top:0;padding:.5rem .55rem}
+  .shop-catalog .shop-product-row td{border:0;padding:.08rem 0;min-width:0}
+  .shop-catalog .shop-product-row td:nth-child(1){grid-column:1}
+  .shop-catalog .shop-product-row td:nth-child(2){grid-column:2;white-space:nowrap}
+  .shop-catalog .shop-product-row td:nth-child(3){grid-column:1/-1}
+  .shop-catalog .shop-product-row td:nth-child(4){grid-column:1}
+  .shop-catalog .shop-product-row td:nth-child(5){grid-column:2}
+  .shop-catalog .shop-detail-row{display:block}
+  .shop-catalog .shop-detail-row[hidden]{display:none}
+  .shop-catalog .shop-detail-row td{display:block;border:1px solid #e1dcc3;border-top:0}
+  .shop-detail-toggle{min-width:94px}
+  .shop-checkout{padding:.45rem .5rem}
+}
+
 .retail-filters{display:grid;grid-template-columns:minmax(145px,1fr) minmax(0,2fr);align-items:end;gap:.65rem}
 .retail-filters label{min-width:0}
 .retail-buy-controls{display:grid;grid-template-columns:minmax(0,0.85fr) minmax(0,1.65fr);gap:.55rem;width:100%;align-items:end}

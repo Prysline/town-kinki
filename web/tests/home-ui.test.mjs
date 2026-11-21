@@ -7,6 +7,7 @@ import { FACILITY_PANELS,townCellAction } from "../public/town-home.js";
 const html=readFileSync(new URL("../public/index.html",import.meta.url),"utf8");
 const css=readFileSync(new URL("../public/style.css",import.meta.url),"utf8");
 const script=readFileSync(new URL("../public/app.js",import.meta.url),"utf8");
+const shopEffects=readFileSync(new URL("../public/shop-effects.js",import.meta.url),"utf8");
 
 test("原版兩間食堂每日菜單與共用庫存呈現完整且售完時不可下單",()=>{
   assert.match(html,/id="meal-menu-day"/);
@@ -198,6 +199,7 @@ test("自動販賣機真實地圖入口、獨立飲料原價、庫存及結帳�
   assert.match(script,/api\("retail\/buy",pendingVendingPurchase\)/);
   assert.match(script,/state\.vendingGoods/);
   assert.match(script,/item\.price\*quantity/);
+  assert.match(script,/renderShopTable\(el\("vending-items"\),goods/);
   assert.match(script,/if\(cell\.key==="自販機"\)renderVending\(\)/);
 });
 
@@ -598,7 +600,8 @@ test("原版右側物品頁籤保留保險、消耗品與使用紀錄，地圖�
 });
 
 test("百貨ランダム品明確標註 17 項獨立隨機 0～上限，不誤顯成固定增加",()=>{
-  assert.match(script,/info\.randomizedEffects\?" \+0～\+"\+value/);
+  assert.match(shopEffects,/randomizedEffects\?" \+0～\+"\+value/);
+  assert.match(script,/groupedStatLines\(info.effects,labels,info.randomizedEffects\)/);
   assert.match(script,/每項獨立隨機/);
 });
 

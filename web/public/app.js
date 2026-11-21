@@ -1,6 +1,7 @@
 import { townCellAction } from "./town-home.js";
 import { shouldShowCompactEnergy } from "./energy-visibility.js";
 import { townTimePhase } from "./time-theme.js";
+import { groupedStatLines } from "./shop-effects.js";
 const el = id => document.getElementById(id);
 let state = null;
 let requestedLegacyIconUrl = null;
@@ -1597,13 +1598,20 @@ function retailEffectDetails(item){
   const bonuses=Object.entries(info.effects??{})
     .map(([key,value])=>(labels[key]??key)+
       (info.randomizedEffects?" +0～+"+value:(value>0?"+":"")+value));
-  const preview=document.createElement("p");
-  preview.className="small retail-effect-preview";
-  preview.textContent=bonuses.length?
-    "原版能力："+bonuses.slice(0,3).join("、")+
-      (bonuses.length>3?"，等 "+bonuses.length+" 項":""):
-    info.effectCode&&info.effectCode!=="無"?
-      "原版特殊效果："+info.effectCode:"原版未記載能力增減";
+  // 完整列出原版非零能力，不再截斷成「等 X 項」；同幅度合併以減少重複。
+  const primary=[];
+  if((info.bodyCost??0)<0)primary.push("身體能量恢復 "+(-info.bodyCost));
+  if((info.brainCost??0)<0)primary.push("頭腦能量恢復 "+(-info.brainCost));
+  if(info.effectCode&&!["無","効果","ステータス"].includes(info.effectCode))
+    primary.push(describeOriginalRetailEffect(info.effectCode));
+  primary.push(...groupedStatLines(info.effects,labels,info.randomizedEffects));
+  if(!primary.length)primary.push("原版未記載能力增減");
+  const preview=document.createElement("div");
+  preview.className="retail-effect-preview";
+  for(const line of primary){
+    const p=document.createElement("p");
+    p.className="small";p.textContent=line;preview.append(p);
+  }
   const details=document.createElement("details");
   details.className="retail-item-effects";
   const summary=document.createElement("summary");
@@ -1633,6 +1641,144 @@ function retailEffectDetails(item){
   }
   return {preview,details};
 }
+// 保留上次選擇，避免每 30 秒同步狀態就清空正在進行的結帳。
+const shopCartSelections=new Map();
+// 原版兩種店均為「一商品一列、分類分段、選一件後統一結帳」。
+function renderShopTable(target,goods,{shopName,onPurchase,emptyText}){
+  target.replaceChildren();
+  if(!goods.length){
+    const empty=document.createElement("p");empty.className="small";
+    empty.textContent=emptyText;target.append(empty);return;
+  }
+  const viewport=document.createElement("div");
+  viewport.className="shop-table-scroll";
+  viewport.tabIndex=0;
+  viewport.setAttribute("aria-label",shopName+"商品清單，可逐列查看商品效果");
+  const table=document.createElement("table");
+  table.className="shop-catalog";
+  const header=document.createElement("thead");
+  const headings=document.createElement("tr");
+  for(const heading of ["商品","價格","主要效果（完整列出）","庫存／耐久","詳情"]){
+    const th=document.createElement("th");th.scope="col";th.textContent=heading;
+    headings.append(th);
+  }
+  header.append(headings);
+  const body=document.createElement("tbody");
+  const saved=shopCartSelections.get(shopName);
+  let category=null,chosen=goods.find(item=>item.sku===saved?.sku&&item.stock>0)??null;
+  const cards=state.classroomCreditCards??[];
+  const checkout=document.createElement("div");checkout.className="shop-checkout";
+  const controls=document.createElement("div");controls.className="retail-buy-controls";
+  const qtyLabel=document.createElement("label");qtyLabel.textContent="數量";
+  const qty=document.createElement("select");
+  qty.setAttribute("aria-label",shopName+"購買數量");
+  for(let n=1;n<=5;n++){
+    const option=document.createElement("option");option.value=String(n);
+    option.textContent=n+" 件";qty.append(option);
+  }
+  qtyLabel.append(qty);
+  const paymentLabel=document.createElement("label");paymentLabel.textContent="付款方式";
+  const payment=document.createElement("select");
+  payment.setAttribute("aria-label",shopName+"付款方式");
+  const cash=document.createElement("option");cash.value="cash";cash.textContent="現金";
+  payment.append(cash);
+  for(const card of cards){
+    const option=document.createElement("option");
+    option.value="card:"+card.sourceLine;
+    option.textContent="信用卡："+card.name;payment.append(option);
+  }
+  paymentLabel.append(payment);
+  if(saved?.quantity&&[...qty.options].some(x=>x.value===String(saved.quantity)))
+    qty.value=String(saved.quantity);
+  if(saved?.payment&&[...payment.options].some(x=>x.value===saved.payment))
+    payment.value=saved.payment;
+  controls.append(qtyLabel,paymentLabel);
+  const quote=document.createElement("p");quote.className="small";
+  quote.setAttribute("role","status");
+  const button=document.createElement("button");
+  button.type="button";button.textContent="請先選擇商品";button.disabled=true;
+  function update(){
+    const item=chosen,quantity=Number(qty.value);
+    const bank=payment.value.startsWith("card:");
+    const balance=bank?state.character.bank:state.character.money;
+    const total=item?item.price*quantity:0;
+    const available=Boolean(item)&&item.stock>=quantity;
+    const affordable=Number.isSafeInteger(total)&&total<=balance;
+    for(const option of qty.options)
+      option.disabled=Boolean(item)&&Number(option.value)>item.stock;
+    quote.textContent=!item?"先在上方表格選擇一項商品。":
+      "已選："+item.name+"｜合計 "+money(total)+"（"+(bank?"普通存款":"現金")+"）"+
+      (!available?"｜庫存不足":!affordable?"｜餘額不足":"");
+    button.disabled=!item||item.stock<=0||!available||!affordable;
+    button.textContent=!item?"請先選擇商品":item.stock<=0?"售完":
+      !available?"庫存不足":!affordable?"餘額不足":"購買所選商品";
+  }
+  let n=0;
+  for(const item of goods){
+    if(item.category!==category){
+      category=item.category;
+      const group=document.createElement("tr");group.className="shop-category-row";
+      const th=document.createElement("th");th.scope="rowgroup";th.colSpan=5;
+      th.textContent="▼ "+category;group.append(th);body.append(group);
+    }
+    const row=document.createElement("tr");row.className="shop-product-row";
+    const nameCell=document.createElement("td");
+    const label=document.createElement("label");label.className="shop-product-name";
+    const radio=document.createElement("input");radio.type="radio";
+    radio.name=shopName+"-selection";radio.value=item.sku;
+    radio.disabled=item.stock<=0;
+    radio.checked=item===chosen;
+    radio.addEventListener("change",()=>{
+      chosen=item;
+      shopCartSelections.set(shopName,{sku:item.sku,quantity:Number(qty.value),
+        payment:payment.value});
+      update();
+    });
+    label.append(radio,document.createTextNode(item.name));nameCell.append(label);
+    const price=document.createElement("td");price.className="shop-price";
+    price.textContent=money(item.price);
+    const effectCell=document.createElement("td");effectCell.className="shop-effect-cell";
+    const effects=retailEffectDetails(item);effectCell.append(effects.preview);
+    const remaining=document.createElement("td");remaining.className="shop-stock";
+    remaining.textContent=(item.stock<=0?"售完":"庫存 "+item.stock)+
+      "｜耐久 "+item.durability+item.unit;
+    const detailCell=document.createElement("td");detailCell.className="shop-expand";
+    const toggle=document.createElement("button");toggle.type="button";
+    toggle.className="secondary shop-detail-toggle";toggle.textContent="查看明細";
+    const detailId=shopName+"-detail-"+(n++);
+    toggle.setAttribute("aria-controls",detailId);
+    toggle.setAttribute("aria-expanded","false");
+    const detailRow=document.createElement("tr");detailRow.className="shop-detail-row";
+    detailRow.id=detailId;detailRow.hidden=true;
+    const full=document.createElement("td");full.colSpan=5;
+    effects.details.open=true;full.append(effects.details);detailRow.append(full);
+    toggle.addEventListener("click",()=>{
+      detailRow.hidden=!detailRow.hidden;
+      toggle.setAttribute("aria-expanded",String(!detailRow.hidden));
+      toggle.textContent=detailRow.hidden?"查看明細":"收合明細";
+    });
+    detailCell.append(toggle);
+    row.append(nameCell,price,effectCell,remaining,detailCell);
+    body.append(row,detailRow);
+  }
+  table.append(header,body);viewport.append(table);target.append(viewport);
+  button.addEventListener("click",()=>{
+    if(!chosen)return;
+    const bank=payment.value.startsWith("card:");
+    onPurchase(chosen,Number(qty.value),bank?"bank":"cash",
+      bank?Number(payment.value.slice(5)):undefined);
+  });
+  const saveControls=()=>{
+    if(chosen)shopCartSelections.set(shopName,{
+      sku:chosen.sku,quantity:Number(qty.value),payment:payment.value
+    });
+    update();
+  };
+  qty.addEventListener("change",saveControls);
+  payment.addEventListener("change",saveControls);
+  checkout.append(controls,quote,button);target.append(checkout);
+  update();
+}
 function renderRetail(){
   if(!state?.character)return;
   const choices=state.retailAvailable??[];
@@ -1648,75 +1794,12 @@ function renderRetail(){
     "目前城鎮沒有已配置的百貨店。請先在地圖中找到百貨店，單機模式可配置原版建築代碼。" :
     !choices.includes(shop)?"這間百貨店不在目前城鎮。" :
     (state.retailDay??"今日")+"｜符合搜尋的商品 "+goods.length+
-    " 種，最多先顯示 30 筆。每筆可買 1～5 件；一般持有上限 25 格、購入禮品 10 格。");
-  const target=el("retail-items");
-  target.replaceChildren();
-  const cards=state.classroomCreditCards??[];
-  for(const item of goods.slice(0,30)){
-    const tile=document.createElement("div");tile.className="training-tile";
-    const name=document.createElement("strong");name.textContent=item.name;
-    const note=document.createElement("p");note.className="small";
-    note.textContent=item.category+"｜單價 "+money(item.price)+
-      "｜耐久 "+item.durability+item.unit+"｜剩餘庫存 "+item.stock;
-    const qtyLabel=document.createElement("label");
-    qtyLabel.textContent="數量";
-    const qty=document.createElement("select");
-    qty.setAttribute("aria-label",item.name+"購買數量");
-    for(let n=1;n<=5;n++){
-      const option=document.createElement("option");
-      option.value=String(n);option.textContent=n+" 件";
-      option.disabled=n>item.stock;
-      qty.append(option);
-    }
-    qtyLabel.append(qty);
-    const paymentLabel=document.createElement("label");
-    paymentLabel.textContent="付款方式";
-    const payment=document.createElement("select");
-    payment.setAttribute("aria-label",item.name+"付款方式");
-    const cashOption=document.createElement("option");
-    cashOption.value="cash";cashOption.textContent="現金";
-    payment.append(cashOption);
-    for(const card of cards){
-      const option=document.createElement("option");
-      option.value="card:"+card.sourceLine;
-      option.textContent="信用卡："+card.name;
-      payment.append(option);
-    }
-    paymentLabel.append(payment);
-    const controls=document.createElement("div");
-    controls.className="retail-buy-controls";
-    controls.append(qtyLabel,paymentLabel);
-    const effects=retailEffectDetails(item);
-    const quote=document.createElement("p");quote.className="small";
-    const button=document.createElement("button");
-    button.type="button";
-    const update=()=>{
-      const quantity=Number(qty.value);
-      const total=item.price*quantity;
-      const bank=payment.value.startsWith("card:");
-      const balance=bank?state.character.bank:state.character.money;
-      const affordable=Number.isSafeInteger(total)&&total<=balance;
-      quote.textContent="合計 "+money(total)+"（"+(bank?"普通存款":"現金")+"）"+
-        (!affordable?"｜餘額不足":quantity>item.stock?"｜庫存不足":"");
-      button.disabled=quantity>item.stock||item.stock<=0||!affordable;
-      button.textContent=item.stock<=0?"今日售完":!affordable?"餘額不足":"購買";
-    };
-    qty.addEventListener("change",update);
-    payment.addEventListener("change",update);
-    button.addEventListener("click",()=>{
-      const bank=payment.value.startsWith("card:");
-      submitRetailPurchase(item,Number(qty.value),bank?"bank":"cash",
-        bank?Number(payment.value.slice(5)):undefined);
-    });
-    update();
-    tile.append(name,note,effects.preview,effects.details,controls,quote,button);
-    target.append(tile);
-  }
-  if(!goods.length){
-    const empty=document.createElement("p");empty.className="small";
-    empty.textContent=choices.length?"目前沒有符合條件的上架商品。":"尚無可進入的百貨店。";
-    target.append(empty);
-  }
+    " 種。請先選擇商品再統一結帳；每筆可買 1～5 件，一般持有上限 25 格、購入禮品 10 格。");
+  renderShopTable(el("retail-items"),goods,{
+    shopName:shop,
+    onPurchase:submitRetailPurchase,
+    emptyText:choices.length?"目前沒有符合條件的上架商品。":"尚無可進入的百貨店。"
+  });
   const receipts=el("retail-purchases");
   receipts.replaceChildren();
   const list=document.createElement("ol");list.className="health-event-list";
@@ -1772,76 +1855,11 @@ function renderVending(){
     "本期貨架："+(state.vendingPeriod??"尚未初始化")+
     "（當地中午 12 點刷新）｜"+goods.length+
     " 種飲料，均為自販機原始標價，不乘三。所有玩家共用庫存。");
-  const target=el("vending-items");
-  target.replaceChildren();
-  const cards=state.classroomCreditCards??[];
-  for(const item of goods){
-    const tile=document.createElement("div");
-    tile.className="training-tile";
-    const name=document.createElement("strong");
-    name.textContent=item.name;
-    const note=document.createElement("p");
-    note.className="small";
-    note.textContent=item.category+"｜單價 "+money(item.price)+
-      "｜耐久 "+item.durability+item.unit+"｜剩餘庫存 "+item.stock;
-    const qtyLabel=document.createElement("label");
-    qtyLabel.textContent="數量";
-    const qty=document.createElement("select");
-    qty.setAttribute("aria-label",item.name+"自販機購買數量");
-    for(let n=1;n<=5;n++){
-      const option=document.createElement("option");
-      option.value=String(n);
-      option.textContent=n+" 件";
-      option.disabled=n>item.stock;
-      qty.append(option);
-    }
-    qtyLabel.append(qty);
-    const paymentLabel=document.createElement("label");
-    paymentLabel.textContent="付款方式";
-    const pay=document.createElement("select");
-    pay.setAttribute("aria-label",item.name+"自販機付款方式");
-    const cash=document.createElement("option");
-    cash.value="cash";cash.textContent="現金";
-    pay.append(cash);
-    for(const card of cards){
-      const option=document.createElement("option");
-      option.value="card:"+card.sourceLine;
-      option.textContent="信用卡："+card.name;
-      pay.append(option);
-    }
-    paymentLabel.append(pay);
-    const quote=document.createElement("p");
-    quote.className="small";
-    const button=document.createElement("button");
-    button.type="button";
-    const update=()=>{
-      const quantity=Number(qty.value);
-      const total=quantity*item.price;
-      const credit=pay.value.startsWith("card:");
-      const balance=credit?state.character.bank:state.character.money;
-      const affordable=Number.isSafeInteger(total)&&total<=balance;
-      quote.textContent="合計 "+money(total)+"（"+(credit?"普通存款":"現金")+"）"+
-        (!affordable?"｜餘額不足":quantity>item.stock?"｜庫存不足":"");
-      button.disabled=item.stock<=0||quantity>item.stock||!affordable;
-      button.textContent=item.stock<=0?"本期售完":!affordable?"餘額不足":"購買";
-    };
-    qty.addEventListener("change",update);
-    pay.addEventListener("change",update);
-    button.addEventListener("click",()=>{
-      const credit=pay.value.startsWith("card:");
-      submitVendingPurchase(item,Number(qty.value),credit?"bank":"cash",
-        credit?Number(pay.value.slice(5)):undefined);
-    });
-    update();
-    tile.append(name,note,qtyLabel,paymentLabel,quote,button);
-    target.append(tile);
-  }
-  if(!goods.length){
-    const note=document.createElement("p");
-    note.className="small";
-    note.textContent=available?"本期沒有可售飲料。":"請先進入城鎮中的自動販賣機。";
-    target.append(note);
-  }
+  renderShopTable(el("vending-items"),goods,{
+    shopName:"自動販賣機",
+    onPurchase:submitVendingPurchase,
+    emptyText:available?"本期沒有可售飲料。":"請先進入城鎮中的自動販賣機。"
+  });
   const history=el("vending-purchases");
   history.replaceChildren();
   const list=document.createElement("ol");
