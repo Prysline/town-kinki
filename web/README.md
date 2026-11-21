@@ -12,6 +12,8 @@
 
 > **第 50 階段單機遊玩優先**：先解決新玩家因原版四份 `townlog` 空檔而只有空白地圖的阻塞。已新增[單機首次遊玩稽核與可選擇試玩街區](docs/phase50-solo-first-play-audit.md)：玩家可以明確確認後建立**只使用原版已知設施代碼的 Web 試玩配置**，供百貨購物、用餐、訓練與住宅空地等既有正式交易操作；不冒充原版歷史地圖，不自動初始化、不覆寫有任何配置或住宅的城鎮，不送額外資金。單機遊玩、道具、事件與可單人操作的特殊設施為後續優先，現有多人功能保留但暫不擴充為首要目標。
 
+> **第 51 階段：單機事件優惠券真正兌換**：依 [原版 `coupon.cgi::coupon_do`、30筆原始獎品與兌換交易驗收](docs/phase51-event-coupon-redemption.md)，已有「クーポン」地圖建築／單機試玩街區 D5，玩家可以把**Web 隨機事件取得的優惠券點數**按原始序號、品名和點數兌換完整 33 欄獎品，真實寫入本人背包；同一 SQLite 交易扣券、入庫和記錄，含 25 格上限、請求防重與失敗全數回滾。**原始玩家匯入券仍保留唯讀、未併入 Web 事件券；部分獎品的抽獎、使用等獨立原版 CGI 仍未移植。**原版舊檔與實際瀏覽器尺寸仍待另外驗收。
+
 > **第 30 階段盤點與後續工作**：[CGI 來源重盤點／偽待辦校正](docs/phase30-source-recheck.md)、[最新待辦總清冊：未深入盤點／已盤點未修／已修待驗收](docs/phase30-open-audit-backlog.md)、[現行原版 → Web 差異矩陣](docs/migration-audit.md)、[全 43 個原版地圖互動入口與 Web 導覽覆蓋表](docs/phase30-entrypoint-coverage.md)、[外貌與圖示來源](docs/appearance-source-audit.md)、[職業／教室／公開個人檔案](docs/phase30-jobs-training-profile-audit.md) 分別追溯原版程式與實際缺漏。**現有 CI 只核對入口清單／圖示，並不逐子 CGI 驗證功能**；歷史 [工作契約](docs/PHASE30-MIGRATION-INVENTORY-PLAN.md) 不是驗收證明。實際玩家資料／瀏覽器仍待驗收。
 
 ## 本階段已完成
