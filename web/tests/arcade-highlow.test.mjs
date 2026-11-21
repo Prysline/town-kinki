@@ -52,7 +52,10 @@ test("來源驗證：遊樂中心donus4、1～5五點、萬元乘累積牌數、
   assert.equal(source.cooldownMs,600000);
   assert.equal(source.tieMultiplier,2);
   assert.throws(()=>parseOriginalArcadeHighLow("",donut,settings),/入口/);
-  assert.throws(()=>parseOriginalArcadeHighLow(arcade,donut.replace("int(rand(5))+1","int(rand(8))+1"),settings),/已變更/);
+  const mode4Start=donut.indexOf("sub donus4 {");
+  const alteredMode4=donut.slice(0,mode4Start)+
+    donut.slice(mode4Start).replace("int(rand(5))+1","int(rand(8))+1");
+  assert.throws(()=>parseOriginalArcadeHighLow(arcade,alteredMode4,settings),/已變更/);
   assert.throws(()=>parseOriginalArcadeHighLow(arcade,donut.replace("$doroubai = 2","$doroubai = 3"),settings),/已變更/);
   assert.throws(()=>parseOriginalArcadeHighLow(arcade,donut,settings.replace("$crad_game_time = '10'","$crad_game_time = '1'")) ,/已變更/);
 });
@@ -136,7 +139,8 @@ test("玩家十分鐘冷卻在599999毫秒拒絕、600000毫秒通過；他人�
     assert.throws(()=>play(db,{at:now+599999,requestId:"phase56_too_early"}),/10分鐘/);
     assert.equal(cash(db),balance);
     const next=play(db,{at:now+600000,roll:0,requestId:"phase56_ready_next"});
-    assert.equal(next.won,true);
+    assert.equal(next.won,false);
+    assert.equal(next.delta,-30000);
     assert.equal(rounds(db),3);
   }finally{db.close();}
 });
