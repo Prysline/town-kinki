@@ -840,6 +840,26 @@ test("第59階段：六號樂透原版分場、六個1～36選號、隨機購券
   assert.ok(!script.includes("innerHTML=ticket.numbers"));
 });
 
+test("第60階段：多卡五課程、實際79至19%成功率、原子下注與安全DOM",()=>{
+  for(const id of ["arcade-cardw-panel","arcade-cardw-status",
+    "arcade-cardw-course","arcade-cardw-quote","arcade-cardw-submit",
+    "arcade-cardw-result","arcade-cardw-history"])
+    assert.ok(html.includes('id="'+id+'"'));
+  assert.ok(html.includes("cardw2.cgi"));
+  for(let i=0;i<=4;i++)assert.ok(html.includes('value="'+i+'">'));
+  assert.ok(html.includes("79%／64%／49%／34%／19%"));
+  assert.ok(html.includes("0分鐘"));
+  assert.ok(html.includes("多人Web保留此限制"));
+  assert.ok(script.includes("function renderMultiCard(){"));
+  assert.ok(script.includes("renderMultiCard();"));
+  assert.ok(script.includes('await api("arcade/cardw/draw"'));
+  assert.ok(script.includes("pendingMultiCard"));
+  assert.ok(script.includes("multiCardBusy"));
+  assert.ok(script.includes("document.createElement"));
+  assert.ok(script.includes("history.replaceChildren()"));
+  assert.ok(!script.includes("innerHTML=r.stake"));
+});
+
 test("第53階段：原版釣場與餌料商店實際有入庫交易 UI 且拒絕虛構漁獲",()=>{
   for(const key of ["釣り","販売1"])
     assert.deepEqual(townCellAction(describeTile(key)),{
