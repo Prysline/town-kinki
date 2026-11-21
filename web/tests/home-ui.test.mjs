@@ -736,13 +736,13 @@ test("第54階段：原版合成屋只有真正材料才能製作，表單及資
   for(const id of ["crafting-panel","crafting-status","crafting-recipes",
     "crafting-select","crafting-quantity","crafting-submit","crafting-history"])
     assert.match(html,new RegExp('id="'+id+'"'));
-  assert.match(html,/gouseiya\\.cgi／dat_dir\\/gousei\\.cgi/);
-  assert.match(script,/function renderCrafting\\(\\)/);
-  assert.match(script,/renderCrafting\\(\\);/);
-  assert.match(script,/await api\\("crafting\\/make"/);
-  assert.match(script,/pendingCraftingAction/);
-  assert.match(script,/material|materials/);
-  assert.doesNotMatch(script,/innerHTML\\s*=\\s*recipe\\.name/);
+  assert.ok(html.includes("gouseiya.cgi／dat_dir/gousei.cgi"));
+  assert.ok(script.includes("function renderCrafting(){"));
+  assert.ok(script.includes("renderCrafting();"));
+  assert.ok(script.includes('await api("crafting/make"'));
+  assert.ok(script.includes("pendingCraftingAction"));
+  assert.ok(script.includes("materials"));
+  assert.ok(!script.includes("innerHTML=recipe.name"));
 });
 
 test("第53階段：原版釣場與餌料商店實際有入庫交易 UI 且拒絕虛構漁獲",()=>{
