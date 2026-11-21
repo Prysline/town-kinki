@@ -1909,6 +1909,121 @@ function renderShopTable(target,goods,{shopName,onPurchase,emptyText}){
   checkout.append(controls,quote,button);target.append(checkout);
   update();
 }
+let pendingInstantLoto=null;
+let instantLotoSubmitting=false;
+async function submitInstantLoto(stake,chosenDigits){
+  if(instantLotoSubmitting)return;
+  if(!window.confirm("確認以現金 "+money(stake)+" 下注六位數 "+
+    chosenDigits.join("")+" 嗎？伺服器會即時開出六個0～9數字，並依猜中位置發還0～1000倍金額。"))return;
+  const key=stake+":"+chosenDigits.join("");
+  if(!pendingInstantLoto||pendingInstantLoto.key!==key)
+    pendingInstantLoto={key,requestId:crypto.randomUUID()};
+  instantLotoSubmitting=true;
+  el("arcade-loto-submit").disabled=true;
+  try{
+    state=await api("arcade/loto/play",{
+      stake,chosenDigits,requestId:pendingInstantLoto.requestId
+    });
+    const result=state.instantLotoResult;
+    pendingInstantLoto=null;
+    render();
+    notify(result.replayed?"這筆六位數樂透已經結算，沒有重複扣款或發獎。":
+      "六位數樂透：你的 "+result.chosenDigits.join("")+
+      "／開獎 "+result.drawnDigits.join("")+
+      "｜猜中 "+result.matches+" 位（"+result.multiplier+"倍發還）｜"+
+      (result.delta>=0?"現金淨增加 ":"現金淨減少 ")+
+      money(Math.abs(result.delta))+"。");
+  }catch(error){notify(error.message,true);}
+  finally{
+    instantLotoSubmitting=false;
+    if(state?.character)renderInstantLoto();
+  }
+}
+function renderInstantLoto(){
+  if(!state?.character)return;
+  const info=state.instantLoto??{};
+  const available=info.available===true;
+  const remain=Math.max(0,(info.readyAt??0)-browserGameNow());
+  text("arcade-loto-status",!available?
+    "目前城鎮沒有「ゲーセン」遊樂中心；可在單機編輯地圖放置。":
+    remain>0?"原版最後一位玩樂透的仍是本人，需再等 "+
+      Math.ceil(remain/1000)+" 秒（單機可快轉）。":
+      "可立即開獎；僅當最後遊玩者仍是本人時，才有3分鐘限制。");
+  const selectors=Array.from({length:6},(_,i)=>el("arcade-loto-digit-"+(i+1)));
+  for(const selector of selectors){
+    const previous=selector.value;
+    if(selector.options.length!==10){
+      selector.replaceChildren();
+      for(let digit=0;digit<10;digit++){
+        const option=document.createElement("option");
+        option.value=String(digit);option.textContent=String(digit);
+        selector.append(option);
+      }
+      if(Array.from({length:10},(_,i)=>String(i)).includes(previous))
+        selector.value=previous;
+    }
+  }
+  const stake=el("arcade-loto-stake"),previousStake=stake.value;
+  stake.replaceChildren();
+  for(const amount of info.rates??[]){
+    const option=document.createElement("option");
+    option.value=String(amount);option.textContent=money(amount);
+    stake.append(option);
+  }
+  if((info.rates??[]).some(x=>String(x)===previousStake))stake.value=previousStake;
+  const submit=el("arcade-loto-submit");
+  function update(){
+    const amount=Number(stake.value);
+    const chosen=selectors.map(s=>Number(s.value));
+    const valid=(info.rates??[]).includes(amount)&&
+      chosen.length===6&&chosen.every(x=>Number.isInteger(x)&&x>=0&&x<=9);
+    const enough=valid&&state.character.money>=amount;
+    text("arcade-loto-quote",valid?
+      "所選號碼 "+chosen.join("")+"｜下注 "+money(amount)+
+      "｜0位中獎會損失 "+money(amount)+
+      "｜全部6位相符最高發還 "+money(amount*1000)+
+      (!enough?"｜現金不足":""):
+      "請選擇六位0～9數字及原版下注金額。");
+    submit.disabled=instantLotoSubmitting||!available||remain>0||!enough;
+  }
+  stake.onchange=update;
+  for(const selector of selectors)selector.onchange=update;
+  submit.onclick=()=>{
+    const amount=Number(stake.value);
+    const chosen=selectors.map(s=>Number(s.value));
+    if(available&&remain<=0&&(info.rates??[]).includes(amount)&&
+       state.character.money>=amount&&chosen.length===6&&
+       chosen.every(x=>Number.isInteger(x)&&x>=0&&x<=9))
+      submitInstantLoto(amount,chosen);
+  };
+  update();
+  const history=el("arcade-loto-history");history.replaceChildren();
+  const rounds=info.history??[],latest=rounds[0];
+  text("arcade-loto-result",latest?
+    "最近開獎："+latest.chosenDigits.join("")+"／"+
+    latest.drawnDigits.join("")+"，符合 "+
+    latest.matches+" 位，發還 "+money(latest.gross)+
+    "（淨"+(latest.delta>=0?"+":"−")+money(Math.abs(latest.delta))+"）":
+    "尚無本人六位數樂透紀錄。");
+  if(!rounds.length){
+    const p=document.createElement("p");p.className="small";
+    p.textContent="尚未進行即時樂透。";history.append(p);
+  }else{
+    const list=document.createElement("ol");list.className="health-event-list";
+    for(const round of rounds){
+      const item=document.createElement("li");
+      item.textContent=new Date(round.playedAt).toLocaleString("zh-TW")+
+        "｜選 "+round.chosenDigits.join("")+
+        "／開 "+round.drawnDigits.join("")+
+        "｜符合"+round.matches+"位／"+round.multiplier+"倍"+
+        "｜下注 "+money(round.stake)+
+        "，淨"+(round.delta>=0?"+":"−")+money(Math.abs(round.delta));
+      list.append(item);
+    }
+    history.append(list);
+  }
+}
+
 let pendingArcadeDonut=null;
 let arcadeDonutSubmitting=false;
 async function submitArcadeDonut(mode,risk,winAmount,reference){
@@ -3454,6 +3569,7 @@ function render() {
   renderArcadeDice();
   renderArcadeHighLow();
   renderArcadeDonuts();
+  renderInstantLoto();
   renderEquipment();
   renderGiftShop();
   renderMailbox();

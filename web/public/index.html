@@ -626,6 +626,31 @@
           <h3>所選模式：本人最近20局紀錄</h3>
           <div id="arcade-donuts-history"></div>
         </section>
+        <section class="card" id="arcade-loto-panel">
+          <div class="heading">
+            <div><div class="eyebrow">原版遊樂中心 · 即時開獎</div><h2>六位數樂透</h2></div>
+            <span class="muted">gamerand.cgi／loto.cgi</span>
+          </div>
+          <details class="explain">
+            <summary>原版六位數開獎規則與安全差異</summary>
+            <p class="small">這是原版「loto.cgi」的即時樂透，與另一個定時開獎並將獎金匯入銀行的「loto6.cgi」不同。選六個0～9數字，每個位置獨立等機率開出0～9；僅相同位置相符才算猜中，並允許重複數字。原始下注額為500、1,000、5,000、10,000、50,000、100,000元。猜中0～6位的發還倍率依序為0、2、5、20、100、500、1,000倍。結算是「先扣下注額，再發還下注額×倍率」，因此顯示的淨收入＝下注額×（倍率−1）。原版只有當最後一位玩樂透的人仍是自己，才需要等三分鐘；若其他玩家已玩過，就不適用這個限制。單機只會有本人，須等三分鐘再玩。原版紀錄保留最多50筆共用歷史；Web保留本人最近20筆畫面紀錄及完整個人帳本。必須有「ゲーセン」建築和足額現金，採伺服器抽號、原子扣款發獎、防重送及安全整數檢查。原版另外的六號樂透及已於2010年結束的福引活動尚未在此開放。</p>
+          </details>
+          <p id="arcade-loto-status" class="small" role="status"></p>
+          <div class="filters retail-filters">
+            <label for="arcade-loto-digit-1">第1位<select id="arcade-loto-digit-1" class="arcade-loto-digit"></select></label>
+            <label for="arcade-loto-digit-2">第2位<select id="arcade-loto-digit-2" class="arcade-loto-digit"></select></label>
+            <label for="arcade-loto-digit-3">第3位<select id="arcade-loto-digit-3" class="arcade-loto-digit"></select></label>
+            <label for="arcade-loto-digit-4">第4位<select id="arcade-loto-digit-4" class="arcade-loto-digit"></select></label>
+            <label for="arcade-loto-digit-5">第5位<select id="arcade-loto-digit-5" class="arcade-loto-digit"></select></label>
+            <label for="arcade-loto-digit-6">第6位<select id="arcade-loto-digit-6" class="arcade-loto-digit"></select></label>
+            <label for="arcade-loto-stake">下注金額<select id="arcade-loto-stake"></select></label>
+          </div>
+          <p id="arcade-loto-quote" class="small" role="status"></p>
+          <button type="button" id="arcade-loto-submit" disabled>確認六位數與下注，立即開獎</button>
+          <p id="arcade-loto-result" class="small" aria-live="polite"></p>
+          <h3>本人最近20局即時樂透</h3>
+          <div id="arcade-loto-history"></div>
+        </section>
       </div>
       <div id="facility-pane-training" class="facility-pane" role="tabpanel" aria-labelledby="facility-tab-training" tabindex="0" hidden>
         <section class="card" id="school-panel">

@@ -799,6 +799,25 @@ test("第57階段：三種donus模式、原版卡牌資料與安全DOM表單皆�
   assert.ok(!script.includes("innerHTML=round.drawnCard"));
 });
 
+test("第58階段：原版六位數樂透6欄選號、下注、安全DOM與伺服器交易已接入",()=>{
+  for(const id of ["arcade-loto-panel","arcade-loto-status","arcade-loto-stake",
+    "arcade-loto-quote","arcade-loto-submit","arcade-loto-result","arcade-loto-history"])
+    assert.ok(html.includes('id="'+id+'"'));
+  for(let i=1;i<=6;i++)assert.ok(html.includes('id="arcade-loto-digit-'+i+'"'));
+  assert.ok(html.includes("gamerand.cgi／loto.cgi"));
+  assert.ok(html.includes("最後一位玩樂透的人"));
+  assert.ok(html.includes("六號樂透"));
+  assert.ok(script.includes("function renderInstantLoto(){"));
+  assert.ok(script.includes("renderInstantLoto();"));
+  assert.ok(script.includes('await api("arcade/loto/play"'));
+  assert.ok(script.includes("pendingInstantLoto"));
+  assert.ok(script.includes("instantLotoSubmitting"));
+  assert.ok(script.includes("crypto.randomUUID()"));
+  assert.ok(script.includes("document.createElement"));
+  assert.ok(script.includes("history.replaceChildren()"));
+  assert.ok(!script.includes("innerHTML=round.chosenDigits"));
+});
+
 test("第53階段：原版釣場與餌料商店實際有入庫交易 UI 且拒絕虛構漁獲",()=>{
   for(const key of ["釣り","販売1"])
     assert.deepEqual(townCellAction(describeTile(key)),{
