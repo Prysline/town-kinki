@@ -560,3 +560,30 @@ test("寄禮站內信 UI 允許撰寫、雙方查看，純文字輸出不做 HTM
   assert.match(script,/pendingGiftAction\.message!==message/);
   assert.doesNotMatch(script,/body\.innerHTML=mail\.message/);
 });
+
+test("所有共用成功與錯誤通知固定於目前視窗，且可關閉、可被輔助工具宣告",()=>{
+  assert.match(html,/id="notice" role="status" aria-live="polite" aria-atomic="true"/);
+  assert.match(html,/id="notice-message"/);
+  assert.match(html,/id="notice-close"[^>]*aria-label="關閉通知"/);
+  assert.match(css,/#notice\{position:fixed;z-index:60/);
+  assert.match(css,/#notice-message\{flex:1;min-width:0;overflow-wrap:anywhere/);
+  assert.match(script,/text\("notice-message", message\)/);
+  assert.match(script,/target\.setAttribute\("role", error \? "alert" : "status"\)/);
+  assert.match(script,/el\("notice-close"\)\.addEventListener\("click"/);
+  for(const feature of ["work","bank","house/build","meal/eat","train"])
+    assert.match(script,new RegExp('path === "'+feature.replace("/","\\/")+'"'));
+  assert.match(script,/notify\(result\.replayed\?/);
+});
+test("現金與普通存款同時出現在固定狀態列及銀行表單，交易回覆含最新餘額",()=>{
+  for(const id of ["compact-money","compact-bank","bank-available-cash","bank-available-balance"])
+    assert.match(html,new RegExp('id="'+id+'"'));
+  assert.match(script,/text\("compact-money",money\(character\.money\)\)/);
+  assert.match(script,/text\("compact-bank",money\(character\.bank\)\)/);
+  assert.match(script,/text\("bank-available-cash",money\(state\.character\.money\)\)/);
+  assert.match(script,/text\("bank-available-balance",money\(state\.character\.bank\)\)/);
+  assert.match(script,/const result=state\.bankResult/);
+  assert.match(script,/目前現金：/);
+  assert.match(script,/普通銀行存款：/);
+  assert.match(css,/top:var\(--compact-status-height,64px\)/);
+  assert.match(script,/getBoundingClientRect\(\)\.height/);
+});
