@@ -58,6 +58,7 @@ export function initLoto6Tables(db){
     "user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,",
     "request_id TEXT NOT NULL,",
     "chosen_json TEXT NOT NULL,",
+    "random_selected INTEGER NOT NULL DEFAULT 0 CHECK(random_selected IN (0,1)),",
     "bought_at INTEGER NOT NULL,",
     "draw_id INTEGER REFERENCES arcade_loto6_draws(id),",
     "matches INTEGER CHECK(matches BETWEEN 0 AND 6),",
@@ -112,7 +113,7 @@ function pickSix(randomIndex){
   return [...selected].sort((a,b)=>a-b);
 }
 const ticketPublic=row=>({
-  id:row.id,numbers:JSON.parse(row.chosen_json),boughtAt:row.bought_at,
+  id:row.id,numbers:JSON.parse(row.chosen_json),randomSelected:Boolean(row.random_selected),boughtAt:row.bought_at,
   pending:row.draw_id===null,matches:row.matches,prize:row.prize,drawId:row.draw_id
 });
 function drawInside(db,source,now,timeZone,randomIndex){
@@ -174,9 +175,11 @@ export function settleLoto6Draw(db,source,{now,timeZone="Asia/Taipei",
   }catch(error){db.exec("ROLLBACK");throw error;}
 }
 
-export function buyLoto6Ticket(db,userId,source,{numbers,requestId,now,
+export function buyLoto6Ticket(db,userId,source,{numbers,random=false,requestId,now,
   timeZone="Asia/Taipei",randomIndex=randomInt}={}){
-  if(!Number.isSafeInteger(userId)||userId<1||!validNumbers(numbers)||
+  if(!Number.isSafeInteger(userId)||userId<1||
+     typeof random!=="boolean"||
+     (random?numbers!==undefined:!validNumbers(numbers))||
      typeof requestId!=="string"||!REQUEST_ID.test(requestId)||
      typeof randomIndex!=="function")
     throw new Error("六號樂透六個號碼或購買請求格式不正確");
@@ -184,12 +187,13 @@ export function buyLoto6Ticket(db,userId,source,{numbers,requestId,now,
   db.exec("BEGIN IMMEDIATE");
   try{
     const prior=db.prepare([
-      "SELECT id,chosen_json,bought_at,draw_id,matches,prize",
+      "SELECT id,chosen_json,random_selected,bought_at,draw_id,matches,prize",
       "FROM arcade_loto6_tickets WHERE user_id=? AND request_id=?"
     ].join(" ")).get(userId,requestId);
     if(prior){
-      if(prior.chosen_json!==JSON.stringify(numbers))
-        throw new Error("相同六號樂透購券識別碼不可更換選號");
+      if(Boolean(prior.random_selected)!==random||
+         (!random&&prior.chosen_json!==JSON.stringify(numbers)))
+        throw new Error("相同六號樂透購券識別碼不可更換選號模式或號碼");
       db.exec("COMMIT");return {...ticketPublic(prior),replayed:true};
     }
     const char=db.prepare("SELECT town_id,money FROM characters WHERE user_id=?").get(userId);
@@ -210,12 +214,13 @@ export function buyLoto6Ticket(db,userId,source,{numbers,requestId,now,
     const updated=db.prepare("UPDATE characters SET money=money-? WHERE user_id=? AND money>=?")
       .run(source.price,userId,source.price);
     if(updated.changes!==1)throw new Error("六號樂透身上現金不足以買券");
+    const finalNumbers=random?pickSix(randomIndex):numbers;
     const ticket=db.prepare([
-      "INSERT INTO arcade_loto6_tickets(user_id,request_id,chosen_json,bought_at)",
-      "VALUES(?,?,?,?)"
-    ].join(" ")).run(userId,requestId,JSON.stringify(numbers),now);
+      "INSERT INTO arcade_loto6_tickets(user_id,request_id,chosen_json,random_selected,bought_at)",
+      "VALUES(?,?,?,?,?)"
+    ].join(" ")).run(userId,requestId,JSON.stringify(finalNumbers),random?1:0,now);
     db.exec("COMMIT");
-    return {id:Number(ticket.lastInsertRowid),numbers:[...numbers],
+    return {id:Number(ticket.lastInsertRowid),numbers:[...finalNumbers],randomSelected:random,
       boughtAt:now,pending:true,price:source.price,
       drawTriggered:beforeDraw.drawn,replayed:false};
   }catch(error){db.exec("ROLLBACK");throw error;}
@@ -227,7 +232,7 @@ export function loto6Overview(db,userId,source,now,timeZone="Asia/Taipei"){
   const map=char?readTownMap(db,char.town_id):null;
   const last=db.prepare("SELECT id,day,drawn_json,reason,ticket_count,drawn_at FROM arcade_loto6_draws ORDER BY id DESC LIMIT 1").get();
   const history=db.prepare([
-    "SELECT id,chosen_json,bought_at,draw_id,matches,prize",
+    "SELECT id,chosen_json,random_selected,bought_at,draw_id,matches,prize",
     "FROM arcade_loto6_tickets WHERE user_id=? ORDER BY id DESC LIMIT ?"
   ].join(" ")).all(userId,LOTO6_HISTORY_LIMIT).map(ticketPublic);
   const ownedPending=db.prepare([
