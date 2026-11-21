@@ -62,12 +62,68 @@ async function api(path, data) {
   return result;
 }
 
-function notify(message, error = false) {
-  const target = el("notice");
-  target.hidden = false;
-  target.textContent = message;
-  target.classList.toggle("error", error);
+// 原版的交易與錯誤結果採中央訊息畫面。Web 保留原操作頁面，改用確認後返回的對話框；
+// 輸入或餘額錯誤則優先顯示在剛操作的表單／按鈕旁，不再推到頁首或右下角。
+let feedbackOrigin=null;
+let inlineFeedback=null;
+let resultReturnFocus=null;
+function clearInlineFeedback(){
+  if(inlineFeedback?.isConnected)inlineFeedback.remove();
+  inlineFeedback=null;
 }
+function rememberFeedbackOrigin(event){
+  if(event.target.closest("#result-dialog"))return;
+  const target=event.type==="submit"?(event.submitter||event.target):
+    event.type==="change"?event.target:
+    event.target.closest("button,a,[role=button]");
+  if(!target)return;
+  feedbackOrigin=target;
+  clearInlineFeedback();
+}
+document.addEventListener("click",rememberFeedbackOrigin,true);
+document.addEventListener("submit",rememberFeedbackOrigin,true);
+document.addEventListener("change",rememberFeedbackOrigin,true);
+function showInlineFeedback(message,error,source){
+  const origin=source||feedbackOrigin;
+  if(!origin?.isConnected||origin.closest("[hidden]"))return false;
+  const form=origin.closest("form");
+  const tile=origin.closest(".training-tile");
+  const section=origin.closest(".solo-time-panel");
+  const anchor=form||tile||section||origin;
+  clearInlineFeedback();
+  const note=document.createElement("p");
+  note.className="operation-feedback"+(error?" error":"");
+  note.setAttribute("role",error?"alert":"status");
+  note.textContent=String(message);
+  if(tile&&!form || section&&!form)anchor.append(note);
+  else anchor.insertAdjacentElement("afterend",note);
+  inlineFeedback=note;
+  // 只捲動到附近的提示，不把整個長頁面跳回頂端。
+  note.scrollIntoView({block:"nearest",behavior:"auto"});
+  return true;
+}
+function showResultDialog(message,title,error){
+  const dialog=el("result-dialog");
+  clearInlineFeedback();
+  dialog.classList.toggle("error",error);
+  dialog.setAttribute("role",error?"alertdialog":"dialog");
+  text("result-dialog-title",title);
+  text("result-dialog-message",String(message));
+  if(!dialog.open){
+    resultReturnFocus=feedbackOrigin?.isConnected?feedbackOrigin:document.activeElement;
+    dialog.showModal();
+  }
+}
+function notify(message,error=false,{title,inline=false,source}={}){
+  if((error||inline)&&showInlineFeedback(message,error,source))return;
+  showResultDialog(message,title||(error?"操作未完成":"操作結果"),error);
+}
+el("result-dialog-close").addEventListener("click",()=>el("result-dialog").close());
+el("result-dialog").addEventListener("close",()=>{
+  if(resultReturnFocus?.isConnected&&!resultReturnFocus.disabled)
+    resultReturnFocus.focus({preventScroll:true});
+  resultReturnFocus=null;
+});
 
 function text(id, value) { el(id).textContent = value; }
 
@@ -190,13 +246,19 @@ function updateCompactVisibility(){
     bodyRowBottom:statusView?el("body-energy").closest("div").getBoundingClientRect().bottom:Infinity,
     profileTabsBottom:!statusView?el("profile-view-tabs").getBoundingClientRect().bottom:Infinity
   });
-  el("compact-status").hidden=!show;
+  const compact=el("compact-status");
+  compact.hidden=!show;
   document.body.classList.toggle("compact-status-active",show);
+  if(show)document.body.style.setProperty("--compact-status-height",
+    Math.ceil(compact.getBoundingClientRect().height)+"px");
+  else document.body.style.removeProperty("--compact-status-height");
 }
 function renderCompactStatus(character){
   text("compact-character-name",character.name);
   text("compact-body-energy",character.bodyEnergy+" / "+state.maxBodyEnergy);
   text("compact-brain-energy",character.brainEnergy+" / "+state.maxBrainEnergy);
+  text("compact-money",money(character.money));
+  text("compact-bank",money(character.bank));
   el("compact-body-bar").value=state.maxBodyEnergy>0?
     Math.max(0,Math.min(100,character.bodyEnergy/state.maxBodyEnergy*100)):0;
   el("compact-brain-bar").value=state.maxBrainEnergy>0?
@@ -399,7 +461,7 @@ function renderTownMap() {
             el("towns").querySelector("button:not(:disabled)")?.focus({preventScroll:true});
           }
           else if(destination.kind==="unavailable")
-            notify(name+"："+cell.label+" 尚未移植或尚無對應 Web 入口。");
+            notify(name+"："+cell.label+" 尚未移植或尚無對應 Web 入口。",false,{inline:true,source:el("map-selection")});
         }
       });
       board.append(button);
@@ -1199,8 +1261,9 @@ async function submitLegacyUse(sourceLine,name){
       "相同道具使用請求已處理，沒有重複扣除耐久。" :
       "已使用「"+result.name+"」，效果已套用。");
   }catch(error){
-    notify(error.message,true);
+    // 清單重建後再提示，避免把錯誤訊息連同舊商品元件一起刪掉。
     renderLegacyItems();
+    notify(error.message,true);
   }
 }
 function renderLegacyItems() {
@@ -2474,6 +2537,8 @@ function renderBank() {
   el("bank-transfer-panel").hidden = state.mode !== "multi";
   const account = state.bankAccount;
   if (!account) return;
+  text("bank-available-cash",money(state.character.money));
+  text("bank-available-balance",money(state.character.bank));
   renderLoan();
   text("term-balance", "目前定期存款：" + money(account.termBalance));
   text("bank-interest-day", account.lastInterestDay
@@ -2604,7 +2669,7 @@ async function action(path, data, message) {
       const result=state.travelResult;
       const town=state.towns.find(t=>t.id===result.toTownId);
       notify("已搭電車抵達 "+(town?.name??"目的地")+
-        "，依原版票價支付現金 "+money(result.fare)+"。");
+        "，依原版票價支付現金 "+money(result.fare)+"。",false,{title:"電車移動結果"});
     } else if (path === "work") {
       const result = state.result;
       const messages = ["工作完成（狀態："+(result.condition??"普通")+"），職業經驗 "+
@@ -2617,7 +2682,7 @@ async function action(path, data, message) {
       if (result.bonus) messages.push("升級獎金 " + money(result.bonus) + destination+"。");
       if (result.leveledUp) messages.push("職業等級提升至 " + result.jobLevel + " 級。");
       if (result.mastered) messages.push("已精通目前職業，開放相關進階職業。");
-      notify(messages.join(" "));
+      notify(messages.join("\n"),false,{title:"工作結果"});
     } else if (path === "house/build") {
       notify("住宅建造完成，費用：" + money(state.houseResult.quote.total) + "。");
     } else if (path === "house/remodel") {
@@ -2652,7 +2717,13 @@ async function action(path, data, message) {
         (result.payment==="credit"?"普通銀行存款扣除 ":"現金花費 ")+money(result.paid) +
         (gains ? "，能力提升：" + gains : "") +
         (result.weightLoss ? "，體重減少 "+result.weightLoss.toFixed(2)+" 公斤" : "") + "。");
-    } else if (message) notify(message);
+    } else if (path === "bank") {
+      const result=state.bankResult;
+      notify((result.action==="deposit"?"存款":"提款")+"完成："+money(data.amount)+
+        "\n目前現金："+money(result.money)+"\n普通銀行存款："+money(result.bank)+"。",
+        false,{title:result.action==="deposit"?"存款完成":"提款完成"});
+    } else if (message) notify(message,false,{inline:path==="map/tile"||path==="job/payment",
+      source:path==="map/tile"?el("map-selection"):undefined});
     if (path === "login" || path === "register") closeRoom();
     render();
   } catch (error) { notify(error.message, true); }
@@ -2699,8 +2770,7 @@ el("bank-form").addEventListener("submit", event => {
   event.preventDefault();
   const actionName = event.submitter?.value === "withdraw" ? "withdraw" : "deposit";
   const amount = Number(new FormData(event.currentTarget).get("amount"));
-  action("bank", { action: actionName, amount },
-    (actionName === "deposit" ? "存款" : "提款") + "完成：" + money(amount));
+  action("bank", { action: actionName, amount });
 });
 let pendingTransfer = null;
 el("bank-transfer-form").addEventListener("submit", async event => {
@@ -2833,7 +2903,7 @@ el("solo-continue").addEventListener("click",()=>{
   soloAtHome=false;
   try{sessionStorage.removeItem("town-solo-at-home");}catch{}
   render();
-  notify("已繼續單機遊戲。");
+  notify("已繼續單機遊戲。",false,{inline:true});
 });
 let soloDeleteBusy=false;
 el("solo-delete-form").addEventListener("submit",async event=>{
@@ -2990,7 +3060,7 @@ el("legacy-icon-image").addEventListener("error", () => {
   text("legacy-icon-help", "原版圖示無法載入，可再次按下嘗試。");
 });
 el("refresh").addEventListener("click", async () => {
-  try { state = await api("state"); render(); notify("遊戲資料已更新"); }
+  try { state = await api("state"); render(); notify("遊戲資料已更新",false,{inline:true}); }
   catch (error) { notify(error.message, true); }
 });
 el("work").addEventListener("click", () => action("work", {}));

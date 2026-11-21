@@ -560,3 +560,55 @@ test("寄禮站內信 UI 允許撰寫、雙方查看，純文字輸出不做 HTM
   assert.match(script,/pendingGiftAction\.message!==message/);
   assert.doesNotMatch(script,/body\.innerHTML=mail\.message/);
 });
+
+test("共用交易結果依原版中央呈現，玩家確認後返回操作畫面，不再使用右下角 Toast",()=>{
+  assert.match(html,/<dialog id="result-dialog"[^>]*aria-modal="true"/);
+  assert.match(html,/id="result-dialog-title"/);
+  assert.match(html,/id="result-dialog-message"/);
+  assert.match(html,/id="result-dialog-close"[^>]*>確認並返回/);
+  assert.doesNotMatch(html,/id="notice"/);
+  assert.match(css,/\.result-dialog::backdrop/);
+  assert.match(css,/white-space:pre-line;overflow-wrap:anywhere/);
+  assert.doesNotMatch(css,/#notice\{position:fixed/);
+  assert.match(script,/dialog\.showModal\(\)/);
+  assert.match(script,/dialog\.setAttribute\("role",error\?"alertdialog":"dialog"\)/);
+  assert.match(script,/el\("result-dialog-close"\)\.addEventListener\("click"/);
+  assert.match(script,/resultReturnFocus\.focus\(\{preventScroll:true\}\)/);
+  for(const feature of ["work","bank","house/build","meal/eat","train"])
+    assert.match(script,new RegExp('path === "'+feature.replace("/","\\/")+'"'));
+  assert.match(script,/notify\(result\.replayed\?/);
+});
+test("表單與餘額驗證錯誤就地顯示；共用錯誤處理亦有中央後備畫面",()=>{
+  assert.match(script,/function showInlineFeedback\(message,error,source\)/);
+  assert.match(script,/event\.type==="submit"\?\(event\.submitter\|\|event\.target\)/);
+  assert.match(script,/const form=origin\.closest\("form"\)/);
+  assert.match(script,/note\.setAttribute\("role",error\?"alert":"status"\)/);
+  assert.match(script,/note\.textContent=String\(message\)/);
+  assert.match(script,/note\.scrollIntoView\(\{block:"nearest",behavior:"auto"\}\)/);
+  assert.match(script,/if\(\(error\|\|inline\)&&showInlineFeedback\(message,error,source\)\)return/);
+  assert.match(script,/showResultDialog\(message,title\|\|\(error\?"操作未完成":"操作結果"\),error\)/);
+  assert.match(css,/\.operation-feedback\.error/);
+  assert.match(script,/source:el\("map-selection"\)/);
+  assert.match(script,/source:path==="map\/tile"\?el\("map-selection"\):undefined/);
+  assert.match(script,/renderLegacyItems\(\);\s+notify\(error\.message,true\)/);
+});
+test("電車、工作維持不同結果標題；非交易訊息不強制跳出對話框",()=>{
+  assert.match(script,/title:"電車移動結果"/);
+  assert.match(script,/title:"工作結果"/);
+  assert.match(script,/notify\(messages\.join\("\\n"\)/);
+  assert.match(script,/inline:path==="map\/tile"\|\|path==="job\/payment"/);
+  assert.match(script,/notify\("遊戲資料已更新",false,\{inline:true\}\)/);
+});
+test("現金與普通存款同時出現在固定狀態列及銀行表單，交易回覆含最新餘額",()=>{
+  for(const id of ["compact-money","compact-bank","bank-available-cash","bank-available-balance"])
+    assert.match(html,new RegExp('id="'+id+'"'));
+  assert.match(script,/text\("compact-money",money\(character\.money\)\)/);
+  assert.match(script,/text\("compact-bank",money\(character\.bank\)\)/);
+  assert.match(script,/text\("bank-available-cash",money\(state\.character\.money\)\)/);
+  assert.match(script,/text\("bank-available-balance",money\(state\.character\.bank\)\)/);
+  assert.match(script,/const result=state\.bankResult/);
+  assert.match(script,/目前現金：/);
+  assert.match(script,/普通銀行存款：/);
+  assert.match(css,/top:var\(--compact-status-height,64px\)/);
+  assert.match(script,/getBoundingClientRect\(\)\.height/);
+});
