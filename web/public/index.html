@@ -386,7 +386,7 @@
         <section class="card" id="retail-panel">
           <div class="heading"><div><div class="eyebrow">原版建築購物</div><h2>百貨店</h2></div><span class="muted">每日上架，庫存全玩家共用</span></div>
           <details class="explain"><summary>購物規則與目前限制</summary>
-            <p class="small">依原版 command.pl::depart_gamen，百貨店一與二每日各抽選最多 110 種非食堂商品，現金價為商品原始標價三倍。玩家必須在目前城鎮的地圖中有對應百貨店才能購物；每次可購買 1～5 件（原版每種至多持有 5 組）；一般物品持有上限 25 格，購入禮品獨立上限 10 格。已有相同 Web 購入的一般商品會合併耐久，原版匯入的物品保持唯讀。可用現金或本人有效原版信用卡從普通存款付款，款項、共用庫存、帳簿與 33 欄持有物一起交易。商品卡片可檢視原始 33 欄的能力增減、特殊效果代碼、熱量、使用間隔、能量消耗及備註；這些資料不等同於 Web 都已能執行。未支援的特殊效果會另標示，不會假裝已生效。原版購物贈券及部分特殊物品行為仍待移植。</p>
+            <p class="small">依原版 command.pl::depart_gamen，百貨店一與二每日各抽選最多 110 種非食堂商品，現金價為商品原始標價三倍。玩家必須在目前城鎮的地圖中有對應百貨店才能購物；每次可購買 1～5 件（原版每種至多持有 5 組）；一般物品持有上限 25 格，購入禮品獨立上限 10 格。已有相同 Web 購入的一般商品會合併耐久，原版匯入的物品保持唯讀。可用現金或本人有效原版信用卡從普通存款付款，款項、共用庫存、帳簿與 33 欄持有物一起交易。商品表格可直接比較完整的能力增減，展開明細可檢視原始 33 欄的能力增減、特殊效果代碼、熱量、使用間隔、能量消耗及備註；這些資料不等同於 Web 都已能執行。未支援的特殊效果會另標示，不會假裝已生效。原版購物贈券及部分特殊物品行為仍待移植。</p>
           </details>
           <div class="filters retail-filters">
             <label for="retail-shop-select">所在城鎮的百貨店
@@ -400,17 +400,17 @@
             </label>
           </div>
           <p class="small" id="retail-status"></p>
-          <div id="retail-items" class="training-grid"></div>
+          <div id="retail-items" class="shop-list"></div>
           <h3>近期百貨購物紀錄</h3>
           <div id="retail-purchases"></div>
         </section>
         <section class="card" id="vending-panel">
           <div class="heading"><div><div class="eyebrow">原版獨立建築</div><h2>自動販賣機</h2></div><span class="muted">獨立飲料貨架</span></div>
           <details class="explain"><summary>販賣機與百貨店差異</summary>
-            <p class="small">必須在所在城鎮地圖中有原版「自販機」建築才能進入。依 command.pl::hanbai 從 dat_dir/jihanki.cgi 的獨立商品檔抽選最多 10 種，直接以商品原價出售，不乘百貨三倍。上架與庫存由所有玩家共用，依原版中午 12 點換檔週期刷新；可買 1～5 件，依本人持有上限、安全同品耐久及有效信用卡規則交易。原版「元気ミルク」與「爽快ミルク」可按已驗證的負能量消耗欄位恢復身體／頭腦能量；其他特殊飲料效果仍不推測。</p>
+            <p class="small">必須在所在城鎮地圖中有原版「自販機」建築才能進入。依 command.pl::hanbai 從 dat_dir/jihanki.cgi 的獨立商品檔抽選最多 10 種，直接以商品原價出售，不乘百貨三倍。上架與庫存由所有玩家共用，依原版中午 12 點換檔週期刷新；可買 1～5 件，依本人持有上限、安全同品耐久及有效信用卡規則交易。原版「元気ミルク」與「爽快ミルク」可按已驗證的負能量消耗欄位恢復身體／頭腦能量；上架飲料可直接查看原版能力、熱量與備註，其他特殊飲料效果仍不推測。</p>
           </details>
           <p class="small" id="vending-status"></p>
-          <div id="vending-items" class="training-grid"></div>
+          <div id="vending-items" class="shop-list"></div>
           <h3>近期自販機購物紀錄</h3>
           <div id="vending-purchases"></div>
         </section>
