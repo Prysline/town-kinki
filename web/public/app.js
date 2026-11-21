@@ -186,7 +186,7 @@ function renderSoloTime() {
 let publicPreview=null;
 let previewLoading=false;
 // 方案 B：一次顯示一組設施。原本的表單留在 DOM，既有事件和資料更新不受影響。
-const FACILITY_TAB_NAMES = Object.freeze(["house","dining","shops","training","jobs","bank","hospital","events","mail","games"]);
+const FACILITY_TAB_NAMES = Object.freeze(["house","dining","shops","games","training","jobs","bank","hospital","events","mail"]);
 const PROFILE_VIEWS = Object.freeze(["status","inventory","attributes"]);
 let activeProfileView="status";
 function selectProfileView(name,{focus=false}={}) {
