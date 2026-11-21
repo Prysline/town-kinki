@@ -1,4 +1,5 @@
 import { townCellAction } from "./town-home.js";
+import { displayRetailDrinkAlcoholName,displayRetailDrinkAlcoholCategory } from "./retail-drink-alcohol-translations.js";
 import { displayDessertFastFoodName,displayDessertFastFoodCategory } from "./retail-dessert-fastfood-translations.js";
 import { displayRetailFoodName,displayRetailFoodCategory } from "./retail-food-translations.js";
 import { shouldShowCompactEnergy } from "./energy-visibility.js";
@@ -47,8 +48,8 @@ function renderLegacyIcon() {
     ? "此 32×32 圖片來自原版存檔所記錄的網址。"
     : "按下後才會向原版圖示的外部網站載入圖片；可能向對方透露連線資訊。");
 }
-const displayRetailItemName=name=>displayDessertFastFoodName(displayRetailFoodName(displayKnownItemName(name)));
-const displayRetailItemCategory=category=>displayDessertFastFoodCategory(displayRetailFoodCategory(displayKnownItemCategory(category)));
+const displayRetailItemName=name=>displayRetailDrinkAlcoholName(displayDessertFastFoodName(displayRetailFoodName(displayKnownItemName(name))));
+const displayRetailItemCategory=category=>displayRetailDrinkAlcoholCategory(displayDessertFastFoodCategory(displayRetailFoodCategory(displayKnownItemCategory(category))));
 
 const labels = {
   kokugo:"國語",suugaku:"數學",rika:"理科",syakai:"社會",eigo:"英語",
