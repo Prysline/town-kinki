@@ -1261,8 +1261,9 @@ async function submitLegacyUse(sourceLine,name){
       "相同道具使用請求已處理，沒有重複扣除耐久。" :
       "已使用「"+result.name+"」，效果已套用。");
   }catch(error){
-    notify(error.message,true);
+    // 清單重建後再提示，避免把錯誤訊息連同舊商品元件一起刪掉。
     renderLegacyItems();
+    notify(error.message,true);
   }
 }
 function renderLegacyItems() {
@@ -2721,7 +2722,8 @@ async function action(path, data, message) {
       notify((result.action==="deposit"?"存款":"提款")+"完成："+money(data.amount)+
         "\n目前現金："+money(result.money)+"\n普通銀行存款："+money(result.bank)+"。",
         false,{title:result.action==="deposit"?"存款完成":"提款完成"});
-    } else if (message) notify(message,false,{inline:path==="map/tile"||path==="job/payment"});
+    } else if (message) notify(message,false,{inline:path==="map/tile"||path==="job/payment",
+      source:path==="map/tile"?el("map-selection"):undefined});
     if (path === "login" || path === "register") closeRoom();
     render();
   } catch (error) { notify(error.message, true); }
