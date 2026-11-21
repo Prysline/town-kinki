@@ -1,3 +1,4 @@
+import { MEAL_ZH_TW } from "./i18n/meals.zh-TW.mjs";
 // 依原版 top.pl（空腹度）、town_lib.pl（BMI）與 command.pl（食堂）移植。
 // 餐點基本效果依原版；每日抽選與共用庫存由 dining-stock.mjs 管理。
 export const MEAL_COOLDOWN_MS = 60 * 60 * 1000;
@@ -6,15 +7,7 @@ export const HUNGER_LABELS = Object.freeze({
   slightlyHungry:"稍微餓了", hungry:"飢餓", veryHungry:"非常飢餓",
   starving:"極度飢餓", dangerous:"快餓昏了", critical:"瀕臨餓死"
 });
-const TRANSLATIONS = Object.freeze({
-  "牛丼":"牛肉蓋飯","親子丼":"親子丼","うどん":"烏龍麵",
-  "お寿司":"壽司","うな重":"鰻魚飯","カツ丼":"炸豬排蓋飯",
-  "天丼":"天婦羅蓋飯","ショウガ焼き定食":"薑汁燒肉定食",
-  "チャーハン":"炒飯","オムライス":"蛋包飯",
-  "カレーライス":"咖哩飯","ラーメン":"拉麵","そば":"蕎麥麵",
-  "焼きそば":"炒麵","おにぎり":"飯糰","ハンバーグ":"漢堡排",
-  "ピザ":"披薩","スパゲティ":"義大利麵","サンドイッチ":"三明治"
-});
+
 const STAT_POSITIONS = Object.freeze({
   kokugo:2,suugaku:3,rika:4,syakai:5,eigo:6,ongaku:7,bijutu:8,
   looks:10,tairyoku:11,kenkou:12,speed:13,power:14,
@@ -45,7 +38,7 @@ export function parseLegacyMeals(source, menu = "main") {
     const base=originalName.replace(/2$/,"");
     return [{
       key:"meal-"+menu+"-"+(index+2),
-      name:TRANSLATIONS[base] || originalName,
+      name:MEAL_ZH_TW[base] || originalName,
       originalName,menu,price,calories,gains,stock
     }];
   });
