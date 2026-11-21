@@ -42,7 +42,7 @@ test("自動販賣機 12 種可販售飲料全部有繁體中文名稱；原版�
     assert.equal(item.category,"ドリンク");
     assert.ok(item.sku.startsWith("vending-"));
   }
-  assert.equal(VENDING_ZH_TW["ブラジャードリンク"],"白蘭地薑汁汽水");
+  assert.equal(VENDING_ZH_TW["ブラジャードリンク"],"胸罩飲料");
   assert.ok(!names.has("元気ミルク"));
   for(const originalName of Object.keys(VENDING_ZH_TW))
     assert.ok(names.has(originalName),"來源不存在的飲料譯名："+originalName);
