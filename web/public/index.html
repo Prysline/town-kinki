@@ -17,7 +17,10 @@
     <div class="header-right"><span id="mode" class="mode">載入中</span><button id="logout" class="secondary" hidden>登出</button></div>
   </header>
   <main>
-    <div id="notice" role="status" aria-live="polite" hidden></div>
+    <div id="notice" role="status" aria-live="polite" aria-atomic="true" hidden>
+      <span id="notice-message"></span>
+      <button type="button" id="notice-close" class="secondary" aria-label="關閉通知">×</button>
+    </div>
     <div id="landing" class="landing-layout" hidden>
       <section class="card town-home" aria-labelledby="preview-heading">
         <div class="eyebrow">城鎮入口 · 原版街區預覽</div>
@@ -126,6 +129,8 @@
           <span class="compact-energy-label">頭腦能量 <b id="compact-brain-energy"></b></span>
           <progress id="compact-brain-bar" max="100" value="0" aria-label="頭腦能量比例"></progress>
         </div>
+        <div class="compact-finance"><span>現金</span><strong id="compact-money"></strong></div>
+        <div class="compact-finance"><span>銀行存款</span><strong id="compact-bank"></strong></div>
       </div>
       <aside id="event-popup" class="event-popup" aria-label="原版事件通知" hidden>
         <div class="event-popup-heading">
@@ -517,6 +522,10 @@
       <div id="facility-pane-bank" class="facility-pane" role="tabpanel" aria-labelledby="facility-tab-bank" tabindex="0" hidden>
         <section class="card" id="bank-panel">
           <h3>銀行</h3>
+          <dl class="bank-current-balances" aria-label="目前可用資金">
+            <div><dt>現金</dt><dd id="bank-available-cash"></dd></div>
+            <div><dt>普通銀行存款</dt><dd id="bank-available-balance"></dd></div>
+          </dl>
           <details class="explain"><summary>玩法與限制說明</summary><p class="small">普通存款每日利息 0.5%，超級定期每日利息 1%。Web 版於每日第一次讀取狀態時計息一次，不會補發未讀取期間的多日利息。</p></details>
           <p class="small" id="bank-interest-day"></p>
           <form id="bank-form">
