@@ -24,9 +24,9 @@ async function freePort() {
     });
   });
 }
-async function start(mode, seed) {
+async function start(mode, seed, existingDirectory = null) {
   const port = await freePort();
-  const directory = mkdtempSync(join(tmpdir(), "town-web-"));
+  const directory = existingDirectory ?? mkdtempSync(join(tmpdir(), "town-web-"));
   if (seed) seed(directory);
   const child = spawn(process.execPath, ["src/server.mjs"], {
     cwd: root, env: { ...process.env, HOST: "127.0.0.1", PORT: String(port), GAME_MODE: mode, DATA_DIR: directory }
@@ -50,13 +50,13 @@ async function start(mode, seed) {
   }
   return {
     url, directory,
-    async stop() {
+    async stop({preserveData=false}={}) {
       if (child.exitCode === null) {
         const exited = new Promise(done => child.once("exit", done));
         child.kill();
         await Promise.race([exited, delay(1500)]);
       }
-      rmSync(directory, { force: true, recursive: true });
+      if(!preserveData) rmSync(directory, { force: true, recursive: true });
     }
   };
 }
