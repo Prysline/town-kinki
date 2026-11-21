@@ -694,3 +694,108 @@ test("偽造ランダム品的分類、能力上限、單價或間隔一律不�
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM legacy_item_use_history").get().n,0);
   }finally{db.close();}
 });
+
+
+test("原版空「万能,」只有兩款具有可核實一般使用效果，不擅自補疾病治療增幅",()=>{
+  const water=originalItem("関西名産店","琵琶湖の水");
+  const book=originalItem("書籍","無駄知識を覚える本");
+  const vehicle=originalItem("金の箱","ランドマスター");
+  assert.equal(water[9],"万能,");
+  assert.equal(book[9],"万能,");
+  assert.equal(vehicle[9],"万能,");
+  assert.equal(supportsLegacyItemUse(water),true);
+  assert.equal(supportsLegacyItemUse(book),true);
+  assert.equal(supportsLegacyItemUse(vehicle),false,
+    "備註中的移動用途沒有得到執行流程證據，不能偽裝成一般可用");
+  const db=createDb();
+  try{
+    addItem(db,1,water);
+    book[30]=String(Math.floor(NOW/1000));
+    addItem(db,2,book);
+    addItem(db,3,vehicle);
+    assert.deepEqual(listLegacyItemActions(db,1,{
+      bodyEnergy:25,brainEnergy:35,lastMealAt:0
+    },NOW).map(item=>item.sourceLine),[1,2]);
+    const waterResult=use(db,1,"verified_water_001");
+    assert.equal(waterResult.changes.healthIndex,0);
+    assert.equal(waterResult.changes.stats.looks,10);
+    assert.equal(waterResult.changes.stats.tairyoku,10);
+    assert.equal(waterResult.changes.stats.kenkou,10);
+    assert.equal(waterResult.changes.weight,-0.1);
+    assert.equal(read(db).weight,59.9);
+    assert.equal(db.prepare("SELECT remaining FROM legacy_item_usage WHERE source_line=1").get().remaining,4);
+    assert.throws(()=>use(db,1,"verified_water_002",NOW+30_000),/間隔/);
+    assert.equal(use(db,1,"verified_water_001",NOW+30_000).replayed,true);
+    const beforeHealth=read(db).health_index;
+    const bookResult=use(db,2,"verified_book_001");
+    assert.equal(bookResult.changes.healthIndex,0);
+    assert.equal(read(db).health_index,beforeHealth);
+    assert.equal(bookResult.changes.stats.kokugo,3);
+    assert.equal(bookResult.changes.stats.looks,1);
+    assert.equal(bookResult.changes.stats.love,5);
+    assert.equal(bookResult.changes.bodyEnergy,-1);
+    assert.equal(bookResult.changes.brainEnergy,-10);
+    assert.equal(db.prepare("SELECT remaining FROM legacy_item_usage WHERE source_line=2").get().remaining,5);
+    assert.throws(()=>use(db,2,"verified_book_002",NOW+60_000),/間隔/);
+    assert.equal(use(db,2,"verified_book_002",NOW+30*60_000).replayed,false);
+    assert.equal(db.prepare("SELECT remaining FROM legacy_item_usage WHERE source_line=2").get().remaining,5);
+    assert.throws(()=>use(db,3,"unverified_vehicle"),/尚未支援/);
+    assert.equal(listLegacyItemUseHistory(db,1).length,3);
+    assert.deepEqual(JSON.parse(db.prepare("SELECT raw_fields_json FROM legacy_inventory_items WHERE source_line=1").get().raw_fields_json),water);
+    assert.deepEqual(JSON.parse(db.prepare("SELECT raw_fields_json FROM legacy_inventory_items WHERE source_line=2").get().raw_fields_json),book);
+  }finally{db.close();}
+});
+
+test("原版負熱量的『ぼったくり』依 kcal/1000 降體重，仍照原版扣能力耗能與耐久",()=>{
+  const fields=originalItem("アルコール","ぼったくり");
+  assert.equal(fields[25],"-300");
+  assert.equal(supportsLegacyItemUse(fields),true);
+  const db=createDb();
+  try{
+    addItem(db,1,fields);
+    const before=read(db);
+    const used=use(db,1,"negative_alcohol_01");
+    assert.equal(used.changes.weight,-0.3);
+    assert.equal(read(db).weight,59.7);
+    assert.equal(used.changes.stats.kokugo,1);
+    assert.equal(used.changes.stats.etti,1);
+    assert.equal(used.changes.bodyEnergy,-10);
+    assert.equal(used.changes.brainEnergy,-10);
+    assert.equal(read(db).money,before.money);
+    assert.equal(db.prepare("SELECT remaining FROM legacy_item_usage").get().remaining,0);
+    assert.equal(use(db,1,"negative_alcohol_01",NOW+300_000).replayed,true);
+    assert.throws(()=>use(db,1,"negative_alcohol_02",NOW+300_000),/用盡/);
+  }finally{db.close();}
+});
+
+test("負熱量與空治療數值不接受任意同名、變造來源、負治病幅度或擅自動用移動商品",()=>{
+  const samples=[
+    f=>{f[0]="薬";},
+    f=>{f[10]="999";},
+    f=>{f[25]="-101";},
+    f=>{f[17]="1";},
+    f=>{f[23]="0";},
+    f=>{f[29]="自稱可治所有疾病";},
+    f=>{f[9]="万能,-30";}
+  ];
+  const base=originalItem("関西名産店","琵琶湖の水");
+  const db=createDb();
+  try{
+    for(const [i,alter] of samples.entries()){
+      const changed=[...base];alter(changed);
+      addItem(db,i+1,changed);
+      assert.equal(supportsLegacyItemUse(changed),false,"偽造類型 "+i);
+      assert.throws(()=>use(db,i+1,"invalid_blank_"+i),/尚未支援/);
+    }
+    const booze=originalItem("アルコール","ぼったくり");
+    booze[25]="-9999";
+    addItem(db,20,booze);
+    assert.equal(supportsLegacyItemUse(booze),false);
+    assert.throws(()=>use(db,20,"negative_fake_020"),/尚未支援/);
+    const fakeBook=originalItem("書籍","無駄知識を覚える本");
+    fakeBook[27]="0";
+    assert.equal(supportsLegacyItemUse(fakeBook),false);
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM legacy_item_use_history").get().n,0);
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM legacy_item_usage").get().n,0);
+  }finally{db.close();}
+});
