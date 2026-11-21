@@ -15,8 +15,8 @@
 直接從原版 `unit.pl` 的 `%unit` 定義重新取出 **73 個地圖代碼**：**43 個**定義互動 `<form>`（包含跨行的「温泉」）；另 **30 個**是地景／道路／裝飾等非表單條目。
 
 針對 43 個互動入口，Web 目前：
-- **28 個**有明確的 [`MAP_SYMBOLS`](../src/town-map.mjs) 地圖代碼；**15 個**原版互動入口沒有被加入 Web 地圖代碼清單（匯入真實地圖時可能以未知圖示呈現，實際需要有資料驗證）。
-- **15 個**有操作入口：**14 個**由 [`FACILITY_PANELS`](../public/town-home.js#L2) 導向 Web 面板（含 PR #23 的獨立教室，PR #27 的已匯入有效信用卡付款），另 **1 個「駅」**由 [`townCellAction`](../public/town-home.js#L12) 導向車站票價與乘車選項（PR #26）。這只是入口覆蓋，不代表設施全部規則已移植。
+- **29 個**有明確的 [`MAP_SYMBOLS`](../src/town-map.mjs) 地圖代碼；**14 個**原版互動入口沒有被加入 Web 地圖代碼清單（匯入真實地圖時可能以未知圖示呈現，實際需要有資料驗證）。
+- **16 個**有操作入口：**15 個**由 [`FACILITY_PANELS`](../public/town-home.js#L2) 導向 Web 面板（含 PR #23 的獨立教室，PR #27 的已匯入有效信用卡付款），另 **1 個「駅」**由 [`townCellAction`](../public/town-home.js#L12) 導向車站票價與乘車選項（PR #26）。這只是入口覆蓋，不代表設施全部規則已移植。
 - **13 個**已有 Web 地圖代碼，但既未映射 `FACILITY_PANELS`，也不是車站特例；[`townCellAction`](../public/town-home.js#L12) 會回傳 `unavailable`，按圖示只會提示尚未移植。
 - 百貨兩入口、自販機與裝備屋已有各自實際購物交易，**仍不等於原版全部商店功能**。詳 [百貨店](phase31-department-checkout.md)、[自販機](phase33-vending-shopping.md) 與 [裝備屋](phase35-equipment-shop.md)。
 - 這些是**程式路由覆蓋率**，不是已完成功能比例；車站已按原版 `station.cgi` 收取四城六組雙向車資（PR #26），而真實原版地圖存檔及其他交通道具仍待核查。
@@ -56,7 +56,7 @@
 | [`装備屋`](../../unit.pl#L144) | `hanbai.cgi` | `hanbai` | 有 | 已接入 [原版 6 欄商品原價單件現金購買、獨立 7 欄倉庫、四類換裝、倉庫回收與防重交易](phase35-equipment-shop.md)；[鍛造](phase36-equipment-forge.md)已接入，戰鬥尚未移植 |
 | [`販売1`](../../unit.pl#L146) | `hanbai1.cgi` | `hanbai1` | 無 | Web 地圖代碼未收錄 |
 | [`リサイ`](../../unit.pl#L148) | `recycle.cgi` | `resycle` | 有 | 已接入 [原版 30 分鐘限制、最高回收 200,000、50 件／7 日二手市場、真實出售與跨玩家購買](phase38-recycle-market.md)；舊版原始玩家存檔仍唯讀 |
-| [`クーポン`](../../unit.pl#L150) | `coupon.cgi` | `coupon` | 無 | Web 地圖代碼未收錄 |
+| [`クーポン`](../../unit.pl#L150) | `coupon.cgi` | `coupon` | 有 | **第51階段新增原版兌換所圖示及事件分頁入口**：按原始 30 筆獎品與點數，只扣本人 Web 事件所得券；完整 33 欄獎品真實入庫。舊版匯入券仍唯讀、部分獎品使用效果未移植，見 [第51階段](phase51-event-coupon-redemption.md) |
 | [`教室`](../../unit.pl#L152) | `kyushitu.cgi` | `kyushitu` | 有 | **PR #23／#27 已修正** → `classroom-panel`（四堂課，現金或有效匯入信用卡） |
 | [`職安`](../../unit.pl#L154) | `basic.cgi` | `job_change` | 有 | 有 Web 入口／僅部分對照 |
 | [`問屋`](../../unit.pl#L158) | `$script` | `orosi` | 有 | 已加入 [原版問屋最多 120 種、來源庫存×2、住宅店鋪分類、普通銀行進貨、店鋪庫存與 75% 退貨](phase39-wholesale-store.md)；[住宅商店對外銷售](phase40-player-store-sales.md) 已提供，配偶代理及原始歷史匯入仍待移植 |

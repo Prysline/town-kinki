@@ -186,14 +186,15 @@ export function listLegacyInventoryItems(db,userId,limit=50){
   return db.prepare([
     "SELECT source_line,original_id,category,original_name,durability,durability_unit,purchased_at",
     "FROM legacy_inventory_items WHERE user_id=? ORDER BY",
-    "CASE WHEN original_id IN ('__web_retail__','__web_gift__','__web_recycle__','__web_store__') THEN 0 ELSE 1 END,source_line LIMIT ?"
+    "CASE WHEN original_id IN ('__web_retail__','__web_gift__','__web_recycle__','__web_store__','__web_coupon__') THEN 0 ELSE 1 END,source_line LIMIT ?"
   ].join(" ")).all(userId,cap).map(x=>({
     sourceLine:x.source_line,category:x.category,name:x.original_name,
     durability:x.durability,unit:x.durability_unit,purchasedAt:x.purchased_at,
-    readOnly:!["__web_retail__","__web_gift__","__web_recycle__","__web_store__"].includes(x.original_id),
+    readOnly:!["__web_retail__","__web_gift__","__web_recycle__","__web_store__","__web_coupon__"].includes(x.original_id),
     ...(x.original_id==="__web_retail__"?{origin:"retail"}:
       x.original_id==="__web_gift__"?{origin:"gift"}:
       x.original_id==="__web_recycle__"?{origin:"recycle"}:
-      x.original_id==="__web_store__"?{origin:"store"}:{})
+      x.original_id==="__web_store__"?{origin:"store"}:
+      x.original_id==="__web_coupon__"?{origin:"coupon"}:{})
   }));
 }

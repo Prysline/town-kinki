@@ -139,7 +139,7 @@ test("原 CGI 建築代碼只連到 Web 真正已實作的設施入口",()=>{
   const expected={
     "銀行":"bank-panel","病院":"hospital-panel","職安":"jobs-panel",
     "教室":"classroom-panel","食堂":"dining-panel","食堂２":"dining-panel",
-    "デパ":"retail-panel","デパ2":"retail-panel","自販機":"vending-panel","装備屋":"equipment-panel","ギフト屋":"gift-panel","リサイ":"recycle-panel","問屋":"wholesale-panel","建築":"housing-panel"
+    "デパ":"retail-panel","デパ2":"retail-panel","自販機":"vending-panel","装備屋":"equipment-panel","ギフト屋":"gift-panel","リサイ":"recycle-panel","クーポン":"event-panel","問屋":"wholesale-panel","建築":"housing-panel"
   };
   assert.deepEqual(FACILITY_PANELS,expected);
   for(const [key,panelId] of Object.entries(expected)){
@@ -670,4 +670,28 @@ test("第50階段：單機首次遊玩可自願建立非原版試玩街區，已
   assert.match(script,/window\.confirm\("將在目前城鎮建立一張 Web 試玩街區/);
   assert.match(script,/action\("solo\/map\/starter",\{\}/);
   assert.match(css,/\.map-starter\{/);
+});
+
+
+test("第51階段：原版優惠券兌換所地圖入口、30獎品、本人事件券與原子入庫 UI",()=>{
+  assert.deepEqual(townCellAction(describeTile("クーポン")),
+    {kind:"facility",panelId:"event-panel"});
+  assert.match(html,/id="coupon-rewards"/);
+  assert.match(html,/id="coupon-shop-status"/);
+  assert.match(html,/id="coupon-redemptions"/);
+  assert.match(html,/只可使用「Web 隨機事件所得」的優惠券點數/);
+  assert.match(html,/一般持有物上限 25 格/);
+  assert.match(script,/function renderCouponShop\(\)/);
+  assert.match(script,/renderCouponShop\(\);/);
+  assert.match(script,/state\.couponRewards/);
+  assert.match(script,/state\.couponRedemptions/);
+  assert.match(script,/state\.couponShopAvailable===true/);
+  assert.match(script,/button\.disabled=!reward\.canRedeem/);
+  assert.match(script,/heading\.textContent=reward\.originalName/);
+  assert.match(script,/reason\.textContent=reward\.reason/);
+  assert.match(script,/const result=state\.couponResult/);
+  assert.match(script,/await api\("coupon\/redeem",pendingCouponRedemption\)/);
+  assert.match(script,/pendingCouponRedemption\.originalName!==reward\.originalName/);
+  assert.match(script,/window\.confirm\("確定使用 "/);
+  assert.doesNotMatch(script,/heading\.innerHTML=reward\.originalName/);
 });

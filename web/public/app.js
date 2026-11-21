@@ -1379,6 +1379,76 @@ function updateCockroachCountdown() {
   el("event-alert").hidden=false;
   el("event-alert").textContent=active?"查看事件詳情":"查看事件紀錄";
 }
+let pendingCouponRedemption=null;
+async function submitCouponRedemption(reward){
+  if(!reward.canRedeem)return;
+  if(!window.confirm("確定使用 "+reward.requiredCoupons+" 點 Web 事件優惠券，兌換「"+
+    reward.originalName+"」嗎？此獎品會以原版 33 欄入庫；部分獎品效果仍未支援。"))return;
+  if(!pendingCouponRedemption||
+     pendingCouponRedemption.sourceIndex!==reward.sourceIndex||
+     pendingCouponRedemption.originalName!==reward.originalName)
+    pendingCouponRedemption={
+      sourceIndex:reward.sourceIndex,originalName:reward.originalName,
+      requestId:crypto.randomUUID()
+    };
+  try{
+    state=await api("coupon/redeem",pendingCouponRedemption);
+    const result=state.couponResult;
+    pendingCouponRedemption=null;
+    render();
+    notify(result.replayed?
+      "這筆優惠券兌換已處理過，沒有再次扣券或發獎。":
+      "已扣除 "+result.couponCost+" 點 Web 事件券，兌換「"+
+      result.originalName+"」，獎品已加入本人背包。");
+  }catch(error){notify(error.message,true);}
+}
+function renderCouponShop(){
+  const available=state.couponShopAvailable===true;
+  text("coupon-shop-status",available?
+    "目前城鎮有原版優惠券兌換所；使用 Web 事件取得的點數兌換獎品。":
+    "目前城鎮沒有「クーポン」兌換所。可在單機地圖編輯器放置該原版建築，或前往已有兌換所的城鎮。");
+  const target=el("coupon-rewards");
+  target.replaceChildren();
+  for(const reward of state.couponRewards??[]){
+    const tile=document.createElement("div");
+    tile.className="training-tile";
+    const heading=document.createElement("strong");
+    heading.textContent=reward.originalName;
+    const info=document.createElement("p");info.className="small";
+    info.textContent="需要 "+reward.requiredCoupons+" 點｜獎品耐久 "+
+      reward.rewardDurability+" "+reward.rewardDurabilityUnit+
+      "（是獎品本身的耐久，並非優惠券到期時間）";
+    const button=document.createElement("button");
+    button.type="button";
+    button.textContent=reward.canRedeem?"兌換這件獎品":"目前不可兌換";
+    button.disabled=!reward.canRedeem;
+    const reason=document.createElement("p");reason.className="small";
+    reason.textContent=reward.reason??"";
+    reason.hidden=!reward.reason;
+    button.addEventListener("click",()=>submitCouponRedemption(reward));
+    tile.append(heading,info,button,reason);
+    target.append(tile);
+  }
+  const history=el("coupon-redemptions");
+  history.replaceChildren();
+  const entries=state.couponRedemptions??[];
+  if(!entries.length){
+    const empty=document.createElement("p");empty.className="small";
+    empty.textContent="尚無兌換紀錄。";
+    history.append(empty);
+    return;
+  }
+  const list=document.createElement("ol");list.className="health-event-list";
+  for(const entry of entries){
+    const li=document.createElement("li");
+    li.textContent=new Date(entry.createdAt).toLocaleString("zh-TW")+"｜"+
+      entry.originalName+"（扣 "+entry.couponCost+" 點；持有物行號 "+
+      entry.sourceLine+"）";
+    list.append(li);
+  }
+  history.append(list);
+}
+
 function renderDining() {
   if (!state?.character) return;
   const status=state.hunger;
@@ -1399,7 +1469,8 @@ function renderDining() {
     "治療「" + (quote?.disease.name ?? "未知") + "」需支付現金 " +
       money(quote?.price??0) + "。"));
   el("hospital-treat").disabled=!quote || (state.character.money<quote.price);
-  text("event-coupon-count","Web 事件所得優惠券："+(state.couponBalance ?? 0)+" 張（兌換所尚未移植）");
+  text("event-coupon-count","Web 事件所得優惠券："+(state.couponBalance ?? 0)+" 點");
+  renderCouponShop();
   text("event-kpoint","Web K 點數："+(state.character?.kpoint??0));
   updateCockroachCountdown();
   const events=el("health-event-history");

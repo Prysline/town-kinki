@@ -45,5 +45,5 @@ test("盤點的 Web 地圖代碼有無，與實際 MAP_SYMBOLS 一致", () => {
   for (const row of rows)
     assert.equal(row.known,known.has(row.name),row.name+" 地圖代碼狀態需要更新");
   assert.equal(rows.length,43);
-  assert.equal(rows.filter(row=>row.known).length,28);
+  assert.equal(rows.filter(row=>row.known).length,29);
 });
