@@ -114,6 +114,11 @@ function applyInterest(db, userId, today, now) {
   return { ordinary:ordinaryInterest, term:termInterest, applied:true,
     ...(repayment ? { repayment } : {}) };
 }
+// 僅供外層已啟動 BEGIN IMMEDIATE 的跨玩家交易使用（例如六號樂透開獎）。
+// 不在此開新交易，讓當日利息、開獎、普通存款及銀行帳簿一起回滾。
+export function settleBankInterestInTransaction(db,userId,today,now=Date.now()) {
+  return applyInterest(db,userId,today,now);
+}
 export function settleBankInterest(db,userId,today,now=Date.now()) {
   db.exec("BEGIN IMMEDIATE");
   try {

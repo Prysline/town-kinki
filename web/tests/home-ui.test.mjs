@@ -818,6 +818,28 @@ test("第58階段：原版六位數樂透6欄選號、下注、安全DOM與伺�
   assert.ok(!script.includes("innerHTML=round.chosenDigits"));
 });
 
+test("第59階段：六號樂透原版分場、六個1～36選號、隨機購券、按需開獎與銀行展示",()=>{
+  for(const id of ["arcade-loto6-panel","arcade-loto6-status",
+    "arcade-loto6-random","arcade-loto6-quote","arcade-loto6-buy",
+    "arcade-loto6-check","arcade-loto6-result","arcade-loto6-history"])
+    assert.ok(html.includes('id="'+id+'"'));
+  for(let i=1;i<=6;i++)assert.ok(html.includes('id="arcade-loto6-number-'+i+'"'));
+  assert.ok(html.includes("gamerand.cgi／loto6.cgi"));
+  assert.ok(html.includes("200注"));
+  assert.ok(html.includes("普通銀行"));
+  assert.ok(html.includes("不是在背景定時執行"));
+  assert.ok(script.includes("function renderLoto6(){"));
+  assert.ok(script.includes("renderLoto6();"));
+  assert.ok(script.includes('await api("arcade/loto6/buy"'));
+  assert.ok(script.includes('await api("arcade/loto6/check"'));
+  assert.ok(script.includes("pendingLoto6Purchase"));
+  assert.ok(script.includes("loto6Busy"));
+  assert.ok(script.includes("new Set(chosen).size===6"));
+  assert.ok(script.includes("document.createElement"));
+  assert.ok(script.includes("history.replaceChildren()"));
+  assert.ok(!script.includes("innerHTML=ticket.numbers"));
+});
+
 test("第53階段：原版釣場與餌料商店實際有入庫交易 UI 且拒絕虛構漁獲",()=>{
   for(const key of ["釣り","販売1"])
     assert.deepEqual(townCellAction(describeTile(key)),{

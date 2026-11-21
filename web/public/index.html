@@ -651,6 +651,34 @@
           <h3>本人最近20局即時樂透</h3>
           <div id="arcade-loto-history"></div>
         </section>
+        <section class="card" id="arcade-loto6-panel">
+          <div class="heading">
+            <div><div class="eyebrow">原版遊樂中心 · 定時／滿額開獎</div><h2>六號樂透 LOTO6</h2></div>
+            <span class="muted">gamerand.cgi／loto6.cgi</span>
+          </div>
+          <details class="explain">
+            <summary>原版六號樂透規則與 Web 開獎方式</summary>
+            <p class="small">不同於上方立即開獎的六位數樂透：此遊戲每注2,500元，從1～36選6個不重複號碼；亦可由伺服器隨機選六號。每人每輪最多20注、全服累計200注後，下次存取即可開獎；當地時間06:00後當日尚未開過獎，也會在進入本遊戲的檢查或購券操作時開獎。原版不是在背景定時執行，因此 Web 需要按「檢查／執行開獎」才會主動開獎，或於購券時先結清已到期的上一輪。中0、1、2、3、4、5、6號的獎金分別為0、2,500、5,000、100,000、1,000,000、10,000,000、100,000,000元，全部匯到普通銀行存款，購券費則扣身上現金；這是固定獎金，非倍數。開獎對全體待開獎彩券同批結算，本人紀錄最多顯示最近20張。Web 使用原子交易、防重送、足額現金與安全整數檢查，銀行會在獎金入帳前完成當日應有利息。不會因單純停留畫面而在背景開獎。</p>
+          </details>
+          <p id="arcade-loto6-status" class="small" role="status"></p>
+          <div class="filters retail-filters">
+            <label for="arcade-loto6-random"><input id="arcade-loto6-random" type="checkbox" checked> 由伺服器隨機選六號（原版預設）</label>
+            <label for="arcade-loto6-number-1">號碼1<select id="arcade-loto6-number-1"></select></label>
+            <label for="arcade-loto6-number-2">號碼2<select id="arcade-loto6-number-2"></select></label>
+            <label for="arcade-loto6-number-3">號碼3<select id="arcade-loto6-number-3"></select></label>
+            <label for="arcade-loto6-number-4">號碼4<select id="arcade-loto6-number-4"></select></label>
+            <label for="arcade-loto6-number-5">號碼5<select id="arcade-loto6-number-5"></select></label>
+            <label for="arcade-loto6-number-6">號碼6<select id="arcade-loto6-number-6"></select></label>
+          </div>
+          <p id="arcade-loto6-quote" class="small" role="status"></p>
+          <div class="actions">
+            <button type="button" id="arcade-loto6-buy" disabled>購買一注六號樂透</button>
+            <button type="button" id="arcade-loto6-check" disabled>檢查／執行開獎</button>
+          </div>
+          <p id="arcade-loto6-result" class="small" aria-live="polite"></p>
+          <h3>本人最近20張彩券</h3>
+          <div id="arcade-loto6-history"></div>
+        </section>
       </div>
       <div id="facility-pane-training" class="facility-pane" role="tabpanel" aria-labelledby="facility-tab-training" tabindex="0" hidden>
         <section class="card" id="school-panel">
