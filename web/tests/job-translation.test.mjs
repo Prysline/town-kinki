@@ -39,3 +39,24 @@ test("新增的原版職業在翻譯表找不到時仍使用原名，不干擾�
   assert.equal(job.name,"測試用未知日文職業");
   assert.equal(job.translated,false);
 });
+
+test("職業譯名：風俗與 AV 系列簡潔易讀；英文字母與中文職稱不夾半形空白",()=>{
+  const expected={
+    "風俗嬢":"風俗女郎",
+    "売れっ子風俗嬢":"當紅風俗女郎",
+    "カリスマ風俗嬢":"超人氣風俗女郎",
+    "AV男優":"AV男優",
+    "有名AV男優":"知名AV男優",
+    "カリスマAV男優":"超人氣AV男優",
+    "AV女優":"AV女優",
+    "売れっ子AV女優":"當紅AV女優",
+    "AV界の女王":"AV界女王",
+    "Ｊリーガー":"J聯盟球員",
+    "JAXA勤務":"JAXA職員",
+    "NASA勤務":"NASA職員"
+  };
+  for(const [original,translated] of Object.entries(expected))
+    assert.equal(JOB_ZH_TW[original],translated,original);
+  for(const label of Object.values(JOB_ZH_TW))
+    assert.doesNotMatch(label,/[A-Za-z] [\u3400-\u9FFF]/);
+});
