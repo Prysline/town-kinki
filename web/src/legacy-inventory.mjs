@@ -176,7 +176,6 @@ export function importLegacyInventory(db,parsed,{originalId,sourceFile,now=Date.
     throw error;
   }
 }
-// 可選的唯讀效果轉換器由呼叫端提供，避免物品存檔模組與零售交易互相循環依賴。
 export function listLegacyInventoryItems(db,userId,limit=50,toDetails=null){
   if(!Number.isSafeInteger(userId)||userId<1)throw new Error("無效的帳號");
   const exists=db.prepare(
@@ -187,7 +186,7 @@ export function listLegacyInventoryItems(db,userId,limit=50,toDetails=null){
   return db.prepare([
     "SELECT source_line,original_id,category,original_name,durability,durability_unit,purchased_at,raw_fields_json",
     "FROM legacy_inventory_items WHERE user_id=? ORDER BY",
-    "CASE WHEN original_id IN ('__web_retail__','__web_gift__','__web_recycle__','__web_store__') THEN 0 ELSE 1 END,source_line LIMIT ?"
+    "CASE WHEN original_id IN ('__web_retail__','__web_gift__','__web_recycle__','__web_store__','__web_coupon__') THEN 0 ELSE 1 END,source_line LIMIT ?"
   ].join(" ")).all(userId,cap).map(x=>{
     let details=null;
     if(typeof toDetails==="function"){
@@ -206,7 +205,8 @@ export function listLegacyInventoryItems(db,userId,limit=50,toDetails=null){
     ...(x.original_id==="__web_retail__"?{origin:"retail"}:
       x.original_id==="__web_gift__"?{origin:"gift"}:
       x.original_id==="__web_recycle__"?{origin:"recycle"}:
-      x.original_id==="__web_store__"?{origin:"store"}:{})
+      x.original_id==="__web_store__"?{origin:"store"}:
+      x.original_id==="__web_coupon__"?{origin:"coupon"}:{})
     };
   });
 }

@@ -1477,6 +1477,76 @@ function updateCockroachCountdown() {
   el("event-alert").hidden=false;
   el("event-alert").textContent=active?"查看事件詳情":"查看事件紀錄";
 }
+let pendingCouponRedemption=null;
+async function submitCouponRedemption(reward){
+  if(!reward.canRedeem)return;
+  if(!window.confirm("確定使用 "+reward.requiredCoupons+" 點 Web 事件優惠券，兌換「"+
+    reward.originalName+"」嗎？此獎品會以原版 33 欄入庫；部分獎品效果仍未支援。"))return;
+  if(!pendingCouponRedemption||
+     pendingCouponRedemption.sourceIndex!==reward.sourceIndex||
+     pendingCouponRedemption.originalName!==reward.originalName)
+    pendingCouponRedemption={
+      sourceIndex:reward.sourceIndex,originalName:reward.originalName,
+      requestId:crypto.randomUUID()
+    };
+  try{
+    state=await api("coupon/redeem",pendingCouponRedemption);
+    const result=state.couponResult;
+    pendingCouponRedemption=null;
+    render();
+    notify(result.replayed?
+      "這筆優惠券兌換已處理過，沒有再次扣券或發獎。":
+      "已扣除 "+result.couponCost+" 點 Web 事件券，兌換「"+
+      result.originalName+"」，獎品已加入本人背包。");
+  }catch(error){notify(error.message,true);}
+}
+function renderCouponShop(){
+  const available=state.couponShopAvailable===true;
+  text("coupon-shop-status",available?
+    "目前城鎮有原版優惠券兌換所；使用 Web 事件取得的點數兌換獎品。":
+    "目前城鎮沒有「クーポン」兌換所。可在單機地圖編輯器放置該原版建築，或前往已有兌換所的城鎮。");
+  const target=el("coupon-rewards");
+  target.replaceChildren();
+  for(const reward of state.couponRewards??[]){
+    const tile=document.createElement("div");
+    tile.className="training-tile";
+    const heading=document.createElement("strong");
+    heading.textContent=reward.originalName;
+    const info=document.createElement("p");info.className="small";
+    info.textContent="需要 "+reward.requiredCoupons+" 點｜獎品耐久 "+
+      reward.rewardDurability+" "+reward.rewardDurabilityUnit+
+      "（是獎品本身的耐久，並非優惠券到期時間）";
+    const button=document.createElement("button");
+    button.type="button";
+    button.textContent=reward.canRedeem?"兌換這件獎品":"目前不可兌換";
+    button.disabled=!reward.canRedeem;
+    const reason=document.createElement("p");reason.className="small";
+    reason.textContent=reward.reason??"";
+    reason.hidden=!reward.reason;
+    button.addEventListener("click",()=>submitCouponRedemption(reward));
+    tile.append(heading,info,button,reason);
+    target.append(tile);
+  }
+  const history=el("coupon-redemptions");
+  history.replaceChildren();
+  const entries=state.couponRedemptions??[];
+  if(!entries.length){
+    const empty=document.createElement("p");empty.className="small";
+    empty.textContent="尚無兌換紀錄。";
+    history.append(empty);
+    return;
+  }
+  const list=document.createElement("ol");list.className="health-event-list";
+  for(const entry of entries){
+    const li=document.createElement("li");
+    li.textContent=new Date(entry.createdAt).toLocaleString("zh-TW")+"｜"+
+      entry.originalName+"（扣 "+entry.couponCost+" 點；持有物行號 "+
+      entry.sourceLine+"）";
+    list.append(li);
+  }
+  history.append(list);
+}
+
 function renderDining() {
   if (!state?.character) return;
   const status=state.hunger;
@@ -1497,7 +1567,8 @@ function renderDining() {
     "治療「" + (quote?.disease.name ?? "未知") + "」需支付現金 " +
       money(quote?.price??0) + "。"));
   el("hospital-treat").disabled=!quote || (state.character.money<quote.price);
-  text("event-coupon-count","Web 事件所得優惠券："+(state.couponBalance ?? 0)+" 張（兌換所尚未移植）");
+  text("event-coupon-count","Web 事件所得優惠券："+(state.couponBalance ?? 0)+" 點");
+  renderCouponShop();
   text("event-kpoint","Web K 點數："+(state.character?.kpoint??0));
   updateCockroachCountdown();
   const events=el("health-event-history");
@@ -2560,7 +2631,70 @@ el("wholesale-shop-save").addEventListener("click",async()=>{
   }catch(error){notify(error.message,true);}
 });
 
+// 只更新課程卡片的倒數與狀態；完整課程資格仍由伺服器判斷。
+let trainingTileUpdates=[];
+let trainingExpiryRefreshBusy=false;
+const trainingExpiryRefreshRequested=new Set();
+function formatTrainingWait(ms){
+  const seconds=Math.ceil(Math.max(0,ms)/1000);
+  const hours=Math.floor(seconds/3600);
+  return String(hours).padStart(2,"0")+":"+
+    String(Math.floor((seconds%3600)/60)).padStart(2,"0")+":"+
+    String(seconds%60).padStart(2,"0");
+}
+function schoolWaitUntilTomorrow(now){
+  const character=state?.character;
+  if(!character?.lastSchoolDay)return 0;
+  const zone=state.gameTimeZone||"Asia/Taipei";
+  const at=new Date(now);
+  const today=new Intl.DateTimeFormat("en-CA",{
+    timeZone:zone,year:"numeric",month:"2-digit",day:"2-digit"
+  }).format(at);
+  if(character.lastSchoolDay!==today)return 0;
+  const parts=new Intl.DateTimeFormat("en-GB",{
+    timeZone:zone,hour:"2-digit",minute:"2-digit",second:"2-digit",hourCycle:"h23"
+  }).formatToParts(at);
+  const units=Object.fromEntries(parts.map(part=>[part.type,Number(part.value)]));
+  return ((24-(units.hour||0))*3600-(units.minute||0)*60-(units.second||0))*1000-
+    at.getMilliseconds();
+}
+function trainingWaits(now=browserGameNow()){
+  return {
+    school:Math.max(0,schoolWaitUntilTomorrow(now)),
+    gym:Math.max(0,(state?.character?.gymReadyAt??0)-now),
+    classroom:Math.max(0,(state?.character?.classroomReadyAt??0)-now)
+  };
+}
+function updateTrainingCountdowns(){
+  if(!state?.character||el("game").hidden)return;
+  const waits=trainingWaits();
+  text("school-status",waits.school>0?
+    "今天已完成課程，明日重置剩餘 "+formatTrainingWait(waits.school):"今天還可以上課");
+  text("gym-status",waits.gym>0?
+    "距離下次訓練 "+formatTrainingWait(waits.gym):"現在可以訓練");
+  text("classroom-status",waits.classroom>0?
+    "距離下次教室課程 "+formatTrainingWait(waits.classroom):"目前可以上課");
+  for(const update of trainingTileUpdates)update(waits);
+  // 到期後重新取得後端資格判斷，避免舊快照殘留冷卻錯誤。
+  const character=state.character;
+  const expired=[
+    [state.schoolRemainingToday&&character.lastSchoolDay&&waits.school===0,
+      "school:"+character.lastSchoolDay],
+    [state.gymCooldownMs>0&&character.gymReadyAt&&waits.gym===0,
+      "gym:"+character.gymReadyAt],
+    [state.classroomCooldownMs>0&&character.classroomReadyAt&&waits.classroom===0,
+      "classroom:"+character.classroomReadyAt]
+  ].find(([due,key])=>due&&!trainingExpiryRefreshRequested.has(key));
+  if(expired&&!trainingExpiryRefreshBusy){
+    trainingExpiryRefreshRequested.add(expired[1]);
+    trainingExpiryRefreshBusy=true;
+    api("state").then(fresh=>{state=fresh;render();})
+      .catch(()=>{}) // 若無法連線，既有 30 秒狀態同步仍會重試。
+      .finally(()=>{trainingExpiryRefreshBusy=false;});
+  }
+}
 function renderTraining() {
+  trainingTileUpdates=[];
   const oldChoices=new Map([...el("classroom-lessons").querySelectorAll("select[data-lesson-key]")]
     .map(item=>[item.dataset.lessonKey,item.value]));
   const byType = {
@@ -2569,13 +2703,6 @@ function renderTraining() {
     classroom: el("classroom-lessons")
   };
   Object.values(byType).forEach(target => target.replaceChildren());
-  const statusSchool = state.schoolRemainingToday ? "今天已完成課程" : "今天還可以上課";
-  const wait = state.gymCooldownMs ?? 0;
-  text("school-status", statusSchool);
-  text("gym-status", wait > 0 ? "距離下次訓練約 " + Math.ceil(wait / 60_000) + " 分鐘" : "現在可以訓練");
-  const classroomWait=state.classroomCooldownMs??0;
-  text("classroom-status",classroomWait>0?
-    "距離下次教室課程約 "+Math.ceil(classroomWait/60_000)+" 分鐘":"目前可以上課");
   const cards=state.classroomCreditCards??[];
   for (const lesson of state.trainingLessons || []) {
     const target = byType[lesson.type];
@@ -2604,6 +2731,10 @@ function renderTraining() {
     submit.type = "button";
     const blocked = document.createElement("p");
     blocked.className = "training-blocked";
+    const countdown=document.createElement("p");
+    countdown.className="training-countdown";
+    countdown.setAttribute("role","timer");
+    countdown.setAttribute("aria-live","off");
     let paymentSelect=null;
     if(lesson.type==="classroom"&&cards.length){
       const label=document.createElement("label");
@@ -2628,20 +2759,34 @@ function renderTraining() {
       label.append(paymentSelect);
       tile.append(label);
     }
-    function update(){
+    function update(waits=trainingWaits()){
       const usingCredit=paymentSelect?.value.startsWith("credit:")??false;
-      const reason=lesson.type==="classroom"?
+      const originalReason=lesson.type==="classroom"?
         (usingCredit?lesson.creditReason:lesson.cashReason):lesson.reason;
-      submit.textContent=reason?"目前不可進行":
+      const wait=waits[lesson.type];
+      const cooldownReason=lesson.type==="school"?/^今日已經上過/.test(originalReason??""):
+        lesson.type==="gym"?/^健身房還需要等待/.test(originalReason??""):
+        /^教室還需要等待/.test(originalReason??"");
+      // 冷卻到期但尚未取得新資格快照時，不提前解鎖。
+      const reason=wait>0?(cooldownReason?null:originalReason):
+        cooldownReason?"正在更新課程狀態…":originalReason;
+      const unavailable=wait>0||Boolean(reason);
+      submit.textContent=unavailable?"目前不可進行":
         lesson.type==="school"?"參加課程":"開始訓練";
-      submit.disabled=Boolean(reason);
+      submit.disabled=unavailable;
+      tile.classList.toggle("is-unavailable",unavailable);
+      countdown.textContent=wait>0?
+        (lesson.type==="school"?"今日課程已完成；明日重置剩餘 ":"冷卻剩餘 ")+
+        formatTrainingWait(wait):"";
+      countdown.hidden=wait<=0;
       blocked.textContent=reason??"";
       blocked.hidden=!reason;
     }
-    // 保留原版課程先說明數值、再選付款，最後提交。
+    // 付款方式切換時同步更新灰階與停用原因，不修改後端的付款資格。
     tile.prepend(name,cost,gains);
-    tile.append(blocked,submit);
-    paymentSelect?.addEventListener("change",update);
+    tile.append(countdown,blocked,submit);
+    paymentSelect?.addEventListener("change",()=>update());
+    trainingTileUpdates.push(update);
     update();
     submit.addEventListener("click",()=>{
       const value=paymentSelect?.value??"cash";
@@ -2651,6 +2796,7 @@ function renderTraining() {
     });
     target.append(tile);
   }
+  updateTrainingCountdowns();
 }
 
 function actionTraining(key,payment={payment:"cash"}) {
@@ -3134,6 +3280,7 @@ setInterval(()=>{
   updateInventoryCooldowns(); // 使用伺服器遊戲時間倒數，不依賴瀏覽器本地時鐘。
   if(state?.mode==="solo"&&state?.character&&!soloAtHome)
     renderSoloTime(); // 同步顯示遊戲時鐘，限時事件結束後也恢復快轉按鈕
+  updateTrainingCountdowns(); // 每秒刷新課程灰階和剩餘時間，不重建卡片。
 },1000);
 el("room-close").addEventListener("click", closeRoom);
 el("room-config-form").addEventListener("submit", event => {

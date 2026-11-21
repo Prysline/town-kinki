@@ -40,6 +40,7 @@ const BASE = [
   ["キャラ", "C 聯盟", "chara_battle.gif", "facility"],
   ["競売", "拍賣場", "auction.gif", "facility"],
   ["リサイ", "回收商店", "resai.gif", "facility"],
+  ["クーポン", "優惠券兌換所", "coupon.gif", "facility"],
   ["合成", "合成商店", "gouseiyai.gif", "facility"],
   ["大仏", "大佛", "daibutu.gif", "nature"],
   ["鹿", "鹿", "sika.gif", "nature"],

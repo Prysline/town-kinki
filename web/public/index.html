@@ -631,7 +631,17 @@
           <div class="eyebrow">日常生活</div>
           <h3>最近的隨機事件</h3>
           <details class="explain"><summary>玩法與限制說明</summary><p class="small">沿用原版三分之一機率抽選，再從 44 種事件中挑選，目前已實作 37 種。Web 版每天最多抽選一次。</p></details>
-          <p class="small" id="event-coupon-count">Web 事件所得優惠券：0 張（兌換所尚未移植）</p>
+          <p class="small" id="event-coupon-count">Web 事件所得優惠券：0 點</p>
+          <section class="coupon-shop" aria-label="優惠券兌換所">
+            <h3>優惠券兌換所 · 事件券換獎品</h3>
+            <p id="coupon-shop-status" class="small">依原版獎品目錄與券點數顯示；必須先前往有「クーポン」建築的城鎮。</p>
+            <details class="explain"><summary>原版規則與 Web 兌換限制</summary>
+              <p class="small">原版 coupon.cgi 依獎品序號和名稱核對，再用「クーポン」點數換完整 33 欄的獎品。這裡只可使用「Web 隨機事件所得」的優惠券點數，尚不將舊玩家匯入的原版券併入或扣除。每次交付一件真實物品，不額外扣現金；一般持有物上限 25 格，重複送出不會重複扣券或產生獎品。部分原版獎品雖已入庫，其特殊使用效果仍未移植，請在背包確認支援情況。這個列表本身不代表免費領取。</p>
+            </details>
+            <div id="coupon-rewards" class="coupon-rewards training-grid"></div>
+            <h3>最近兌換紀錄</h3>
+            <div id="coupon-redemptions"></div>
+          </section>
           <p class="small" id="event-kpoint">Web K 點數：0</p>
           <div id="cockroach-challenge" hidden>
             <p id="cockroach-remaining" role="status">蟑螂出現！</p>
