@@ -1,5 +1,6 @@
 import { townCellAction } from "./town-home.js";
 import { shouldShowCompactEnergy } from "./energy-visibility.js";
+import { townTimePhase } from "./time-theme.js";
 const el = id => document.getElementById(id);
 let state = null;
 let requestedLegacyIconUrl = null;
@@ -147,6 +148,13 @@ try { soloAtHome=sessionStorage.getItem("town-solo-at-home")==="1"; } catch {}
 let syncedGameMs=Date.now();
 let syncedAtRealMs=Date.now();
 const browserGameNow=()=>syncedGameMs+Math.max(0,Date.now()-syncedAtRealMs);
+// 使用伺服器的遊戲時間／時區，不使用瀏覽器所在地時區；單機快轉即時生效。
+function updateTownTheme() {
+  if (!state) return;
+  const phase=townTimePhase(browserGameNow(),state.gameTimeZone||"Asia/Taipei");
+  if(document.documentElement.dataset.townTime!==phase)
+    document.documentElement.dataset.townTime=phase;
+}
 let timeAdvanceBusy=false;
 function renderSoloTime() {
   const panel=el("solo-time-panel");
@@ -2578,6 +2586,7 @@ function render() {
   const solo = state.mode === "solo";
   syncedGameMs=state.gameTimeMs??Date.now();
   syncedAtRealMs=Date.now();
+  updateTownTheme();
   text("mode", solo ? "單機模式" : "多人模式");
   const lobby=solo && Boolean(state.character) && soloAtHome;
   el("auth").hidden = solo || Boolean(state.user);
@@ -2956,6 +2965,7 @@ el("solo-time-panel").addEventListener("click",async event=>{
   finally{timeAdvanceBusy=false;renderSoloTime();}
 });
 setInterval(()=>{
+  updateTownTheme(); // 跨越原版時段分界時，即使沒操作也會更新背景。
   if(state?.mode==="solo"&&state?.character&&!soloAtHome)
     renderSoloTime(); // 同步顯示遊戲時鐘，限時事件結束後也恢復快轉按鈕
 },1000);
