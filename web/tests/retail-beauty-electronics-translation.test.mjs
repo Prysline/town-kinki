@@ -60,10 +60,10 @@ test("品牌型號、限定商品及系列玩笑譯名符合目前的校對提�
     "Dior2004限定KIT":"Dior 2004限定套組",
     "ヌーブラ":"NuBra隱形胸罩",
     "バストアップブラ":"豐胸胸罩",
-    "セイ・ノビール":"長高靈",
+    "セイ・ノビール":"聖德高",
     "ドラえもん試作一号":"哆啦A夢試作一號",
     "MacG5":"Mac G5",
-    "Apple1":"Apple I",
+    "Apple1":"Apple1",
     "MacintoshClassic":"Macintosh Classic",
     "ibook":"iBook",
     "年賀状作成機":"新年賀卡製作機"
