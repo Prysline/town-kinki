@@ -16,11 +16,16 @@
     </div>
     <div class="header-right"><span id="mode" class="mode">載入中</span><button id="logout" class="secondary" hidden>登出</button></div>
   </header>
-  <main>
-    <div id="notice" role="status" aria-live="polite" aria-atomic="true" hidden>
-      <span id="notice-message"></span>
-      <button type="button" id="notice-close" class="secondary" aria-label="關閉通知">×</button>
+  <dialog id="result-dialog" class="result-dialog" aria-modal="true" aria-labelledby="result-dialog-title" aria-describedby="result-dialog-message">
+    <div class="result-dialog-content">
+      <h2 id="result-dialog-title">操作結果</h2>
+      <p id="result-dialog-message"></p>
+      <div class="result-dialog-actions">
+        <button type="button" id="result-dialog-close">確認並返回</button>
+      </div>
     </div>
+  </dialog>
+  <main>
     <div id="landing" class="landing-layout" hidden>
       <section class="card town-home" aria-labelledby="preview-heading">
         <div class="eyebrow">城鎮入口 · 原版街區預覽</div>
