@@ -1395,12 +1395,13 @@ function renderLegacyItems(){
         "熱量："+(info?.calories??"未確認")+" kcal｜使用間隔："+(info?.intervalMinutes??"未確認")+" 分鐘",
         "身體能量消耗："+(info?.bodyCost??"未確認")+"｜頭腦能量消耗："+(info?.brainCost??"未確認"),
         "原版備註："+(info?.comment?.trim()||"沒有提供文字備註"),
-        "來源："+(item.readOnly?"原始存檔":"Web 購入或轉換")+
+        "來源："+(item.readOnly?"歷史來源封存":item.origin==="fishing"?"Web 釣魚／餌料店":"Web 購入或轉換")+
           "（記錄位置 "+item.sourceLine+"；原始內容不在此頁修改）",
         "Web 使用狀態："+(actionInfo?"已核對可使用規則，受冷卻與角色條件限制":
           info?.usage==="automatic"?"自動處理":
           info?.usage==="payment"?"支援有效信用卡付款":
-          info?.usage==="gift"?"禮品，請於寄送介面操作":"尚未支援手動使用")
+          info?.usage==="gift"?"禮品，請於寄送介面操作":
+          item.origin==="fishing"?"請至原版釣場釣魚或出售":"尚未支援手動使用")
       ];
       for(const line of lines){
         const p=document.createElement("p");p.className="small";p.textContent=line;details.append(p);
