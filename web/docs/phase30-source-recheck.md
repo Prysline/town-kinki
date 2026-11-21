@@ -19,7 +19,7 @@
 
 | 原記載／來源表象 | 重盤點後的判定 |
 |---|---|
-| `BK-04 稅務／原版全部資產檔匯入` 以 `yakuba.cgi` 為來源且標「缺少來源無法驗證」 | **更正為確實存在但未移植的徵稅行為**：來源是 `town_maker.cgi::login_view`；完整資產檔匯入是工程相依，不是另一個原版稅務 CGI 功能 |
+| `BK-04 稅務／原版全資產欄位對照` 以 `yakuba.cgi` 為來源且標「缺少來源無法驗證」 | **更正為確實存在但未移植的徵稅行為**：來源是 `town_maker.cgi::login_view`；新 Web 角色的全部資產統計才是需要補的玩法相依；舊玩家資產檔匯入已排除 |
 | `IT-04` 兌換驗收寫「跨日／過期」 | [`coupon.cgi::coupon_do` L120–170](../../coupon.cgi#L120) 用 `ギフト/クーポン` 的持有耐久作點數、依 [`dat_dir/coupon.cgi`](../../dat_dir/coupon.cgi) 每筆 `クーポン交換品:N` 的 N 扣券並添加獎品；未看到優惠券本身「跨日歸零／到期失效」的分支，**不得把到期當成原版既有規則**。要驗證兌換點數、贈品 33 欄、容量、重送、原子回滾與新 Web 角色事件券的唯一可花餘額 |
 | `SC-03` 把 `atakka.cgi` 和 `battle.cgi` 並列為戰鬥程式 | 本 fork 的 [`atakka.cgi`](../../atakka.cgi) 是 0 bytes；[`town_lib.pl::atakka` L43–86](../../town_lib.pl#L43) 將它當作封鎖／計次資料檔讀寫。**不是可執行的戰鬥 CGI**；真正的 B 聯賽執行來源是 [`battle.cgi::bbin/bb`](../../battle.cgi#L22) |
 | 遊樂中心老虎機、`kuzi.cgi`、`人生` | [`gamerand.cgi` L101](../../gamerand.cgi#L101) 指 `slot.php`（此 fork 缺檔），L167–177 的 `kuzi.cgi` 表單被註解；[`unit.pl` L185](../../unit.pl#L185) 的 `./sugoroku/zinsei.cgi` 缺檔。**不列為已確認可進入的功能**，須有部署或真正分流證據才可升級 |
