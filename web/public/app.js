@@ -1419,6 +1419,8 @@ function describeOriginalRetailEffect(code){
     "ダイエット":"減少體重","身長":"增加身高","縮み":"減少身高"
   };
   if(code==="無")return "原版標記「無」；仍須查看下方能力增減值";
+  if(code==="万能,")
+    return "原版沒有填寫治療幅度；不會推定治病加成，一般能力與熱量需依原版欄位及 Web 支援狀態核對";
   if(code==="ステータス")
     return "依原版能力增減和能量消耗欄位生效；原版沒有額外特殊分支";
   if(code==="効果")
@@ -1460,7 +1462,9 @@ function retailEffectDetails(item){
     "能力增減"+(info.randomizedEffects?"（每項獨立隨機）":"")+"："+
       (bonuses.length?bonuses.join("、"):"原版欄位沒有非零能力增減"),
     "特殊欄位："+describeOriginalRetailEffect(info.effectCode??"無"),
-    "熱量："+(info.calories??0)+" kcal｜使用間隔："+(info.intervalMinutes??0)+" 分鐘",
+    "熱量："+(info.calories??0)+" kcal"+
+      ((info.calories??0)<0?"（依原版計算，使用後體重減少）":"")+
+      "｜使用間隔："+(info.intervalMinutes??0)+" 分鐘",
     "身體能量消耗："+(info.bodyCost??0)+"（負數表示恢復）"+
       "｜頭腦能量消耗："+(info.brainCost??0)+"（負數表示恢復）",
     "原版備註："+(info.comment?.trim()||"沒有提供文字備註"),

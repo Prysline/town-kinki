@@ -3410,3 +3410,75 @@ test("HTTP：百貨真實買入原版ランダム品後可使用，隨機增益�
     assert.equal(replay.result.legacyItemActions.find(x=>x.sourceLine===line)?.remaining,9);
   }finally{await srv.stop();}
 });
+
+test("HTTP：百貨購入原版琵琶湖の水和無駄知識書籍後，能力、負熱量與日制使用真正生效",async()=>{
+  const catalog=parseLegacyRetailCatalog(
+    decodeLegacyText(readFileSync(new URL("../../dat_dir/syouhin.cgi",import.meta.url)))
+  );
+  const water=catalog.find(x=>x.category==="関西名産店"&&x.name==="琵琶湖の水");
+  const book=catalog.find(x=>x.category==="書籍"&&x.name==="無駄知識を覚える本");
+  assert.ok(water&&book);
+  const srv=await start("solo");
+  try{
+    assert.equal((await api(srv.url,"character",{
+      name:"負熱量與空万能實際驗收",gender:"other",stats:defaultStats()
+    })).status,200);
+    assert.equal((await api(srv.url,"map/tile",{
+      row:0,column:0,symbol:"デパ"
+    })).status,200);
+    const db=new DatabaseSync(join(srv.directory,"solo.sqlite"));
+    try{
+      for(const item of [water,book]){
+        if(db.prepare("SELECT 1 FROM retail_stock WHERE shop='depart1' AND sku=?").get(item.sku))continue;
+        const free=db.prepare([
+          "SELECT position FROM retail_stock WHERE shop='depart1'",
+          "AND sku NOT IN (?,?) ORDER BY position LIMIT 1"
+        ].join(" ")).get(water.sku,book.sku);
+        assert.ok(free,"需有可讓原版商品上架的測試貨架");
+        db.prepare("UPDATE retail_stock SET sku=?,remaining=? WHERE shop='depart1' AND position=?")
+          .run(item.sku,item.originalStock,free.position);
+      }
+      db.prepare("UPDATE characters SET money=1000000 WHERE name='負熱量與空万能實際驗收'").run();
+    }finally{db.close();}
+    const initial=(await api(srv.url,"state")).result;
+    for(const item of [water,book]){
+      const offer=initial.retailGoods.find(x=>x.sku===item.sku);
+      assert.equal(offer?.details?.usage,"supported",item.name);
+    }
+    const purchases=[];
+    for(const [item,id] of [[water,"blank_water_buy_001"],[book,"blank_book_buy_001"]]){
+      const bought=await api(srv.url,"retail/buy",{
+        shop:"depart1",sku:item.sku,quantity:1,requestId:id
+      });
+      assert.equal(bought.status,200,item.name);
+      purchases.push(bought.result.retailResult.sourceLine);
+    }
+    const owned=(await api(srv.url,"state")).result;
+    const weightBefore=owned.character.weight;
+    const healthBefore=owned.character.healthIndex;
+    const waterUse=await api(srv.url,"inventory/legacy/use",{
+      sourceLine:purchases[0],requestId:"blank_water_use_001"
+    });
+    assert.equal(waterUse.status,200);
+    assert.equal(waterUse.result.itemUseResult.changes.healthIndex,0);
+    assert.equal(waterUse.result.itemUseResult.changes.weight,-0.1);
+    assert.equal(waterUse.result.character.weight,Math.round((weightBefore-0.1)*100)/100);
+    assert.equal(waterUse.result.character.healthIndex,healthBefore);
+    assert.equal(waterUse.result.itemUseResult.changes.stats.looks,10);
+    assert.equal(waterUse.result.legacyItemActions.find(x=>x.sourceLine===purchases[0]).remaining,4);
+    const bookUse=await api(srv.url,"inventory/legacy/use",{
+      sourceLine:purchases[1],requestId:"blank_book_use_001"
+    });
+    assert.equal(bookUse.status,200);
+    assert.equal(bookUse.result.itemUseResult.changes.healthIndex,0);
+    assert.equal(bookUse.result.itemUseResult.changes.stats.kokugo,3);
+    assert.equal(bookUse.result.itemUseResult.changes.stats.love,5);
+    assert.equal(bookUse.result.legacyItemActions.find(x=>x.sourceLine===purchases[1]).remaining,5);
+    const replay=await api(srv.url,"inventory/legacy/use",{
+      sourceLine:purchases[1],requestId:"blank_book_use_001"
+    });
+    assert.equal(replay.status,200);
+    assert.equal(replay.result.itemUseResult.replayed,true);
+    assert.equal(replay.result.legacyItemActions.find(x=>x.sourceLine===purchases[1]).remaining,5);
+  }finally{await srv.stop();}
+});
