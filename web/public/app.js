@@ -380,6 +380,7 @@ function renderTownMap() {
   }
   const editor = el("map-editor");
   editor.hidden = !map.editable;
+  el("solo-starter-town").hidden=!(state.mode==="solo"&&!map.configured);
   const palette = el("map-palette");
   const previousSymbol = palette.value;
   palette.replaceChildren();
@@ -395,7 +396,9 @@ function renderTownMap() {
     ? "這個城鎮目前沒有原始街區資料，顯示未配置的空白地圖。"
     : map.source === "legacy" || map.source === "legacy-import"
       ? "已讀取原版街區配置，未支援的設施將保留原始代碼。"
-      : "目前使用 Web 版儲存的街區配置。";
+      : map.source === "web-solo-starter"
+        ? "這是玩家自行建立的 Web 單機試玩配置，不是原版歷史街區。"
+        : "目前使用 Web 版儲存的街區配置。";
   text("map-source", sourceText);
 
   board.style.backgroundImage = "url('/legacy-assets/" + map.background + "')";
@@ -3082,6 +3085,11 @@ el("mail-compose").addEventListener("submit",event=>{
 el("facility-shortcuts").addEventListener("click",event=>{
   const button=event.target.closest("button[data-facility]");
   if(button)goToFacility(button.dataset.facility);
+});
+el("solo-starter-create").addEventListener("click",()=>{
+  if(state?.mode!=="solo"||!state?.character||state.map?.configured)return;
+  if(!window.confirm("將在目前城鎮建立一張 Web 試玩街區：包含原版已確認的商店、食堂、工作入口、教室及住宅空地。這不是遺失的原版地圖；已有配置的城鎮無法套用。要繼續嗎？"))return;
+  action("solo/map/starter",{},"已建立單機試玩街區，可點選百貨、住宅用空地與其他設施開始遊玩。");
 });
 el("map-edit-toggle").addEventListener("change", () => {
   el("map-palette").disabled = !el("map-edit-toggle").checked;

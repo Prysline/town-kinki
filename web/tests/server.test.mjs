@@ -4068,3 +4068,147 @@ test("第49階段多人 HTTP：獨立信件＋禮品共用信箱，權限、刪�
     assert.deepEqual((await api(srv.url,"state",undefined,c.cookie)).result.mailbox,[]);
   }finally{await srv.stop();}
 });
+
+
+test("第50階段單機首次遊玩：空白街區一鍵配置後可工作、百貨購物、建屋、重啟保留資料",async()=>{
+  let srv=await start("solo");
+  const directory=srv.directory;
+  try{
+    assert.equal((await api(srv.url,"solo/map/starter",{})).status,409,
+      "必須先建立自己的單機角色");
+    const created=await api(srv.url,"character",{
+      name:"單機街區初次探索者",gender:"other",stats:defaultStats()
+    });
+    assert.equal(created.status,200);
+    assert.equal(created.result.map.configured,false);
+    assert.equal(created.result.retailAvailable.length,0);
+    assert.equal(created.result.equipmentAvailable,false);
+    assert.equal(created.result.vendingAvailable,false);
+
+    const first=await api(srv.url,"solo/map/starter",{townId:3});
+    assert.equal(first.status,200);
+    assert.deepEqual(first.result.mapStarterResult,{
+      townId:0,placed:16,source:"web-solo-starter"
+    },"初始化只能配置伺服器上的目前城鎮，不接受客戶端冒填城鎮");
+    assert.equal(first.result.map.source,"web-solo-starter");
+    assert.equal(first.result.map.configured,true);
+    assert.equal(first.result.map.cells.length,192);
+    assert.equal(first.result.map.cells.filter(x=>x.raw).length,16);
+    const expected=[
+      [0,0,"駅"],[0,1,"職安"],[0,2,"銀行"],[0,3,"病院"],
+      [1,0,"食堂"],[1,1,"食堂２"],[1,2,"デパ"],[1,3,"デパ2"],
+      [2,0,"自販機"],[2,1,"装備屋"],[2,2,"教室"],[2,3,"建築"],
+      [3,0,"空地"],[3,1,"空地2"],[3,2,"リサイ"],[3,3,"空地3"]
+    ];
+    for(const [row,column,symbol] of expected)
+      assert.equal(first.result.map.cells[row*16+column].key,symbol);
+    assert.deepEqual(first.result.retailAvailable,["depart1","depart2"]);
+    assert.equal(first.result.equipmentAvailable,true);
+    assert.equal(first.result.vendingAvailable,true);
+    assert.equal(first.result.recycleAvailable,true);
+    assert.ok(first.result.map.palette.length>16);
+    assert.equal(first.result.character.money,created.result.character.money,
+      "配置建築不可任意發錢或扣款");
+
+    const worked=await api(srv.url,"work",{});
+    assert.equal(worked.status,200);
+    assert.equal(worked.result.result.paid,1000);
+    const deposited=await api(srv.url,"bank",{action:"deposit",amount:500});
+    assert.equal(deposited.status,200);
+    assert.equal(deposited.result.character.bank,500);
+
+    const goods=deposited.result.retailGoods.find(x=>x.stock>0&&
+      x.price>0&&x.price<=deposited.result.character.money);
+    assert.ok(goods,"試玩街區已可實際購買一件原版百貨商品");
+    const purchase=await api(srv.url,"retail/buy",{
+      shop:"depart1",sku:goods.sku,quantity:1,requestId:"phase50_solo_first_purchase"
+    });
+    assert.equal(purchase.status,200);
+    assert.equal(purchase.result.retailResult.paid,goods.price);
+    assert.equal(purchase.result.legacyInventory.some(x=>x.name===goods.name),true);
+    const timeBefore=(await api(srv.url,"state")).result.gameTimeOffsetMs;
+
+    const db=new DatabaseSync(join(directory,"solo.sqlite"));
+    try{
+      // 僅測試住宅真正扣款／實際地圖占用；來源的建造費不靠試玩配置補貼。
+      db.prepare("UPDATE characters SET money=100000000 WHERE name=?")
+        .run("單機街區初次探索者");
+    }finally{db.close();}
+    const built=await api(srv.url,"house/build",{
+      row:3,column:0,image:"house/kamakura.gif",interiorRank:3,payment:"cash"
+    });
+    assert.equal(built.status,200);
+    assert.equal(built.result.houses.length,1);
+    assert.equal(built.result.houses[0].location,"D1");
+    assert.equal(built.result.map.cells[3*16].category,"house");
+    assert.ok(built.result.houseResult.quote.total>0);
+    assert.equal(built.result.character.money,100000000-built.result.houseResult.quote.total);
+    assert.equal((await api(srv.url,"solo/map/starter",{})).status,400,
+      "已配置或已建屋時再次初始化不能毀掉玩家進度");
+    assert.equal((await api(srv.url,"map/tile",{
+      row:3,column:0,symbol:"銀行"
+    })).status,400,"地圖編輯器亦不得覆蓋已持有住宅");
+    const prior=await api(srv.url,"state");
+    assert.equal(prior.result.gameTimeOffsetMs,timeBefore);
+    const before=prior.result;
+    assert.equal(before.retailPurchases.length,1);
+    await srv.stop({preserveData:true});
+    srv=await start("solo",undefined,directory);
+    const after=(await api(srv.url,"state")).result;
+    assert.equal(after.map.configured,true);
+    assert.equal(after.map.cells[0].key,"駅");
+    assert.equal(after.map.cells[1*16+2].key,"デパ");
+    assert.equal(after.map.cells[3*16].category,"house");
+    assert.equal(after.houses.length,1);
+    assert.equal(after.houses[0].id,before.houses[0].id);
+    assert.equal(after.character.money,before.character.money);
+    assert.equal(after.character.bank,before.character.bank);
+    assert.equal(after.character.jobWorkCount,before.character.jobWorkCount);
+    assert.equal(after.gameTimeOffsetMs,before.gameTimeOffsetMs);
+    assert.equal(after.retailPurchases.length,1);
+    assert.equal(after.legacyInventory.some(x=>x.name===goods.name),true);
+    assert.equal((await api(srv.url,"solo/map/starter",{})).status,400);
+  }finally{await srv.stop();}
+});
+
+test("第50階段單機試玩街區：原版匯入地圖不能覆蓋，多人模式絕不允許建立",async()=>{
+  const seeded=directory=>{
+    const db=new DatabaseSync(join(directory,"solo.sqlite"));
+    try{
+      db.exec([
+        "CREATE TABLE town_maps(town_id INTEGER PRIMARY KEY,",
+        "original_name TEXT NOT NULL DEFAULT '',",
+        "original_record TEXT NOT NULL DEFAULT '',",
+        "source TEXT NOT NULL,tiles_json TEXT NOT NULL,",
+        "updated_at INTEGER NOT NULL);"
+      ].join(" "));
+      const tiles=Array(192).fill("");
+      tiles[0]="銀行";
+      db.prepare("INSERT INTO town_maps(town_id,original_name,source,tiles_json,updated_at) VALUES(?,?,?,?,?)")
+        .run(0,"原始街區","legacy-import",JSON.stringify(tiles),Date.now());
+    }finally{db.close();}
+  };
+  const solo=await start("solo",seeded);
+  try{
+    assert.equal((await api(solo.url,"character",{
+      name:"保護匯入街區",gender:"other",stats:defaultStats()
+    })).status,200);
+    assert.equal((await api(solo.url,"solo/map/starter",{})).status,400);
+    const unchanged=(await api(solo.url,"state")).result;
+    assert.equal(unchanged.map.source,"legacy-import");
+    assert.equal(unchanged.map.cells[0].raw,"銀行");
+    assert.equal(unchanged.map.cells.filter(x=>x.raw).length,1);
+  }finally{await solo.stop();}
+  const multi=await start("multi");
+  try{
+    const registered=await api(multi.url,"register",{
+      username:"phase50SoloOnly",password:"phase50-solo-only-pass-123"
+    });
+    assert.equal(registered.status,200);
+    assert.equal((await api(multi.url,"character",{
+      name:"多人無權建立試玩城鎮",gender:"other",stats:defaultStats()
+    },registered.cookie)).status,200);
+    assert.equal((await api(multi.url,"solo/map/starter",{},registered.cookie)).status,403);
+    assert.equal((await api(multi.url,"state",undefined,registered.cookie)).result.map.configured,false);
+  }finally{await multi.stop();}
+});
