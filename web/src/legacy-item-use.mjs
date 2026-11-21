@@ -32,6 +32,36 @@ const ENERGY_RECOVERY_ITEMS=new Map([
   ["デザート\t爽快パフェ","0,-500"]
 ]);
 const COMPOUND_SUFFIXES=new Set(["食料品","ファ"]);
+// 原始商品表的三款例外：兩款「万能,」不含治病數值，另有普通能力／熱量效果；
+// 「ぼったくり」的 -300 kcal 依 basic.cgi::item_do 原始公式減少 0.3 kg。
+// 僅比對不可變來源欄位；耐久、最後使用、購入時間及單價可隨合法交易變更。
+const VERIFIED_EDGE_ITEMS=new Map([
+  ["関西名産店\t琵琶湖の水",{
+    effect:"万能,",bonuses:[0,0,0,0,0,0,0,10,10,10,0,0,0,0,0,0,0],
+    price:"10000",unit:"回",interval:"1",stock:"5",calories:"-100",
+    body:"0",brain:"0",comment:"冷たくておいしいです。",sale:""
+  }],
+  ["書籍\t無駄知識を覚える本",{
+    effect:"万能,",bonuses:[3,3,3,3,3,3,3,1,1,1,1,1,1,1,5,5,5],
+    price:"1050",unit:"日",interval:"30",stock:"5",calories:"",
+    body:"1",brain:"10",comment:"この本で無駄知識を覚えよう",sale:""
+  }],
+  ["アルコール\tぼったくり",{
+    effect:"無",bonuses:Array(17).fill(1),
+    price:"15000",unit:"回",interval:"3",stock:"15",calories:"-300",
+    body:"10",brain:"10",comment:"※専門店限定商品。",sale:"0"
+  }]
+]);
+function isVerifiedEdgeItem(row,raw){
+  const item=VERIFIED_EDGE_ITEMS.get(row.category+"\t"+row.original_name);
+  return Boolean(item&&
+    raw[9]===item.effect&&raw[17]===item.price&&raw[22]===item.unit&&
+    raw[23]===item.interval&&raw[24]===item.stock&&
+    raw[25]===item.calories&&raw[27]===item.body&&
+    raw[28]===item.brain&&raw[29]===item.comment&&
+    raw[32]===item.sale&&
+    STATS_INDEX.every((index,i)=>raw[index]===String(item.bonuses[i])));
+}
 const ID_RE=/^[a-zA-Z0-9_-]{8,80}$/;
 // basic.cgi::item_do 對「ランダム品」的 17 項原版能力上限各自抽 0～10（含端點）。
 // 只接受 syouhin.cgi 真實「薬」商品的固定效果欄；已購物品的耐久、購買日及單價可改動。
@@ -74,6 +104,8 @@ function parseArchivedItem(row){
   // basic.cgi::item_do 對「効果」與「ステータス」沒有獨立特殊分支：
   // 前者只有原版 4 款明確記載 -500 能量恢復的飲食品可安全放行。
   const itemKey=row.category+"\t"+row.original_name;
+  const originalEdge=isVerifiedEdgeItem(row,raw);
+  const emptyMagnitude=originalEdge&&raw[9]==="万能,";
   const recovered=ENERGY_RECOVERY_ITEMS.get(itemKey);
   const originalEnergyRecovery=effect==="効果"&&parts.length===1&&
     recovered===raw[27]+","+raw[28];
@@ -81,11 +113,11 @@ function parseArchivedItem(row){
     STATUS_ITEMS.has(itemKey);
   if(!SPECIAL_TYPES.has(effect)&&!originalEnergyRecovery&&!originalStatus)
     return null;
-  if(effect!=="無"&&!originalEnergyRecovery&&!originalStatus&&
+  if(effect!=="無"&&!originalEnergyRecovery&&!originalStatus&&!emptyMagnitude&&
      (parts.length!==2&&!compound||!/^\d+$/.test(parts[1])))return null;
   if(["無","効果","ステータス"].includes(effect)&&parts.length!==1)
     return null;
-  const magnitude=effect==="無"||originalEnergyRecovery||originalStatus?0:
+  const magnitude=effect==="無"||originalEnergyRecovery||originalStatus||emptyMagnitude?0:
     nonnegative(parts[1],"特殊效果",100000);
   let purchasedAt=null,expiresAt=null;
   if(unit==="日"){
@@ -105,7 +137,9 @@ function parseArchivedItem(row){
   const intervalMinutes=nonnegative(raw[23],"使用間隔",1000000);
   const bodyCost= signedNumber(raw[27]||"0","身體能量消耗");
   const brainCost=signedNumber(raw[28]||"0","頭腦能量消耗");
-  const calories=nonnegative(raw[25]||"0","熱量",1000000);
+  // 原版負熱量會使體重減少；對未核實的負熱量資料維持拒絕。
+  const calories=signedNumber(raw[25]||"0","熱量");
+  if(calories<0&&!originalEdge)return null;
   const lastUsedSec=nonnegative(raw[26]||"0","最後使用時間",Number.MAX_SAFE_INTEGER);
   const originalRemaining=nonnegative(String(row.durability),"原始耐久",1000000);
   const food=FOOD_TYPES.has(row.category);
