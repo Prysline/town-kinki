@@ -318,6 +318,7 @@
         <button id="facility-tab-hospital" type="button" role="tab" data-pane="hospital" aria-controls="facility-pane-hospital" aria-selected="false" tabindex="-1">醫院</button>
         <button id="facility-tab-events" type="button" role="tab" data-pane="events" aria-controls="facility-pane-events" aria-selected="false" tabindex="-1">事件</button>
         <button id="facility-tab-mail" type="button" role="tab" data-pane="mail" aria-controls="facility-pane-mail" aria-selected="false" tabindex="-1">郵件</button>
+        <button id="facility-tab-games" type="button" role="tab" data-pane="games" aria-controls="facility-pane-games" aria-selected="false" tabindex="-1">遊樂</button>
 
         </div>
       <div id="facility-pane-house" class="facility-pane" role="tabpanel" aria-labelledby="facility-tab-house" tabindex="0" hidden>
@@ -544,6 +545,35 @@
           <div id="wholesale-inventory" class="training-grid"></div>
           <h3>近期進貨及退貨紀錄</h3>
           <div id="wholesale-history"></div>
+        </section>
+      </div>
+      <div id="facility-pane-games" class="facility-pane" role="tabpanel" aria-labelledby="facility-tab-games" tabindex="0" hidden>
+        <section class="card" id="arcade-dice-panel">
+          <div class="heading">
+            <div><div class="eyebrow">單機優先 · 原版遊樂中心</div><h2>雙骰猜奇偶</h2></div>
+            <span class="muted">gamerand.cgi／saikoro.cgi</span>
+          </div>
+          <p id="arcade-dice-status" class="small" role="status"></p>
+          <details class="explain">
+            <summary>原始骰子遊戲規則與 Web 安全差異</summary>
+            <p class="small">原版每次擲兩顆六面骰：先從 0～35 等機率抽一個整數，再推算兩顆骰面。猜總和是奇數或偶數；猜中增加所選下注額，猜錯扣除同額現金。可下注 10,000、50,000、100,000、500,000 或 1,000,000 元，同一玩家每局間隔 5 分鐘。Web 版需在所在城鎮有「ゲーセン」建築、下注現金必須足夠；原版可在現金不足時下注，但 Web 為保護現金存檔而拒絕。結果以伺服器擲骰、本人 SQLite 原子交易結算，重複請求不會重複輸贏。只顯示本人的最近 20 局；其餘卡牌、樂透、福引和寶箱尚未移植。</p>
+          </details>
+          <div class="filters retail-filters">
+            <label for="arcade-dice-guess">猜測總和
+              <select id="arcade-dice-guess">
+                <option value="even">偶數</option>
+                <option value="odd">奇數</option>
+              </select>
+            </label>
+            <label for="arcade-dice-stake">下注現金
+              <select id="arcade-dice-stake"></select>
+            </label>
+          </div>
+          <p id="arcade-dice-quote" class="small" role="status"></p>
+          <button type="button" id="arcade-dice-submit" disabled>確認下注並擲骰</button>
+          <p id="arcade-dice-result" class="small" aria-live="polite"></p>
+          <h3>本人最近 20 局紀錄</h3>
+          <div id="arcade-dice-history"></div>
         </section>
       </div>
       <div id="facility-pane-training" class="facility-pane" role="tabpanel" aria-labelledby="facility-tab-training" tabindex="0" hidden>
