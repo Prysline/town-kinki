@@ -289,7 +289,7 @@ test("第63階段單純迷路無事故：原版只顯示迷路，不會真正使
     assert.equal(journey.accident,undefined);
     const row=db.prepare("SELECT lost,rerouted,to_town,requested_to_town FROM arcade_road_trips WHERE id=?")
       .get(journey.id);
-    assert.deepEqual(row,{lost:1,rerouted:0,to_town:1,requested_to_town:1});
+    assert.deepEqual({...row},{lost:1,rerouted:0,to_town:1,requested_to_town:1});
     const after=arrive(db,{tripId:journey.id,now:NOW+10000});
     assert.equal(after.lost,true);
     assert.equal(after.rerouted,false);
@@ -311,7 +311,7 @@ test("第63階段持有輪滑車即使不選它，出發城不是3時迷路必�
     assert.equal(journey.accident,undefined);
     const stored=db.prepare("SELECT lost,rerouted,to_town,requested_to_town,accident FROM arcade_road_trips WHERE id=?")
       .get(journey.id);
-    assert.deepEqual(stored,{lost:1,rerouted:1,to_town:2,requested_to_town:1,accident:1});
+    assert.deepEqual({...stored},{lost:1,rerouted:1,to_town:2,requested_to_town:1,accident:1});
     assert.equal(roadOverview(db,1,rules,NOW).pending.toTownId,1);
     const replay=start(db,{vehicleSourceLine:car,toTownId:1,
       requestId:"phase63_roll_and_crash",now:NOW+1000,rolls:[9],rerouteTown:3});
@@ -417,7 +417,7 @@ test("第63階段從第62階段舊SQLite無損升級：既有待抵達行程和�
     initRoadTravelTables(db);
     initRoadTravelTables(db);
     assert.equal(db.prepare("SELECT COUNT(*) n FROM arcade_road_trips").get().n,2);
-    assert.deepEqual(db.prepare("SELECT requested_to_town,lost,rerouted FROM arcade_road_trips WHERE user_id=1").get(),
+    assert.deepEqual({...db.prepare("SELECT requested_to_town,lost,rerouted FROM arcade_road_trips WHERE user_id=1").get()},
       {requested_to_town:1,lost:0,rerouted:0});
     const old=roadOverview(db,1,rules,NOW);
     assert.equal(old.pending.id,1);
