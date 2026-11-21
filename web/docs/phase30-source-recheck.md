@@ -1,6 +1,8 @@
 # 第 30 階段 CGI 來源重盤點（2026-11-20）
 
-> 依據：[`feature/web-dual-mode-phase1`](https://github.com/Prysline/town-kinki/tree/feature/web-dual-mode-phase1) 在 PR #31 合併後的 `f10726c`；逐項讀取**同一版本的**原始 Perl/CGI、`unit.pl`、Web 程式及原有工作清單。這是來源／程式層級盤點；**尚未取得非空的真實舊玩家資料、尚未實測原版 CGI 伺服器或 Web 瀏覽器**。程式存在與入口存在，仍不能保證舊站部署後能正常遊玩。
+> **現行決策**：原版舊玩家存檔匯入、兼容及真實舊玩家資料驗收已**完全排除專案範圍**。本文件的原版 CGI 與資料格式引用只用來還原玩法；新 Web SQLite 存檔持續性與瀏覽器驗收仍必要。詳 [專案範圍](project-scope-no-legacy-player-import.md)。
+
+> 依據：[`feature/web-dual-mode-phase1`](https://github.com/Prysline/town-kinki/tree/feature/web-dual-mode-phase1) 在 PR #31 合併後的 `f10726c`；逐項讀取**同一版本的**原始 Perl/CGI、`unit.pl`、Web 程式及原有工作清單。這是來源／程式層級盤點；**原版舊玩家資料已排除專案範圍，尚未實測原版 CGI 伺服器或 Web 瀏覽器**。程式存在與入口存在，仍不能保證舊站部署後能正常遊玩。
 
 ## 一、重新確認確實存在而 Web 尚未移植的路徑
 
@@ -18,12 +20,12 @@
 | 原記載／來源表象 | 重盤點後的判定 |
 |---|---|
 | `BK-04 稅務／原版全部資產檔匯入` 以 `yakuba.cgi` 為來源且標「缺少來源無法驗證」 | **更正為確實存在但未移植的徵稅行為**：來源是 `town_maker.cgi::login_view`；完整資產檔匯入是工程相依，不是另一個原版稅務 CGI 功能 |
-| `IT-04` 兌換驗收寫「跨日／過期」 | [`coupon.cgi::coupon_do` L120–170](../../coupon.cgi#L120) 用 `ギフト/クーポン` 的持有耐久作點數、依 [`dat_dir/coupon.cgi`](../../dat_dir/coupon.cgi) 每筆 `クーポン交換品:N` 的 N 扣券並添加獎品；未看到優惠券本身「跨日歸零／到期失效」的分支，**不得把到期當成原版既有規則**。要驗證兌換點數、贈品 33 欄、容量、重送、原子回滾與匯入券／Web 事件券是否同一餘額 |
+| `IT-04` 兌換驗收寫「跨日／過期」 | [`coupon.cgi::coupon_do` L120–170](../../coupon.cgi#L120) 用 `ギフト/クーポン` 的持有耐久作點數、依 [`dat_dir/coupon.cgi`](../../dat_dir/coupon.cgi) 每筆 `クーポン交換品:N` 的 N 扣券並添加獎品；未看到優惠券本身「跨日歸零／到期失效」的分支，**不得把到期當成原版既有規則**。要驗證兌換點數、贈品 33 欄、容量、重送、原子回滾與新 Web 角色事件券的唯一可花餘額 |
 | `SC-03` 把 `atakka.cgi` 和 `battle.cgi` 並列為戰鬥程式 | 本 fork 的 [`atakka.cgi`](../../atakka.cgi) 是 0 bytes；[`town_lib.pl::atakka` L43–86](../../town_lib.pl#L43) 將它當作封鎖／計次資料檔讀寫。**不是可執行的戰鬥 CGI**；真正的 B 聯賽執行來源是 [`battle.cgi::bbin/bb`](../../battle.cgi#L22) |
 | 遊樂中心老虎機、`kuzi.cgi`、`人生` | [`gamerand.cgi` L101](../../gamerand.cgi#L101) 指 `slot.php`（此 fork 缺檔），L167–177 的 `kuzi.cgi` 表單被註解；[`unit.pl` L185](../../unit.pl#L185) 的 `./sugoroku/zinsei.cgi` 缺檔。**不列為已確認可進入的功能**，須有部署或真正分流證據才可升級 |
 | 學校／健身房的時間與特殊效果、BMI 連動換圖 | 此 fork 只有 `dat_dir/school.cgi`／`dat_dir/gym.cgi` 課程表，根目錄沒有同名執行 CGI。未找到「`効果=美` 直接換圖／減重」的執行分支；不因數值、素材、提示文字就建功能 |
 | `AC-03` 速率限制、`UI-04` 監控／備份與單機快轉 | 這些是 **Web 營運安全／體驗工程工作**，不是「原 CGI 原本具有的遊戲玩法」；保留安全待辦，但不可統計成原版未移植功能 |
-| 所有原版 `member/<ID>/*.cgi`、住宅／股票／問卷 log、四城地圖實際內容 | 本 fork 缺少真正的會員歷史檔，數種 `log_dir` 樣本是 0 bytes；只能核對執行程式與資料格式，不可推定舊玩家相容性已驗收 |
+| 所有原版 `member/<ID>/*.cgi`、住宅／股票／問卷 log、四城地圖實際內容 | 本 fork 缺少真正的會員歷史檔，數種 `log_dir` 樣本是 0 bytes；只核對執行程式、原版遊戲規則與商品資料格式；**舊玩家轉檔與相容性完全不在範圍** |
 
 ## 三、仍需逐模式盤點的原版子入口
 
