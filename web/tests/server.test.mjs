@@ -4088,12 +4088,12 @@ test("第50階段單機首次遊玩：空白街區一鍵配置後可工作、百
     const first=await api(srv.url,"solo/map/starter",{townId:3});
     assert.equal(first.status,200);
     assert.deepEqual(first.result.mapStarterResult,{
-      townId:0,placed:20,source:"web-solo-starter"
+      townId:0,placed:21,source:"web-solo-starter"
     },"初始化只能配置伺服器上的目前城鎮，不接受客戶端冒填城鎮");
     assert.equal(first.result.map.source,"web-solo-starter");
     assert.equal(first.result.map.configured,true);
     assert.equal(first.result.map.cells.length,192);
-    assert.equal(first.result.map.cells.filter(x=>x.raw).length,20);
+    assert.equal(first.result.map.cells.filter(x=>x.raw).length,21);
     const expected=[
       [0,0,"駅"],[0,1,"職安"],[0,2,"銀行"],[0,3,"病院"],
       [1,0,"食堂"],[1,1,"食堂２"],[1,2,"デパ"],[1,3,"デパ2"],
@@ -4365,7 +4365,7 @@ test("第53階段單機 HTTP：買真正原版魚餌→釣魚耗餌及100秒冷�
     assert.deepEqual(created.result.fishing.baitGoods,[]);
     const starter=await api(srv.url,"solo/map/starter",{});
     assert.equal(starter.status,200);
-    assert.equal(starter.result.mapStarterResult.placed,20);
+    assert.equal(starter.result.mapStarterResult.placed,21);
     assert.equal(starter.result.map.cells[3*16+5].key,"販売1");
     assert.equal(starter.result.map.cells[3*16+6].key,"釣り");
     assert.equal(starter.result.fishing.fishingAvailable,true);
@@ -4475,7 +4475,7 @@ test("第54階段單機 HTTP：原版合成屋→真正扣材料→成品33欄�
     })).status,400);
     const starter=await api(srv.url,"solo/map/starter",{});
     assert.equal(starter.status,200);
-    assert.equal(starter.result.mapStarterResult.placed,20);
+    assert.equal(starter.result.mapStarterResult.placed,21);
     assert.equal(starter.result.map.cells[3*16+7].key,"合成");
     assert.equal(starter.result.crafting.available,true);
     assert.equal(starter.result.crafting.recipes.length,12);
