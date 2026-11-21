@@ -74,8 +74,7 @@ export function parseOriginalTreasure(gamerandSource,treasureSource,datSource,se
      !treasureSource.includes('if ($syo_kouka ne "無"')||
      !treasureSource.includes('if ($print_messe eq "")')||
      !treasureSource.includes('$money += $syo_nedan;')||
-     !treasureSource.includes('$money -= $otakara_money;')||
-     !treasureSource.includes('if($gift_mothisuu >= $gift_gendo +1')&&false)
+     !treasureSource.includes('$money -= $otakara_money;'))
      throw new Error("原版寶箱入口、費用或分支已變更");
   // 上述比較涵蓋可執行分支；額外保留四個陣列的原始 off-by-one，避免無意中抽到最後一項。
   if(prices.some((p,i)=>p!==TREASURE_BOXES[i].price)||
