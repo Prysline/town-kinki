@@ -179,14 +179,17 @@ export function recoverEnergy(character, now = Date.now()) {
   };
 }
 
-function eligibility(character, job, checkPrerequisite = true) {
+function eligibility(character, job, checkPrerequisite = true, checkEntryOnly = true) {
   if (checkPrerequisite && job.previousJob && job.previousJob !== character.masteredJob)
     return "需先精通：" + job.previousJob;
-  if (job.gender && character.gender !== job.gender) return "不符合原始職業的性別限制";
+  // basic.cgi::job_change 會核對性別；::do_work 不會重新檢查。
+  if (checkEntryOnly && job.gender && character.gender !== job.gender)
+    return "不符合原始職業的性別限制";
   // 轉職與實際工作均使用原版取整 BMI；不依賴可能陳舊的一位小數存檔欄位。
   const originalBmi=legacyPhysiqueBmi(character.height,character.weight);
   if (originalBmi < job.bmiMin || (job.bmiMax && originalBmi > job.bmiMax)) return "體格指數不足";
-  if (character.height < job.minHeight) return "身高不足";
+  // basic.cgi::job_change 才檢查入職身高，工作後身高改變仍依 BMI 與能力判定。
+  if (checkEntryOnly && character.height < job.minHeight) return "身高不足";
   for (const key of STAT_KEYS) {
     if ((character.stats[key] ?? 0) < job.requirements[key]) return STAT_LABELS[key] + "不足";
   }
@@ -208,7 +211,8 @@ export function performWork(character, job, now = Date.now(), random = Math.rand
   const remaining = character.lastWorkAt === 0 ? 0 : Math.max(0, WORK_COOLDOWN_MS - (now - character.lastWorkAt));
   if (remaining > 0) throw new Error("還需要等待 " + Math.ceil(remaining / 1000) + " 秒才能工作");
   const current = recoverEnergy(character, now);
-  const reason = eligibility(current, job, false);
+  // basic.cgi::do_work 實際只重新確認能力與 BMI（能量另行檢查）。
+  const reason = eligibility(current, job, false, false);
   if (reason) throw new Error(reason);
   if (current.bodyEnergy < job.bodyCost || current.brainEnergy < job.brainCost)
     throw new Error("身體或頭腦能量不足");
