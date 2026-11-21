@@ -215,6 +215,24 @@ test("食品與食堂共用 60 分鐘用餐間隔，增加熱量、能力及體�
   }finally{db.close();}
 });
 
+test("食品個別冷卻與用餐 60 分鐘同時存在時，readyAt 是真正最晚可用時刻",()=>{
+  const db=createDb();
+  try{
+    addItem(db,1,archived({category:"食料品",name:"頭脳パン",effect:"無",
+      durability:2,interval:10,lastUsed:Math.floor((NOW-60_000)/1000)}));
+    const character={bodyEnergy:25,brainEnergy:35,lastMealAt:NOW-15*60_000};
+    const first=listLegacyItemActions(db,1,character,NOW)[0];
+    assert.equal(first.canUse,false);
+    assert.equal(first.readyAt,NOW+45*60_000);
+    assert.match(first.reason,/用餐/);
+    const second=listLegacyItemActions(db,1,{...character,lastMealAt:0},NOW)[0];
+    assert.equal(second.readyAt,NOW+9*60_000);
+    assert.match(second.reason,/物品使用間隔/);
+    const available=listLegacyItemActions(db,1,character,NOW+45*60_000)[0];
+    assert.equal(available.canUse,true);
+  }finally{db.close();}
+});
+
 test("腹瀉、肺炎及結核效果只有對應病症時作用，其他疾病不會憑空治療",()=>{
   const effects=[["下痢,18",-17],["肺炎,20",-21],["結核,40",-41]];
   for(const [effect,index] of effects){
