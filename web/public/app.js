@@ -1272,7 +1272,7 @@ function renderInsurance() {
 
 let pendingLegacyUse=null;
 async function submitLegacyUse(sourceLine,name){
-  if(!window.confirm("確定使用「"+name+"」一次嗎？將消耗一次原始耐久。"))return;
+  if(!window.confirm("確定使用「"+displayRetailFoodName(name)+"」一次嗎？將消耗一次原始耐久。"))return;
   if(!pendingLegacyUse||pendingLegacyUse.sourceLine!==sourceLine)
     pendingLegacyUse={sourceLine,requestId:crypto.randomUUID()};
   try{
@@ -1282,7 +1282,7 @@ async function submitLegacyUse(sourceLine,name){
     render();
     notify(result.replayed?
       "相同道具使用請求已處理，沒有重複扣除耐久。" :
-      "已使用「"+result.name+"」，效果已套用。");
+      "已使用「"+displayRetailFoodName(result.name)+"」，效果已套用。");
   }catch(error){
     // 清單重建後再提示，避免把錯誤訊息連同舊商品元件一起刪掉。
     renderLegacyItems();
@@ -2671,7 +2671,7 @@ function renderWholesale(){
   category.replaceChildren();
   for(const kind of state.shopCategories??[]){
     const o=document.createElement("option");
-    o.value=kind;o.textContent=kind;
+    o.value=kind;o.textContent=displayRetailFoodCategory(kind);
     category.append(o);
   }
   category.value=shop?.category??(
@@ -2685,7 +2685,7 @@ function renderWholesale(){
     "目前城鎮沒有「問屋」；可以先在自己的住宅配置玩家商店，但不能進貨。");
   text("wholesale-shop-summary",!houses.length?
     "你尚無住宅。必須先建立住宅，於室內配置中選「玩家商店」，再設定店鋪類別。":
-    shop?"已設定「"+shop.title+"」（"+shop.category+
+    shop?"已設定「"+shop.title+"」（"+displayRetailFoodCategory(shop.category)+
       "）｜店鋪倉庫 "+shop.inventory.length+"/100 種；變更類別會清除庫存。":
     "請先進入本人住宅，把至少一個室內欄位設為「玩家商店」，再於此設定店名與類別。");
   const goods=el("wholesale-goods");goods.replaceChildren();
