@@ -21,6 +21,7 @@ import { healthStatus, settleDailyHealth, conditionWithIllness, getTreatmentQuot
 import { initCharacterEvents, settleDailyIllnessEvent, listCharacterEvents, getCouponBalance } from "./events.mjs";
 import {parseLegacyCouponCatalog} from "./coupon-catalog.mjs";
 import {parseOriginalFishing,initFishingTables,ensureFishingStock,fishingOverview,buyFishingBait,castFishing,sellFishingCatch} from "./fishing.mjs";
+import {parseOriginalCrafting,initCraftingTables,craftingOverview,craftItem} from "./crafting.mjs";
 import {initCouponRedemptionTables,listCouponRewards,listCouponRedemptions,redeemEventCoupon,COUPON_SHOP_SYMBOL} from "./coupon-redemption.mjs";
 import { getCockroachChallenge,claimCockroach } from "./event-cockroach.mjs";
 import { parseLegacyInsurance, initInventoryTables, inventoryOverview, hasActiveHealthInsurance, listInsurancePurchases, buyHealthInsurance } from "./inventory.mjs";
@@ -98,6 +99,7 @@ initBankTables(db);
 initCharacterEvents(db);
 initCouponRedemptionTables(db);
 initFishingTables(db);
+initCraftingTables(db);
 initInventoryTables(db);
 initDiningStockTables(db);
 initLegacyItemUseTables(db);
@@ -139,6 +141,7 @@ const fishingCatalog=parseOriginalFishing(
   decodeLegacyText(readFileSync(resolve(REPO_ROOT,"sea.cgi"))),
   decodeLegacyText(readFileSync(resolve(REPO_ROOT,"hanbai1.cgi")))
 );
+const craftingCatalog=parseOriginalCrafting(decodeLegacyText(readFileSync(resolve(REPO_ROOT,"dat_dir","gousei.cgi"))));
 const wholesaleCatalog=parseWholesaleCatalog(decodeLegacyText(readFileSync(resolve(REPO_ROOT,"dat_dir","syouhin.cgi"))));
 const vendingCatalog=parseLegacyVendingCatalog(decodeLegacyText(readFileSync(resolve(REPO_ROOT,"dat_dir","jihanki.cgi"))));
 const equipmentCatalog=parseLegacyEquipmentCatalog(decodeLegacyText(readFileSync(resolve(REPO_ROOT,"dat_dir","soubi.cgi"))));
@@ -376,6 +379,7 @@ function snapshot(user) {
     couponRewards:updated?listCouponRewards(couponCatalog,getCouponBalance(db,user.id),couponShopAvailable):[],
     couponRedemptions:updated?listCouponRedemptions(db,user.id):[],
     fishing:updated?fishingOverview(db,user.id,fishingCatalog,now,today):null,
+    crafting:updated?craftingOverview(db,user.id,craftingCatalog):null,
     cockroachChallenge: updated ? getCockroachChallenge(db,user.id,now) : null,
     hospital: updated ? getTreatmentQuote(updated,hasActiveHealthInsurance(db,user.id,insuranceItem,now)) : null,
     insurance: updated ? inventoryOverview(db,user.id,insuranceItem,now) : null,
@@ -754,6 +758,17 @@ async function handle(req, res) {
         });
       }catch(error){throw new HttpError(400,error.message);}
       return sendJson(res,200,{...snapshot(user),fishingResult});
+    }
+
+    if(path==="/api/crafting/make"){
+      let craftingResult;
+      try{
+        craftingResult=craftItem(db,user.id,craftingCatalog,{
+          recipeKey:data.recipeKey,quantity:data.quantity,
+          requestId:data.requestId,now:gameNow()
+        });
+      }catch(error){throw new HttpError(400,error.message);}
+      return sendJson(res,200,{...snapshot(user),craftingResult});
     }
 
     if (path === "/api/coupon/redeem") {
