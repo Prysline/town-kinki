@@ -406,3 +406,41 @@ body.compact-status-active .game-shell .facility-pane{scroll-margin-top:7rem}
   .retail-filters{grid-template-columns:1fr}
   .retail-buy-controls{grid-template-columns:minmax(0,0.8fr) minmax(0,1.4fr);gap:.35rem}
 }
+
+/* 全站操作回饋：無論銀行、購物、工作或地圖捲到哪裡都能閱讀。 */
+#notice{position:fixed;z-index:60;right:max(12px,env(safe-area-inset-right));
+  bottom:max(12px,env(safe-area-inset-bottom));width:min(460px,calc(100vw - 24px));
+  max-height:min(50dvh,440px);margin:0;display:flex;align-items:flex-start;gap:.7rem;
+  padding:.8rem .9rem;box-shadow:0 8px 28px #17382b38}
+#notice-message{flex:1;min-width:0;overflow-wrap:anywhere;overflow-y:auto;
+  max-height:calc(min(50dvh,440px) - 2rem);line-height:1.55}
+#notice-close{flex:0 0 auto;min-width:32px;min-height:32px;padding:.1rem .4rem;
+  line-height:1.2;background:transparent;color:inherit;border:1px solid currentColor}
+#notice.error #notice-close{color:#9a3528}
+
+/* 固定狀態列加上交易必需的可用資金，窄螢幕自動換行。 */
+.game-shell .compact-status{display:grid;grid-template-columns:minmax(0,.75fr) repeat(2,minmax(120px,1.5fr)) repeat(2,minmax(130px,1fr));
+  gap:.4rem;min-height:64px}
+.game-shell .compact-status .compact-name{max-width:100%}
+.game-shell .compact-energy{width:100%;max-width:none}
+.game-shell .compact-finance{display:grid;gap:.1rem;min-width:0;padding:.25rem .45rem;
+  border:1px solid #71937d;border-radius:3px;background:#2b5844;font-size:.77rem;line-height:1.25}
+.game-shell .compact-finance span{color:#d5e9dc}
+.game-shell .compact-finance strong{font-variant-numeric:tabular-nums;overflow-wrap:anywhere;color:#fff}
+body.compact-status-active .game-shell .facility-tabs{top:var(--compact-status-height,64px)}
+body.compact-status-active .game-shell .facility-focused,
+body.compact-status-active .game-shell .facility-pane{scroll-margin-top:calc(var(--compact-status-height,64px) + 3rem)}
+@media(max-width:740px){
+  .game-shell .compact-status{grid-template-columns:repeat(2,minmax(0,1fr));gap:.25rem .5rem;
+    padding:.35rem .55rem}
+  .game-shell .compact-status .compact-name{grid-column:1/-1;max-width:100%;text-align:center}
+  .game-shell .compact-energy-label{white-space:normal;flex-wrap:wrap;gap:.15rem}
+}
+/* 銀行表單不需捲回角色卡，就能在決定金額時比較現金與普通存款。 */
+.game-shell .bank-current-balances{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:.55rem;margin:.55rem 0}
+.game-shell .bank-current-balances>div{min-width:0;padding:.55rem .7rem;border:1px solid #c8dccc;
+  border-radius:4px;background:#edf5ee}
+.game-shell .bank-current-balances dt{font-size:.8rem;color:#4f6c59}
+.game-shell .bank-current-balances dd{margin:.2rem 0 0;font-weight:750;
+  font-variant-numeric:tabular-nums;overflow-wrap:anywhere;color:#214b35}
