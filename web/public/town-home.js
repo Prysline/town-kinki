@@ -15,6 +15,7 @@ export const FACILITY_PANELS=Object.freeze({
   "クーポン":"event-panel",
   "釣り":"fishing-panel",
   "販売1":"fishing-panel",
+  "合成":"crafting-panel",
   "問屋":"wholesale-panel",
   "建築":"housing-panel"
 });

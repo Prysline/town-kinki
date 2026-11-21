@@ -4088,12 +4088,12 @@ test("第50階段單機首次遊玩：空白街區一鍵配置後可工作、百
     const first=await api(srv.url,"solo/map/starter",{townId:3});
     assert.equal(first.status,200);
     assert.deepEqual(first.result.mapStarterResult,{
-      townId:0,placed:19,source:"web-solo-starter"
+      townId:0,placed:20,source:"web-solo-starter"
     },"初始化只能配置伺服器上的目前城鎮，不接受客戶端冒填城鎮");
     assert.equal(first.result.map.source,"web-solo-starter");
     assert.equal(first.result.map.configured,true);
     assert.equal(first.result.map.cells.length,192);
-    assert.equal(first.result.map.cells.filter(x=>x.raw).length,19);
+    assert.equal(first.result.map.cells.filter(x=>x.raw).length,20);
     const expected=[
       [0,0,"駅"],[0,1,"職安"],[0,2,"銀行"],[0,3,"病院"],
       [1,0,"食堂"],[1,1,"食堂２"],[1,2,"デパ"],[1,3,"デパ2"],
@@ -4365,7 +4365,7 @@ test("第53階段單機 HTTP：買真正原版魚餌→釣魚耗餌及100秒冷�
     assert.deepEqual(created.result.fishing.baitGoods,[]);
     const starter=await api(srv.url,"solo/map/starter",{});
     assert.equal(starter.status,200);
-    assert.equal(starter.result.mapStarterResult.placed,19);
+    assert.equal(starter.result.mapStarterResult.placed,20);
     assert.equal(starter.result.map.cells[3*16+5].key,"販売1");
     assert.equal(starter.result.map.cells[3*16+6].key,"釣り");
     assert.equal(starter.result.fishing.fishingAvailable,true);
@@ -4454,5 +4454,109 @@ test("第53階段單機 HTTP：買真正原版魚餌→釣魚耗餌及100秒冷�
       sourceLine:itemLine,requestId:"phase53_http_sale"
     })).result.fishingResult.replayed,true);
     assert.equal((await api(srv.url,"state")).result.character.money,savedMoney);
+  }finally{await srv.stop();}
+});
+
+
+test("第54階段單機 HTTP：原版合成屋→真正扣材料→成品33欄入庫→重送與重啟持久化",async()=>{
+  let srv=await start("solo");
+  const dir=srv.directory;
+  try{
+    const created=await api(srv.url,"character",{
+      name:"第54階段合成居民",gender:"other",stats:defaultStats()
+    });
+    assert.equal(created.status,200);
+    assert.equal(created.result.crafting.available,false);
+    assert.equal(created.result.crafting.recipes.length,12);
+    const recipe=created.result.crafting.recipes.find(x=>x.name==="アイスコーヒー");
+    assert.ok(recipe);
+    assert.equal((await api(srv.url,"crafting/make",{
+      recipeKey:recipe.key,quantity:1,requestId:"phase54_no_house"
+    })).status,400);
+    const starter=await api(srv.url,"solo/map/starter",{});
+    assert.equal(starter.status,200);
+    assert.equal(starter.result.mapStarterResult.placed,20);
+    assert.equal(starter.result.map.cells[3*16+7].key,"合成");
+    assert.equal(starter.result.crafting.available,true);
+    assert.equal(starter.result.crafting.recipes.length,12);
+    const goods=decodeLegacyText(readFileSync(join(root,"..","dat_dir","syouhin.cgi")))
+      .split(/\r?\n/).filter(Boolean).map(line=>{
+        const fields=line.split("<>");
+        if(fields.length===34&&fields[33]==="")fields.pop();
+        return fields;
+      }).filter(fields=>fields.length===33);
+    const db=new DatabaseSync(join(dir,"solo.sqlite"));
+    const lines=[810001,810002];
+    try{
+      const userId=db.prepare("SELECT user_id FROM characters WHERE name=?")
+        .get("第54階段合成居民").user_id;
+      for(const [name,sourceLine] of [["冷蔵庫",lines[0]],["コーヒー",lines[1]]]){
+        const original=goods.find(row=>row[1]===name);
+        assert.ok(original);
+        const fields=[...original];
+        fields[21]="2";fields[22]="回";
+        fields[30]=String(Math.floor(starter.result.gameTimeMs/1000));
+        db.prepare([
+          "INSERT INTO legacy_inventory_items(user_id,original_id,source_line,category,original_name,",
+          "effect,durability,durability_unit,purchased_at,last_used_at,raw_fields_json)",
+          "VALUES(?,?,?,?,?,?,?,?,?,?,?)"
+        ].join(" ")).run(userId,"__web_retail__",sourceLine,fields[0],name,
+          fields[9],2,"回",Number(fields[30]),0,JSON.stringify(fields));
+      }
+    }finally{db.close();}
+    const overview=(await api(srv.url,"state")).result.crafting;
+    assert.equal(overview.recipes.find(x=>x.key===recipe.key).maxBatches,2);
+    const request={recipeKey:recipe.key,quantity:2,requestId:"phase54_http_craft_first"};
+    assert.equal((await api(srv.url,"crafting/make",{
+      ...request,recipeKey:"craft-fake"
+    })).status,400);
+    assert.equal((await api(srv.url,"crafting/make",{
+      ...request,quantity:0
+    })).status,400);
+    const made=await api(srv.url,"crafting/make",request);
+    assert.equal(made.status,200);
+    assert.equal(made.result.craftingResult.name,"アイスコーヒー");
+    assert.equal(made.result.craftingResult.quantity,2);
+    assert.equal(made.result.craftingResult.addedDurability,2);
+    assert.equal(made.result.craftingResult.fee,0);
+    assert.equal(made.result.crafting.history.length,1);
+    assert.equal(made.result.character.money,starter.result.character.money);
+    const sourceLine=made.result.craftingResult.sourceLine;
+    assert.ok(sourceLine>=8000000);
+    const product=made.result.legacyInventory.find(x=>
+      x.sourceLine===sourceLine&&x.origin==="crafting");
+    assert.ok(product);
+    assert.equal(product.name,"アイスコーヒー");
+    assert.equal(product.remaining,2);
+    const check=new DatabaseSync(join(dir,"solo.sqlite"));
+    try{
+      for(const line of lines){
+        assert.equal(check.prepare("SELECT remaining FROM legacy_item_usage WHERE source_line=?")
+          .get(line).remaining,0);
+      }
+      const stored=check.prepare("SELECT * FROM legacy_inventory_items WHERE source_line=?").get(sourceLine);
+      assert.equal(stored.original_id,"__web_crafting__");
+      assert.equal(stored.durability,2);
+      assert.equal(JSON.parse(stored.raw_fields_json).length,33);
+    }finally{check.close();}
+    const replay=await api(srv.url,"crafting/make",request);
+    assert.equal(replay.status,200);
+    assert.equal(replay.result.craftingResult.replayed,true);
+    assert.equal(replay.result.crafting.history.length,1);
+    assert.equal((await api(srv.url,"crafting/make",{
+      ...request,quantity:1
+    })).status,400);
+    assert.equal((await api(srv.url,"crafting/make",{
+      recipeKey:recipe.key,quantity:1,requestId:"phase54_http_no_material"
+    })).status,400);
+    await srv.stop({preserveData:true});
+    srv=await start("solo",undefined,dir);
+    const restored=await api(srv.url,"state");
+    assert.equal(restored.status,200);
+    assert.equal(restored.result.crafting.available,true);
+    assert.equal(restored.result.crafting.history.length,1);
+    assert.equal(restored.result.character.money,starter.result.character.money);
+    assert.equal(restored.result.legacyInventory.find(x=>x.sourceLine===sourceLine).remaining,2);
+    assert.equal((await api(srv.url,"crafting/make",request)).result.craftingResult.replayed,true);
   }finally{await srv.stop();}
 });

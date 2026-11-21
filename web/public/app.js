@@ -1395,7 +1395,7 @@ function renderLegacyItems(){
         "熱量："+(info?.calories??"未確認")+" kcal｜使用間隔："+(info?.intervalMinutes??"未確認")+" 分鐘",
         "身體能量消耗："+(info?.bodyCost??"未確認")+"｜頭腦能量消耗："+(info?.brainCost??"未確認"),
         "原版備註："+(info?.comment?.trim()||"沒有提供文字備註"),
-        "來源："+(item.readOnly?"歷史來源封存":item.origin==="fishing"?"Web 釣魚／餌料店":"Web 購入或轉換")+
+        "來源："+(item.readOnly?"歷史來源封存":item.origin==="fishing"?"Web 釣魚／餌料店":item.origin==="crafting"?"Web 合成屋":"Web 購入或轉換")+
           "（記錄位置 "+item.sourceLine+"；原始內容不在此頁修改）",
         "Web 使用狀態："+(actionInfo?"已核對可使用規則，受冷卻與角色條件限制":
           info?.usage==="automatic"?"自動處理":
@@ -1978,6 +1978,96 @@ function renderFishing(){
       list.append(li);
     }
     history.append(list);
+  }
+}
+
+let pendingCraftingAction=null;
+async function submitCrafting(recipe,quantity){
+  if(!window.confirm("使用本人實際材料合成「"+recipe.name+"」共 "+quantity+
+    " 組？材料會扣除，成品將增加 "+(recipe.durability*quantity)+" 回耐久；手續費 0 元。"))return;
+  const key=recipe.key+":"+quantity;
+  if(!pendingCraftingAction||pendingCraftingAction.key!==key)
+    pendingCraftingAction={key,requestId:crypto.randomUUID()};
+  try{
+    state=await api("crafting/make",{
+      recipeKey:recipe.key,quantity,requestId:pendingCraftingAction.requestId
+    });
+    const result=state.craftingResult;
+    pendingCraftingAction=null;
+    render();
+    notify(result.replayed?
+      "這筆合成已經完成，不會重複扣材料或增加成品。":
+      "合成完成：「"+result.name+"」"+result.quantity+" 組，共增加 "+
+        result.addedDurability+" 回耐久，已入本人背包。");
+  }catch(error){notify(error.message,true);}
+}
+function renderCrafting(){
+  if(!state?.character)return;
+  const info=state.crafting??{};
+  text("crafting-status",info.available?
+    "合成屋已開放。僅能使用本人持有材料，製作手續費為 0 元。":
+    "目前城鎮沒有「合成」建築；可在單機地圖編輯器放置原版合成屋。");
+  const recipes=info.recipes??[];
+  const list=el("crafting-recipes");list.replaceChildren();
+  for(const recipe of recipes){
+    const tile=document.createElement("article");tile.className="training-tile";
+    const title=document.createElement("strong");
+    title.textContent=recipe.name+"（"+recipe.category+"，每組 "+recipe.durability+" 回）";
+    const materials=document.createElement("p");materials.className="small";
+    materials.textContent="需要："+recipe.ingredients.map(i=>i.name+" "+i.quantity+
+      " 回（持有 "+i.owned+" 回）").join("＋");
+    const count=document.createElement("p");count.className="small";
+    count.textContent="最多可製作 "+recipe.maxBatches+" 組"+
+      (recipe.sourceAnomaly?"｜原始配方多餘冒號已依 Perl 實際解析方式處理":"");
+    tile.append(title,materials,count);list.append(tile);
+  }
+  const select=el("crafting-select"),previous=select.value;
+  select.replaceChildren();
+  for(const recipe of recipes){
+    const option=document.createElement("option");
+    option.value=recipe.key;
+    option.textContent=recipe.name+"（可製作 "+recipe.maxBatches+" 組）";
+    option.disabled=recipe.maxBatches===0;
+    select.append(option);
+  }
+  const available=recipes.filter(x=>x.maxBatches>0);
+  if(available.length){
+    select.value=available.some(r=>r.key===previous)?previous:available[0].key;
+  }
+  select.disabled=!info.available||!available.length;
+  const qty=el("crafting-quantity"),submit=el("crafting-submit");
+  function update(){
+    const recipe=recipes.find(x=>x.key===select.value);
+    const max=recipe?.maxBatches??0;
+    qty.max=String(max||1);
+    const current=Number(qty.value);
+    if(!Number.isSafeInteger(current)||current<1||current>max)
+      qty.value="1";
+    qty.disabled=!info.available||max===0;
+    submit.disabled=!info.available||max===0;
+  }
+  select.onchange=update;
+  qty.onchange=update;
+  submit.onclick=()=>{
+    const recipe=recipes.find(x=>x.key===select.value);
+    const quantity=Number(qty.value);
+    if(recipe&&Number.isSafeInteger(quantity)&&quantity>=1&&quantity<=recipe.maxBatches)
+      submitCrafting(recipe,quantity);
+  };
+  update();
+  const history=el("crafting-history");history.replaceChildren();
+  if(!info.history?.length){
+    const empty=document.createElement("p");empty.className="small";
+    empty.textContent="尚無合成紀錄。";history.append(empty);
+  }else{
+    const ordered=document.createElement("ol");ordered.className="health-event-list";
+    for(const item of info.history){
+      const li=document.createElement("li");
+      li.textContent=new Date(item.createdAt).toLocaleString("zh-TW")+
+        "｜"+item.name+" × "+item.quantity+"（新增 "+item.addedDurability+" 回）";
+      ordered.append(li);
+    }
+    history.append(ordered);
   }
 }
 
@@ -3050,6 +3140,7 @@ function render() {
   renderRetail();
   renderVending();
   renderFishing();
+  renderCrafting();
   renderEquipment();
   renderGiftShop();
   renderMailbox();

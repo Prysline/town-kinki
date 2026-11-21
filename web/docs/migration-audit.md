@@ -112,7 +112,7 @@
 | IT-04 優惠券獲得與兌換 | coupon.cgi::coupon/coupon_do；dat_dir/coupon.cgi；event.pl #30/#35 | events.mjs 的 Web 新角色券、coupon-redemption.mjs 的 30 件原版獎品兌換 | **Web 事件券兌換已實作；獎品其他玩法待補** | 新 Web 角色只從 character_coupons 扣點並取得 33 欄商品；不轉入舊 CGI 玩家券；獎品其他使用流程仍未全實作 | P1（單機） | 道具用途、交易原子性、存檔與瀏覽器驗收 |
 | IT-05 原版釣魚與漁獲出售 | unit.pl L77、L146；sea.cgi::turu/seri；hanbai1.cgi 與原版餌料商品 | [src/fishing.mjs](../src/fishing.mjs)、公開釣魚面板、三支正式釣魚 API | **第53階段單機核心可操作** | 原版4款餌料原價與庫存、13種魚餌對應、4級別×3種實際可抽魚獲、每次耗餌與100秒冷卻、本人33欄魚獲入庫與12種原版售價區間、25格與5份上限，全部以SQLite原子交易扣款／扣餌／出售；詳 [第53階段](phase53-fishing-economy.md) | P1（單機） | Web庫存每日刷新與原版01時旗標差異、更多跨店堆疊與新版Web存檔／實機驗收 |
 | IT-06 原版拍賣場刊登與結算 | unit.pl L189；auction.cgi::auction L49–72、::syupin、::syupin_do、::ukewatashi | Web 無該拍賣／結算流程 | **確定缺漏** | 原版使用獨立拍賣紀錄與刊登、交付分支；不同於普通商店／回收 | P2 | 物品所有權、有效期、競價、交付與多人交易競態 |
-| IT-07 原版合成屋 | unit.pl L187；gouseiya.cgi::gousei/gousei_do L47–48、L229–365；dat_dir/gousei.cgi | Web 無原始配方與合成交易模型 | **確定缺漏（未完整逐配方核對）** | 原版以本人持有材料耐久生成合成品，不能把現有 33 欄物品解析當作具備合成功能 | P2 | 所有配方及材料、同一材料/多筆持有、產出容量、原子扣耐久與重送、新版 Web 物品存檔 |
+| IT-07 原版合成屋 | unit.pl L187；gouseiya.cgi::gousei/gousei_do；dat_dir/gousei.cgi | [src/crafting.mjs](../src/crafting.mjs)、地圖合成面板、POST /api/crafting/make | **第54階段新 Web 單機核心可操作，待 CI 與實機驗收** | 原始12種、2～3種材料配方及33欄成品；本人多筆材料扣耐久、零手續費、25格／同品5份限制、SQLite原子交易、防重送與失敗回滾；原版アイスクリーム多餘冒號採原始Perl解析語義，原始檔不改；詳 [第54階段](phase54-crafting-house.md) | P1（單機） | 新 Web SQLite存檔重啟、多人隔離、原版全域行動限制差異、瀏覽器／手機操作 |
 
 ### 09 隨機與限時事件：全部 #01～#44 獨立列示
 

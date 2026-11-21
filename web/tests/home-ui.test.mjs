@@ -140,7 +140,7 @@ test("原 CGI 建築代碼只連到 Web 真正已實作的設施入口",()=>{
   const expected={
     "銀行":"bank-panel","病院":"hospital-panel","職安":"jobs-panel",
     "教室":"classroom-panel","食堂":"dining-panel","食堂２":"dining-panel",
-    "デパ":"retail-panel","デパ2":"retail-panel","自販機":"vending-panel","装備屋":"equipment-panel","ギフト屋":"gift-panel","リサイ":"recycle-panel","クーポン":"event-panel","釣り":"fishing-panel","販売1":"fishing-panel","問屋":"wholesale-panel","建築":"housing-panel"
+    "デパ":"retail-panel","デパ2":"retail-panel","自販機":"vending-panel","装備屋":"equipment-panel","ギフト屋":"gift-panel","リサイ":"recycle-panel","クーポン":"event-panel","釣り":"fishing-panel","販売1":"fishing-panel","合成":"crafting-panel","問屋":"wholesale-panel","建築":"housing-panel"
   };
   assert.deepEqual(FACILITY_PANELS,expected);
   for(const [key,panelId] of Object.entries(expected)){
@@ -728,6 +728,22 @@ test("第51階段：原版優惠券兌換所地圖入口、30獎品、本人事�
   assert.doesNotMatch(script,/heading\.innerHTML=reward\.originalName/);
 });
 
+
+test("第54階段：原版合成屋只有真正材料才能製作，表單及資料皆用安全 DOM",()=>{
+  assert.deepEqual(townCellAction(describeTile("合成")),{
+    kind:"facility",panelId:"crafting-panel"
+  });
+  for(const id of ["crafting-panel","crafting-status","crafting-recipes",
+    "crafting-select","crafting-quantity","crafting-submit","crafting-history"])
+    assert.match(html,new RegExp('id="'+id+'"'));
+  assert.ok(html.includes("gouseiya.cgi／dat_dir/gousei.cgi"));
+  assert.ok(script.includes("function renderCrafting(){"));
+  assert.ok(script.includes("renderCrafting();"));
+  assert.ok(script.includes('await api("crafting/make"'));
+  assert.ok(script.includes("pendingCraftingAction"));
+  assert.ok(script.includes("materials"));
+  assert.ok(!script.includes("innerHTML=recipe.name"));
+});
 
 test("第53階段：原版釣場與餌料商店實際有入庫交易 UI 且拒絕虛構漁獲",()=>{
   for(const key of ["釣り","販売1"])

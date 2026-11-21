@@ -18,7 +18,7 @@
 
 針對 43 個互動入口，Web 目前：
 - **30 個**有明確的 [`MAP_SYMBOLS`](../src/town-map.mjs) 地圖代碼；**13 個**原版互動入口沒有被加入 Web 地圖代碼清單（如未來製作這些原版建築，須以 `unit.pl` 及來源函式核對，不能亂畫入口）。
-- **18 個**有操作入口：**17 個**由 [`FACILITY_PANELS`](../public/town-home.js#L2) 導向 Web 面板（含 PR #23 的獨立教室，PR #27 的已匯入有效信用卡付款），另 **1 個「駅」**由 [`townCellAction`](../public/town-home.js#L12) 導向車站票價與乘車選項（PR #26）。這只是入口覆蓋，不代表設施全部規則已移植。
+- **19 個**有操作入口：**18 個**由 [`FACILITY_PANELS`](../public/town-home.js#L2) 導向 Web 面板（含 PR #23 的獨立教室，PR #27 的已匯入有效信用卡付款），另 **1 個「駅」**由 [`townCellAction`](../public/town-home.js#L12) 導向車站票價與乘車選項（PR #26）。這只是入口覆蓋，不代表設施全部規則已移植。
 - **13 個**已有 Web 地圖代碼，但既未映射 `FACILITY_PANELS`，也不是車站特例；[`townCellAction`](../public/town-home.js#L12) 會回傳 `unavailable`，按圖示只會提示尚未移植。
 - 百貨兩入口、自販機與裝備屋已有各自實際購物交易，**仍不等於原版全部商店功能**。詳 [百貨店](phase31-department-checkout.md)、[自販機](phase33-vending-shopping.md) 與 [裝備屋](phase35-equipment-shop.md)。
 - 這些是**程式路由覆蓋率**，不是已完成功能比例；車站已按原版 `station.cgi` 收取四城六組雙向車資（PR #26），而真實原版地圖存檔及其他交通道具仍待核查。
@@ -70,7 +70,7 @@
 | [`温泉`](../../unit.pl#L172) | `basic.cgi` | `onsen` | 有 | Web 有圖示、點選不可進入 |
 | [`斡旋`](../../unit.pl#L183) | `kekkon.cgi` | `assenjo` | 有 | Web 有圖示、點選不可進入 |
 | [`人生`](../../unit.pl#L185) | `./sugoroku/zinsei.cgi` | `—` | 無 | Web 地圖代碼未收錄 |
-| [`合成`](../../unit.pl#L187) | `gouseiya.cgi` | `gousei` | 有 | Web 有圖示、點選不可進入 |
+| [`合成`](../../unit.pl#L187) | `gouseiya.cgi` | `gousei` | 有 | **第54階段已新增可操作合成屋**：從原版12配方核對2～3種本人材料、實際扣耐久、產出33欄成品並記錄零手續費原子交易；詳 [第54階段](phase54-crafting-house.md) |
 | [`競売`](../../unit.pl#L189) | `auction.cgi` | `auction` | 有 | Web 有圖示、點選不可進入 |
 
 > **重要例外**：[原版「人生」入口](../../unit.pl#L185) 指向 `./sugoroku/zinsei.cgi`；這份 fork 的 GitHub 樹中**沒有該檔**，因此只能標記為「來源中存在外部／缺檔連結」，不能宣稱原版有一套可在此 fork 正常執行的人生遊戲，也不能據此創作其規則。`プレ３` 指向 `test.cgi`，也需要檢查實際有效性，不按名稱賦予遊戲效果。
