@@ -2,6 +2,7 @@ import { townCellAction } from "./town-home.js";
 import { shouldShowCompactEnergy } from "./energy-visibility.js";
 import { townTimePhase } from "./time-theme.js";
 import { groupedStatLines } from "./shop-effects.js";
+import { itemCooldownRemaining,itemCooldownText,itemRemainingDurability } from "./item-cooldown.js";
 const el = id => document.getElementById(id);
 let state = null;
 let requestedLegacyIconUrl = null;
@@ -1231,6 +1232,9 @@ function renderInsurance() {
     "健康保險生效中，剩餘約 "+item.remainingDays+" 天，到期時間："+
       new Date(item.activeUntil).toLocaleString("zh-TW")+"。" :
     "目前沒有有效的健康保險。");
+  const brief=el("inventory-insurance-inline");
+  brief.hidden=!item.active;
+  brief.textContent=item.active?"健康保險有效：約剩 "+item.remainingDays+" 天（醫院自動生效）":"";
   const quantity=Number(el("insurance-quantity").value);
   const total=item.price*quantity;
   const capacity=item.maxQuantity*item.durationDays*86400000;
@@ -1284,47 +1288,140 @@ async function submitLegacyUse(sourceLine,name){
     notify(error.message,true);
   }
 }
-function renderLegacyItems() {
+// 倒數以伺服器的遊戲時鐘為基準，單機快轉或同步後都重新核對。
+let inventoryCooldownSyncBusy=false;
+const inventoryCooldownSyncRequested=new Set();
+function updateInventoryCooldowns(){
+  if(!state?.character||el("inventory-panel").hidden)return;
+  const now=browserGameNow();
+  let expired=false;
+  for(const node of el("legacy-inventory-list").querySelectorAll(".inventory-cooldown[data-ready-at]")){
+    const readyAt=Number(node.dataset.readyAt);
+    const key=node.dataset.cooldownKey;
+    const action={canUse:false,readyAt,reason:node.dataset.reason};
+    const remaining=itemCooldownRemaining(action,now);
+    node.textContent=remaining>0?itemCooldownText(action,now):
+      "冷卻已結束，正在確認可使用狀態";
+    if(remaining===0&&key&&!inventoryCooldownSyncRequested.has(key)){
+      inventoryCooldownSyncRequested.add(key);expired=true;
+    }
+  }
+  if(expired&&!inventoryCooldownSyncBusy){
+    inventoryCooldownSyncBusy=true;
+    api("state").then(next=>{state=next;render();})
+      .catch(()=>{}).finally(()=>{inventoryCooldownSyncBusy=false;});
+  }
+}
+function itemInventoryEffects(info){
+  if(!info)return ["原始效果資料尚無法確認"];
+  const lines=[];
+  if((info.bodyCost??0)<0)lines.push("身體能量恢復 "+(-info.bodyCost));
+  if((info.brainCost??0)<0)lines.push("頭腦能量恢復 "+(-info.brainCost));
+  if(info.effectCode&&!["無","効果","ステータス"].includes(info.effectCode))
+    lines.push(describeOriginalRetailEffect(info.effectCode));
+  lines.push(...groupedStatLines(info.effects,labels,info.randomizedEffects));
+  if(!lines.length)lines.push("原版沒有非零能力增減");
+  return lines;
+}
+function renderLegacyItems(){
   const target=el("legacy-inventory-list");
   target.replaceChildren();
+  const items=state.legacyInventory??[];
   const actions=new Map((state.legacyItemActions??[]).map(x=>[x.sourceLine,x]));
-  if(!state.legacyInventory?.length){
-    const note=document.createElement("p");
-    note.className="small";
-    note.textContent="尚未匯入原版物品存檔。";
-    target.append(note);
-  }else{
-    const list=document.createElement("ol");
-    list.className="health-event-list";
-    for(const item of state.legacyInventory){
-      const row=document.createElement("li");
+  const grouped=new Map(),gifts=[];
+  for(const item of items){
+    // 原版一般道具清單排除寄送用「ギフト」，但不刪除：另置收合區。
+    if(item.category==="ギフト"){gifts.push(item);continue;}
+    if(!grouped.has(item.category))grouped.set(item.category,[]);
+    grouped.get(item.category).push(item);
+  }
+  text("inventory-summary",items.length?
+    "顯示 "+items.length+" 筆持有物資料｜"+grouped.size+" 類"+
+    (gifts.length?"｜另有 "+gifts.length+" 筆寄送用禮品":""):
+    "目前沒有持有物。");
+  if(!items.length){
+    const empty=document.createElement("p");empty.className="small";
+    empty.textContent="目前沒有持有物；可以在百貨店或自動販賣機購買。";
+    target.append(empty);
+  }
+  for(const category of [...grouped.keys()].sort((x,y)=>x.localeCompare(y,"ja"))){
+    const section=document.createElement("section");section.className="inventory-category";
+    const heading=document.createElement("h4");heading.className="inventory-category-heading";
+    heading.textContent="▼ "+category;section.append(heading);
+    for(const item of grouped.get(category)){
+      const card=document.createElement("article");card.className="inventory-item";
+      const info=item.details??null;
       const actionInfo=actions.get(item.sourceLine);
-      const label=document.createElement("span");
-      label.textContent=item.category+"｜"+item.name+"｜剩餘耐久 "+
-        (actionInfo?.remaining??item.durability)+" "+
-        (item.unit||"（未標示單位）")+
-        (item.origin==="retail"?"｜百貨店新購入":"｜原始存檔第 "+item.sourceLine+" 行")+
-        (actionInfo?"（已支援使用）":item.name==="健康保険"&&state.insurance?.active?
-        "（醫院自動生效，不需手動使用）":item.origin==="retail"?"（尚未支援直接使用）":"（唯讀封存）");
-      row.append(label);
+      const head=document.createElement("div");head.className="inventory-item-heading";
+      const name=document.createElement("strong");name.textContent=item.name;
+      const durability=document.createElement("span");durability.className="inventory-item-remaining";
+      const amount=itemRemainingDurability(item,actionInfo,browserGameNow());
+      durability.textContent="剩餘 "+amount+(item.unit??"");
+      head.append(name,durability);card.append(head);
+      const preview=document.createElement("div");preview.className="inventory-effects";
+      for(const effect of itemInventoryEffects(info)){
+        const line=document.createElement("p");line.className="small";line.textContent=effect;
+        preview.append(line);
+      }
+      card.append(preview);
+      const controls=document.createElement("div");controls.className="inventory-item-controls";
       if(actionInfo){
-        const button=document.createElement("button");
-        button.type="button";
-        button.className="secondary";
-        button.textContent=actionInfo.canUse?"使用一次":"目前無法使用";
+        const status=document.createElement("span");status.className="small inventory-item-status";
+        if(!actionInfo.canUse&&itemCooldownRemaining(actionInfo,browserGameNow())>0){
+          status.classList.add("inventory-cooldown");
+          status.dataset.readyAt=String(actionInfo.readyAt);
+          status.dataset.reason=actionInfo.reason??"";
+          status.dataset.cooldownKey=state.character.name+":"+item.sourceLine+":"+actionInfo.readyAt;
+          status.textContent=itemCooldownText(actionInfo,browserGameNow());
+        }else{
+          status.textContent=actionInfo.canUse?"可使用":actionInfo.reason??"目前無法使用";
+        }
+        const button=document.createElement("button");button.className="secondary";
+        button.type="button";button.textContent="使用";
         button.disabled=!actionInfo.canUse;
         button.addEventListener("click",()=>submitLegacyUse(item.sourceLine,item.name));
-        row.append(button);
-        if(actionInfo.reason){
-          const note=document.createElement("p");
-          note.className="small";
-          note.textContent=actionInfo.reason;
-          row.append(note);
-        }
+        controls.append(status,button);
+      }else{
+        const status=document.createElement("span");status.className="small inventory-item-status";
+        status.textContent=item.name==="健康保険"&&state.insurance?.active?
+          "醫院自動生效，不需手動使用":"目前尚未支援直接使用";
+        controls.append(status);
       }
-      list.append(row);
+      card.append(controls);
+      const details=document.createElement("details");details.className="inventory-item-details";
+      const summary=document.createElement("summary");summary.textContent="原版備註與詳細資訊";
+      details.append(summary);
+      const lines=[
+        "熱量："+(info?.calories??"未確認")+" kcal｜使用間隔："+(info?.intervalMinutes??"未確認")+" 分鐘",
+        "身體能量消耗："+(info?.bodyCost??"未確認")+"｜頭腦能量消耗："+(info?.brainCost??"未確認"),
+        "原版備註："+(info?.comment?.trim()||"沒有提供文字備註"),
+        "來源："+(item.readOnly?"原始存檔":"Web 購入或轉換")+
+          "（記錄位置 "+item.sourceLine+"；原始內容不在此頁修改）",
+        "Web 使用狀態："+(actionInfo?"已核對可使用規則，受冷卻與角色條件限制":
+          info?.usage==="automatic"?"自動處理":
+          info?.usage==="payment"?"支援有效信用卡付款":
+          info?.usage==="gift"?"禮品，請於寄送介面操作":"尚未支援手動使用")
+      ];
+      for(const line of lines){
+        const p=document.createElement("p");p.className="small";p.textContent=line;details.append(p);
+      }
+      card.append(details);section.append(card);
     }
-    target.append(list);
+    target.append(section);
+  }
+  if(gifts.length){
+    const details=document.createElement("details");details.className="inventory-secondary";
+    const summary=document.createElement("summary");
+    summary.textContent="寄送用禮品（"+gifts.length+" 筆）";details.append(summary);
+    const note=document.createElement("p");note.className="small";
+    note.textContent="原版一般物品清單不顯示自購禮品；這些項目仍留在資料庫，請於禮品店／郵件中操作。";
+    details.append(note);
+    for(const gift of gifts){
+      const p=document.createElement("p");p.className="small";
+      p.textContent=gift.name+"｜剩餘 "+gift.durability+(gift.unit??"");
+      details.append(p);
+    }
+    target.append(details);
   }
   const history=el("legacy-item-use-history");
   history.replaceChildren();
@@ -3180,6 +3277,7 @@ el("solo-time-panel").addEventListener("click",async event=>{
 });
 setInterval(()=>{
   updateTownTheme(); // 跨越原版時段分界時，即使沒操作也會更新背景。
+  updateInventoryCooldowns(); // 使用伺服器遊戲時間倒數，不依賴瀏覽器本地時鐘。
   if(state?.mode==="solo"&&state?.character&&!soloAtHome)
     renderSoloTime(); // 同步顯示遊戲時鐘，限時事件結束後也恢復快轉按鈕
   updateTrainingCountdowns(); // 每秒刷新課程灰階和剩餘時間，不重建卡片。

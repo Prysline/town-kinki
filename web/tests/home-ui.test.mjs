@@ -166,7 +166,7 @@ test("百貨店實體地圖入口、商品與現金操作需連上真正交易�
   assert.match(script,/api\("retail\/buy",pendingRetailPurchase\)/);
   assert.match(script,/item\.stock<=0/);
   assert.match(script,/renderRetail\(\)/);
-  assert.match(script,/item\.origin==="retail"/);
+  assert.match(script,/item\.readOnly\?"原始存檔":"Web 購入或轉換"/);
 });
 test("原版特殊代碼已可依來源區分實際使用與尚未支援",()=>{
   assert.match(script,/code==="ステータス"/);

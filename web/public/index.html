@@ -260,31 +260,42 @@
           </div>
         </section>
           <section class="card inventory-panel" id="inventory-panel" role="tabpanel" aria-labelledby="profile-tab-inventory" hidden>
-          <div class="eyebrow">持有物</div>
-          <h3>健康保險與個人物品</h3>
-          <p id="insurance-status" class="small"></p>
-          <details class="explain"><summary>玩法與限制說明</summary><p class="small">原始「日用品／健康保険」標價 10,000 元，有效 30 天。Web 版暫用原始基準價直接購買，正式百貨、每日上架、玩家商店價格與庫存仍未移植。</p></details>
-          <form id="insurance-buy-form">
-            <label>購買份數
-              <select id="insurance-quantity" name="quantity">
-                <option value="1">1 份</option>
-                <option value="2">2 份</option>
-                <option value="3">3 份</option>
-                <option value="4">4 份</option>
-                <option value="5">5 份</option>
-              </select>
-            </label>
-            <p id="insurance-quote" class="small"></p>
-            <button type="submit" id="insurance-buy">購買健康保險</button>
-          </form>
-          <h4>近期購買紀錄</h4>
-          <div id="insurance-purchases"></div>
-          <h4>原版物品存檔與消耗品</h4>
-          <p class="small">舊版 mono.cgi 匯入物品維持原始 33 欄封存；百貨店新購入的物品也記在本人持有清單。已有明確執行證據的「回」耐久消耗品可使用一次；未支援的裝備、特殊效果或禮物不可憑空產生作用。自販機與裝備屋已有各自交易入口；裝備使用獨立倉庫，未與 33 欄消耗品混存。其他尚未支援的商店不能直接交易。</p>
-          <div id="legacy-inventory-list"></div>
-          <h4>最近的道具使用紀錄</h4>
-          <div id="legacy-item-use-history"></div>
-        </section>
+            <div class="eyebrow">持有物</div>
+            <h3>我的物品</h3>
+            <p id="inventory-summary" class="small"></p>
+            <p id="inventory-insurance-inline" class="small" hidden></p>
+            <div id="legacy-inventory-list" class="inventory-catalog"></div>
+            <details class="inventory-secondary" id="inventory-insurance-management">
+              <summary>健康保險與續保</summary>
+              <p id="insurance-status" class="small"></p>
+              <p class="small">此處保留 Web 暫行健康保險直購入口（基準價）；正式百貨也可依當期上架商品購買。兩種方式的保險有效期會合併計算。</p>
+              <form id="insurance-buy-form">
+                <label>購買份數
+                  <select id="insurance-quantity" name="quantity">
+                    <option value="1">1 份</option>
+                    <option value="2">2 份</option>
+                    <option value="3">3 份</option>
+                    <option value="4">4 份</option>
+                    <option value="5">5 份</option>
+                  </select>
+                </label>
+                <p id="insurance-quote" class="small"></p>
+                <button type="submit" id="insurance-buy">購買健康保險</button>
+              </form>
+              <details class="inventory-nested">
+                <summary>保險購買紀錄</summary>
+                <div id="insurance-purchases"></div>
+              </details>
+            </details>
+            <details class="inventory-secondary" id="inventory-history-details">
+              <summary>最近的道具使用紀錄</summary>
+              <div id="legacy-item-use-history"></div>
+            </details>
+            <details class="inventory-secondary" id="inventory-source-info">
+              <summary>原始存檔與支援範圍</summary>
+              <p class="small">舊版 mono.cgi 匯入資料的原始 33 欄保持封存；Web 已核對的物品可透過獨立使用紀錄執行。未支援的效果只顯示原版資料，不會假裝已生效。裝備使用獨立裝備欄；寄送用禮品請至禮品店或郵件操作。</p>
+            </details>
+          </section>
           <section class="card attributes-panel" id="attributes-panel" role="tabpanel" aria-labelledby="profile-tab-attributes" hidden>
             <h3>能力值</h3>
             <p class="small ability-caption">延續原版頭腦／身體／其他三組黃色能力條。長度僅比較目前能力的相對大小。</p>

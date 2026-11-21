@@ -480,6 +480,43 @@ body.compact-status-active .game-shell .facility-pane{scroll-margin-top:7rem}
   .retail-buy-controls{grid-template-columns:minmax(0,0.8fr) minmax(0,1.4fr);gap:.35rem}
 }
 
+/* 原版物品欄：商品分類與可使用性優先，購買及歷史收合，不重複技術欄位。 */
+.inventory-catalog{display:grid;gap:.5rem;min-width:0}
+.inventory-category{min-width:0}
+.game-shell .inventory-panel .inventory-category-heading{
+  margin:.5rem 0 .15rem;padding:.35rem .45rem;border:1px solid #dbcb94;
+  background:#fff0ac;color:#493a23;border-radius:3px;font-size:.83rem
+}
+.inventory-item{padding:.45rem .5rem;border:1px solid #e4dcc2;border-top:0;background:#fffdf5;
+  min-width:0;display:grid;gap:.28rem;color:#2c3a2d}
+.inventory-item:nth-of-type(odd){background:#fff9ea}
+.inventory-item-heading{display:flex;justify-content:space-between;align-items:flex-start;
+  gap:.35rem;min-width:0}
+.inventory-item-heading strong{font-size:.84rem;overflow-wrap:anywhere;color:#273a2d}
+.inventory-item-remaining{font-size:.76rem;color:#4b513e;font-variant-numeric:tabular-nums;
+  white-space:nowrap;flex:0 0 auto}
+.inventory-effects{display:grid;gap:.1rem;min-width:0}
+.game-shell .inventory-panel .inventory-effects p.small{margin:0;font-size:.77rem;font-weight:600;color:#2d543e}
+.inventory-item-controls{display:flex;gap:.4rem;align-items:center;justify-content:space-between;min-width:0}
+.inventory-item-controls button{padding:.28rem .65rem;min-height:32px;flex:0 0 auto;font-size:.8rem}
+.inventory-item-status{flex:1;min-width:0;color:#5c654f}
+.game-shell .inventory-panel .inventory-cooldown{font-weight:700;color:#8a451f;
+  font-variant-numeric:tabular-nums}
+.inventory-item-details{border-top:1px solid #e6e0ce;padding-top:.22rem;min-width:0}
+.inventory-item-details>summary,.inventory-secondary>summary,.inventory-nested>summary{
+  font-size:.8rem;font-weight:650;color:#345740;cursor:pointer}
+.game-shell .inventory-panel .inventory-item-details p.small{margin:.25rem 0;overflow-wrap:anywhere}
+.inventory-secondary{border:1px solid #d7ded0;border-radius:5px;padding:.5rem .55rem;
+  background:#fcfdf9;margin-top:.65rem;color:#2c3a2d}
+.inventory-secondary>summary{font-size:.85rem}
+.inventory-secondary p.small{margin:.35rem 0}
+.inventory-nested{padding:.4rem 0;border-top:1px solid #e4e9df;margin-top:.5rem}
+.inventory-nested>summary{font-size:.8rem}
+.game-shell .inventory-panel #inventory-insurance-inline{margin:.1rem 0 .45rem;
+  color:#285d40;font-weight:700}
+.game-shell .inventory-panel #insurance-buy-form{margin-top:.5rem}
+.game-shell .inventory-panel #insurance-buy-form button{width:auto}
+
 /* 原版結果畫面：中央呈現完整交易回執，玩家確認後才返回原操作頁。 */
 .result-dialog{width:min(490px,calc(100vw - 1.5rem));max-width:none;
   max-height:min(82dvh,660px);padding:0;border:1px solid #8eaa95;
