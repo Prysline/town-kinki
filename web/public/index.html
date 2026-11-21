@@ -158,6 +158,7 @@
             <button type="button" id="home-work" data-facility="jobs-panel"><img src="/legacy-assets/button/go_work.png" alt="">工作</button>
             <button type="button" data-facility="inventory-panel"><img src="/legacy-assets/button/item.png" alt="">物品</button>
             <button type="button" data-facility="bank-panel"><img src="/legacy-assets/bank.gif" alt="">銀行</button>
+            <button type="button" data-facility="mail-panel">✉ 郵件</button>
             <button type="button" data-facility="hospital-panel"><img src="/legacy-assets/hospital.gif" alt="">醫院</button>
             <button type="button" data-facility="dining-panel"><img src="/legacy-assets/syokudou.gif" alt="">食堂</button>
             <button type="button" data-facility="housing-panel"><img src="/legacy-assets/house/house_1.gif" alt="">住宅</button>
@@ -286,6 +287,7 @@
         <button id="facility-tab-bank" type="button" role="tab" data-pane="bank" aria-controls="facility-pane-bank" aria-selected="false" tabindex="-1">銀行</button>
         <button id="facility-tab-hospital" type="button" role="tab" data-pane="hospital" aria-controls="facility-pane-hospital" aria-selected="false" tabindex="-1">醫院</button>
         <button id="facility-tab-events" type="button" role="tab" data-pane="events" aria-controls="facility-pane-events" aria-selected="false" tabindex="-1">事件</button>
+        <button id="facility-tab-mail" type="button" role="tab" data-pane="mail" aria-controls="facility-pane-mail" aria-selected="false" tabindex="-1">郵件</button>
 
         </div>
       <div id="facility-pane-house" class="facility-pane" role="tabpanel" aria-labelledby="facility-tab-house" tabindex="0" hidden>
@@ -409,15 +411,14 @@
         <section class="card" id="gift-panel">
           <div class="heading"><div><div class="eyebrow">原版獨立建築</div><h2>禮品店</h2></div><span class="muted">將持有物轉換成禮品</span></div>
           <details class="explain"><summary>轉換與寄送規則</summary>
-            <p class="small">原版 gifutoya.cgi：只能在有「ギフト屋」的城鎮轉換；每次收取現金 50,000 元。可把本人 Web 持有物的全部剩餘耐久轉成「ギフト」，或切出指定的回數／日數。未寄送禮品最多持有 10 格。轉送可指定另一名角色和正整數份數；對方收到的是「ギフト商品」，最多持有 10 格。舊版原始匯入資料保持唯讀，優惠券仍未移植。Web 禮品寄送會同步寫入寄件者及收件者的站內信，雙方各最多保留 50 封；一般無禮品的私人信件、舊版信件匯入及原版附件格式尚未移植，不能透過此頁轉送優惠券。</p>
+            <p class="small">原版 gifutoya.cgi：只能在有「ギフト屋」的城鎮轉換；每次收取現金 50,000 元。可把本人 Web 持有物的全部剩餘耐久轉成「ギフト」，或切出指定的回數／日數。未寄送禮品最多持有 10 格。轉送可指定另一名角色和正整數份數；對方收到的是「ギフト商品」，最多持有 10 格。舊版原始匯入資料保持唯讀，優惠券仍未移植。Web 寄禮會同步寫入雙方各自的站內信；可於「郵件」分頁閱讀、刪除，也能不附禮物寄送純文字信件。所有收／寄、純文字與寄禮信每人合計最多 50 封。舊版信件匯入、K 點數附件及優惠券特例尚未移植，不能透過此頁轉送優惠券。</p>
           </details>
           <p id="gift-status" class="small"></p>
           <h3>可轉換與可寄送物品</h3>
           <div id="gift-sources" class="training-grid"></div>
           <h3>近期禮品操作紀錄</h3>
           <div id="gift-events"></div>
-          <h3>寄禮站內信（收件與寄件，共用 50 封上限）</h3>
-          <div id="gift-mail"></div>
+          <p class="small">寄禮信件已統一收進「郵件」分頁；在此仍可寄送附禮訊息。</p>
         </section>
         <section class="card" id="recycle-panel">
           <div class="heading"><div><div class="eyebrow">原版獨立建築</div><h2>回收商店</h2></div><span class="muted">全玩家共用二手市場</span></div>
@@ -606,6 +607,26 @@
         </section>
       </div>
 
+      <div id="facility-pane-mail" class="facility-pane" role="tabpanel" aria-labelledby="facility-tab-mail" tabindex="0" hidden>
+        <section class="card" id="mail-panel">
+          <div class="heading"><div><div class="eyebrow">原版首頁社交系統</div><h2>私人站內信</h2></div><span class="muted">收件與寄件合計最多 50 封</span></div>
+          <details class="explain"><summary>郵件規則與目前限制</summary>
+            <p class="small">依原版 command.pl::mail_do，輸入其他角色名稱與非空訊息就能寄出，收件人和寄件人各自保有紀錄。純文字信與禮品附信共用同一個信箱與 50 封上限；最新信件排前，超過上限的最舊訊息自動清理。只能刪除自己的信件，不能刪除對方的副本。Web 支援繁體中文及其他 Unicode 文字，原版 Shift-JIS 限制未照搬。原版 mail.cgi 歷史郵件、朋友地址簿、K 點數附件及完整原版讀信狀態尚未移植。</p>
+          </details>
+          <form id="mail-compose">
+            <label for="mail-recipient">收件角色名稱
+              <input id="mail-recipient" name="recipientName" type="text" maxlength="40" required autocomplete="off" placeholder="完整角色名稱">
+            </label>
+            <label for="mail-message">信件內容
+              <textarea id="mail-message" name="message" rows="4" maxlength="1000" required placeholder="寫給其他角色的訊息（最多 1,000 字）"></textarea>
+            </label>
+            <button type="submit">寄出私人站內信</button>
+          </form>
+          <p id="mail-status" class="small" role="status"></p>
+          <h3>我的郵件（收／寄共同保留 50 封）</h3>
+          <div id="mail-messages"></div>
+        </section>
+      </div>
       </section>
     </div>
   </main>
