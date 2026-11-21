@@ -2,6 +2,7 @@ import { townCellAction } from "./town-home.js";
 import { shouldShowCompactEnergy } from "./energy-visibility.js";
 import { townTimePhase } from "./time-theme.js";
 import { groupedStatLines } from "./shop-effects.js";
+import { displayRetailBeautyElectronicsName,displayRetailBeautyElectronicsCategory } from "./retail-beauty-electronics-translations.js";
 import { displayEquipmentName,displayVendingName,displayKnownItemName,displayEquipmentCategory,displayKnownItemCategory } from "./item-translations.js";
 import { itemCooldownRemaining,itemCooldownText,itemRemainingDurability,formatItemCountdown } from "./item-cooldown.js";
 const el = id => document.getElementById(id);
@@ -1362,7 +1363,7 @@ function renderLegacyItems(){
   for(const category of [...grouped.keys()].sort((x,y)=>x.localeCompare(y,"ja"))){
     const section=document.createElement("section");section.className="inventory-category";
     const heading=document.createElement("h4");heading.className="inventory-category-heading";
-    heading.textContent="▼ "+displayKnownItemCategory(category);section.append(heading);
+    heading.textContent="▼ "+displayRetailBeautyElectronicsCategory(displayKnownItemCategory(category));section.append(heading);
     for(const item of grouped.get(category)){
       const card=document.createElement("article");card.className="inventory-item";
       if(Number.isSafeInteger(item.removeAt)){
@@ -1372,7 +1373,7 @@ function renderLegacyItems(){
       const info=item.details??null;
       const actionInfo=actions.get(item.sourceLine);
       const head=document.createElement("div");head.className="inventory-item-heading";
-      const name=document.createElement("strong");name.textContent=displayKnownItemName(item.name);
+      const name=document.createElement("strong");name.textContent=displayRetailBeautyElectronicsName(displayKnownItemName(item.name));
       const durability=document.createElement("span");durability.className="inventory-item-remaining";
       const amount=itemRemainingDurability(item,actionInfo,browserGameNow());
       durability.textContent="剩餘 "+amount+(item.unit??"");
@@ -1461,7 +1462,7 @@ function renderLegacyItems(){
     for(const item of state.legacyItemHistory){
       const li=document.createElement("li");
       li.textContent=new Date(item.usedAt).toLocaleString("zh-TW")+
-        "｜"+item.name+"｜能力變化 "+
+        "｜"+displayRetailBeautyElectronicsName(item.name)+"｜能力變化 "+
         Object.entries(item.changes.stats??{}).map(([key,n])=>
           (labels[key]||key)+(n>=0?"+":"")+n).join("、")+
         "｜疾病指數 "+(item.changes.healthIndex>=0?"+":"")+item.changes.healthIndex+
@@ -1665,7 +1666,7 @@ async function submitRetailPurchase(item,quantity,payment,cardSourceLine){
   const total=item.price*quantity;
   const method=payment==="bank"?"普通銀行存款（有效信用卡）":"現金";
   if(!window.confirm("確定以"+method+"支付 "+money(total)+
-    "，購買「"+item.name+"」×"+quantity+" 嗎？"))return;
+    "，購買「"+displayRetailBeautyElectronicsName(item.name)+"」×"+quantity+" 嗎？"))return;
   if(!pendingRetailPurchase||pendingRetailPurchase.shop!==item.shop||
      pendingRetailPurchase.sku!==item.sku||
      pendingRetailPurchase.quantity!==quantity||
@@ -1680,7 +1681,7 @@ async function submitRetailPurchase(item,quantity,payment,cardSourceLine){
     pendingRetailPurchase=null;
     render();
     notify(result.replayed?"這筆購買已完成，未重複扣款。":
-      "已購入「"+result.name+"」×"+result.quantity+"，"+
+      "已購入「"+displayRetailBeautyElectronicsName(result.name)+"」×"+result.quantity+"，"+
       (result.payment==="bank"?"普通存款":"現金")+"支付 "+money(result.paid)+
       (result.merged?"；耐久已合併至原持有物。":"；物品已加入本人清單。"));
   }catch(error){notify(error.message,true);}
@@ -1768,7 +1769,7 @@ const shopCartSelections=new Map();
 // 原版兩種店均為「一商品一列、分類分段、選一件後統一結帳」。
 function renderShopTable(target,goods,{shopName,onPurchase,emptyText}){
   // 商店、確認與背包顯示中文；商品 SKU 和後端原始日文資料保持不變。
-  const displayProductName=shopName==="自動販賣機"?displayVendingName:name=>name;
+  const displayProductName=shopName==="自動販賣機"?displayVendingName:displayRetailBeautyElectronicsName;
   target.replaceChildren();
   if(!goods.length){
     const empty=document.createElement("p");empty.className="small";
@@ -1843,7 +1844,7 @@ function renderShopTable(target,goods,{shopName,onPurchase,emptyText}){
       category=item.category;
       const group=document.createElement("tr");group.className="shop-category-row";
       const th=document.createElement("th");th.scope="rowgroup";th.colSpan=5;
-      th.textContent="▼ "+(shopName==="自動販賣機"?displayKnownItemCategory(category):category);group.append(th);body.append(group);
+      th.textContent="▼ "+(shopName==="自動販賣機"?displayKnownItemCategory(category):displayRetailBeautyElectronicsCategory(category));group.append(th);body.append(group);
     }
     const row=document.createElement("tr");row.className="shop-product-row";
     const nameCell=document.createElement("td");
@@ -2383,7 +2384,9 @@ function renderRetail(){
   const search=el("retail-search").value.trim().toLocaleLowerCase("zh-TW");
   const goods=(state.retailGoods??[]).filter(item=>item.shop===shop&&
     (item.name.toLocaleLowerCase("zh-TW").includes(search)||
-     item.category.toLocaleLowerCase("zh-TW").includes(search)));
+     displayRetailBeautyElectronicsName(item.name).toLocaleLowerCase("zh-TW").includes(search)||
+     item.category.toLocaleLowerCase("zh-TW").includes(search)||
+     displayRetailBeautyElectronicsCategory(item.category).toLocaleLowerCase("zh-TW").includes(search)));
   text("retail-status",!choices.length?
     "目前城鎮沒有已配置的百貨店。請先在地圖中找到百貨店，單機模式可配置原版建築代碼。" :
     !choices.includes(shop)?"這間百貨店不在目前城鎮。" :
@@ -2400,7 +2403,7 @@ function renderRetail(){
   for(const purchase of (state.retailPurchases??[]).filter(x=>x.shop!=="vending")){
     const line=document.createElement("li");
     line.textContent=new Date(purchase.createdAt).toLocaleString("zh-TW")+
-      "｜"+(purchase.shop==="depart2"?"百貨二":"百貨一")+"｜"+purchase.name+
+      "｜"+(purchase.shop==="depart2"?"百貨二":"百貨一")+"｜"+displayRetailBeautyElectronicsName(purchase.name)+
       " ×"+purchase.quantity+"｜"+(purchase.payment==="bank"?"信用卡／普通存款":"現金")+
       "支付 "+money(purchase.paid)+
       (purchase.merged?"｜已合併耐久":"")+
