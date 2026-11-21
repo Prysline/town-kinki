@@ -78,8 +78,9 @@ test("原版「無」不等於沒有使用效果；未支援的特殊代碼不�
   const examples=catalog.filter(x=>x.effect==="無"&&
     retailItemDetails(x).effects.looks!==undefined);
   assert.ok(examples.length>0);
-  const unsupported=catalog.find(x=>x.effect==="万能,");
+  const unsupported=catalog.find(x=>x.name==="ランドマスター");
   assert.ok(unsupported);
+  assert.equal(unsupported.effect,"万能,");
   assert.equal(retailItemDetails(unsupported).usage,"unsupported");
   assert.equal(retailItemDetails(unsupported).effectCode,"万能,");
 });
@@ -103,7 +104,7 @@ test("新增可實際使用的原版甜點、ステータス 道具、分類複�
   // 断食セット 的原版價為 0，百貨的安全目錄不能上架；使用效果另由舊檔道具測試。
   assert.equal(catalog.some(x=>x.name==="断食セット"),false);
   for(const [name,usage] of [
-    ["無駄知識を覚える本","unsupported"],
+    ["無駄知識を覚える本","supported"],
     ["健康保険","automatic"],["クレジットカード","payment"],
     ["ガチャピン","unsupported"],["防犯カメラ","unsupported"]
   ]){
@@ -353,4 +354,25 @@ test("原版ランダム品的百貨預覽不誤寫每項固定 +10，商品仍�
   assert.ok(Object.values(detail.effects).every(value=>value===10));
   const ordinary=retailItemDetails(catalog.find(x=>x.name==="油取り紙"));
   assert.equal(ordinary.randomizedEffects,false);
+});
+
+test("原版兩款空値万能商品的可觀察效果可用；移動說明不被視為已完成",()=>{
+  const water=catalog.find(x=>x.name==="琵琶湖の水");
+  const book=catalog.find(x=>x.name==="無駄知識を覚える本");
+  const vehicle=catalog.find(x=>x.name==="ランドマスター");
+  const alcohol=catalog.find(x=>x.name==="ぼったくり");
+  assert.ok(water&&book&&vehicle&&alcohol);
+  assert.equal(retailItemDetails(water).usage,"supported");
+  assert.equal(retailItemDetails(water).calories,-100);
+  assert.equal(retailItemDetails(water).effects.looks,10);
+  assert.equal(retailItemDetails(water).effects.tairyoku,10);
+  assert.equal(retailItemDetails(water).effects.kenkou,10);
+  assert.equal(retailItemDetails(book).usage,"supported");
+  assert.equal(retailItemDetails(book).effects.kokugo,3);
+  assert.equal(retailItemDetails(book).effects.love,5);
+  assert.equal(retailItemDetails(book).bodyCost,1);
+  assert.equal(retailItemDetails(book).brainCost,10);
+  assert.equal(retailItemDetails(vehicle).usage,"unsupported");
+  assert.equal(retailItemDetails(alcohol).calories,-300);
+  assert.equal(retailItemDetails(alcohol).usage,"supported");
 });
