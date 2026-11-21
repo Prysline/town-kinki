@@ -1880,6 +1880,94 @@ function renderShopTable(target,goods,{shopName,onPurchase,emptyText}){
   checkout.append(controls,quote,button);target.append(checkout);
   update();
 }
+let pendingArcadeHighLow=null;
+let arcadeHighLowSubmitting=false;
+async function submitArcadeHighLow(guess,stake,previousCard){
+  const direction=guess==="hi"?"高":"低";
+  const comparison=previousCard===null?"原版首次未設定的前卡（比較為0）":String(previousCard);
+  if(arcadeHighLowSubmitting)return;
+  if(!window.confirm("這局選擇比 "+comparison+" 更"+direction+
+      "，即將抽1～5點牌。桌面基本輸贏 "+money(stake)+
+      "；若與前卡相同則依原版設定獲勝且獎金雙倍。確認要玩嗎？"))return;
+  if(!pendingArcadeHighLow||pendingArcadeHighLow.guess!==guess)
+    pendingArcadeHighLow={guess,requestId:crypto.randomUUID()};
+  arcadeHighLowSubmitting=true;
+  el("arcade-highlow-submit").disabled=true;
+  try{
+    state=await api("arcade/highlow/play",{
+      guess,requestId:pendingArcadeHighLow.requestId
+    });
+    const result=state.arcadeHighLowResult;
+    pendingArcadeHighLow=null;
+    render();
+    notify(result.replayed?"這局 High／Low 已結算，沒有重複扣款或領獎。":
+      "High／Low 抽到 "+result.drawnCard+" 點（前卡 "+
+      (result.previousCard??"未設定，數值比較0")+"）；"+
+      (result.tie?"同點數雙倍！":"")+
+      (result.won?"獲得 ":"扣除 ")+money(Math.abs(result.delta))+
+      "；桌面目前 "+result.cardsAfter+" 張牌。");
+  }catch(error){notify(error.message,true);}
+  finally{
+    arcadeHighLowSubmitting=false;
+    if(state?.character)renderArcadeHighLow();
+  }
+}
+function renderArcadeHighLow(){
+  if(!state?.character)return;
+  const info=state.arcadeHighLow??{};
+  const available=info.available===true;
+  const wait=Math.max(0,(info.readyAt??0)-browserGameNow());
+  const stake=info.stake??0;
+  const enough=Number.isSafeInteger(stake)&&stake>0&&state.character.money>=stake;
+  text("arcade-highlow-status",!available?
+    "目前城鎮沒有「ゲーセン」遊樂中心；可使用單機地圖編輯器放置。":
+    wait>0?"High／Low 冷卻中，還有 "+Math.ceil(wait/1000)+" 秒（單機可快轉時間）。":
+      "High／Low 可進行下一局，牌桌與其他帳號共用。");
+  const previous=info.previousCard;
+  text("arcade-highlow-table","前一張："+(previous===null?"未設定（原版首次比較值0）":previous+"點")+
+    "｜累積 "+(info.cardCount??0)+" 張｜最近牌面 "+
+    (info.recentCards?.join("、")??"")+
+    ((info.cardCount??0)>20?"（只顯示最後20張）":""));
+  const guess=el("arcade-highlow-guess"),submit=el("arcade-highlow-submit");
+  function update(){
+    text("arcade-highlow-quote","本局基本輸贏 "+money(stake)+
+      "｜同點數獲勝 +"+money(stake*(info.tieMultiplier??2))+
+      "｜目前現金 "+money(state.character.money)+
+      (!enough?"｜現金不足":""));
+    submit.disabled=arcadeHighLowSubmitting||!available||wait>0||!enough;
+  }
+  guess.onchange=update;
+  submit.onclick=()=>{
+    if(["hi","low"].includes(guess.value)&&available&&wait<=0&&enough)
+      submitArcadeHighLow(guess.value,stake,previous);
+  };
+  update();
+  const history=el("arcade-highlow-history");history.replaceChildren();
+  const rounds=info.history??[];
+  const newest=rounds[0];
+  text("arcade-highlow-result",newest?
+    "最近一次：前卡 "+(newest.previousCard??"未設定")+"、抽到 "+
+    newest.drawnCard+"，"+(newest.won?"獲勝 +":"失敗 −")+
+    money(Math.abs(newest.delta)):"尚未玩過 High／Low。");
+  if(!rounds.length){
+    const empty=document.createElement("p");empty.className="small";
+    empty.textContent="目前沒有本人 High／Low 對局。";history.append(empty);
+  }else{
+    const list=document.createElement("ol");list.className="health-event-list";
+    for(const round of rounds){
+      const li=document.createElement("li");
+      li.textContent=new Date(round.playedAt).toLocaleString("zh-TW")+
+        "｜猜"+(round.guess==="hi"?"高":"低")+
+        "，前卡 "+(round.previousCard??"未設定")+" → "+round.drawnCard+
+        "｜"+(round.tie?"同點數雙倍勝利":round.won?"勝":"敗")+
+        " "+(round.won?"+":"−")+money(Math.abs(round.delta))+
+        "｜累積 "+round.cardsAfter+" 張";
+      list.append(li);
+    }
+    history.append(list);
+  }
+}
+
 let pendingArcadeDice=null;
 let arcadeDiceSubmitting=false;
 async function submitArcadeDice(guess,stake){
@@ -3233,6 +3321,7 @@ function render() {
   renderFishing();
   renderCrafting();
   renderArcadeDice();
+  renderArcadeHighLow();
   renderEquipment();
   renderGiftShop();
   renderMailbox();
