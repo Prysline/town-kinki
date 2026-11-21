@@ -2,7 +2,7 @@ import { townCellAction } from "./town-home.js";
 import { shouldShowCompactEnergy } from "./energy-visibility.js";
 import { townTimePhase } from "./time-theme.js";
 import { groupedStatLines } from "./shop-effects.js";
-import { itemCooldownRemaining,itemCooldownText } from "./item-cooldown.js";
+import { itemCooldownRemaining,itemCooldownText,itemRemainingDurability } from "./item-cooldown.js";
 const el = id => document.getElementById(id);
 let state = null;
 let requestedLegacyIconUrl = null;
@@ -1355,7 +1355,7 @@ function renderLegacyItems(){
       const head=document.createElement("div");head.className="inventory-item-heading";
       const name=document.createElement("strong");name.textContent=item.name;
       const durability=document.createElement("span");durability.className="inventory-item-remaining";
-      const amount=actionInfo?.remaining??item.durability;
+      const amount=itemRemainingDurability(item,actionInfo,browserGameNow());
       durability.textContent="剩餘 "+amount+(item.unit??"");
       head.append(name,durability);card.append(head);
       const preview=document.createElement("div");preview.className="inventory-effects";
