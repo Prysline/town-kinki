@@ -52,3 +52,17 @@ test("app.js 僅載入共用入口，且所有交易仍使用來源 SKU 和原�
   assert.match(app,/const duplicate=owned\.some\(x=>x\.name===item\.name\)/);
   assert.match(app,/if\(item\.category!==category\)/);
 });
+
+test("跨分類校對過的商品仍顯示指定譯名",()=>{
+  const reviewed={
+    "セイ・ノビール":"聖德高",
+    "Apple1":"Apple1",
+    "ビスコ":"必思可夾心餅乾",
+    "オレンジポテト":"橘薯條",
+    "カルアミルク":"卡魯哇牛奶",
+    "リコリス":"甘草滋補飲",
+    "ブラジャードリンク":"胸罩飲料"
+  };
+  for(const [original,localized] of Object.entries(reviewed))
+    assert.equal(displayRetailItemName(original),localized,original);
+});
