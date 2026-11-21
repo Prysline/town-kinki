@@ -35,7 +35,7 @@ export const DESSERT_FASTFOOD_ZH_TW=Object.freeze({
   "ポン・デ・リング": "波堤甜甜圈",
   "D-ポップ": "D-POP迷你甜甜圈",
   "クロワッサン": "可頌",
-  "オレンジポテト": "橘子薯條"
+  "オレンジポテト": "橘薯條"
 });
 
 export const displayDessertFastFoodName=name=>DESSERT_FASTFOOD_ZH_TW[name]??name;
