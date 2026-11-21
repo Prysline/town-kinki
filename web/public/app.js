@@ -522,7 +522,7 @@ async function buyFromPlayerRoom(item,quantity,payment,cardSourceLine){
   if(!houseId)return;
   const total=item.price*quantity;
   if(!window.confirm("確定從「"+(activeRoom.shop?.title??"玩家商店")+
-    "」購買「"+item.name+"」×"+quantity+"，"+
+    "」購買「"+displayRetailFoodName(item.name)+"」×"+quantity+"，"+
     (payment==="bank"?"使用有效信用卡扣普通存款 ":"支付現金 ")+money(total)+"嗎？"))return;
   if(!pendingPlayerStorePurchase||
     pendingPlayerStorePurchase.houseId!==houseId||
@@ -545,7 +545,7 @@ async function buyFromPlayerRoom(item,quantity,payment,cardSourceLine){
     pendingPlayerStorePurchase=null;
     render();
     notify(result.replayed?"這筆商店購物已完成，沒有重複扣款或出貨。":
-      "已購入「"+result.name+"」×"+quantity+"，付款 "+money(result.paid)+
+      "已購入「"+displayRetailFoodName(result.name)+"」×"+quantity+"，付款 "+money(result.paid)+
       (result.cashback?"；同城現金回饋 "+money(result.cashback):"")+
       "，商品已入本人持有物。");
     await openRoom(houseId,slot,false);
@@ -557,12 +557,12 @@ async function setPlayerRoomPrice(item,price){
   if(!Number.isSafeInteger(price)||price<item.min||price>item.max){
     notify("售價必須為 "+money(item.min)+"～"+money(item.max)+" 的整數",true);return;
   }
-  if(!window.confirm("確定將「"+item.name+"」的售價設定為 "+money(price)+" 嗎？"))return;
+  if(!window.confirm("確定將「"+displayRetailFoodName(item.name)+"」的售價設定為 "+money(price)+" 嗎？"))return;
   const slot=activeRoom.selectedIndex;
   try{
     state=await api("shop/price",{houseId,sku:item.sku,price});
     render();
-    notify("已設定「"+item.name+"」的商店單價。");
+    notify("已設定「"+displayRetailFoodName(item.name)+"」的商店單價。");
     await openRoom(houseId,slot,false);
   }catch(error){notify(error.message,true);}
 }
@@ -626,14 +626,14 @@ function renderRoom() {
       const tile=document.createElement("div");
       tile.className="training-tile";
       const title=document.createElement("strong");
-      title.textContent=item.name+"｜"+item.category;
+      title.textContent=displayRetailFoodName(item.name)+"｜"+displayRetailFoodCategory(item.category);
       const hint=document.createElement("p");hint.className="small";
       hint.textContent="單價 "+money(item.price)+"｜剩餘 "+item.stock+
         " 件｜進貨原價 "+money(item.basePrice);
       const qtyLabel=document.createElement("label");
       qtyLabel.textContent="購買數量";
       const qty=document.createElement("select");
-      qty.setAttribute("aria-label",item.name+"玩家商店購買數量");
+      qty.setAttribute("aria-label",displayRetailFoodName(item.name)+"玩家商店購買數量");
       for(let n=1;n<=5;n++){
         const opt=document.createElement("option");
         opt.value=String(n);
@@ -705,7 +705,7 @@ function renderRoom() {
       for(const entry of recent){
         const li=document.createElement("li");
         li.textContent=new Date(entry.createdAt).toLocaleString("zh-TW")+"｜"+
-          (entry.role==="seller"?"出售":"購入")+"｜"+entry.name+
+          (entry.role==="seller"?"出售":"購入")+"｜"+displayRetailFoodName(entry.name)+
           " ×"+entry.quantity+"｜"+money(entry.paid)+
           (entry.cashback?"｜同城回饋 "+money(entry.cashback):"");
         list.append(li);
@@ -1420,7 +1420,7 @@ function renderLegacyItems(){
     details.append(note);
     for(const gift of gifts){
       const p=document.createElement("p");p.className="small";
-      p.textContent=gift.name+"｜剩餘 "+gift.durability+(gift.unit??"");
+      p.textContent=displayRetailFoodName(gift.name)+"｜剩餘 "+gift.durability+(gift.unit??"");
       details.append(p);
     }
     target.append(details);
@@ -2347,9 +2347,9 @@ async function submitGiftAction(action,{sourceLine,quantity,recipientName,name,m
   const converted=action==="convert";
   if(!converted&&action!=="send")return;
   if(!window.confirm(converted?
-    "確定支付 50,000 元，將「"+name+"」的"+(quantity===0?"全部剩餘":quantity+" 份")+
+    "確定支付 50,000 元，將「"+displayRetailFoodName(name)+"」的"+(quantity===0?"全部剩餘":quantity+" 份")+
     "耐久轉換成禮品嗎？":
-    "確定將「"+name+"」的 "+quantity+" 份禮品寄給「"+recipientName+"」嗎？"))return;
+    "確定將「"+displayRetailFoodName(name)+"」的 "+quantity+" 份禮品寄給「"+recipientName+"」嗎？"))return;
   if(!pendingGiftAction||pendingGiftAction.action!==action||
      pendingGiftAction.sourceLine!==sourceLine||
      pendingGiftAction.quantity!==quantity||
@@ -2365,8 +2365,8 @@ async function submitGiftAction(action,{sourceLine,quantity,recipientName,name,m
     pendingGiftAction=null;
     render();
     notify(result.replayed?"禮品操作已完成，未重複改變持有物或扣款。":
-      converted?"「"+result.name+"」已轉換成禮品，手續費 "+money(result.fee)+"。":
-      "已將「"+result.name+"」×"+quantity+" 送給「"+recipientName+"」。");
+      converted?"「"+displayRetailFoodName(result.name)+"」已轉換成禮品，手續費 "+money(result.fee)+"。":
+      "已將「"+displayRetailFoodName(result.name)+"」×"+quantity+" 送給「"+recipientName+"」。");
   }catch(error){notify(error.message,true);}
 }
 function renderGiftShop(){
@@ -2381,7 +2381,7 @@ function renderGiftShop(){
     const tile=document.createElement("div");
     tile.className="training-tile";
     const heading=document.createElement("strong");
-    heading.textContent=item.name+"｜"+item.category;
+    heading.textContent=displayRetailFoodName(item.name)+"｜"+displayRetailFoodCategory(item.category);
     const detail=document.createElement("p");
     detail.className="small";
     detail.textContent="剩餘 "+item.quantity+item.unit+"｜物品來源 #"+item.sourceLine;
@@ -2532,7 +2532,7 @@ let pendingRecycleAction=null;
 async function submitRecycleAction(action,{sourceLine,listingId,name,price}){
   if(!["sell","buy"].includes(action))return;
   if(!window.confirm((action==="sell"?"確定回收出售「":"確定購買二手商品「")+
-    name+"」嗎？"+(action==="sell"?"預計得到 ":"需支付 ")+money(price)))return;
+    displayRetailFoodName(name)+"」嗎？"+(action==="sell"?"預計得到 ":"需支付 ")+money(price)))return;
   const id=action==="sell"?sourceLine:listingId;
   if(!pendingRecycleAction||pendingRecycleAction.action!==action||
     pendingRecycleAction.id!==id)
@@ -2545,7 +2545,7 @@ async function submitRecycleAction(action,{sourceLine,listingId,name,price}){
     pendingRecycleAction=null;
     render();
     notify(result.replayed?"回收交易已處理，沒有重複改變資產。":
-      (action==="sell"?"已出售「":"已購入「")+result.name+
+      (action==="sell"?"已出售「":"已購入「")+displayRetailFoodName(result.name)+
       "」，"+(result.amount>=0?"現金增加 ":"現金扣除 ")+
       money(Math.abs(result.amount))+"。");
   }catch(error){notify(error.message,true);}
@@ -2561,7 +2561,7 @@ function renderRecycle(){
   for(const item of state.recycleListings??[]){
     const tile=document.createElement("div");tile.className="training-tile";
     const title=document.createElement("strong");
-    title.textContent=item.name+"｜"+item.category;
+    title.textContent=displayRetailFoodName(item.name)+"｜"+displayRetailFoodCategory(item.category);
     const note=document.createElement("p");note.className="small";
     note.textContent="耐久 "+item.quantity+item.unit+"｜二手售價 "+money(item.price);
     const button=document.createElement("button");button.type="button";
@@ -2583,7 +2583,7 @@ function renderRecycle(){
   for(const item of state.recycleSellable??[]){
     const tile=document.createElement("div");tile.className="training-tile";
     const title=document.createElement("strong");
-    title.textContent=item.name+"｜"+item.category;
+    title.textContent=displayRetailFoodName(item.name)+"｜"+displayRetailFoodCategory(item.category);
     const note=document.createElement("p");note.className="small";
     note.textContent="剩餘 "+item.quantity+item.unit+"｜預估回收款 "+money(item.payout);
     const button=document.createElement("button");button.type="button";
@@ -2608,7 +2608,7 @@ function renderRecycle(){
   for(const entry of state.recycleHistory??[]){
     const line=document.createElement("li");
     line.textContent=new Date(entry.createdAt).toLocaleString("zh-TW")+"｜"+
-      (entry.action==="sell"?"出售":"購買")+"｜"+entry.name+"｜"+
+      (entry.action==="sell"?"出售":"購買")+"｜"+displayRetailFoodName(entry.name)+"｜"+
       (entry.amount>=0?"現金收入 ":"現金支出 ")+money(Math.abs(entry.amount));
     list.append(line);
   }
@@ -2627,7 +2627,7 @@ async function submitWholesaleAction(action,{houseId,sku,name,quantity,price}){
   if(!["buy","return"].includes(action))return;
   if(!window.confirm(
     (action==="buy"?"確定從問屋進貨「":"確定把商店貨物退回問屋「")+
-    name+"」 "+(quantity===0?"全部剩餘":quantity+" 件")+"，"+
+    displayRetailFoodName(name)+"」 "+(quantity===0?"全部剩餘":quantity+" 件")+"，"+
     (action==="buy"?"從普通存款支付 ":"退回普通存款 ")+money(price)+" 嗎？"
   ))return;
   if(!pendingWholesaleOrder||
@@ -2644,7 +2644,7 @@ async function submitWholesaleAction(action,{houseId,sku,name,quantity,price}){
     pendingWholesaleOrder=null;
     render();
     notify(result.replayed?"這筆問屋交易已結帳，沒有重複扣款、加貨或退貨。":
-      (action==="buy"?"已進貨「":"已退貨「")+result.name+"」×"+
+      (action==="buy"?"已進貨「":"已退貨「")+displayRetailFoodName(result.name)+"」×"+
       (action==="return"?(result.returned??quantity):quantity)+"，"+
       (result.amount<0?"普通存款扣除 ":"普通存款增加 ")+money(Math.abs(result.amount))+"。");
   }catch(error){notify(error.message,true);}
@@ -2691,14 +2691,14 @@ function renderWholesale(){
   const goods=el("wholesale-goods");goods.replaceChildren();
   const search=(el("wholesale-search").value??"").trim().toLocaleLowerCase();
   const matching=(state.wholesaleGoods??[]).filter(item=>
-    (!search||(item.name+" "+item.category).toLocaleLowerCase().includes(search))&&
+    (!search||(item.name+" "+item.category+" "+displayRetailFoodName(item.name)+" "+displayRetailFoodCategory(item.category)).toLocaleLowerCase().includes(search))&&
     (!shop||shop.category==="スーパー"||
      item.category===shop.category)
   );
   for(const item of matching.slice(0,40)){
     const tile=document.createElement("div");tile.className="training-tile";
     const heading=document.createElement("strong");
-    heading.textContent=item.name+"｜"+item.category;
+    heading.textContent=displayRetailFoodName(item.name)+"｜"+displayRetailFoodCategory(item.category);
     const note=document.createElement("p");note.className="small";
     note.textContent="原價 "+money(item.price)+"｜本期共用庫存 "+item.stock;
     const quantityLabel=document.createElement("label");
@@ -2751,7 +2751,7 @@ function renderWholesale(){
   for(const stock of shop?.inventory??[]){
     const tile=document.createElement("div");tile.className="training-tile";
     const name=document.createElement("strong");
-    name.textContent=stock.name+"｜"+stock.category;
+    name.textContent=displayRetailFoodName(stock.name)+"｜"+displayRetailFoodCategory(stock.category);
     const note=document.createElement("p");note.className="small";
     note.textContent="店鋪庫存 "+stock.quantity+" 件｜每件進貨原價 "+money(stock.unitPrice);
     const qtyLabel=document.createElement("label");
@@ -2791,7 +2791,7 @@ function renderWholesale(){
   for(const entry of state.wholesaleHistory??[]){
     const line=document.createElement("li");
     line.textContent=new Date(entry.createdAt).toLocaleString("zh-TW")+"｜"+
-      (entry.action==="buy"?"進貨":"退貨")+"｜"+entry.name+" ×"+entry.quantity+
+      (entry.action==="buy"?"進貨":"退貨")+"｜"+displayRetailFoodName(entry.name)+" ×"+entry.quantity+
       "｜"+(entry.amount<0?"普通存款扣除 ":"普通存款增加 ")+
       money(Math.abs(entry.amount));
     list.append(line);
