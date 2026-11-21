@@ -21,7 +21,7 @@
 - **20 個**有操作入口：**19 個**由 [`FACILITY_PANELS`](../public/town-home.js#L2) 導向 Web 面板（含 PR #23 的獨立教室，PR #27 的已匯入有效信用卡付款），另 **1 個「駅」**由 [`townCellAction`](../public/town-home.js#L12) 導向車站票價與乘車選項（PR #26）。這只是入口覆蓋，不代表設施全部規則已移植。
 - **12 個**已有 Web 地圖代碼，但既未映射 `FACILITY_PANELS`，也不是車站特例；[`townCellAction`](../public/town-home.js#L12) 會回傳 `unavailable`，按圖示只會提示尚未移植。
 - 百貨兩入口、自販機與裝備屋已有各自實際購物交易，**仍不等於原版全部商店功能**。詳 [百貨店](phase31-department-checkout.md)、[自販機](phase33-vending-shopping.md) 與 [裝備屋](phase35-equipment-shop.md)。
-- 這些是**程式路由覆蓋率**，不是已完成功能比例；車站已按原版 `station.cgi` 收取四城六組雙向車資（PR #26），；**第62階段已新增原版徒步與寶箱載具的公路旅行、秒數及交通事故扣耐久**，迷路與其他來源載具仍待核查。
+- 這些是**程式路由覆蓋率**，不是已完成功能比例；車站已按原版 `station.cgi` 收取四城六組雙向車資（PR #26）；**第62階段新增徒步與寶箱載具公路旅行、原版秒數與交通事故耐久，第63階段補原版迷路1/5、輪滑車必迷路及事故後四城改道**，其他來源載具與巴士仍待核查。
 
 ## 二、原版全部 43 個表單入口
 
@@ -40,10 +40,10 @@
 | [`イベント`](../../unit.pl#L79) | `event.cgi` | `form` | 無 | Web 地圖代碼未收錄 |
 | [`特典`](../../unit.pl#L81) | `tokuten.cgi` | `tokuten` | 無 | Web 地圖代碼未收錄 |
 | [`アンケ`](../../unit.pl#L83) | `enq.cgi` | `top` | 有 | Web 有圖示、點選不可進入 |
-| [`駅`](../../unit.pl#L85) | `station.cgi` | `map` | 有 | **PR #26 已修復** → 點車站可查看六組原版票價並實際跨城扣現金；另有第62階段[原版公路寶箱載具與實際事故](phase62-road-travel.md)；其他交通券未核實 |
+| [`駅`](../../unit.pl#L85) | `station.cgi` | `map` | 有 | **PR #26 已修復** → 點車站可查看六組原版票價並實際跨城扣現金；另有第62階段[原版公路寶箱載具與事故](phase62-road-travel.md)、第63階段[迷路與事故後改道](phase63-road-lost.md)；其他交通券未核實 |
 | [`おばちゃん`](../../unit.pl#L116) | `obatyan.cgi` | `week` | 無 | Web 地圖代碼未收錄 |
 | [`おばちゃん強`](../../unit.pl#L118) | `obatyan.cgi` | `strong` | 無 | Web 地圖代碼未收錄 |
-| [`ゲーセン`](../../unit.pl#L120) | `gamerand.cgi` | `—` | 有 | **第55階段完成 `saikoro.cgi` 雙骰猜奇偶**；**第56階段補 `donut.cgi::donus4` High／Low**，累積牌桌張數×10,000下注、同點數勝利雙倍、共用牌桌及本人10分鐘冷卻；**第57階段追加 `donus`／`donus2`／`donus3` 三種原版卡牌**：兩種不同點數中獎及一種相同點數中獎，各自共用獨立牌桌；**第58階段加入 `loto.cgi` 六位數即時樂透**，七組獎金倍率、依上一玩家判斷3分鐘限制；**第59階段新增 `loto6.cgi` 六號樂透**：1～36選6個不同號碼、當地06:00或滿200注時由玩家操作開獎，最多每人20注，獎金匯普通銀行；**第60階段新增 `cardw2.cgi` 多卡**：五個下注課程、成功加倍率／失敗歸1、原版實際成功率79～19%；**第61階段完成 `otakara.cgi` 四寶箱開箱／獎池與立即能力或33欄道具入庫**；道具的後續特殊使用仍待逐項移植，福引原活動已過期；**第62階段已接寶箱載具的原版公路移動**（迷路與部分物品用途未移植）。詳 [第55階段](phase55-arcade-dice.md)、[第56階段](phase56-arcade-highlow.md)、[第57階段](phase57-arcade-donut-trio.md)、[第58階段](phase58-instant-loto.md)、[第59階段](phase59-loto6-draw.md)、[第60階段](phase60-multi-card.md)、[第61階段](phase61-treasure-chests.md)、[第62階段](phase62-road-travel.md) |
+| [`ゲーセン`](../../unit.pl#L120) | `gamerand.cgi` | `—` | 有 | **第55階段完成 `saikoro.cgi` 雙骰猜奇偶**；**第56階段補 `donut.cgi::donus4` High／Low**，累積牌桌張數×10,000下注、同點數勝利雙倍、共用牌桌及本人10分鐘冷卻；**第57階段追加 `donus`／`donus2`／`donus3` 三種原版卡牌**：兩種不同點數中獎及一種相同點數中獎，各自共用獨立牌桌；**第58階段加入 `loto.cgi` 六位數即時樂透**，七組獎金倍率、依上一玩家判斷3分鐘限制；**第59階段新增 `loto6.cgi` 六號樂透**：1～36選6個不同號碼、當地06:00或滿200注時由玩家操作開獎，最多每人20注，獎金匯普通銀行；**第60階段新增 `cardw2.cgi` 多卡**：五個下注課程、成功加倍率／失敗歸1、原版實際成功率79～19%；**第61階段完成 `otakara.cgi` 四寶箱開箱／獎池與立即能力或33欄道具入庫**；道具的後續特殊使用仍待逐項移植，福引原活動已過期；**第62階段已接寶箱載具的原版公路移動，第63階段另接迷路與事故後改道**（部分物品其他用途未移植）。詳 [第55階段](phase55-arcade-dice.md)、[第56階段](phase56-arcade-highlow.md)、[第57階段](phase57-arcade-donut-trio.md)、[第58階段](phase58-instant-loto.md)、[第59階段](phase59-loto6-draw.md)、[第60階段](phase60-multi-card.md)、[第61階段](phase61-treasure-chests.md)、[第62階段](phase62-road-travel.md)、[第63階段](phase63-road-lost.md) |
 | [`アイテム`](../../unit.pl#L122) | `item.cgi` | `item_make` | 無 | Web 地圖代碼未收錄 |
 | [`役場`](../../unit.pl#L124) | `yakuba.cgi` | `yakuba` | 有 | Web 有圖示、點選不可進入 |
 | [`銀行`](../../unit.pl#L126) | `basic.cgi` | `ginkou` | 有 | 有 Web 入口／僅部分對照 |
@@ -88,7 +88,7 @@
 | **SV-01 玩家問卷建立、投票與管理** | [`unit.pl` L83](../../unit.pl#L83) 的 `アンケ` 指向 [`enq.cgi`](../../enq.cgi)，含 `top`、`make`、`setup`、`add`、`write`（投票）、`delete` 等模式；[`enq.cgi::write` L417](../../enq.cgi#L417) 有實際票選條件。 | Web 無獨立問卷／投票系統；與事件抽獎及聊天不可混算。**確定缺漏**。 |
 | **BK-05 五種股票及交易記錄** | [`unit.pl` L132](../../unit.pl#L132) 指向 [`kabu.cgi::kabu` L36–108](../../kabu.cgi#L36)；使用 `log_dir/kab_hendou.cgi` 的 A～E 股價與 `member/<ID>` 個人持股記錄，具交易／清算分支。 | Web [`banking.mjs`](../src/banking.mjs) 是存提款／貸款，沒有原版 A～E 股價市場或持股資料模型。**確定缺漏**，不能因有銀行而算股票已完成。 |
 | **IT-06 拍賣刊登及結算** | [`unit.pl` L189](../../unit.pl#L189) 指向 [`auction.cgi`](../../auction.cgi)；`auction` L49 起讀拍賣記錄，另有 `syupin`、`syupin_do`、`ukewatashi` 分支。 | Web 尚無此拍賣流程；不可和原版店舖買賣、回收商店、物品封存混成同項。**確定缺漏**。 |
-| **GM-01 遊樂中心與卡牌遊戲** | [`unit.pl` L120](../../unit.pl#L120) 的 `ゲーセン` 進入 `gamerand.cgi`，另連 `donut.cgi` 卡牌／High-Low、`saikoro.cgi` 雙骰等子遊戲。 | **第55階段完成 `saikoro.cgi` 雙骰，第56階段完成 `donut.cgi::donus4` High／Low**；**第57階段完成 `donut.cgi` 另外三種抽牌，四種卡牌入口已補上**。**第58階段完成 `loto.cgi` 即時六位數樂透**；**第59階段完成 `loto6.cgi` 當日06:00／200注結算並匯入普通銀行**；**第60階段完成 `cardw2.cgi` 多卡共用倍率與五課程**；**第61階段已補 `otakara.cgi` 四箱扣款、110筆原始獎品、立即狀態與33欄真入庫**；福引（原活動已於2010年結束）仍未開放、第62階段另接寶箱載具的公路移動／事故耐久；其他物品特殊用途與迷路仍未移植，不能把整座遊樂中心視為完成。詳 [第55階段](phase55-arcade-dice.md)、[第56階段](phase56-arcade-highlow.md)、[第57階段](phase57-arcade-donut-trio.md)、[第58階段](phase58-instant-loto.md)、[第59階段](phase59-loto6-draw.md)、[第60階段](phase60-multi-card.md)、[第61階段](phase61-treasure-chests.md)、[第62階段](phase62-road-travel.md)。 |
+| **GM-01 遊樂中心與卡牌遊戲** | [`unit.pl` L120](../../unit.pl#L120) 的 `ゲーセン` 進入 `gamerand.cgi`，另連 `donut.cgi` 卡牌／High-Low、`saikoro.cgi` 雙骰等子遊戲。 | **第55階段完成 `saikoro.cgi` 雙骰，第56階段完成 `donut.cgi::donus4` High／Low**；**第57階段完成 `donut.cgi` 另外三種抽牌，四種卡牌入口已補上**。**第58階段完成 `loto.cgi` 即時六位數樂透**；**第59階段完成 `loto6.cgi` 當日06:00／200注結算並匯入普通銀行**；**第60階段完成 `cardw2.cgi` 多卡共用倍率與五課程**；**第61階段已補 `otakara.cgi` 四箱扣款、110筆原始獎品、立即狀態與33欄真入庫**；福引（原活動已於2010年結束）仍未開放、第62階段另接寶箱載具的公路移動／事故耐久；第63階段另補原版迷路判定／事故後四城改道；其他物品特殊用途仍未移植，不能把整座遊樂中心視為完成。詳 [第55階段](phase55-arcade-dice.md)、[第56階段](phase56-arcade-highlow.md)、[第57階段](phase57-arcade-donut-trio.md)、[第58階段](phase58-instant-loto.md)、[第59階段](phase59-loto6-draw.md)、[第60階段](phase60-multi-card.md)、[第61階段](phase61-treasure-chests.md)、[第62階段](phase62-road-travel.md)、[第63階段](phase63-road-lost.md)。 |
 | **AC-04 個人設定／備忘錄／死亡通知** | [`town_maker.cgi` L647–649](../../town_maker.cgi#L647) 的首頁快捷鍵進入 [`setup.cgi`](../../setup.cgi)；模式有 `change`、`friend`、`memo`、`die`；[`setup.cgi::memo` L334–348](../../setup.cgi#L334) 寫個人備忘錄，`die` L354 起有密碼驗證、角色檔案處理。 | Web 有獨立 `solo` 刪角色操作，**不能當作原版 `setup.cgi::die` 已完整移植**；朋友清單、備忘錄與字體／聲音偏好另需對照。**確定缺漏／部分重疊**。 |
 
 ## 四、首頁快速入口也要盤點，不能只看地圖

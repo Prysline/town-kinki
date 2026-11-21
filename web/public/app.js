@@ -1101,7 +1101,7 @@ async function startRoadJourney(destination,vehicleValue){
     "？原版路程 "+seconds+" 秒，旅行時間未滿時不可抵達；"+
     (sourceLine===null?"步行可能增加身體能力。":
       "有 1/10 機率發生事故，事故會扣所選載具1點耐久。")+
-    "原版的迷路分支尚未移植，Web仍會前往所選目的地。"))return;
+    "原版會判定迷路：從和歌山以外出發，持有ローラースルーゴーゴー必迷路，否則有1/5機率；事故與迷路同時發生時可能改道至其他城鎮，實際結果到站時才會公布。"))return;
   const key=String(destination)+":"+String(sourceLine);
   if(!pendingRoadStart||pendingRoadStart.key!==key)
     pendingRoadStart={key,requestId:crypto.randomUUID()};
@@ -1130,10 +1130,17 @@ async function finishRoadJourney(tripId){
     const place=state.towns.find(x=>x.id===trip.toTownId)?.name??"目的地";
     const exercise=Object.entries(trip.exercise??{})
       .map(([key,v])=>(labels[key]??key)+" +"+v);
+    const chosenPlace=state.towns.find(x=>x.id===trip.requestedToTownId)?.name??"原目的地";
+    const lostDescription=trip.rerouted?
+      "原版迷路與交通事故同時發生，原定前往「"+chosenPlace+"」，四城重新抽選後抵達「"+place+"」"+
+        (trip.toTownId===trip.requestedToTownId?"（剛好抽回原定城市）":"（已改道）")+"。":
+      trip.lost?"原版觸發迷路提示，但沒有事故；程式沒有覆寫目的地，照原計畫抵達。":
+      "沒有觸發迷路。";
     notify((trip.replayed?"此旅程先前已完成，未重複處理事故。":"已抵達")+place+
       "；使用 "+displayRetailItemName(trip.vehicleName)+
       "。"+(trip.accident?"原版交通事故：載具耐久−1，剩餘 "+
         trip.durabilityAfter+"。":"沒有發生需要扣耐久的事故。")+
+      lostDescription+
       (exercise.length?"出發時獲得鍛鍊："+exercise.join("、")+"。":""));
   }catch(error){notify(error.message,true);}
   finally{roadTravelBusy=false;if(state?.character)updateRoadCountdown();}
@@ -1189,7 +1196,10 @@ function renderRoadTravel(){
         "｜"+(state.towns.find(x=>x.id===trip.fromTownId)?.name??trip.fromTownId)+
         " → "+(state.towns.find(x=>x.id===trip.toTownId)?.name??trip.toTownId)+
         "｜"+displayRetailItemName(trip.vehicleName)+" "+trip.seconds+"秒"+
-        (trip.accident?"｜事故耐久−1":"");
+        (trip.accident?"｜事故耐久−1":"")+
+        (trip.rerouted?"｜事故加迷路，四城重新抽選"+
+          (trip.toTownId===trip.requestedToTownId?"（剛好原地）":"（實際改道）"):
+          trip.lost?"｜觸發迷路但未改道":"");
       list.append(li);
     }
     history.append(list);
@@ -1220,14 +1230,20 @@ function updateRoadCountdown(){
     "預計路程："+(valid?seconds+" 秒":"請選擇有效目的地與載具")+
     "｜可用寶箱載具 "+(info.choices??[]).length+
     " 件｜有載具時事故機率 1/"+(info.accidentDenominator??10)+
-    "，事故扣1耐久；徒步不扣載具。");
+    "，事故扣1耐久；徒步不扣載具。"+
+    (state.character.townId===3?"｜從和歌山出發不會迷路。":
+      (info.choices??[]).some(item=>item.name==="ローラースルーゴーゴー")?
+        "｜持有輪滑車，原版必觸發迷路；若又發生事故，改從四城抽實際目的地。":
+        "｜原版另有1/5迷路機率；只有同時發生事故才會重抽目的地。"));
   el("road-travel-start").disabled=roadTravelBusy||Boolean(pending)||!valid;
   el("road-travel-arrive").disabled=roadTravelBusy||!pending||left>0;
   text("road-travel-result",pending?
-    "完成抵達後才會刷新所在地；事故結果會在抵達時公布。":
+    "完成抵達後才會刷新所在地；迷路、事故及可能改道的結果都會在抵達時公布。":
     (info.history?.length?
       "最近一次已完成："+(state.towns.find(t=>t.id===info.history[0].toTownId)?.name??"目的地")+
-      (info.history[0].accident?"；當次事故扣載具1點耐久。":"；當次沒有事故扣耐久。"):
+      (info.history[0].accident?"；當次事故扣載具1點耐久。":"；當次沒有事故扣耐久。")+
+      (info.history[0].rerouted?"原版事故且迷路：目的地重新抽選。":
+        info.history[0].lost?"當次迷路提示沒有改道。":""):
       "尚無已完成行程。"));
 }
 

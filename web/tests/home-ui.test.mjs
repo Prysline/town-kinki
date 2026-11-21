@@ -888,7 +888,7 @@ test("第62階段：公路旅行原版秒數、寶箱載具選擇、倒數完成
     assert.ok(html.includes('id="'+id+'"'));
   assert.ok(html.includes("town_ini.cgi／town_lib.pl／town_maker.cgi"));
   assert.ok(html.includes("1/10事故機率"));
-  assert.ok(html.includes("原版另有迷路"));
+  assert.ok(html.includes("第63階段已依原版補上迷路與事故後改道"));
   assert.ok(script.includes("function renderRoadTravel(){"));
   assert.ok(script.includes("function updateRoadCountdown(){"));
   assert.ok(script.includes("renderRoadTravel();"));
@@ -900,6 +900,21 @@ test("第62階段：公路旅行原版秒數、寶箱載具選擇、倒數完成
   assert.ok(script.includes("Boolean(state.roadTravel?.pending)"));
   assert.ok(script.includes("history.replaceChildren()"));
   assert.ok(!script.includes("innerHTML=trip.vehicleName"));
+});
+
+test("第63階段：原版迷路／事故後改道只在抵達時公布，並列原定與實際目的地",()=>{
+  assert.ok(html.includes("持有「ローラースルーゴーゴー」必定迷路"));
+  assert.ok(html.includes("否則有1/5機率迷路"));
+  assert.ok(html.includes("只有「迷路且發生交通事故」"));
+  assert.ok(html.includes("單純迷路時"));
+  assert.ok(html.includes("到站之前不提前公布"));
+  assert.ok(script.includes("trip.requestedToTownId"));
+  assert.ok(script.includes("trip.rerouted"));
+  assert.ok(script.includes("trip.lost"));
+  assert.ok(script.includes("原版觸發迷路提示，但沒有事故"));
+  assert.ok(script.includes("迷路、事故及可能改道的結果都會在抵達時公布"));
+  assert.ok(script.includes("history.replaceChildren()"));
+  assert.ok(!script.includes("innerHTML=trip.rerouted"));
 });
 
 test("第53階段：原版釣場與餌料商店實際有入庫交易 UI 且拒絕虛構漁獲",()=>{
