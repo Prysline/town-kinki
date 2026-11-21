@@ -3482,3 +3482,94 @@ test("HTTP：百貨購入原版琵琶湖の水和無駄知識書籍後，能力�
     assert.equal(replay.result.legacyItemActions.find(x=>x.sourceLine===purchases[1]).remaining,5);
   }finally{await srv.stop();}
 });
+
+test("多人 HTTP：受贈食品可實際食用，速食共用 60 分鐘冷卻且重送不重複扣除",async()=>{
+  const srv=await start("multi");
+  try{
+    const a=await api(srv.url,"register",{username:"giftFoodSender45",password:"gift-food-sender-123"});
+    const b=await api(srv.url,"register",{username:"giftFoodReceiver45",password:"gift-food-receiver-123"});
+    assert.equal(a.status,200);assert.equal(b.status,200);
+    const sender=await api(srv.url,"character",{
+      name:"食品寄件玩家45",gender:"other",stats:defaultStats()
+    },a.cookie);
+    const recipient=await api(srv.url,"character",{
+      name:"食品收件玩家45",gender:"other",stats:defaultStats()
+    },b.cookie);
+    assert.equal(sender.status,200);assert.equal(recipient.status,200);
+    const catalog=parseLegacyRetailCatalog(decodeLegacyText(
+      readFileSync(new URL("../../dat_dir/syouhin.cgi",import.meta.url))
+    ));
+    const products=[
+      {name:"牛丼弁当",effect:"食料品",line:1000045},
+      {name:"特級幻バーガー",effect:"ファ",line:1000046}
+    ];
+    const db=new DatabaseSync(join(srv.directory,"multi.sqlite"));
+    try{
+      const owner=db.prepare("SELECT user_id FROM characters WHERE name='食品寄件玩家45'").get().user_id;
+      const seconds=Math.floor(sender.result.gameTimeMs/1000);
+      for(const product of products){
+        const item=catalog.find(x=>x.name===product.name);
+        assert.ok(item,"原版商品不存在："+product.name);
+        const raw=[...item.rawFields];
+        raw[0]="ギフト";raw[9]=product.effect;raw[30]=String(seconds);
+        db.prepare([
+          "INSERT INTO legacy_inventory_items(user_id,original_id,source_line,category,",
+          "original_name,effect,durability,durability_unit,purchased_at,last_used_at,raw_fields_json)",
+          "VALUES(?,'__web_gift__',?,'ギフト',?,?,?,?,?,?,?)"
+        ].join(" ")).run(owner,product.line,raw[1],raw[9],
+          Number(raw[21]),raw[22],seconds,0,JSON.stringify(raw));
+      }
+    }finally{db.close();}
+    for(const product of products){
+      const sent=await api(srv.url,"gift/send",{
+        sourceLine:product.line,quantity:1,recipientName:"食品收件玩家45",
+        requestId:"gift_food_http_send_"+product.line
+      },a.cookie);
+      assert.equal(sent.status,200,product.name);
+    }
+    const received=await api(srv.url,"state",undefined,b.cookie);
+    assert.equal(received.status,200);
+    const sourceLines=products.map(product=>{
+      const row=received.result.legacyInventory.find(x=>x.name===product.name);
+      assert.ok(row);
+      assert.equal(row.category,"ギフト商品");
+      const action=received.result.legacyItemActions.find(x=>x.sourceLine===row.sourceLine);
+      assert.ok(action,"確實有可操作使用動作："+product.name);
+      assert.equal(action.food,true);
+      return row.sourceLine;
+    });
+    const before=received.result.character;
+    const used=await api(srv.url,"inventory/legacy/use",{
+      sourceLine:sourceLines[0],requestId:"gift_food_http_use_bento"
+    },b.cookie);
+    assert.equal(used.status,200);
+    assert.equal(used.result.itemUseResult.changes.food,true);
+    assert.equal(used.result.itemUseResult.changes.weight,.72);
+    assert.equal(used.result.character.weight,Math.round((before.weight+.72)*100)/100);
+    const wait=await api(srv.url,"inventory/legacy/use",{
+      sourceLine:sourceLines[1],requestId:"gift_food_http_use_burger_early"
+    },b.cookie);
+    assert.equal(wait.status,400);
+    assert.match(wait.result.error,/60 分鐘/);
+    const repeat=await api(srv.url,"inventory/legacy/use",{
+      sourceLine:sourceLines[0],requestId:"gift_food_http_use_bento"
+    },b.cookie);
+    assert.equal(repeat.status,200);
+    assert.equal(repeat.result.itemUseResult.replayed,true);
+    const current=await api(srv.url,"state",undefined,b.cookie);
+    assert.equal(current.result.legacyItemActions.find(x=>x.sourceLine===sourceLines[0]).remaining,0);
+    assert.equal(current.result.legacyItemActions.find(x=>x.sourceLine===sourceLines[1]).remaining,1);
+    assert.equal(current.result.legacyItemUseHistory.length,1);
+    const check=new DatabaseSync(join(srv.directory,"multi.sqlite"));
+    try{
+      const rows=check.prepare([
+        "SELECT category,effect,raw_fields_json FROM legacy_inventory_items",
+        "WHERE source_line=? AND original_name=?"
+      ].join(" ")).all(sourceLines[0],"牛丼弁当");
+      assert.equal(rows.length,1);
+      assert.equal(rows[0].category,"ギフト商品");
+      assert.equal(rows[0].effect,"食料品");
+      assert.equal(JSON.parse(rows[0].raw_fields_json)[0],"ギフト商品");
+    }finally{check.close();}
+  }finally{await srv.stop();}
+});
