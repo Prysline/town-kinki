@@ -1192,13 +1192,19 @@ function renderJobs() {
     meta.className="job-main";
     const title = document.createElement("span");
     const desc = document.createElement("small");
-    title.textContent = job.name + (job.translated ? "" : "（未翻譯）");
+    // 原版 basic.cgi 的職業名稱後會顯示 (階級 - 1) 顆 *；這不是玩家目前的職業等級。
+    const rankStars=job.rank>1?"*".repeat(job.rank-1):"";
+    title.textContent = job.name + rankStars + (job.translated ? "" : "（未翻譯）");
+    const eligibility=document.createElement("small");
+    eligibility.className="job-eligibility"+(job.reason?" locked":"");
+    eligibility.textContent=job.key===state.character.jobId?"目前任職中":
+      job.reason?(job.previousJob&&job.reason.startsWith("需先精通")?
+        "尚未解鎖："+job.reason:"目前未達就職條件："+job.reason):"可應徵";
     desc.textContent = "薪資 " + money(job.salary) + "／每 " + job.payEvery +
-      " 次工作 · 體力 " + job.bodyCost + " · 頭腦 " + job.brainCost +
-      (job.reason ? " · " + job.reason : "");
+      " 次工作 · 體力 " + job.bodyCost + " · 頭腦 " + job.brainCost;
     const requirements=jobRequirementsPanel(job);
     requirements.open=expanded.has(job.key);
-    meta.append(title, desc, requirements);
+    meta.append(title,eligibility,desc,requirements);
     const button = document.createElement("button");
     button.type = "button";
     button.textContent = job.key === state.character.jobId ? "任職中" : "應徵";
@@ -2652,23 +2658,23 @@ function render() {
   text("brain-energy", c.brainEnergy + " / " + state.maxBrainEnergy);
   renderCompactStatus(c);
   selectProfileView(activeProfileView);
-  text("current-job", state.currentJob?.name || "尚未就職");
+  // 原版 town_maker.cgi：職業名稱與等級同列；移入提示才看總經驗與下級剩餘值。
+  // Web 直接把「本級 / 100 XP」放在角色狀態，精通 Lv.15 獨立用文字標示。
+  const hasCurrentJob=Boolean(state.currentJob);
+  const jobExperience=hasCurrentJob?Math.max(0,c.jobExperience??0):0;
+  const jobLevel=hasCurrentJob?state.jobLevel:0;
+  const currentLevelXp=jobExperience%100;
+  text("current-job",hasCurrentJob?state.currentJob.name+"（Lv."+jobLevel+"）":"尚未就職");
+  el("job-level-progress").hidden=!hasCurrentJob;
+  text("job-level-xp","本級經驗 "+currentLevelXp+" / 100 XP");
+  text("job-next-level","距離 Lv."+(jobLevel+1)+" 還差 "+(100-currentLevelXp)+" XP");
+  el("job-level-bar").value=currentLevelXp;
+  text("job-mastery-status",!hasCurrentJob?"尚未就職":
+    jobLevel>=15?"已達 Lv.15 精通門檻":
+    "距離 Lv.15 精通還需 "+(1500-jobExperience)+" XP");
   text("work-count", c.workCount + " 次（目前職業 " + c.jobWorkCount + " 次）");
-  text("job-experience", c.jobExperience + " 點");
-  text("job-level", state.jobLevel + " 級");
-  // 原版 town_maker.cgi：每 100 經驗升一級，basic.cgi 達 15 級精通。
-  // 只呈現目前職業的進度；masteredJob 是先前已精通的職業，兩者不得混用。
-  const currentMasteryXp=state.currentJob?Math.max(0,c.jobExperience??0):0;
-  const masteryTargetXp=1500;
-  const masteryReached=Boolean(state.currentJob&&state.jobLevel>=15);
-  const masteryText=!state.currentJob?"尚未就職":
-    masteryReached?"已達精通門檻（15 級，"+currentMasteryXp+" 經驗）":
-    "目前 "+Math.min(currentMasteryXp,masteryTargetXp)+" / "+masteryTargetXp+
-      " 經驗（"+state.jobLevel+" / 15 級），距離精通還需 "+
-      (masteryTargetXp-currentMasteryXp)+" 經驗";
-  text("job-mastery-status",masteryText);
-  el("job-mastery-bar").value=Math.min(currentMasteryXp,masteryTargetXp);
-  text("jobs-mastery-status","目前職業精通進度："+masteryText+"。");
+  text("job-experience", jobExperience + " XP");
+  // masteredJob 是原版單一前置職業欄位，並非完整履歷。
   text("mastered-job", c.masteredJob || "無");
   text("measurements", c.height + " 公分／" + c.weight + " 公斤");
   renderDining();
@@ -2689,6 +2695,9 @@ function render() {
     state.workCooldownMs > 0 ? "距離下次工作約 " + Math.ceil(state.workCooldownMs / 1000) + " 秒。" :
       "工作冷卻時間已結束。");
   const job=state.currentJob;
+  const workJob=job?state.jobs?.find(entry=>entry.key===job.key):null;
+  text("work-cost-status",workJob?
+    "每次工作消耗：身體能量 "+workJob.bodyCost+"、頭腦能量 "+workJob.brainCost+"。":"");
   text("work-payday-status",!job?"尚未任職，無薪資發放週期。":
     job.payEvery===1?"目前職業：每次完成工作即發薪；收款方式："+
       (c.salaryPayment==="bank"?"普通銀行存款":"現金")+"。":
