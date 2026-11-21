@@ -10,6 +10,8 @@
 
 > **第 49 階段獨立私人站內信**：依 [原版收寄雙方紀錄與共用信箱規則](docs/phase49-unified-private-mail.md)，城鎮快捷與設施分頁新增獨立「郵件」，支援純文字寄信、本人刪信、寄禮附信和普通信共用每人收／寄合計 50 封、重送防重、舊信箱資料無損升級及多人資料隔離；舊版 `member/<ID>/mail.cgi` 匯入、朋友地址簿、K 點數附信、已讀狀態尚未移植。功能有 HTTP 與單元回歸，但實機視覺驗收及真實玩家舊資料仍待核實。
 
+> **第 50 階段單機遊玩優先**：先解決新玩家因原版四份 `townlog` 空檔而只有空白地圖的阻塞。已新增[單機首次遊玩稽核與可選擇試玩街區](docs/phase50-solo-first-play-audit.md)：玩家可以明確確認後建立**只使用原版已知設施代碼的 Web 試玩配置**，供百貨購物、用餐、訓練與住宅空地等既有正式交易操作；不冒充原版歷史地圖，不自動初始化、不覆寫有任何配置或住宅的城鎮，不送額外資金。單機遊玩、道具、事件與可單人操作的特殊設施為後續優先，現有多人功能保留但暫不擴充為首要目標。
+
 > **第 30 階段盤點與後續工作**：[CGI 來源重盤點／偽待辦校正](docs/phase30-source-recheck.md)、[最新待辦總清冊：未深入盤點／已盤點未修／已修待驗收](docs/phase30-open-audit-backlog.md)、[現行原版 → Web 差異矩陣](docs/migration-audit.md)、[全 43 個原版地圖互動入口與 Web 導覽覆蓋表](docs/phase30-entrypoint-coverage.md)、[外貌與圖示來源](docs/appearance-source-audit.md)、[職業／教室／公開個人檔案](docs/phase30-jobs-training-profile-audit.md) 分別追溯原版程式與實際缺漏。**現有 CI 只核對入口清單／圖示，並不逐子 CGI 驗證功能**；歷史 [工作契約](docs/PHASE30-MIGRATION-INVENTORY-PLAN.md) 不是驗收證明。實際玩家資料／瀏覽器仍待驗收。
 
 ## 本階段已完成
