@@ -15,6 +15,35 @@ function requireArgs(userId,requestId,now){
      typeof requestId!=="string"||!VALID_REQUEST.test(requestId)||
      !Number.isSafeInteger(now)||now<=0)throw new Error("禮品操作格式不正確");
 }
+// 寄禮收發是收件者／寄件者各自的歷史資料，不應隨「對方」刪帳連帶消失。
+// 第46階段將每封信外鍵綁 gift_events：刪除寄件人會連帶刪除收件人的信。
+// 新 DB 取消跨帳號的事件刪除外鍵，既有 DB 在啟動時以可回滾交易遷移。
+function migrateMailOwnership(db){
+  const foreignKeys=db.prepare("PRAGMA foreign_key_list(gift_mail_messages)").all();
+  if(!foreignKeys.some(key=>key.table==="gift_events"))return;
+  db.exec("BEGIN IMMEDIATE");
+  try{
+    db.exec([
+      "CREATE TABLE gift_mail_messages_v2(",
+      "id INTEGER PRIMARY KEY AUTOINCREMENT,",
+      "user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,",
+      "event_id INTEGER NOT NULL,",
+      "direction TEXT NOT NULL CHECK(direction IN ('inbox','sent')),",
+      "other_name TEXT NOT NULL,message TEXT NOT NULL,",
+      "gift_name TEXT NOT NULL,quantity INTEGER NOT NULL CHECK(quantity>0),",
+      "created_at INTEGER NOT NULL,UNIQUE(event_id,direction));",
+      "INSERT INTO gift_mail_messages_v2(",
+      "id,user_id,event_id,direction,other_name,message,gift_name,quantity,created_at)",
+      "SELECT id,user_id,event_id,direction,other_name,message,gift_name,quantity,created_at",
+      "FROM gift_mail_messages;",
+      "DROP TABLE gift_mail_messages;",
+      "ALTER TABLE gift_mail_messages_v2 RENAME TO gift_mail_messages;",
+      "CREATE INDEX gift_mail_user_idx",
+      "ON gift_mail_messages(user_id,created_at DESC,id DESC);"
+    ].join(" "));
+    db.exec("COMMIT");
+  }catch(error){db.exec("ROLLBACK");throw error;}
+}
 export function initGiftTables(db){
   db.exec([
     "CREATE TABLE IF NOT EXISTS gift_events(",
@@ -29,7 +58,7 @@ export function initGiftTables(db){
     "CREATE TABLE IF NOT EXISTS gift_mail_messages(",
     "id INTEGER PRIMARY KEY AUTOINCREMENT,",
     "user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,",
-    "event_id INTEGER NOT NULL REFERENCES gift_events(id) ON DELETE CASCADE,",
+    "event_id INTEGER NOT NULL,",
     "direction TEXT NOT NULL CHECK(direction IN ('inbox','sent')),",
     "other_name TEXT NOT NULL,message TEXT NOT NULL,",
     "gift_name TEXT NOT NULL,quantity INTEGER NOT NULL CHECK(quantity>0),",
@@ -41,6 +70,7 @@ export function initGiftTables(db){
   // 既有第37階段交易表保留舊資料，新增請求文字比對避免同一 ID 偷換信件。
   if(!db.prepare("PRAGMA table_info(gift_events)").all().some(c=>c.name==="message"))
     db.exec("ALTER TABLE gift_events ADD COLUMN message TEXT NOT NULL DEFAULT ''");
+  migrateMailOwnership(db);
 }
 function giftMessage(message){
   if(message===undefined)return DEFAULT_GIFT_MESSAGE; // 相容已存在、不含訊息欄的舊版 Web API

@@ -3648,3 +3648,66 @@ test("多人 HTTP：寄送附信和禮品同筆完成，雙方信箱隔離、重
     assert.equal(verified.result.giftEvents.length,0);
   }finally{await srv.stop();}
 });
+
+
+test("多人 HTTP：寄件帳號刪除後，仍可由收件者讀取自己的信件與已交付禮品",async()=>{
+  const srv=await start("multi");
+  try{
+    const sentAccount=await api(srv.url,"register",{
+      username:"phase47SafeSender",password:"phase47-sender-pass-123"
+    });
+    const inboxAccount=await api(srv.url,"register",{
+      username:"phase47SafeReader",password:"phase47-reader-pass-123"
+    });
+    assert.equal(sentAccount.status,200);
+    assert.equal(inboxAccount.status,200);
+    const sender=await api(srv.url,"character",{
+      name:"收發存續寄件者",gender:"other",stats:defaultStats()
+    },sentAccount.cookie);
+    const reader=await api(srv.url,"character",{
+      name:"收發存續收件者",gender:"other",stats:defaultStats()
+    },inboxAccount.cookie);
+    assert.equal(sender.status,200);
+    assert.equal(reader.status,200);
+    const raw=Array(33).fill("0");
+    raw[0]="ギフト";raw[1]="油取り紙";raw[9]="無";
+    raw[21]="1";raw[22]="回";
+    raw[30]=String(Math.floor(sender.result.gameTimeMs/1000));
+    const db=new DatabaseSync(join(srv.directory,"multi.sqlite"));
+    try{
+      const senderId=db.prepare("SELECT user_id FROM characters WHERE name=?")
+        .get("收發存續寄件者").user_id;
+      db.prepare([
+        "INSERT INTO legacy_inventory_items(user_id,original_id,source_line,category,",
+        "original_name,effect,durability,durability_unit,purchased_at,last_used_at,raw_fields_json)",
+        "VALUES(?,'__web_gift__',1000047,'ギフト','油取り紙','無',1,'回',?,0,?)"
+      ].join(" ")).run(senderId,Number(raw[30]),JSON.stringify(raw));
+    }finally{db.close();}
+    const sent=await api(srv.url,"gift/send",{
+      sourceLine:1000047,quantity:1,recipientName:"收發存續收件者",
+      message:"寄件者刪除帳號後這封信仍須保留",
+      requestId:"phase47_safe_mail_http"
+    },sentAccount.cookie);
+    assert.equal(sent.status,200);
+    assert.equal(sent.result.giftResult.replayed,false);
+    const before=await api(srv.url,"state",undefined,inboxAccount.cookie);
+    assert.equal(before.result.giftMail.length,1);
+    assert.equal(before.result.giftMail[0].direction,"inbox");
+    assert.equal(before.result.legacyInventory.some(x=>x.name==="油取り紙"),true);
+    const writeDb=new DatabaseSync(join(srv.directory,"multi.sqlite"));
+    try{
+      writeDb.exec("PRAGMA foreign_keys=ON");
+      const senderId=writeDb.prepare("SELECT user_id FROM characters WHERE name=?")
+        .get("收發存續寄件者").user_id;
+      writeDb.prepare("DELETE FROM users WHERE id=?").run(senderId);
+      assert.equal(writeDb.prepare("PRAGMA foreign_key_check").all().length,0);
+      assert.equal(writeDb.prepare("SELECT COUNT(*) AS n FROM gift_events").get().n,0);
+    }finally{writeDb.close();}
+    const after=await api(srv.url,"state",undefined,inboxAccount.cookie);
+    assert.equal(after.status,200);
+    assert.equal(after.result.giftMail.length,1);
+    assert.equal(after.result.giftMail[0].otherName,"收發存續寄件者");
+    assert.equal(after.result.giftMail[0].message,"寄件者刪除帳號後這封信仍須保留");
+    assert.equal(after.result.legacyInventory.some(x=>x.name==="油取り紙"),true);
+  }finally{await srv.stop();}
+});
