@@ -1,6 +1,7 @@
 import { townCellAction } from "./town-home.js";
 import { shouldShowCompactEnergy } from "./energy-visibility.js";
 import { townTimePhase } from "./time-theme.js";
+import { groupedStatLines } from "./shop-effects.js";
 const el = id => document.getElementById(id);
 let state = null;
 let requestedLegacyIconUrl = null;
@@ -1527,20 +1528,12 @@ function retailEffectDetails(item){
     .map(([key,value])=>(labels[key]??key)+
       (info.randomizedEffects?" +0～+"+value:(value>0?"+":"")+value));
   // 完整列出原版非零能力，不再截斷成「等 X 項」；同幅度合併以減少重複。
-  const grouped=new Map();
-  for(const [key,value] of Object.entries(info.effects??{})){
-    const change=info.randomizedEffects?" +0～+"+value:
-      (value>0?" +"+value:" "+value);
-    if(!grouped.has(change))grouped.set(change,[]);
-    grouped.get(change).push(labels[key]??key);
-  }
   const primary=[];
   if((info.bodyCost??0)<0)primary.push("身體能量恢復 "+(-info.bodyCost));
   if((info.brainCost??0)<0)primary.push("頭腦能量恢復 "+(-info.brainCost));
   if(info.effectCode&&!["無","効果","ステータス"].includes(info.effectCode))
     primary.push(describeOriginalRetailEffect(info.effectCode));
-  for(const [change,names] of grouped)
-    primary.push((info.randomizedEffects?"每項獨立隨機":"能力")+change+"："+names.join("、"));
+  primary.push(...groupedStatLines(info.effects,labels,info.randomizedEffects));
   if(!primary.length)primary.push("原版未記載能力增減");
   const preview=document.createElement("div");
   preview.className="retail-effect-preview";
@@ -1577,6 +1570,8 @@ function retailEffectDetails(item){
   }
   return {preview,details};
 }
+// 保留上次選擇，避免每 30 秒同步狀態就清空正在進行的結帳。
+const shopCartSelections=new Map();
 // 原版兩種店均為「一商品一列、分類分段、選一件後統一結帳」。
 function renderShopTable(target,goods,{shopName,onPurchase,emptyText}){
   target.replaceChildren();
@@ -1598,7 +1593,8 @@ function renderShopTable(target,goods,{shopName,onPurchase,emptyText}){
   }
   header.append(headings);
   const body=document.createElement("tbody");
-  let category=null,chosen=null;
+  const saved=shopCartSelections.get(shopName);
+  let category=null,chosen=goods.find(item=>item.sku===saved?.sku&&item.stock>0)??null;
   const cards=state.classroomCreditCards??[];
   const checkout=document.createElement("div");checkout.className="shop-checkout";
   const controls=document.createElement("div");controls.className="retail-buy-controls";
@@ -1621,6 +1617,10 @@ function renderShopTable(target,goods,{shopName,onPurchase,emptyText}){
     option.textContent="信用卡："+card.name;payment.append(option);
   }
   paymentLabel.append(payment);
+  if(saved?.quantity&&[...qty.options].some(x=>x.value===String(saved.quantity)))
+    qty.value=String(saved.quantity);
+  if(saved?.payment&&[...payment.options].some(x=>x.value===saved.payment))
+    payment.value=saved.payment;
   controls.append(qtyLabel,paymentLabel);
   const quote=document.createElement("p");quote.className="small";
   quote.setAttribute("role","status");
@@ -1656,7 +1656,13 @@ function renderShopTable(target,goods,{shopName,onPurchase,emptyText}){
     const radio=document.createElement("input");radio.type="radio";
     radio.name=shopName+"-selection";radio.value=item.sku;
     radio.disabled=item.stock<=0;
-    radio.addEventListener("change",()=>{chosen=item;update();});
+    radio.checked=item===chosen;
+    radio.addEventListener("change",()=>{
+      chosen=item;
+      shopCartSelections.set(shopName,{sku:item.sku,quantity:Number(qty.value),
+        payment:payment.value});
+      update();
+    });
     label.append(radio,document.createTextNode(item.name));nameCell.append(label);
     const price=document.createElement("td");price.className="shop-price";
     price.textContent=money(item.price);
@@ -1691,8 +1697,14 @@ function renderShopTable(target,goods,{shopName,onPurchase,emptyText}){
     onPurchase(chosen,Number(qty.value),bank?"bank":"cash",
       bank?Number(payment.value.slice(5)):undefined);
   });
-  qty.addEventListener("change",update);
-  payment.addEventListener("change",update);
+  const saveControls=()=>{
+    if(chosen)shopCartSelections.set(shopName,{
+      sku:chosen.sku,quantity:Number(qty.value),payment:payment.value
+    });
+    update();
+  };
+  qty.addEventListener("change",saveControls);
+  payment.addEventListener("change",saveControls);
   checkout.append(controls,quote,button);target.append(checkout);
   update();
 }
@@ -1713,7 +1725,7 @@ function renderRetail(){
     (state.retailDay??"今日")+"｜符合搜尋的商品 "+goods.length+
     " 種。請先選擇商品再統一結帳；每筆可買 1～5 件，一般持有上限 25 格、購入禮品 10 格。");
   renderShopTable(el("retail-items"),goods,{
-    shopName:"百貨店",
+    shopName:shop,
     onPurchase:submitRetailPurchase,
     emptyText:choices.length?"目前沒有符合條件的上架商品。":"尚無可進入的百貨店。"
   });
