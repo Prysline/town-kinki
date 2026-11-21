@@ -1876,6 +1876,110 @@ function renderShopTable(target,goods,{shopName,onPurchase,emptyText}){
   checkout.append(controls,quote,button);target.append(checkout);
   update();
 }
+let pendingFishingAction=null;
+async function submitFishingAction(actionName,payload,description){
+  if(!window.confirm(description))return;
+  const requestKey=actionName+":"+JSON.stringify(payload);
+  if(!pendingFishingAction||pendingFishingAction.key!==requestKey)
+    pendingFishingAction={key:requestKey,requestId:crypto.randomUUID()};
+  const data={...payload,requestId:pendingFishingAction.requestId};
+  try{
+    state=await api("fishing/"+actionName,data);
+    const result=state.fishingResult;
+    pendingFishingAction=null;
+    render();
+    if(result.replayed){notify("這筆釣魚交易已完成，沒有重複扣款、扣餌或領獎。");return;}
+    notify(actionName==="bait/buy"?
+      "已購入「"+result.name+"」魚餌，支付 "+money(result.price)+"；商品已入本人背包。":
+      actionName==="cast"?
+        "已消耗「"+result.baitName+"」一回。"+
+        (result.caught?"釣到「"+result.catchName+"」，漁獲已入庫！":"這次沒有釣到魚。")+
+        "釣魚冷卻 100 秒。":
+        "已出售「"+result.name+"」一回，競價收入 "+money(result.paid)+"。");
+  }catch(error){notify(error.message,true);}
+}
+function renderFishing(){
+  if(!state?.character)return;
+  const info=state.fishing??{};
+  const available=info.fishingAvailable===true;
+  const shop=info.baitShopAvailable===true;
+  text("fishing-status",available?
+    "釣場已開放。魚可重新作餌，也可於此出售；每次都消耗一回耐久。":
+    "目前城鎮尚無「釣り」釣場；可在單機地圖編輯器放置原版建築。");
+  text("fishing-shop-status",shop?
+    "原版餌料商店已開放：依原始標價，庫存每日依原版商品數據補充。":
+    "這座城鎮尚無「販売1」餌料商店；無法購買新的魚餌。");
+  const goods=el("fishing-bait-goods");
+  goods.replaceChildren();
+  for(const bait of info.baitGoods??[]){
+    const tile=document.createElement("div");tile.className="training-tile";
+    const name=document.createElement("strong");name.textContent=bait.name;
+    const details=document.createElement("p");details.className="small";
+    details.textContent="售價："+money(bait.price)+"｜耐久 "+bait.durability+" 回｜尚餘 "+bait.stock+" 件";
+    const buy=document.createElement("button");buy.type="button";
+    const canBuy=shop&&bait.stock>0&&state.character.money>=bait.price;
+    buy.textContent=canBuy?"購買一件魚餌":"目前無法購買";
+    buy.disabled=!canBuy;
+    buy.addEventListener("click",()=>submitFishingAction("bait/buy",{
+      sku:bait.sku
+    },"確定依原版標價以現金 "+money(bait.price)+" 購買「"+bait.name+"」嗎？"));
+    tile.append(name,details,buy);goods.append(tile);
+  }
+  function fillOptions(id,list){
+    const select=el(id),previous=select.value;
+    select.replaceChildren();
+    for(const item of list){
+      const option=document.createElement("option");
+      option.value=String(item.sourceLine);
+      option.textContent=item.name+"（可用 "+item.remaining+" 回）";
+      select.append(option);
+    }
+    if(list.some(x=>String(x.sourceLine)===previous))select.value=previous;
+    select.disabled=!available||list.length===0;
+  }
+  fillOptions("fishing-bait-select",info.baitOptions??[]);
+  fillOptions("fishing-sell-select",info.sellOptions??[]);
+  const readyAt=info.readyAt??0;
+  const wait=Math.max(0,readyAt-(state.gameTimeMs??Date.now()));
+  text("fishing-cooldown",!available?"釣場未開放。":
+    wait>0?"釣魚冷卻中，尚需約 "+Math.ceil(wait/1000)+" 秒；可使用單機時間快轉。":
+    "現在可以釣魚。成功或失敗都會扣掉一回魚餌，並進入 100 秒冷卻。");
+  const cast=el("fishing-cast"),sell=el("fishing-sell");
+  cast.disabled=!available||wait>0||!(info.baitOptions?.length);
+  sell.disabled=!available||!(info.sellOptions?.length);
+  cast.onclick=()=>{
+    const line=Number(el("fishing-bait-select").value);
+    const bait=info.baitOptions?.find(x=>x.sourceLine===line);
+    if(bait)submitFishingAction("cast",{sourceLine:line},
+      "使用「"+bait.name+"」釣魚一次？不論有沒有釣到魚，都會消耗一回耐久。");
+  };
+  sell.onclick=()=>{
+    const line=Number(el("fishing-sell-select").value);
+    const catchItem=info.sellOptions?.find(x=>x.sourceLine===line);
+    if(catchItem)submitFishingAction("sell",{sourceLine:line},
+      "確定在原版競價市場出售「"+catchItem.name+"」一回？成交價格依原版範圍隨機決定。");
+  };
+  const history=el("fishing-history");history.replaceChildren();
+  const items=info.history??[];
+  if(!items.length){
+    const p=document.createElement("p");p.className="small";
+    p.textContent="尚未有購餌、釣魚或魚獲出售紀錄。";history.append(p);
+  }else{
+    const list=document.createElement("ol");list.className="health-event-list";
+    for(const item of items){
+      const li=document.createElement("li");
+      const label=item.action==="buy"?
+        "買餌："+item.name+"（"+money(item.price)+"）":
+        item.action==="cast"?
+          "釣魚："+item.baitName+" → "+(item.caught?"釣到 "+item.catchName:"未中魚"):
+          "賣魚："+item.name+"（收入 "+money(item.paid)+"）";
+      li.textContent=new Date(item.createdAt).toLocaleString("zh-TW")+"｜"+label;
+      list.append(li);
+    }
+    history.append(list);
+  }
+}
+
 function renderRetail(){
   if(!state?.character)return;
   const choices=state.retailAvailable??[];
@@ -2944,6 +3048,7 @@ function render() {
   renderDining();
   renderRetail();
   renderVending();
+  renderFishing();
   renderEquipment();
   renderGiftShop();
   renderMailbox();
