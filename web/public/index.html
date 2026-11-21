@@ -442,6 +442,29 @@
           <h3>最近釣魚紀錄</h3>
           <div id="fishing-history"></div>
         </section>
+        <section class="card" id="crafting-panel">
+          <div class="heading">
+            <div><div class="eyebrow">單機生活 · 原版合成屋</div><h2>合成屋</h2></div>
+            <span class="muted">gouseiya.cgi／dat_dir/gousei.cgi</span>
+          </div>
+          <p id="crafting-status" class="small" role="status"></p>
+          <details class="explain">
+            <summary>配方與材料使用規則</summary>
+            <p class="small">依原版 12 種配方，需要兩或三種實際持有材料，每製作一組按配方耗用指定回數、取得該成品原始耐久；手續費 0 元。Web 版依同筆交易檢查本人材料、25 格背包、同品最多 5 組、防重送及失敗回滾。材料剩餘回數與製作紀錄保存在 SQLite。部分合成原料必須先從實際上架的商店、獎品或其他合成品取得；沒有材料時無法憑空製造。原版配方「アイスクリーム」材料欄末尾多一個冒號，按原 CGI 解析結果視為冷蔵庫 1 回，不改寫原始配方檔。</p>
+          </details>
+          <div id="crafting-recipes" class="training-grid"></div>
+          <div class="filters retail-filters">
+            <label for="crafting-select">選擇合成品
+              <select id="crafting-select"></select>
+            </label>
+            <label for="crafting-quantity">製作組數
+              <input id="crafting-quantity" type="number" min="1" max="5" value="1" step="1">
+            </label>
+          </div>
+          <button type="button" id="crafting-submit" disabled>確認製作（手續費 0 元）</button>
+          <h3>近期合成紀錄</h3>
+          <div id="crafting-history"></div>
+        </section>
         <section class="card" id="vending-panel">
           <div class="heading"><div><div class="eyebrow">原版獨立建築</div><h2>自動販賣機</h2></div><span class="muted">獨立飲料貨架</span></div>
           <details class="explain"><summary>販賣機與百貨店差異</summary>
