@@ -4088,17 +4088,17 @@ test("第50階段單機首次遊玩：空白街區一鍵配置後可工作、百
     const first=await api(srv.url,"solo/map/starter",{townId:3});
     assert.equal(first.status,200);
     assert.deepEqual(first.result.mapStarterResult,{
-      townId:0,placed:16,source:"web-solo-starter"
+      townId:0,placed:17,source:"web-solo-starter"
     },"初始化只能配置伺服器上的目前城鎮，不接受客戶端冒填城鎮");
     assert.equal(first.result.map.source,"web-solo-starter");
     assert.equal(first.result.map.configured,true);
     assert.equal(first.result.map.cells.length,192);
-    assert.equal(first.result.map.cells.filter(x=>x.raw).length,16);
+    assert.equal(first.result.map.cells.filter(x=>x.raw).length,17);
     const expected=[
       [0,0,"駅"],[0,1,"職安"],[0,2,"銀行"],[0,3,"病院"],
       [1,0,"食堂"],[1,1,"食堂２"],[1,2,"デパ"],[1,3,"デパ2"],
       [2,0,"自販機"],[2,1,"装備屋"],[2,2,"教室"],[2,3,"建築"],
-      [3,0,"空地"],[3,1,"空地2"],[3,2,"リサイ"],[3,3,"空地3"]
+      [3,0,"空地"],[3,1,"空地2"],[3,2,"リサイ"],[3,3,"空地3"],[3,4,"クーポン"]
     ];
     for(const [row,column,symbol] of expected)
       assert.equal(first.result.map.cells[row*16+column].key,symbol);
