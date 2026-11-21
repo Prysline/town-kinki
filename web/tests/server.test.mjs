@@ -5537,3 +5537,146 @@ test("第60階段多人HTTP：原版禁止同人連抽、兩位玩家承接共�
     assert.equal(third.result.multiCardResult.cardsBefore,q.cardsAfter);
   }finally{await srv.stop();}
 });
+
+
+test("第61階段單機HTTP：四寶箱真實扣款、抽到物品或即時效果、冷卻、重送與重啟SQLite",async()=>{
+  let srv=await start("solo");
+  const dir=srv.directory;
+  try{
+    const absent=await api(srv.url,"arcade/treasure/open",{
+      boxKey:"copper",requestId:"phase61_no_character"
+    });
+    assert.equal(absent.status,400);
+    const created=await api(srv.url,"character",{
+      name:"第61階段寶箱居民",gender:"other",stats:defaultStats()
+    });
+    assert.equal(created.status,200);
+    assert.equal(created.result.treasure.available,false);
+    assert.deepEqual(created.result.treasure.boxes.map(b=>b.price),
+      [500,1000,2500000,500000]);
+    assert.deepEqual(created.result.treasure.boxes.map(b=>b.selectable),
+      [33,34,38,109]);
+    assert.equal((await api(srv.url,"arcade/treasure/open",{
+      boxKey:"copper",requestId:"phase61_no_arcade"
+    })).status,400);
+    const starter=await api(srv.url,"solo/map/starter",{});
+    assert.equal(starter.status,200);
+    assert.equal(starter.result.mapStarterResult.placed,21);
+    assert.equal(starter.result.treasure.available,true);
+    const base=starter.result.character.money;
+    assert.equal((await api(srv.url,"arcade/treasure/open",{
+      boxKey:"unknown",requestId:"phase61_invalid_box"
+    })).status,400);
+    assert.equal((await api(srv.url,"arcade/treasure/open",{
+      boxKey:"copper",requestId:"bad"
+    })).status,400);
+    const payload={boxKey:"copper",requestId:"phase61_http_first"};
+    const opened=await api(srv.url,"arcade/treasure/open",payload);
+    assert.equal(opened.status,200);
+    const result=opened.result.treasureResult;
+    assert.equal(result.boxKey,"copper");
+    assert.equal(result.price,500);
+    assert.ok(result.itemName.length>0);
+    assert.ok(["inventory","status"].includes(result.kind));
+    assert.equal(opened.result.character.money,base-500+result.rewardCash);
+    assert.equal(opened.result.treasure.history.length,1);
+    assert.equal(opened.result.treasure.readyAt,result.playedAt+300000);
+    if(result.kind==="inventory"){
+      assert.ok(opened.result.legacyInventory.some(x=>x.name===result.itemName&&
+        x.origin==="treasure"&&x.sourceLine===result.sourceLine));
+    }else{
+      assert.equal(result.sourceLine,null);
+      assert.ok(result.changes&&typeof result.changes==="object");
+    }
+    const replay=await api(srv.url,"arcade/treasure/open",payload);
+    assert.equal(replay.status,200);
+    assert.equal(replay.result.treasureResult.replayed,true);
+    assert.equal(replay.result.character.money,opened.result.character.money);
+    assert.equal((await api(srv.url,"arcade/treasure/open",{
+      boxKey:"silver",requestId:payload.requestId
+    })).status,400);
+    assert.equal((await api(srv.url,"arcade/treasure/open",{
+      boxKey:"silver",requestId:"phase61_too_early"
+    })).status,400);
+    assert.equal((await api(srv.url,"solo/time/advance",{preset:"5m"})).status,200);
+    const second=await api(srv.url,"arcade/treasure/open",{
+      boxKey:"silver",requestId:"phase61_http_second"
+    });
+    assert.equal(second.status,200);
+    const b=second.result.treasureResult;
+    assert.equal(b.boxKey,"silver");
+    assert.equal(b.price,1000);
+    assert.ok(b.itemName.length>0);
+    assert.equal(second.result.character.money,
+      base-500+result.rewardCash-1000+b.rewardCash);
+    assert.equal(second.result.treasure.history.length,2);
+    const savedCash=second.result.character.money;
+    const savedInventory=second.result.legacyInventory.map(x=>({
+      name:x.name,sourceLine:x.sourceLine,origin:x.origin
+    }));
+    await srv.stop({preserveData:true});
+    srv=await start("solo",undefined,dir);
+    const restored=await api(srv.url,"state");
+    assert.equal(restored.status,200);
+    assert.equal(restored.result.character.money,savedCash);
+    assert.equal(restored.result.treasure.history.length,2);
+    assert.deepEqual(restored.result.legacyInventory.map(x=>({
+      name:x.name,sourceLine:x.sourceLine,origin:x.origin
+    })),savedInventory);
+    assert.equal((await api(srv.url,"arcade/treasure/open",payload)).result.treasureResult.replayed,true);
+  }finally{await srv.stop();}
+});
+
+test("第61階段多人HTTP：兩位玩家可各自開箱，各自扣款／物品／本人歷史互不混用",async()=>{
+  const seed=dir=>{
+    const db=new DatabaseSync(join(dir,"multi.sqlite"));
+    try{
+      db.exec([
+        "CREATE TABLE town_maps(town_id INTEGER PRIMARY KEY,",
+        "original_name TEXT NOT NULL DEFAULT '',",
+        "original_record TEXT NOT NULL DEFAULT '',",
+        "source TEXT NOT NULL,tiles_json TEXT NOT NULL,",
+        "updated_at INTEGER NOT NULL);"
+      ].join(" "));
+      const tiles=Array(192).fill("");tiles[0]="ゲーセン";
+      db.prepare("INSERT INTO town_maps(town_id,original_name,source,tiles_json,updated_at) VALUES(?,?,?,?,?)")
+        .run(0,"測試街區","legacy-import",JSON.stringify(tiles),Date.now());
+    }finally{db.close();}
+  };
+  const srv=await start("multi",seed);
+  try{
+    const a=await api(srv.url,"register",{
+      username:"phase61TreasureUserA",password:"phase61-strong-password-a"
+    });
+    const b=await api(srv.url,"register",{
+      username:"phase61TreasureUserB",password:"phase61-strong-password-b"
+    });
+    assert.equal(a.status,200);assert.equal(b.status,200);
+    assert.equal((await api(srv.url,"character",{
+      name:"寶箱甲",gender:"other",stats:defaultStats()
+    },a.cookie)).status,200);
+    assert.equal((await api(srv.url,"character",{
+      name:"寶箱乙",gender:"other",stats:defaultStats()
+    },b.cookie)).status,200);
+    const payload={boxKey:"copper",requestId:"phase61_multi_shared_code"};
+    assert.equal((await api(srv.url,"arcade/treasure/open",payload)).status,401);
+    const first=await api(srv.url,"arcade/treasure/open",payload,a.cookie);
+    const second=await api(srv.url,"arcade/treasure/open",payload,b.cookie);
+    assert.equal(first.status,200);assert.equal(second.status,200);
+    assert.equal(first.result.treasureResult.replayed,false);
+    assert.equal(second.result.treasureResult.replayed,false);
+    assert.equal(first.result.treasure.history.length,1);
+    assert.equal(second.result.treasure.history.length,1);
+    assert.equal((await api(srv.url,"arcade/treasure/open",{
+      boxKey:"copper",requestId:"phase61_multi_a_again"
+    },a.cookie)).status,400);
+    assert.equal((await api(srv.url,"arcade/treasure/open",payload,a.cookie))
+      .result.treasureResult.replayed,true);
+    const stateA=(await api(srv.url,"state",undefined,a.cookie)).result;
+    const stateB=(await api(srv.url,"state",undefined,b.cookie)).result;
+    assert.equal(stateA.treasure.history.length,1);
+    assert.equal(stateB.treasure.history.length,1);
+    assert.ok(!stateA.legacyInventory.some(x=>x.sourceLine&&
+      x.name==="絕不存在的寶箱獎品"));
+  }finally{await srv.stop();}
+});
