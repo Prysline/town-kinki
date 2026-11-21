@@ -21,7 +21,7 @@
 - **20 個**有操作入口：**19 個**由 [`FACILITY_PANELS`](../public/town-home.js#L2) 導向 Web 面板（含 PR #23 的獨立教室，PR #27 的已匯入有效信用卡付款），另 **1 個「駅」**由 [`townCellAction`](../public/town-home.js#L12) 導向車站票價與乘車選項（PR #26）。這只是入口覆蓋，不代表設施全部規則已移植。
 - **12 個**已有 Web 地圖代碼，但既未映射 `FACILITY_PANELS`，也不是車站特例；[`townCellAction`](../public/town-home.js#L12) 會回傳 `unavailable`，按圖示只會提示尚未移植。
 - 百貨兩入口、自販機與裝備屋已有各自實際購物交易，**仍不等於原版全部商店功能**。詳 [百貨店](phase31-department-checkout.md)、[自販機](phase33-vending-shopping.md) 與 [裝備屋](phase35-equipment-shop.md)。
-- 這些是**程式路由覆蓋率**，不是已完成功能比例；車站已按原版 `station.cgi` 收取四城六組雙向車資（PR #26），而真實原版地圖存檔及其他交通道具仍待核查。
+- 這些是**程式路由覆蓋率**，不是已完成功能比例；車站已按原版 `station.cgi` 收取四城六組雙向車資（PR #26），；**第62階段已新增原版徒步與寶箱載具的公路旅行、秒數及交通事故扣耐久**，迷路與其他來源載具仍待核查。
 
 ## 二、原版全部 43 個表單入口
 
@@ -40,10 +40,10 @@
 | [`イベント`](../../unit.pl#L79) | `event.cgi` | `form` | 無 | Web 地圖代碼未收錄 |
 | [`特典`](../../unit.pl#L81) | `tokuten.cgi` | `tokuten` | 無 | Web 地圖代碼未收錄 |
 | [`アンケ`](../../unit.pl#L83) | `enq.cgi` | `top` | 有 | Web 有圖示、點選不可進入 |
-| [`駅`](../../unit.pl#L85) | `station.cgi` | `map` | 有 | **PR #26 已修復** → 點車站可查看六組原版票價並實際跨城扣現金；其他交通券未核實 |
+| [`駅`](../../unit.pl#L85) | `station.cgi` | `map` | 有 | **PR #26 已修復** → 點車站可查看六組原版票價並實際跨城扣現金；另有第62階段[原版公路寶箱載具與實際事故](phase62-road-travel.md)；其他交通券未核實 |
 | [`おばちゃん`](../../unit.pl#L116) | `obatyan.cgi` | `week` | 無 | Web 地圖代碼未收錄 |
 | [`おばちゃん強`](../../unit.pl#L118) | `obatyan.cgi` | `strong` | 無 | Web 地圖代碼未收錄 |
-| [`ゲーセン`](../../unit.pl#L120) | `gamerand.cgi` | `—` | 有 | **第55階段完成 `saikoro.cgi` 雙骰猜奇偶**；**第56階段補 `donut.cgi::donus4` High／Low**，累積牌桌張數×10,000下注、同點數勝利雙倍、共用牌桌及本人10分鐘冷卻；**第57階段追加 `donus`／`donus2`／`donus3` 三種原版卡牌**：兩種不同點數中獎及一種相同點數中獎，各自共用獨立牌桌；**第58階段加入 `loto.cgi` 六位數即時樂透**，七組獎金倍率、依上一玩家判斷3分鐘限制；**第59階段新增 `loto6.cgi` 六號樂透**：1～36選6個不同號碼、當地06:00或滿200注時由玩家操作開獎，最多每人20注，獎金匯普通銀行；**第60階段新增 `cardw2.cgi` 多卡**：五個下注課程、成功加倍率／失敗歸1、原版實際成功率79～19%；**第61階段完成 `otakara.cgi` 四寶箱開箱／獎池與立即能力或33欄道具入庫**；道具的後續特殊使用仍待逐項移植，福引原活動已過期。詳 [第55階段](phase55-arcade-dice.md)、[第56階段](phase56-arcade-highlow.md)、[第57階段](phase57-arcade-donut-trio.md)、[第58階段](phase58-instant-loto.md)、[第59階段](phase59-loto6-draw.md)、[第60階段](phase60-multi-card.md)、[第61階段](phase61-treasure-chests.md) |
+| [`ゲーセン`](../../unit.pl#L120) | `gamerand.cgi` | `—` | 有 | **第55階段完成 `saikoro.cgi` 雙骰猜奇偶**；**第56階段補 `donut.cgi::donus4` High／Low**，累積牌桌張數×10,000下注、同點數勝利雙倍、共用牌桌及本人10分鐘冷卻；**第57階段追加 `donus`／`donus2`／`donus3` 三種原版卡牌**：兩種不同點數中獎及一種相同點數中獎，各自共用獨立牌桌；**第58階段加入 `loto.cgi` 六位數即時樂透**，七組獎金倍率、依上一玩家判斷3分鐘限制；**第59階段新增 `loto6.cgi` 六號樂透**：1～36選6個不同號碼、當地06:00或滿200注時由玩家操作開獎，最多每人20注，獎金匯普通銀行；**第60階段新增 `cardw2.cgi` 多卡**：五個下注課程、成功加倍率／失敗歸1、原版實際成功率79～19%；**第61階段完成 `otakara.cgi` 四寶箱開箱／獎池與立即能力或33欄道具入庫**；道具的後續特殊使用仍待逐項移植，福引原活動已過期；**第62階段已接寶箱載具的原版公路移動**（迷路與部分物品用途未移植）。詳 [第55階段](phase55-arcade-dice.md)、[第56階段](phase56-arcade-highlow.md)、[第57階段](phase57-arcade-donut-trio.md)、[第58階段](phase58-instant-loto.md)、[第59階段](phase59-loto6-draw.md)、[第60階段](phase60-multi-card.md)、[第61階段](phase61-treasure-chests.md)、[第62階段](phase62-road-travel.md) |
 | [`アイテム`](../../unit.pl#L122) | `item.cgi` | `item_make` | 無 | Web 地圖代碼未收錄 |
 | [`役場`](../../unit.pl#L124) | `yakuba.cgi` | `yakuba` | 有 | Web 有圖示、點選不可進入 |
 | [`銀行`](../../unit.pl#L126) | `basic.cgi` | `ginkou` | 有 | 有 Web 入口／僅部分對照 |
@@ -81,14 +81,14 @@
 
 | ID | 原版實際可執行證據 | Web 對照與判定 |
 |---|---|---|
-| **MP-04 車站收費與跨城（已修核心、待新版存檔／瀏覽器驗收）** | [`station.cgi::idou` L99–116](../../station.cgi#L99) 有四城六組票價：0↔1 **950**、0↔2 **780**、0↔3 **1,210**、1↔2 **950**、1↔3 **2,210**、2↔3 **1,530**；L135–169 為畫面移動倒數。 | PR #26 已修復 [`/api/move`](../src/server.mjs) 與地圖「駅」：按原版票價扣現金、更新城鎮，同城或餘額不足拒絕；原版 5 秒倒數**不是**新增伺服器旅行冷卻的證據；其他交通券及真實玩家地圖仍待核實。 |
+| **MP-04 車站收費與跨城（已修核心；第62階段另補公路載具，待新版存檔／瀏覽器驗收）** | [`station.cgi::idou` L99–116](../../station.cgi#L99) 有四城六組票價：0↔1 **950**、0↔2 **780**、0↔3 **1,210**、1↔2 **950**、1↔3 **2,210**、2↔3 **1,530**；L135–169 為畫面移動倒數。 | PR #26 已修復 [`/api/move`](../src/server.mjs) 與地圖「駅」：按原版票價扣現金、更新城鎮，同城或餘額不足拒絕；原版 5 秒倒數**不是**新增伺服器旅行冷卻的證據；其他交通券及真實玩家地圖仍待核實。 |
 | **UI-05 教室獨立導航（已修復）** | [`unit.pl` L152](../../unit.pl#L152) 的 `教室` 指向 [`kyushitu.cgi`](../../kyushitu.cgi)，有獨立四課資料。 | [`town-home.js` L6](../public/town-home.js#L6) 已將「教室」導向 `classroom-panel`；Web 由 [`training.mjs`](../src/training.mjs) 按原版資料執行四堂現金課程及原版有效匯入卡片付款。**PR #23 修正地圖導覽；PR #27 補入本人有效原版信用卡付款，購卡流程未移植**。 |
 | **IT-05 原版釣魚及漁獲出售** | [`unit.pl` L77](../../unit.pl#L77) 指向 [`sea.cgi`](../../sea.cgi)；`turu` L139–186 檢查上次釣魚間隔、實際持有餌料與釣獲分支；`seri` L244–283 檢查實際漁獲並依不同類別結算售價。 | Web 沒有完整對應釣魚／漁獲出售行為；不得以現有物品封存或餐飲菜單視為完成。**確定缺漏**。 |
 | **EV-01 玩家投稿事件** | [`unit.pl` L79](../../unit.pl#L79) 的 `イベント` 指向 [`event.cgi::form/save` L21–103](../../event.cgi#L21)；`save` 將文字、能力、金錢等資料寫 `log_dir/eventlog.cgi`。 | **與 `event.pl` 的 #01～#44 隨機事件完全是兩件事**；Web 已支援部分隨機事件，但沒有此原版玩家投稿入口。投稿並非自動導入隨機事件池。**確定缺漏**。 |
 | **SV-01 玩家問卷建立、投票與管理** | [`unit.pl` L83](../../unit.pl#L83) 的 `アンケ` 指向 [`enq.cgi`](../../enq.cgi)，含 `top`、`make`、`setup`、`add`、`write`（投票）、`delete` 等模式；[`enq.cgi::write` L417](../../enq.cgi#L417) 有實際票選條件。 | Web 無獨立問卷／投票系統；與事件抽獎及聊天不可混算。**確定缺漏**。 |
 | **BK-05 五種股票及交易記錄** | [`unit.pl` L132](../../unit.pl#L132) 指向 [`kabu.cgi::kabu` L36–108](../../kabu.cgi#L36)；使用 `log_dir/kab_hendou.cgi` 的 A～E 股價與 `member/<ID>` 個人持股記錄，具交易／清算分支。 | Web [`banking.mjs`](../src/banking.mjs) 是存提款／貸款，沒有原版 A～E 股價市場或持股資料模型。**確定缺漏**，不能因有銀行而算股票已完成。 |
 | **IT-06 拍賣刊登及結算** | [`unit.pl` L189](../../unit.pl#L189) 指向 [`auction.cgi`](../../auction.cgi)；`auction` L49 起讀拍賣記錄，另有 `syupin`、`syupin_do`、`ukewatashi` 分支。 | Web 尚無此拍賣流程；不可和原版店舖買賣、回收商店、物品封存混成同項。**確定缺漏**。 |
-| **GM-01 遊樂中心與卡牌遊戲** | [`unit.pl` L120](../../unit.pl#L120) 的 `ゲーセン` 進入 `gamerand.cgi`，另連 `donut.cgi` 卡牌／High-Low、`saikoro.cgi` 雙骰等子遊戲。 | **第55階段完成 `saikoro.cgi` 雙骰，第56階段完成 `donut.cgi::donus4` High／Low**；**第57階段完成 `donut.cgi` 另外三種抽牌，四種卡牌入口已補上**。**第58階段完成 `loto.cgi` 即時六位數樂透**；**第59階段完成 `loto6.cgi` 當日06:00／200注結算並匯入普通銀行**；**第60階段完成 `cardw2.cgi` 多卡共用倍率與五課程**；**第61階段已補 `otakara.cgi` 四箱扣款、110筆原始獎品、立即狀態與33欄真入庫**；福引（原活動已於2010年結束）仍未開放、部分持有物後續使用尚未移植，不能把整座遊樂中心視為完成。詳 [第55階段](phase55-arcade-dice.md)、[第56階段](phase56-arcade-highlow.md)、[第57階段](phase57-arcade-donut-trio.md)、[第58階段](phase58-instant-loto.md)、[第59階段](phase59-loto6-draw.md)、[第60階段](phase60-multi-card.md)、[第61階段](phase61-treasure-chests.md)。 |
+| **GM-01 遊樂中心與卡牌遊戲** | [`unit.pl` L120](../../unit.pl#L120) 的 `ゲーセン` 進入 `gamerand.cgi`，另連 `donut.cgi` 卡牌／High-Low、`saikoro.cgi` 雙骰等子遊戲。 | **第55階段完成 `saikoro.cgi` 雙骰，第56階段完成 `donut.cgi::donus4` High／Low**；**第57階段完成 `donut.cgi` 另外三種抽牌，四種卡牌入口已補上**。**第58階段完成 `loto.cgi` 即時六位數樂透**；**第59階段完成 `loto6.cgi` 當日06:00／200注結算並匯入普通銀行**；**第60階段完成 `cardw2.cgi` 多卡共用倍率與五課程**；**第61階段已補 `otakara.cgi` 四箱扣款、110筆原始獎品、立即狀態與33欄真入庫**；福引（原活動已於2010年結束）仍未開放、第62階段另接寶箱載具的公路移動／事故耐久；其他物品特殊用途與迷路仍未移植，不能把整座遊樂中心視為完成。詳 [第55階段](phase55-arcade-dice.md)、[第56階段](phase56-arcade-highlow.md)、[第57階段](phase57-arcade-donut-trio.md)、[第58階段](phase58-instant-loto.md)、[第59階段](phase59-loto6-draw.md)、[第60階段](phase60-multi-card.md)、[第61階段](phase61-treasure-chests.md)、[第62階段](phase62-road-travel.md)。 |
 | **AC-04 個人設定／備忘錄／死亡通知** | [`town_maker.cgi` L647–649](../../town_maker.cgi#L647) 的首頁快捷鍵進入 [`setup.cgi`](../../setup.cgi)；模式有 `change`、`friend`、`memo`、`die`；[`setup.cgi::memo` L334–348](../../setup.cgi#L334) 寫個人備忘錄，`die` L354 起有密碼驗證、角色檔案處理。 | Web 有獨立 `solo` 刪角色操作，**不能當作原版 `setup.cgi::die` 已完整移植**；朋友清單、備忘錄與字體／聲音偏好另需對照。**確定缺漏／部分重疊**。 |
 
 ## 四、首頁快速入口也要盤點，不能只看地圖

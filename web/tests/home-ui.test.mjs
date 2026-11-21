@@ -881,6 +881,27 @@ test("第61階段：四寶箱有來源獎池、扣款與真實33欄入庫／直�
   assert.ok(!script.includes("innerHTML=round.itemName"));
 });
 
+test("第62階段：公路旅行原版秒數、寶箱載具選擇、倒數完成與安全DOM",()=>{
+  for(const id of ["road-travel-panel","road-travel-to","road-travel-vehicle",
+    "road-travel-status","road-travel-quote","road-travel-start",
+    "road-travel-arrive","road-travel-result","road-travel-history"])
+    assert.ok(html.includes('id="'+id+'"'));
+  assert.ok(html.includes("town_ini.cgi／town_lib.pl／town_maker.cgi"));
+  assert.ok(html.includes("1/10事故機率"));
+  assert.ok(html.includes("原版另有迷路"));
+  assert.ok(script.includes("function renderRoadTravel(){"));
+  assert.ok(script.includes("function updateRoadCountdown(){"));
+  assert.ok(script.includes("renderRoadTravel();"));
+  assert.ok(script.includes("updateRoadCountdown();"));
+  assert.ok(script.includes('await api("road/start"'));
+  assert.ok(script.includes('await api("road/arrive"'));
+  assert.ok(script.includes("pendingRoadStart"));
+  assert.ok(script.includes("roadTravelBusy"));
+  assert.ok(script.includes("Boolean(state.roadTravel?.pending)"));
+  assert.ok(script.includes("history.replaceChildren()"));
+  assert.ok(!script.includes("innerHTML=trip.vehicleName"));
+});
+
 test("第53階段：原版釣場與餌料商店實際有入庫交易 UI 且拒絕虛構漁獲",()=>{
   for(const key of ["釣り","販売1"])
     assert.deepEqual(townCellAction(describeTile(key)),{

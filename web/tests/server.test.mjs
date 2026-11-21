@@ -5680,3 +5680,154 @@ test("第61階段多人HTTP：兩位玩家可各自開箱，各自扣款／物�
       x.name==="絕不存在的寶箱獎品"));
   }finally{await srv.stop();}
 });
+
+
+function seedRoadVehicle(srv,characterName,vehicleName,sourceLine=3005001){
+  const text=decodeLegacyText(readFileSync(resolve(root,"..","dat_dir","otakara.cgi")));
+  const record=text.split(/\r?\n/).find(line=>
+    line.split("<>")[1]===vehicleName);
+  assert.ok(record,"原版寶箱獎池存在 "+vehicleName);
+  const raw=record.split("<>");
+  if(raw.length===34&&raw[33]==="")raw.pop();
+  assert.equal(raw.length,33);
+  raw[26]="0";
+  raw[30]=String(Math.floor(Date.now()/1000));
+  raw[31]=String(Math.trunc(Number(raw[17])/Number(raw[21])));
+  const db=new DatabaseSync(join(srv.directory,"solo.sqlite"));
+  try{
+    const owner=db.prepare("SELECT user_id FROM characters WHERE name=?").get(characterName);
+    assert.ok(owner);
+    db.prepare([
+      "INSERT INTO legacy_inventory_items(user_id,original_id,source_line,",
+      "category,original_name,effect,durability,durability_unit,purchased_at,",
+      "last_used_at,raw_fields_json) VALUES(?,'__web_treasure__',?,?,?,?,?,?,?,?,?)"
+    ].join(" ")).run(owner.user_id,sourceLine,raw[0],raw[1],raw[9],Number(raw[21]),
+      raw[22],Number(raw[30]),0,JSON.stringify(raw));
+  }finally{db.close();}
+  return sourceLine;
+}
+
+test("第62階段單機HTTP：原版寶箱載具20秒公路出發、重啟待抵達、事故耐久與抵達後換城",async()=>{
+  let srv=await start("solo");
+  const dir=srv.directory;
+  try{
+    anchorSoloTestAtNoon(srv);
+    const created=await api(srv.url,"character",{
+      name:"第62階段公路旅客",gender:"other",stats:defaultStats()
+    });
+    assert.equal(created.status,200);
+    assert.equal(created.result.roadTravel.walkingSeconds,10);
+    assert.equal(created.result.roadTravel.accidentDenominator,10);
+    assert.equal(created.result.roadTravel.choices.length,0);
+    assert.equal((await api(srv.url,"road/start",{
+      toTownId:99,requestId:"phase62_invalid_town"
+    })).status,400);
+    assert.equal((await api(srv.url,"road/start",{
+      toTownId:1,vehicleSourceLine:3333,requestId:"phase62_fake_vehicle"
+    })).status,400);
+    const sourceLine=seedRoadVehicle(srv,"第62階段公路旅客","ローラースルーゴーゴー");
+    const ready=await api(srv.url,"state");
+    assert.equal(ready.status,200);
+    assert.deepEqual(ready.result.roadTravel.choices.map(x=>[x.sourceLine,x.seconds]),
+      [[sourceLine,20]]);
+    const payload={toTownId:1,vehicleSourceLine:sourceLine,
+      requestId:"phase62_http_vehicle"};
+    const started=await api(srv.url,"road/start",payload);
+    assert.equal(started.status,200);
+    const trip=started.result.roadStartResult;
+    assert.equal(trip.vehicleName,"ローラースルーゴーゴー");
+    assert.equal(trip.seconds,20);
+    assert.equal(trip.pending,true);
+    assert.equal(trip.accident,undefined,"抵達前不得偽稱事故已結案");
+    assert.equal(started.result.character.townId,0);
+    assert.equal(started.result.roadTravel.pending.id,trip.id);
+    assert.equal((await api(srv.url,"road/start",payload))
+      .result.roadStartResult.replayed,true);
+    assert.equal((await api(srv.url,"road/start",{
+      toTownId:2,requestId:"phase62_http_overlap"
+    })).status,400);
+    assert.equal((await api(srv.url,"move",{townId:2})).status,400,
+      "行程未結束不可同時搭電車");
+    assert.equal((await api(srv.url,"road/arrive",{tripId:trip.id})).status,400,
+      "20秒原版旅行尚未到達");
+    const db=new DatabaseSync(join(dir,"solo.sqlite"));
+    let recorded;
+    try{
+      recorded=db.prepare("SELECT accident,durability_after FROM arcade_road_trips WHERE id=?")
+        .get(trip.id);
+      const row=db.prepare("SELECT remaining FROM legacy_item_usage WHERE source_line=?").get(sourceLine);
+      if(recorded.accident){
+        assert.equal(recorded.durability_after,3);
+        assert.equal(row.remaining,3);
+      }else assert.equal(row,undefined);
+    }finally{db.close();}
+    await srv.stop({preserveData:true});
+    srv=await start("solo",undefined,dir);
+    assert.equal((await api(srv.url,"state")).result.roadTravel.pending.id,trip.id,
+      "未完成旅程跨進程持久化");
+    assert.equal((await api(srv.url,"solo/time/advance",{preset:"5m"})).status,200);
+    const waiting=await api(srv.url,"state");
+    assert.equal(waiting.result.character.townId,0,
+      "即使已經超過抵達時間，讀取GET狀態不自動改寫所在地");
+    assert.equal(waiting.result.roadTravel.pending.id,trip.id);
+    const arrived=await api(srv.url,"road/arrive",{tripId:trip.id});
+    assert.equal(arrived.status,200);
+    assert.equal(arrived.result.roadArrivalResult.pending,false);
+    assert.equal(arrived.result.roadArrivalResult.accident,Boolean(recorded.accident));
+    assert.equal(arrived.result.character.townId,1);
+    assert.equal(arrived.result.roadTravel.pending,null);
+    assert.equal(arrived.result.roadTravel.history.length,1);
+    assert.equal((await api(srv.url,"road/arrive",{tripId:trip.id}))
+      .result.roadArrivalResult.replayed,true);
+    const after=(await api(srv.url,"state")).result;
+    const result=await api(srv.url,"move",{townId:0});
+    assert.equal(result.status,200,"完成公路旅程後，原版電車依舊可用");
+    assert.equal(result.result.character.townId,0);
+    assert.equal(after.character.money,ready.result.character.money,
+      "免費原版公路旅行不應直接扣車資");
+    assert.equal(after.character.bank,ready.result.character.bank);
+  }finally{await srv.stop();}
+});
+
+test("第62階段多人HTTP：公路行程與請求碼本人隔離，別人不能使用或抵達他人載具",async()=>{
+  const srv=await start("multi");
+  try{
+    const a=await api(srv.url,"register",{
+      username:"phase62RoadUserA",password:"phase62-strong-password-a"
+    });
+    const b=await api(srv.url,"register",{
+      username:"phase62RoadUserB",password:"phase62-strong-password-b"
+    });
+    assert.equal(a.status,200);assert.equal(b.status,200);
+    assert.equal((await api(srv.url,"character",{
+      name:"公路玩家甲",gender:"other",stats:defaultStats()
+    },a.cookie)).status,200);
+    assert.equal((await api(srv.url,"character",{
+      name:"公路玩家乙",gender:"other",stats:defaultStats()
+    },b.cookie)).status,200);
+    const payload={toTownId:1,requestId:"phase62_multi_same_request"};
+    assert.equal((await api(srv.url,"road/start",payload)).status,401);
+    const first=await api(srv.url,"road/start",payload,a.cookie);
+    const second=await api(srv.url,"road/start",payload,b.cookie);
+    assert.equal(first.status,200);
+    assert.equal(second.status,200);
+    assert.equal(first.result.roadStartResult.pending,true);
+    assert.equal(second.result.roadStartResult.pending,true);
+    assert.notEqual(first.result.roadStartResult.id,second.result.roadStartResult.id);
+    assert.equal((await api(srv.url,"road/arrive",{
+      tripId:first.result.roadStartResult.id
+    },b.cookie)).status,400);
+    assert.equal((await api(srv.url,"road/start",payload,a.cookie))
+      .result.roadStartResult.replayed,true);
+    assert.equal((await api(srv.url,"road/start",{
+      toTownId:2,requestId:"phase62_other_pending"
+    },b.cookie)).status,400);
+    const aState=(await api(srv.url,"state",undefined,a.cookie)).result;
+    const bState=(await api(srv.url,"state",undefined,b.cookie)).result;
+    assert.equal(aState.roadTravel.pending.id,first.result.roadStartResult.id);
+    assert.equal(bState.roadTravel.pending.id,second.result.roadStartResult.id);
+    assert.equal(aState.roadTravel.history.length,0);
+    assert.equal(bState.roadTravel.history.length,0);
+    assert.equal((await api(srv.url,"move",{townId:2},a.cookie)).status,400);
+  }finally{await srv.stop();}
+});

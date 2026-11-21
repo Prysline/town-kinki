@@ -29,6 +29,7 @@ import {parseOriginalInstantLoto,initInstantLotoTables,instantLotoOverview,playI
 import {parseOriginalLoto6,initLoto6Tables,loto6Overview,buyLoto6Ticket,settleLoto6Draw} from "./arcade-loto6.mjs";
 import {parseOriginalMultiCard,initMultiCardTables,multiCardOverview,playMultiCard} from "./arcade-cardw.mjs";
 import {parseOriginalTreasure,initTreasureTables,treasureOverview,openTreasure} from "./arcade-treasure.mjs";
+import {parseOriginalRoadTransport,initRoadTravelTables,roadOverview,beginRoadTrip,arriveRoadTrip} from "./road-travel.mjs";
 import {initCouponRedemptionTables,listCouponRewards,listCouponRedemptions,redeemEventCoupon,COUPON_SHOP_SYMBOL} from "./coupon-redemption.mjs";
 import { getCockroachChallenge,claimCockroach } from "./event-cockroach.mjs";
 import { parseLegacyInsurance, initInventoryTables, inventoryOverview, hasActiveHealthInsurance, listInsurancePurchases, buyHealthInsurance } from "./inventory.mjs";
@@ -114,6 +115,7 @@ initInstantLotoTables(db);
 initLoto6Tables(db);
 initMultiCardTables(db);
 initTreasureTables(db);
+initRoadTravelTables(db);
 initInventoryTables(db);
 initDiningStockTables(db);
 initLegacyItemUseTables(db);
@@ -188,6 +190,12 @@ const treasureSource=parseOriginalTreasure(
   decodeLegacyText(readFileSync(resolve(REPO_ROOT,"otakara.cgi"))),
   decodeLegacyText(readFileSync(resolve(REPO_ROOT,"dat_dir","otakara.cgi"))),
   decodeLegacyText(readFileSync(resolve(REPO_ROOT,"town_ini.cgi")))
+);
+const roadSource=parseOriginalRoadTransport(
+  decodeLegacyText(readFileSync(resolve(REPO_ROOT,"town_ini.cgi"))),
+  decodeLegacyText(readFileSync(resolve(REPO_ROOT,"town_lib.pl"))),
+  decodeLegacyText(readFileSync(resolve(REPO_ROOT,"town_maker.cgi"))),
+  treasureSource
 );
 const wholesaleCatalog=parseWholesaleCatalog(decodeLegacyText(readFileSync(resolve(REPO_ROOT,"dat_dir","syouhin.cgi"))));
 const vendingCatalog=parseLegacyVendingCatalog(decodeLegacyText(readFileSync(resolve(REPO_ROOT,"dat_dir","jihanki.cgi"))));
@@ -434,6 +442,7 @@ function snapshot(user) {
     loto6:updated?loto6Overview(db,user.id,loto6Source,now,GAME_TIMEZONE):null,
     multiCard:updated?multiCardOverview(db,user.id,multiCardSource,now,{solo:MODE==="solo"}):null,
     treasure:updated?treasureOverview(db,user.id,treasureSource,now):null,
+    roadTravel:updated?roadOverview(db,user.id,roadSource,now):null,
     cockroachChallenge: updated ? getCockroachChallenge(db,user.id,now) : null,
     hospital: updated ? getTreatmentQuote(updated,hasActiveHealthInsurance(db,user.id,insuranceItem,now)) : null,
     insurance: updated ? inventoryOverview(db,user.id,insuranceItem,now) : null,
@@ -910,6 +919,23 @@ async function handle(req, res) {
       return sendJson(res,200,{...snapshot(user),treasureResult});
     }
 
+    if(path==="/api/road/start"){
+      let roadStartResult;
+      try{
+        roadStartResult=beginRoadTrip(db,user.id,roadSource,{
+          toTownId:data.toTownId,vehicleSourceLine:data.vehicleSourceLine??null,
+          requestId:data.requestId,now:gameNow()
+        });
+      }catch(error){throw new HttpError(400,error.message);}
+      return sendJson(res,200,{...snapshot(user),roadStartResult});
+    }
+    if(path==="/api/road/arrive"){
+      let roadArrivalResult;
+      try{roadArrivalResult=arriveRoadTrip(db,user.id,{tripId:data.tripId,now:gameNow()});}
+      catch(error){throw new HttpError(400,error.message);}
+      return sendJson(res,200,{...snapshot(user),roadArrivalResult});
+    }
+
     if (path === "/api/coupon/redeem") {
       let result;
       try{
@@ -1223,6 +1249,8 @@ async function handle(req, res) {
     }
 
     if (path === "/api/move") {
+      if(roadOverview(db,user.id,roadSource,gameNow()).pending)
+        throw new HttpError(400,"公路旅程尚未抵達，不可同時搭乘電車");
       let journey;
       try {
         // mutateCharacter 開啟 BEGIN IMMEDIATE；從伺服器存檔中的 townId
