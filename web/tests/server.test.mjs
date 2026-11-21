@@ -5739,6 +5739,9 @@ test("第62階段單機HTTP：原版寶箱載具20秒公路出發、重啟待抵
     assert.equal(trip.seconds,20);
     assert.equal(trip.pending,true);
     assert.equal(trip.accident,undefined,"抵達前不得偽稱事故已結案");
+    assert.equal(trip.lost,undefined,"迷路判定也不得在抵達前提前公布");
+    assert.equal(trip.toTownId,1);
+    assert.equal(trip.requestedToTownId,1);
     assert.equal(started.result.character.townId,0);
     assert.equal(started.result.roadTravel.pending.id,trip.id);
     assert.equal((await api(srv.url,"road/start",payload))
@@ -5753,9 +5756,14 @@ test("第62階段單機HTTP：原版寶箱載具20秒公路出發、重啟待抵
     const db=new DatabaseSync(join(dir,"solo.sqlite"));
     let recorded;
     try{
-      recorded=db.prepare("SELECT accident,durability_after FROM arcade_road_trips WHERE id=?")
+      recorded=db.prepare("SELECT accident,durability_after,lost,rerouted,to_town,requested_to_town FROM arcade_road_trips WHERE id=?")
         .get(trip.id);
       const row=db.prepare("SELECT remaining FROM legacy_item_usage WHERE source_line=?").get(sourceLine);
+      assert.equal(recorded.lost,1,"從第0城出發持有輪滑車，原版必定迷路");
+      assert.equal(recorded.rerouted,recorded.accident?1:0,
+        "只有交通事故且迷路才會抽籤改寫真實目的地");
+      assert.equal(recorded.requested_to_town,1);
+      if(!recorded.rerouted)assert.equal(recorded.to_town,1);
       if(recorded.accident){
         assert.equal(recorded.durability_after,3);
         assert.equal(row.remaining,3);
@@ -5773,16 +5781,22 @@ test("第62階段單機HTTP：原版寶箱載具20秒公路出發、重啟待抵
     const arrived=await api(srv.url,"road/arrive",{tripId:trip.id});
     assert.equal(arrived.status,200);
     assert.equal(arrived.result.roadArrivalResult.pending,false);
-    assert.equal(arrived.result.roadArrivalResult.accident,Boolean(recorded.accident));
-    assert.equal(arrived.result.character.townId,1);
+    const outcome=arrived.result.roadArrivalResult;
+    assert.equal(outcome.accident,Boolean(recorded.accident));
+    assert.equal(outcome.lost,true);
+    assert.equal(outcome.rerouted,Boolean(recorded.accident));
+    assert.equal(outcome.requestedToTownId,1);
+    assert.equal(outcome.toTownId,recorded.to_town);
+    assert.equal(arrived.result.character.townId,recorded.to_town);
     assert.equal(arrived.result.roadTravel.pending,null);
     assert.equal(arrived.result.roadTravel.history.length,1);
     assert.equal((await api(srv.url,"road/arrive",{tripId:trip.id}))
       .result.roadArrivalResult.replayed,true);
     const after=(await api(srv.url,"state")).result;
-    const result=await api(srv.url,"move",{townId:0});
+    const trainDestination=(recorded.to_town+1)%4;
+    const result=await api(srv.url,"move",{townId:trainDestination});
     assert.equal(result.status,200,"完成公路旅程後，原版電車依舊可用");
-    assert.equal(result.result.character.townId,0);
+    assert.equal(result.result.character.townId,trainDestination);
     assert.equal(after.character.money,ready.result.character.money,
       "免費原版公路旅行不應直接扣車資");
     assert.equal(after.character.bank,ready.result.character.bank);
