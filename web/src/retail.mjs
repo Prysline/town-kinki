@@ -125,13 +125,15 @@ export function retailItemDetails(item){
     item.effect==="無"&&item.durabilityUnit==="日";
   const payment=item.effect==="クレジット"&&item.durabilityUnit==="日";
   const gift=adjusted[0]==="ギフト";
+  const useSupported=supportsLegacyItemUse(adjusted);
   return {
     effects:bonuses,effectCode:item.effect,comment:f[29]||"",
+    randomizedEffects:item.category==="薬"&&item.name==="ランダム品"&&useSupported,
     calories:Number(f[25])||0,
     bodyCost:Number(f[27])||0,brainCost:Number(f[28])||0,
     intervalMinutes:Number(f[23])||0,
     usage:insurance?"automatic":payment?"payment":gift?"gift":
-      supportsLegacyItemUse(adjusted)?"supported":"unsupported"
+      useSupported?"supported":"unsupported"
   };
 }
 export function listRetailStock(db,catalog,allowedShops=[]){
