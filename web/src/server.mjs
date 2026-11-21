@@ -392,7 +392,7 @@ function snapshot(user) {
     couponRewards:updated?listCouponRewards(couponCatalog,getCouponBalance(db,user.id),couponShopAvailable):[],
     couponRedemptions:updated?listCouponRedemptions(db,user.id):[],
     fishing:updated?fishingOverview(db,user.id,fishingCatalog,now,today):null,
-    crafting:updated?craftingOverview(db,user.id,craftingCatalog):null,
+    crafting:updated?craftingOverview(db,user.id,craftingCatalog,now):null,
     arcadeDice:updated?arcadeDiceOverview(db,user.id,arcadeDiceSource,now):null,
     arcadeHighLow:updated?arcadeHighLowOverview(db,user.id,arcadeHighLowSource,now):null,
     cockroachChallenge: updated ? getCockroachChallenge(db,user.id,now) : null,
