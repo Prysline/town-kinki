@@ -213,14 +213,16 @@ export function listLegacyItemUseHistory(db,userId,limit=20){
     changes:JSON.parse(row.changes_json),usedAt:row.used_at
   }));
 }
-function applyEffects(character,item,now){
+function applyEffects(character,item,now,randomIndex=randomInt){
   const current=recoverEnergy(character,now);
   const next={...current,stats:{...current.stats}};
   const gained={};
   for(let i=0;i<STAT_KEYS.length;i++){
     const key=STAT_KEYS[i];
     // 原版 int(rand(上限+1))：每項能力各自重抽，使用歷史只保存實際抽中值。
-    const delta=item.randomBonuses?randomInt(item.bonuses[key]+1):item.bonuses[key];
+    const delta=item.randomBonuses?randomIndex(item.bonuses[key]+1):item.bonuses[key];
+    if(item.randomBonuses&&(!Number.isSafeInteger(delta)||delta<0||delta>item.bonuses[key]))
+      throw new Error("原版隨機道具的能力增幅超出範圍");
     const previous=next.stats[key];
     if(!Number.isSafeInteger(previous)||previous<0)
       throw new Error("角色能力資料不正確");
@@ -270,7 +272,7 @@ function applyEffects(character,item,now){
     }
   };
 }
-export function useLegacyItem(db,userId,sourceLine,requestId,now=Date.now()){
+export function useLegacyItem(db,userId,sourceLine,requestId,now=Date.now(),randomIndex=randomInt){
   if(!Number.isSafeInteger(userId)||userId<=0)throw new Error("無效的玩家帳號");
   if(!Number.isSafeInteger(sourceLine)||sourceLine<=0)throw new Error("物品行號不正確");
   if(typeof requestId!=="string"||!ID_RE.test(requestId))
@@ -310,7 +312,7 @@ export function useLegacyItem(db,userId,sourceLine,requestId,now=Date.now()){
     const lastUsedAt=row.last_used_at_ms??item.originalLastUsedAt;
     const availability=status(item,updated,remaining,lastUsedAt,now);
     if(!availability.canUse)throw new Error(availability.reason);
-    const applied=applyEffects(updated,item,now);
+    const applied=applyEffects(updated,item,now,randomIndex);
     const next=applied.character;
     db.prepare([
       "UPDATE characters SET stats_json=?,body_energy=?,brain_energy=?,recovered_at=?,",
