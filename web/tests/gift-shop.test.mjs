@@ -21,7 +21,7 @@ function fixture(){
   db.exec([
     "PRAGMA foreign_keys=ON;",
     "CREATE TABLE users(id INTEGER PRIMARY KEY);",
-    "CREATE TABLE characters(user_id INTEGER PRIMARY KEY REFERENCES users(id),",
+    "CREATE TABLE characters(user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,",
     "name TEXT NOT NULL UNIQUE,town_id INTEGER NOT NULL,money INTEGER NOT NULL);",
     "INSERT INTO users(id) VALUES(1),(2),(3);",
     "INSERT INTO characters(user_id,name,town_id,money) VALUES",
@@ -358,5 +358,101 @@ test("既有 gift_events 無 message 欄的資料庫啟動時可安全升級，�
     initGiftTables(db);
     assert.equal(db.prepare("SELECT message FROM gift_events WHERE user_id=1").get().message,"");
     assert.ok(db.prepare("SELECT name FROM sqlite_master WHERE name='gift_mail_messages'").get());
+  }finally{db.close();}
+});
+
+
+test("P0：刪除寄件人帳號時，已交付的收件信與對方物品不跟著消失",()=>{
+  const db=fixture();
+  try{
+    seed(db,{category:"ギフト",durability:2});
+    const result=sendGift(db,1,{
+      sourceLine:1000001,quantity:1,recipientName:"收件人",
+      message:"寄件者離開後也必須保存",requestId:"mail_lifetime_sender_01",now
+    });
+    assert.equal(listGiftMail(db,1).length,1);
+    assert.equal(listGiftMail(db,2).length,1);
+    db.prepare("DELETE FROM users WHERE id=1").run();
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM gift_events").get().n,0);
+    assert.equal(listGiftMail(db,1).length,0,"刪除帳號者的私有寄件備份應被刪除");
+    assert.equal(listGiftMail(db,2).length,1,"收件人持有自己的收件紀錄");
+    assert.deepEqual(listGiftMail(db,2)[0],{
+      direction:"inbox",otherName:"寄件人",message:"寄件者離開後也必須保存",
+      giftName:sample.name,quantity:1,createdAt:now
+    });
+    assert.equal(owned(db,2,result.giftSourceLine).durability,1,
+      "對方已收的物品不隨寄件人刪帳失去");
+    assert.equal(db.prepare("PRAGMA foreign_key_check").all().length,0);
+  }finally{db.close();}
+});
+test("P0：刪除收件人帳號時，寄件人已送出的備份仍歸寄件人所有",()=>{
+  const db=fixture();
+  try{
+    seed(db,{category:"ギフト",durability:2});
+    sendGift(db,1,{
+      sourceLine:1000001,quantity:1,recipientName:"收件人",
+      message:"這是寄件人的私有寄件備份",requestId:"mail_lifetime_reader_01",now
+    });
+    db.prepare("DELETE FROM users WHERE id=2").run();
+    assert.equal(listGiftMail(db,2).length,0);
+    assert.equal(listGiftMail(db,1).length,1);
+    assert.equal(listGiftMail(db,1)[0].direction,"sent");
+    assert.equal(listGiftMail(db,1)[0].otherName,"收件人");
+    assert.equal(db.prepare("PRAGMA foreign_key_check").all().length,0);
+  }finally{db.close();}
+});
+test("P0：第46階段既有信箱表完整帶資料遷移，保存 ID／時間／雙方文字，重啟冪等",()=>{
+  const db=new DatabaseSync(":memory:");
+  try{
+    db.exec([
+      "PRAGMA foreign_keys=ON;",
+      "CREATE TABLE users(id INTEGER PRIMARY KEY);",
+      "INSERT INTO users(id) VALUES(1),(2),(3);",
+      "CREATE TABLE gift_events(",
+      "id INTEGER PRIMARY KEY AUTOINCREMENT,",
+      "user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,",
+      "request_id TEXT NOT NULL,action TEXT NOT NULL,source_line INTEGER NOT NULL,",
+      "quantity INTEGER NOT NULL,recipient_user_id INTEGER,",
+      "result_source_line INTEGER NOT NULL,fee INTEGER NOT NULL,",
+      "name TEXT NOT NULL,created_at INTEGER NOT NULL,",
+      "UNIQUE(user_id,request_id));",
+      "CREATE TABLE gift_mail_messages(",
+      "id INTEGER PRIMARY KEY AUTOINCREMENT,",
+      "user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,",
+      "event_id INTEGER NOT NULL REFERENCES gift_events(id) ON DELETE CASCADE,",
+      "direction TEXT NOT NULL CHECK(direction IN ('inbox','sent')),",
+      "other_name TEXT NOT NULL,message TEXT NOT NULL,",
+      "gift_name TEXT NOT NULL,quantity INTEGER NOT NULL CHECK(quantity>0),",
+      "created_at INTEGER NOT NULL,UNIQUE(event_id,direction));",
+      "INSERT INTO gift_events(id,user_id,request_id,action,source_line,quantity,",
+      "recipient_user_id,result_source_line,fee,name,created_at)",
+      "VALUES(11,1,'old_phase46_id','send',100,2,2,101,0,'舊禮品',999);",
+      "INSERT INTO gift_mail_messages(id,user_id,event_id,direction,other_name,",
+      "message,gift_name,quantity,created_at) VALUES",
+      "(70,1,11,'sent','收件人','原版已寫入的寄件副本','舊禮品',2,999),",
+      "(71,2,11,'inbox','寄件人','原版已寫入的收件文字','舊禮品',2,999);"
+    ].join(" "));
+    assert.equal(db.prepare("PRAGMA foreign_key_list(gift_mail_messages)").all()
+      .some(key=>key.table==="gift_events"),true,"重現第46階段有問題的舊資料關聯");
+    initGiftTables(db);
+    initGiftTables(db);
+    const links=db.prepare("PRAGMA foreign_key_list(gift_mail_messages)").all();
+    assert.equal(links.some(key=>key.table==="gift_events"),false);
+    assert.equal(links.some(key=>key.table==="users"),true);
+    assert.deepEqual(db.prepare([
+      "SELECT id,user_id,event_id,direction,other_name,message,gift_name,quantity,created_at",
+      "FROM gift_mail_messages ORDER BY id"
+    ].join(" ")).all(),[
+      {id:70,user_id:1,event_id:11,direction:"sent",other_name:"收件人",
+        message:"原版已寫入的寄件副本",gift_name:"舊禮品",quantity:2,created_at:999},
+      {id:71,user_id:2,event_id:11,direction:"inbox",other_name:"寄件人",
+        message:"原版已寫入的收件文字",gift_name:"舊禮品",quantity:2,created_at:999}
+    ]);
+    assert.equal(db.prepare("PRAGMA foreign_key_check").all().length,0);
+    db.prepare("DELETE FROM users WHERE id=1").run();
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM gift_events").get().n,0);
+    assert.equal(listGiftMail(db,2).length,1);
+    assert.equal(listGiftMail(db,2)[0].message,"原版已寫入的收件文字");
+    assert.equal(db.prepare("PRAGMA foreign_key_check").all().length,0);
   }finally{db.close();}
 });
