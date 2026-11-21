@@ -4692,3 +4692,150 @@ test("第55階段多人 HTTP：遊樂中心骰子紀錄、下注與冷卻只屬�
     assert.equal(afterB.arcadeDice.history[0].delta,second.result.arcadeDiceResult.delta);
   }finally{await srv.stop();}
 });
+
+
+test("第56階段單機 HTTP：High/Low 空桌原版種子、真實現金輸贏、十分鐘、重送及重啟存檔",async()=>{
+  let srv=await start("solo");
+  const directory=srv.directory;
+  try{
+    assert.equal((await api(srv.url,"arcade/highlow/play",{
+      guess:"hi",requestId:"phase56_missing_character"
+    })).status,400);
+    const created=await api(srv.url,"character",{
+      name:"第56階段卡牌玩家",gender:"other",stats:defaultStats()
+    });
+    assert.equal(created.status,200);
+    assert.equal(created.result.arcadeHighLow.available,false);
+    assert.equal(created.result.arcadeHighLow.previousCard,null);
+    assert.equal(created.result.arcadeHighLow.stake,10000);
+    assert.equal((await api(srv.url,"arcade/highlow/play",{
+      guess:"hi",requestId:"phase56_missing_arcade"
+    })).status,400);
+    const starter=await api(srv.url,"solo/map/starter",{});
+    assert.equal(starter.status,200);
+    assert.equal(starter.result.arcadeHighLow.available,true);
+    assert.equal(starter.result.arcadeHighLow.cooldownMs,600000);
+    assert.equal(starter.result.arcadeHighLow.cardCount,1);
+    assert.equal(starter.result.arcadeHighLow.recentCards[0],1);
+    const initialCash=starter.result.character.money;
+    assert.equal((await api(srv.url,"arcade/highlow/play",{
+      guess:"equal",requestId:"phase56_invalid_guess"
+    })).status,400);
+    assert.equal((await api(srv.url,"arcade/highlow/play",{
+      guess:"hi",requestId:"too_short"
+    })).status,400);
+    const firstPayload={guess:"hi",requestId:"phase56_first_round"};
+    const first=await api(srv.url,"arcade/highlow/play",firstPayload);
+    assert.equal(first.status,200);
+    const result=first.result.arcadeHighLowResult;
+    assert.equal(result.previousCard,null);
+    assert.ok(result.drawnCard>=1&&result.drawnCard<=5);
+    assert.equal(result.cardsBefore,1);
+    assert.equal(result.cardsAfter,2);
+    assert.equal(result.stake,10000);
+    assert.equal(result.delta,10000);
+    assert.equal(result.won,true);
+    assert.equal(first.result.character.money,initialCash+10000);
+    assert.equal(first.result.arcadeHighLow.stake,20000);
+    assert.equal(first.result.arcadeHighLow.previousCard,result.drawnCard);
+    assert.equal(first.result.arcadeHighLow.readyAt,result.playedAt+600000);
+    const replay=await api(srv.url,"arcade/highlow/play",firstPayload);
+    assert.equal(replay.status,200);
+    assert.equal(replay.result.arcadeHighLowResult.replayed,true);
+    assert.equal(replay.result.character.money,first.result.character.money);
+    assert.equal((await api(srv.url,"arcade/highlow/play",{
+      ...firstPayload,guess:"low"
+    })).status,400);
+    assert.equal((await api(srv.url,"arcade/highlow/play",{
+      guess:"low",requestId:"phase56_cooldown_reject"
+    })).status,400);
+    assert.equal((await api(srv.url,"solo/time/advance",{preset:"5m"})).status,200);
+    assert.equal((await api(srv.url,"arcade/highlow/play",{
+      guess:"low",requestId:"phase56_still_cooling"
+    })).status,400);
+    assert.equal((await api(srv.url,"solo/time/advance",{preset:"5m"})).status,200);
+    const second=await api(srv.url,"arcade/highlow/play",{
+      guess:"low",requestId:"phase56_second_round"
+    });
+    assert.equal(second.status,200);
+    assert.equal(second.result.arcadeHighLowResult.stake,20000);
+    const change=second.result.arcadeHighLowResult.delta;
+    assert.ok([-20000,20000,40000].includes(change));
+    assert.equal(second.result.character.money,initialCash+10000+change);
+    assert.equal(second.result.arcadeHighLow.history.length,2);
+    const balance=second.result.character.money;
+    const previous=second.result.arcadeHighLow.previousCard;
+    const cards=second.result.arcadeHighLow.cardCount;
+    await srv.stop({preserveData:true});
+    srv=await start("solo",undefined,directory);
+    const restored=await api(srv.url,"state");
+    assert.equal(restored.status,200);
+    assert.equal(restored.result.character.money,balance);
+    assert.equal(restored.result.arcadeHighLow.available,true);
+    assert.equal(restored.result.arcadeHighLow.previousCard,previous);
+    assert.equal(restored.result.arcadeHighLow.cardCount,cards);
+    assert.equal(restored.result.arcadeHighLow.history.length,2);
+    const again=await api(srv.url,"arcade/highlow/play",firstPayload);
+    assert.equal(again.status,200);
+    assert.equal(again.result.arcadeHighLowResult.replayed,true);
+    assert.equal(again.result.character.money,balance);
+  }finally{await srv.stop();}
+});
+
+test("第56階段多人 HTTP：遊樂中心共用HighLow牌桌、本人歷史及請求碼隔離",async()=>{
+  const seed=dir=>{
+    const db=new DatabaseSync(join(dir,"multi.sqlite"));
+    try{
+      db.exec([
+        "CREATE TABLE town_maps(town_id INTEGER PRIMARY KEY,",
+        "original_name TEXT NOT NULL DEFAULT '',",
+        "original_record TEXT NOT NULL DEFAULT '',",
+        "source TEXT NOT NULL,tiles_json TEXT NOT NULL,",
+        "updated_at INTEGER NOT NULL);"
+      ].join(" "));
+      const tiles=Array(192).fill("");tiles[0]="ゲーセン";
+      db.prepare("INSERT INTO town_maps(town_id,original_name,source,tiles_json,updated_at) VALUES(?,?,?,?,?)")
+        .run(0,"測試街區","legacy-import",JSON.stringify(tiles),Date.now());
+    }finally{db.close();}
+  };
+  const srv=await start("multi",seed);
+  try{
+    const a=await api(srv.url,"register",{
+      username:"phase56HighLowA",password:"phase56-high-low-alpha-pass"
+    });
+    const b=await api(srv.url,"register",{
+      username:"phase56HighLowB",password:"phase56-high-low-beta-pass"
+    });
+    assert.equal(a.status,200);assert.equal(b.status,200);
+    assert.equal((await api(srv.url,"character",{
+      name:"高低卡牌甲",gender:"other",stats:defaultStats()
+    },a.cookie)).status,200);
+    assert.equal((await api(srv.url,"character",{
+      name:"高低卡牌乙",gender:"other",stats:defaultStats()
+    },b.cookie)).status,200);
+    const payload={guess:"hi",requestId:"phase56_shared_request"};
+    assert.equal((await api(srv.url,"arcade/highlow/play",payload)).status,401);
+    const first=await api(srv.url,"arcade/highlow/play",payload,a.cookie);
+    assert.equal(first.status,200);
+    const second=await api(srv.url,"arcade/highlow/play",payload,b.cookie);
+    assert.equal(second.status,200);
+    assert.equal(second.result.arcadeHighLowResult.previousCard,first.result.arcadeHighLowResult.drawnCard);
+    assert.equal(second.result.arcadeHighLowResult.stake,20000);
+    assert.equal(second.result.arcadeHighLow.cardCount,second.result.arcadeHighLowResult.cardsAfter);
+    assert.equal((await api(srv.url,"arcade/highlow/play",{
+      guess:"low",requestId:"phase56_player_a_cooldown"
+    },a.cookie)).status,400);
+    assert.equal((await api(srv.url,"arcade/highlow/play",{
+      guess:"low",requestId:"phase56_player_b_cooldown"
+    },b.cookie)).status,400);
+    assert.equal((await api(srv.url,"arcade/highlow/play",payload,a.cookie)).result.arcadeHighLowResult.replayed,true);
+    const stateA=(await api(srv.url,"state",undefined,a.cookie)).result;
+    const stateB=(await api(srv.url,"state",undefined,b.cookie)).result;
+    assert.equal(stateA.arcadeHighLow.history.length,1);
+    assert.equal(stateB.arcadeHighLow.history.length,1);
+    assert.equal(stateA.arcadeHighLow.previousCard,stateB.arcadeHighLow.previousCard);
+    assert.equal(stateA.arcadeHighLow.cardCount,stateB.arcadeHighLow.cardCount);
+    assert.equal(stateA.arcadeHighLow.history[0].drawnCard,first.result.arcadeHighLowResult.drawnCard);
+    assert.equal(stateB.arcadeHighLow.history[0].drawnCard,second.result.arcadeHighLowResult.drawnCard);
+  }finally{await srv.stop();}
+});
