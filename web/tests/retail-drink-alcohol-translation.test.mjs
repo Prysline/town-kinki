@@ -85,13 +85,13 @@ test("趣味與品牌譯名保留、未知名稱回退原文",()=>{
 
 test("商店／背包／搜尋／交易紀錄顯示繁體中文，不把譯名送往 API",()=>{
   assert.match(app,/from "\.\/retail-drink-alcohol-translations\.js"/);
-  assert.match(app,/const displayProductName=shopName==="自動販賣機"\?displayVendingName:displayRetailDrinkAlcoholName/);
-  assert.match(app,/name\.textContent=displayRetailDrinkAlcoholName\(displayKnownItemName\(item\.name\)\)/);
+  assert.match(app,/const displayProductName=shopName==="自動販賣機"\?displayVendingName:displayRetailItemName/);
+  assert.match(app,/name\.textContent=displayRetailItemName\(item\.name\)/);
   assert.match(app,/document\.createTextNode\(displayProductName\(item\.name\)\)/);
-  assert.match(app,/displayRetailDrinkAlcoholName\(item\.name\)\.toLocaleLowerCase\("zh-TW"\)\.includes\(search\)/);
-  assert.match(app,/displayRetailDrinkAlcoholName\(purchase\.name\)/);
-  assert.match(app,/displayRetailDrinkAlcoholName\(entry\.name\)/);
-  assert.match(app,/displayRetailDrinkAlcoholName\(stock\.name\)/);
+  assert.match(app,/displayRetailItemName\(item\.name\)\.toLocaleLowerCase\("zh-TW"\)\.includes\(search\)/);
+  assert.match(app,/displayRetailItemName\(purchase\.name\)/);
+  assert.match(app,/displayRetailItemName\(entry\.name\)/);
+  assert.match(app,/displayRetailItemName\(stock\.name\)/);
   assert.match(app,/pendingRetailPurchase=\{shop:item\.shop,sku:item\.sku,quantity,payment/);
   assert.match(app,/submitLegacyUse\(item\.sourceLine,item\.name\)/);
   assert.match(app,/const duplicate=owned\.some\(x=>x\.name===item\.name\)/);

@@ -3,6 +3,7 @@
 import { createHash } from "node:crypto";
 import { basename } from "node:path";
 import { DAY_MS, initInventoryTables, insuranceCoverage } from "./inventory.mjs";
+import { heldInventoryRows,inventoryLife } from "./inventory-life.mjs";
 
 export const LEGACY_ITEM_FIELDS=Object.freeze([
   "category","name","kokugo","suugaku","rika","syakai","eigo","ongaku",
@@ -176,18 +177,19 @@ export function importLegacyInventory(db,parsed,{originalId,sourceFile,now=Date.
     throw error;
   }
 }
-export function listLegacyInventoryItems(db,userId,limit=50,toDetails=null){
+export function listLegacyInventoryItems(db,userId,limit=50,toDetails=null,now=Date.now()){
   if(!Number.isSafeInteger(userId)||userId<1)throw new Error("無效的帳號");
   const exists=db.prepare(
     "SELECT 1 FROM sqlite_master WHERE type='table' AND name='legacy_inventory_items'"
   ).get();
   if(!exists)return [];
   const cap=Number.isSafeInteger(limit)?Math.max(1,Math.min(limit,100)):50;
-  return db.prepare([
-    "SELECT source_line,original_id,category,original_name,durability,durability_unit,purchased_at,raw_fields_json",
-    "FROM legacy_inventory_items WHERE user_id=? ORDER BY",
-    "CASE WHEN original_id IN ('__web_retail__','__web_gift__','__web_recycle__','__web_store__','__web_coupon__','__web_fishing__','__web_crafting__') THEN 0 ELSE 1 END,source_line LIMIT ?"
-  ].join(" ")).all(userId,cap).map(x=>{
+  // 先排除已耗盡／過期項目，再套清單筆數上限，避免歷史零耐久擠掉有效物品。
+  return heldInventoryRows(db,userId,now).sort((a,b)=>
+    Number(b.original_id.startsWith("__web_"))-Number(a.original_id.startsWith("__web_"))||
+    a.source_line-b.source_line
+  ).slice(0,cap).map(x=>{
+    const life=inventoryLife(x,now);
     let details=null;
     if(typeof toDetails==="function"){
       try{
@@ -198,14 +200,12 @@ export function listLegacyInventoryItems(db,userId,limit=50,toDetails=null){
             category:x.category,name:x.original_name,durabilityUnit:x.durability_unit});
       }catch{ /* 歷史來源欄位無法辨識時，仍顯示名稱與耐久；不虛構效果。 */ }
     }
-    const fishingRemaining=x.original_id.startsWith("__web_")?db.prepare(
-      "SELECT remaining FROM legacy_item_usage WHERE user_id=? AND source_line=?"
-    ).get(userId,x.source_line)?.remaining:null;
     return {
     sourceLine:x.source_line,category:x.category,name:x.original_name,
     durability:x.durability,unit:x.durability_unit,purchasedAt:x.purchased_at,
     ...(details?{details}:{}),
-    ...(x.original_id.startsWith("__web_")?{remaining:fishingRemaining??x.durability}:{}),readOnly:!["__web_retail__","__web_gift__","__web_recycle__","__web_store__","__web_coupon__","__web_fishing__","__web_crafting__"].includes(x.original_id),
+    ...(x.original_id.startsWith("__web_")?{remaining:life.remaining}:{}),
+    ...(life.removeAt!==null?{removeAt:life.removeAt}:{}),readOnly:!["__web_retail__","__web_gift__","__web_recycle__","__web_store__","__web_coupon__","__web_fishing__","__web_crafting__"].includes(x.original_id),
     ...(x.original_id==="__web_retail__"?{origin:"retail"}:
       x.original_id==="__web_gift__"?{origin:"gift"}:
       x.original_id==="__web_recycle__"?{origin:"recycle"}:

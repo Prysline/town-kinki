@@ -4839,3 +4839,201 @@ test("第56階段多人 HTTP：遊樂中心共用HighLow牌桌、本人歷史及
     assert.equal(stateB.arcadeHighLow.history[0].drawnCard,second.result.arcadeHighLowResult.drawnCard);
   }finally{await srv.stop();}
 });
+
+
+test("第57階段單機HTTP：三種donus獨立牌桌、原版空桌、現金結算、冷卻、防重與重啟持久化",async()=>{
+  let srv=await start("solo");
+  const dir=srv.directory;
+  try{
+    assert.equal((await api(srv.url,"arcade/donuts/draw",{
+      mode:"donus",requestId:"phase57_no_character"
+    })).status,400);
+    const created=await api(srv.url,"character",{
+      name:"第57階段抽牌居民",gender:"other",stats:defaultStats()
+    });
+    assert.equal(created.status,200);
+    assert.equal(created.result.arcadeDonuts.available,false);
+    assert.deepEqual(created.result.arcadeDonuts.modes.map(m=>m.mode),
+      ["donus","donus2","donus3"]);
+    assert.equal((await api(srv.url,"arcade/donuts/draw",{
+      mode:"donus",requestId:"phase57_without_arcade"
+    })).status,400);
+    const starter=await api(srv.url,"solo/map/starter",{});
+    assert.equal(starter.status,200);
+    assert.equal(starter.result.mapStarterResult.placed,21);
+    assert.equal(starter.result.arcadeDonuts.available,true);
+    assert.equal(starter.result.map.cells[3*16+8].key,"ゲーセン");
+    for(const m of starter.result.arcadeDonuts.modes){
+      assert.equal(m.cardCount,1);
+      assert.equal(m.previousCard,null);
+      assert.deepEqual(m.recentCards,[1]);
+    }
+    const db=new DatabaseSync(join(dir,"solo.sqlite"));
+    try{
+      db.prepare("UPDATE characters SET money=500000 WHERE name=?")
+        .run("第57階段抽牌居民");
+    }finally{db.close();}
+    assert.equal((await api(srv.url,"state")).result.character.money,500000);
+    assert.equal((await api(srv.url,"arcade/donuts/draw",{
+      mode:"donus4",requestId:"phase57_bad_mode"
+    })).status,400);
+    assert.equal((await api(srv.url,"arcade/donuts/draw",{
+      mode:"donus",requestId:"short"
+    })).status,400);
+    const firstPayload={mode:"donus",requestId:"phase57_mode1_first"};
+    const first=await api(srv.url,"arcade/donuts/draw",firstPayload);
+    assert.equal(first.status,200);
+    const a=first.result.arcadeDonutResult;
+    assert.equal(a.mode,"donus");
+    assert.equal(a.previousCard,null);
+    assert.ok(a.drawnCard>=1&&a.drawnCard<=5);
+    assert.equal(a.won,true,"空白上一張Perl比較0，模式一第一局一定抽到不同點數");
+    assert.equal(a.delta,10000);
+    assert.equal(a.cardsAfter,2);
+    assert.equal(first.result.character.money,510000);
+    assert.equal(first.result.arcadeDonuts.modes.find(m=>m.mode==="donus").risk,20000);
+    const replay=await api(srv.url,"arcade/donuts/draw",firstPayload);
+    assert.equal(replay.status,200);
+    assert.equal(replay.result.arcadeDonutResult.replayed,true);
+    assert.equal(replay.result.character.money,510000);
+    assert.equal((await api(srv.url,"arcade/donuts/draw",{
+      ...firstPayload,mode:"donus2"
+    })).status,400);
+    assert.equal((await api(srv.url,"arcade/donuts/draw",{
+      mode:"donus",requestId:"phase57_mode1_cooldown"
+    })).status,400);
+    const mode2=await api(srv.url,"arcade/donuts/draw",{
+      mode:"donus2",requestId:"phase57_mode2_first"
+    });
+    assert.equal(mode2.status,200);
+    assert.equal(mode2.result.arcadeDonutResult.delta,20000);
+    assert.equal(mode2.result.arcadeDonutResult.cardsAfter,2);
+    assert.equal(mode2.result.character.money,530000);
+    assert.equal((await api(srv.url,"arcade/donuts/draw",{
+      mode:"donus2",requestId:"phase57_mode2_cooldown"
+    })).status,400);
+    const mode3=await api(srv.url,"arcade/donuts/draw",{
+      mode:"donus3",requestId:"phase57_mode3_first"
+    });
+    assert.equal(mode3.status,200);
+    const c=mode3.result.arcadeDonutResult;
+    assert.ok(c.drawnCard>=1&&c.drawnCard<=3);
+    assert.equal(c.won,c.drawnCard===1);
+    assert.equal(c.delta,c.won?100000:-100000);
+    assert.equal(c.cardsAfter,c.won?1:2);
+    assert.equal(c.risk,100000);
+    assert.equal(c.winAmount,100000);
+    assert.equal((await api(srv.url,"arcade/donuts/draw",{
+      mode:"donus3",requestId:"phase57_mode3_cooldown"
+    })).status,400);
+    const firstAfter=mode3.result.character.money;
+    assert.equal(firstAfter,530000+c.delta);
+    assert.equal((await api(srv.url,"solo/time/advance",{preset:"5m"})).status,200);
+    const mode1Second=await api(srv.url,"arcade/donuts/draw",{
+      mode:"donus",requestId:"phase57_mode1_second"
+    });
+    assert.equal(mode1Second.status,200);
+    assert.equal(mode1Second.result.arcadeDonutResult.risk,20000);
+    assert.equal(mode1Second.result.arcadeDonutResult.winAmount,20000);
+    assert.equal((await api(srv.url,"arcade/donuts/draw",{
+      mode:"donus2",requestId:"phase57_mode2_still_cooling"
+    })).status,400);
+    assert.equal((await api(srv.url,"solo/time/advance",{preset:"5m"})).status,200);
+    const mode2Second=await api(srv.url,"arcade/donuts/draw",{
+      mode:"donus2",requestId:"phase57_mode2_second"
+    });
+    assert.equal(mode2Second.status,200);
+    assert.equal(mode2Second.result.arcadeDonutResult.risk,40000);
+    assert.equal(mode2Second.result.arcadeDonutResult.winAmount,40000);
+    assert.equal(mode2Second.result.arcadeDonuts.modes.find(m=>m.mode==="donus2").history.length,2);
+    const mode3Second=await api(srv.url,"arcade/donuts/draw",{
+      mode:"donus3",requestId:"phase57_mode3_second"
+    });
+    assert.equal(mode3Second.status,200);
+    assert.equal(mode3Second.result.arcadeDonutResult.risk,100000);
+    const moneySaved=mode3Second.result.character.money;
+    const tableSaved=mode3Second.result.arcadeDonuts.modes.map(m=>({
+      mode:m.mode,previousCard:m.previousCard,cardCount:m.cardCount,
+      history:m.history.length
+    }));
+    await srv.stop({preserveData:true});
+    srv=await start("solo",undefined,dir);
+    const restored=await api(srv.url,"state");
+    assert.equal(restored.status,200);
+    assert.equal(restored.result.character.money,moneySaved);
+    assert.equal(restored.result.arcadeDonuts.available,true);
+    assert.deepEqual(restored.result.arcadeDonuts.modes.map(m=>({
+      mode:m.mode,previousCard:m.previousCard,cardCount:m.cardCount,
+      history:m.history.length
+    })),tableSaved);
+    const repeated=await api(srv.url,"arcade/donuts/draw",firstPayload);
+    assert.equal(repeated.status,200);
+    assert.equal(repeated.result.arcadeDonutResult.replayed,true);
+    assert.equal(repeated.result.character.money,moneySaved);
+  }finally{await srv.stop();}
+});
+
+test("第57階段多人HTTP：三模式共桌但彼此獨立，下注與本人紀錄不會混用",async()=>{
+  const seed=dir=>{
+    const db=new DatabaseSync(join(dir,"multi.sqlite"));
+    try{
+      db.exec([
+        "CREATE TABLE town_maps(town_id INTEGER PRIMARY KEY,",
+        "original_name TEXT NOT NULL DEFAULT '',",
+        "original_record TEXT NOT NULL DEFAULT '',",
+        "source TEXT NOT NULL,tiles_json TEXT NOT NULL,",
+        "updated_at INTEGER NOT NULL);"
+      ].join(" "));
+      const tiles=Array(192).fill("");tiles[0]="ゲーセン";
+      db.prepare("INSERT INTO town_maps(town_id,original_name,source,tiles_json,updated_at) VALUES(?,?,?,?,?)")
+        .run(0,"測試街區","legacy-import",JSON.stringify(tiles),Date.now());
+    }finally{db.close();}
+  };
+  const srv=await start("multi",seed);
+  try{
+    const a=await api(srv.url,"register",{
+      username:"phase57DonutUserA",password:"phase57-strong-password-a"
+    });
+    const b=await api(srv.url,"register",{
+      username:"phase57DonutUserB",password:"phase57-strong-password-b"
+    });
+    assert.equal(a.status,200);assert.equal(b.status,200);
+    assert.equal((await api(srv.url,"character",{
+      name:"抽牌多人甲",gender:"other",stats:defaultStats()
+    },a.cookie)).status,200);
+    assert.equal((await api(srv.url,"character",{
+      name:"抽牌多人乙",gender:"other",stats:defaultStats()
+    },b.cookie)).status,200);
+    const request={mode:"donus",requestId:"phase57_same_request"};
+    assert.equal((await api(srv.url,"arcade/donuts/draw",request)).status,401);
+    const first=await api(srv.url,"arcade/donuts/draw",request,a.cookie);
+    assert.equal(first.status,200);
+    assert.equal(first.result.arcadeDonutResult.cardsBefore,1);
+    const second=await api(srv.url,"arcade/donuts/draw",request,b.cookie);
+    assert.equal(second.status,200);
+    assert.equal(second.result.arcadeDonutResult.cardsBefore,2);
+    assert.equal(second.result.arcadeDonuts.modes.find(m=>m.mode==="donus2").cardCount,1);
+    assert.equal((await api(srv.url,"arcade/donuts/draw",{
+      ...request,mode:"donus2"
+    },a.cookie)).status,400);
+    const otherMode=await api(srv.url,"arcade/donuts/draw",{
+      mode:"donus2",requestId:"phase57_mode2_other"
+    },a.cookie);
+    assert.equal(otherMode.status,200);
+    assert.equal(otherMode.result.arcadeDonutResult.cardsBefore,1);
+    const stateA=(await api(srv.url,"state",undefined,a.cookie)).result;
+    const stateB=(await api(srv.url,"state",undefined,b.cookie)).result;
+    const mode=(s,key)=>s.arcadeDonuts.modes.find(m=>m.mode===key);
+    assert.equal(mode(stateA,"donus").cardCount,mode(stateB,"donus").cardCount);
+    assert.equal(mode(stateA,"donus").previousCard,mode(stateB,"donus").previousCard);
+    assert.equal(mode(stateA,"donus").history.length,1);
+    assert.equal(mode(stateB,"donus").history.length,1);
+    assert.equal(mode(stateA,"donus2").history.length,1);
+    assert.equal(mode(stateB,"donus2").history.length,0);
+    assert.equal(mode(stateB,"donus3").cardCount,1);
+    assert.equal((await api(srv.url,"arcade/donuts/draw",request,a.cookie)).result.arcadeDonutResult.replayed,true);
+    assert.equal((await api(srv.url,"arcade/donuts/draw",{
+      mode:"donus",requestId:"phase57_mode1_a_cooldown"
+    },a.cookie)).status,400);
+  }finally{await srv.stop();}
+});
