@@ -10,7 +10,7 @@ const SYMBOLS=[
   ["駅","職安","銀行","病院"],
   ["食堂","食堂２","デパ","デパ2"],
   ["自販機","装備屋","教室","建築"],
-  ["空地","空地2","リサイ","空地3","クーポン","販売1","釣り","合成"]
+  ["空地","空地2","リサイ","空地3","クーポン","販売1","釣り","合成","ゲーセン"]
 ];
 const known=new Set(MAP_SYMBOLS.map(symbol=>symbol.key));
 if(SYMBOLS.some(row=>row.some(symbol=>!known.has(symbol))))
