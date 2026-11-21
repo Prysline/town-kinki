@@ -27,6 +27,7 @@ import {parseOriginalArcadeHighLow,initArcadeHighLowTables,arcadeHighLowOverview
 import {parseOriginalArcadeDonuts,initArcadeDonutTables,arcadeDonutsOverview,playArcadeDonut} from "./arcade-donuts.mjs";
 import {parseOriginalInstantLoto,initInstantLotoTables,instantLotoOverview,playInstantLoto} from "./arcade-loto.mjs";
 import {parseOriginalLoto6,initLoto6Tables,loto6Overview,buyLoto6Ticket,settleLoto6Draw} from "./arcade-loto6.mjs";
+import {parseOriginalMultiCard,initMultiCardTables,multiCardOverview,playMultiCard} from "./arcade-cardw.mjs";
 import {initCouponRedemptionTables,listCouponRewards,listCouponRedemptions,redeemEventCoupon,COUPON_SHOP_SYMBOL} from "./coupon-redemption.mjs";
 import { getCockroachChallenge,claimCockroach } from "./event-cockroach.mjs";
 import { parseLegacyInsurance, initInventoryTables, inventoryOverview, hasActiveHealthInsurance, listInsurancePurchases, buyHealthInsurance } from "./inventory.mjs";
@@ -110,6 +111,7 @@ initArcadeHighLowTables(db);
 initArcadeDonutTables(db);
 initInstantLotoTables(db);
 initLoto6Tables(db);
+initMultiCardTables(db);
 initInventoryTables(db);
 initDiningStockTables(db);
 initLegacyItemUseTables(db);
@@ -173,6 +175,11 @@ const instantLotoSource=parseOriginalInstantLoto(
 const loto6Source=parseOriginalLoto6(
   decodeLegacyText(readFileSync(resolve(REPO_ROOT,"gamerand.cgi"))),
   decodeLegacyText(readFileSync(resolve(REPO_ROOT,"loto6.cgi")))
+);
+const multiCardSource=parseOriginalMultiCard(
+  decodeLegacyText(readFileSync(resolve(REPO_ROOT,"gamerand.cgi"))),
+  decodeLegacyText(readFileSync(resolve(REPO_ROOT,"cardw2.cgi"))),
+  decodeLegacyText(readFileSync(resolve(REPO_ROOT,"town_ini.cgi")))
 );
 const wholesaleCatalog=parseWholesaleCatalog(decodeLegacyText(readFileSync(resolve(REPO_ROOT,"dat_dir","syouhin.cgi"))));
 const vendingCatalog=parseLegacyVendingCatalog(decodeLegacyText(readFileSync(resolve(REPO_ROOT,"dat_dir","jihanki.cgi"))));
@@ -417,6 +424,7 @@ function snapshot(user) {
     arcadeDonuts:updated?arcadeDonutsOverview(db,user.id,arcadeDonutsSource,now):null,
     instantLoto:updated?instantLotoOverview(db,user.id,instantLotoSource,now):null,
     loto6:updated?loto6Overview(db,user.id,loto6Source,now,GAME_TIMEZONE):null,
+    multiCard:updated?multiCardOverview(db,user.id,multiCardSource,now,{solo:MODE==="solo"}):null,
     cockroachChallenge: updated ? getCockroachChallenge(db,user.id,now) : null,
     hospital: updated ? getTreatmentQuote(updated,hasActiveHealthInsurance(db,user.id,insuranceItem,now)) : null,
     insurance: updated ? inventoryOverview(db,user.id,insuranceItem,now) : null,
@@ -870,6 +878,17 @@ async function handle(req, res) {
         loto6DrawResult=settleLoto6Draw(db,loto6Source,{now,timeZone:GAME_TIMEZONE});
       }catch(error){throw new HttpError(400,error.message);}
       return sendJson(res,200,{...snapshot(user),loto6DrawResult});
+    }
+
+    if(path==="/api/arcade/cardw/draw"){
+      let multiCardResult;
+      try{
+        multiCardResult=playMultiCard(db,user.id,multiCardSource,{
+          course:data.course,requestId:data.requestId,
+          now:gameNow(),solo:MODE==="solo"
+        });
+      }catch(error){throw new HttpError(400,error.message);}
+      return sendJson(res,200,{...snapshot(user),multiCardResult});
     }
 
     if (path === "/api/coupon/redeem") {
