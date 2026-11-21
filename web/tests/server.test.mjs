@@ -4212,3 +4212,138 @@ test("第50階段單機試玩街區：原版匯入地圖不能覆蓋，多人模
     assert.equal((await api(multi.url,"state",undefined,registered.cookie)).result.map.configured,false);
   }finally{await multi.stop();}
 });
+
+
+test("第51階段單機事件券實際兌換：原版兌換所→扣點→33欄獎品入庫→重新啟動",async()=>{
+  let srv=await start("solo");
+  const directory=srv.directory;
+  try{
+    const created=await api(srv.url,"character",{
+      name:"單機事件優惠券兌換者",gender:"other",stats:defaultStats()
+    });
+    assert.equal(created.status,200);
+    assert.equal(created.result.couponShopAvailable,false);
+    assert.equal(created.result.couponRewards.length,30);
+    assert.equal(created.result.couponRewards[0].originalName,"福引券");
+    assert.equal(created.result.couponRewards[0].requiredCoupons,1);
+    const db=new DatabaseSync(join(directory,"solo.sqlite"));
+    try{
+      const id=db.prepare("SELECT user_id FROM characters WHERE name=?")
+        .get("單機事件優惠券兌換者").user_id;
+      db.prepare("INSERT INTO character_coupons(user_id,quantity) VALUES(?,?)").run(id,4);
+    }finally{db.close();}
+    const absent=await api(srv.url,"coupon/redeem",{
+      sourceIndex:0,originalName:"福引券",requestId:"phase51_coupon_no_building"
+    });
+    assert.equal(absent.status,400);
+    assert.match(absent.result.error,/沒有優惠券兌換所/);
+    assert.equal((await api(srv.url,"state")).result.couponBalance,4);
+    const layout=await api(srv.url,"solo/map/starter",{});
+    assert.equal(layout.status,200);
+    assert.equal(layout.result.map.cells[3*16+4].key,"クーポン");
+    assert.equal(layout.result.couponShopAvailable,true);
+    assert.equal(layout.result.couponRewards.length,30);
+    assert.equal(layout.result.couponRewards[0].canRedeem,true);
+    assert.equal(layout.result.couponRewards[1].canRedeem,false);
+    const name="福引券";
+    const payload={sourceIndex:0,originalName:name,requestId:"phase51_solo_redeem_first"};
+    assert.equal((await api(srv.url,"coupon/redeem",{
+      ...payload,originalName:"４次元福袋"
+    })).status,400);
+    const redeem=await api(srv.url,"coupon/redeem",payload);
+    assert.equal(redeem.status,200);
+    assert.equal(redeem.result.couponResult.couponCost,1);
+    assert.equal(redeem.result.couponResult.replayed,false);
+    assert.equal(redeem.result.couponBalance,3);
+    assert.equal(redeem.result.couponRedemptions.length,1);
+    const item=redeem.result.legacyInventory.find(x=>x.origin==="coupon");
+    assert.equal(item.name,name);
+    assert.equal(item.readOnly,false);
+    assert.ok(item.sourceLine>=6000000);
+    assert.equal(redeem.result.couponRedemptions[0].sourceLine,item.sourceLine);
+    const persistedDb=new DatabaseSync(join(directory,"solo.sqlite"));
+    try{
+      const row=persistedDb.prepare([
+        "SELECT raw_fields_json,original_name,durability,durability_unit,original_id",
+        "FROM legacy_inventory_items WHERE source_line=?"
+      ].join(" ")).get(item.sourceLine);
+      assert.equal(row.original_name,name);
+      assert.equal(row.original_id,"__web_coupon__");
+      assert.equal(JSON.parse(row.raw_fields_json).length,33);
+      assert.equal(row.durability_unit,"日");
+    }finally{persistedDb.close();}
+    const replay=await api(srv.url,"coupon/redeem",payload);
+    assert.equal(replay.status,200);
+    assert.equal(replay.result.couponResult.replayed,true);
+    assert.equal(replay.result.couponBalance,3);
+    assert.equal(replay.result.legacyInventory.filter(x=>x.origin==="coupon").length,1);
+    assert.equal((await api(srv.url,"coupon/redeem",{
+      ...payload,sourceIndex:1,originalName:"４次元福袋"
+    })).status,400);
+    assert.equal((await api(srv.url,"coupon/redeem",{
+      sourceIndex:1,originalName:"４次元福袋",requestId:"phase51_expensive_reward"
+    })).status,400,"原版150點獎品須先存到足額，不是免費領");
+    await srv.stop({preserveData:true});
+    srv=await start("solo",undefined,directory);
+    const restored=await api(srv.url,"state");
+    assert.equal(restored.status,200);
+    assert.equal(restored.result.couponBalance,3);
+    assert.equal(restored.result.couponShopAvailable,true);
+    assert.equal(restored.result.couponRedemptions.length,1);
+    assert.equal(restored.result.legacyInventory.filter(x=>x.origin==="coupon").length,1);
+    assert.equal((await api(srv.url,"coupon/redeem",payload)).result.couponResult.replayed,true);
+    assert.equal((await api(srv.url,"state")).result.couponBalance,3);
+  }finally{await srv.stop();}
+});
+
+test("第51階段多人 HTTP：角色各自券點與獎品不得跨帳號借用",async()=>{
+  const seeded=dir=>{
+    const db=new DatabaseSync(join(dir,"multi.sqlite"));
+    try{
+      db.exec([
+        "CREATE TABLE town_maps(town_id INTEGER PRIMARY KEY,",
+        "original_name TEXT NOT NULL DEFAULT '',",
+        "original_record TEXT NOT NULL DEFAULT '',",
+        "source TEXT NOT NULL,tiles_json TEXT NOT NULL,updated_at INTEGER NOT NULL);"
+      ].join(" "));
+      const tiles=Array(192).fill("");tiles[1]="クーポン";
+      db.prepare("INSERT INTO town_maps(town_id,original_name,source,tiles_json,updated_at) VALUES(?,?,?,?,?)")
+        .run(0,"共用城鎮","legacy-import",JSON.stringify(tiles),Date.now());
+    }finally{db.close();}
+  };
+  const srv=await start("multi",seeded);
+  try{
+    const a=await api(srv.url,"register",{username:"phase51RedeemAlpha",
+      password:"phase51-redeem-alpha-123"});
+    const b=await api(srv.url,"register",{username:"phase51RedeemBeta",
+      password:"phase51-redeem-beta-123"});
+    assert.equal(a.status,200);assert.equal(b.status,200);
+    assert.equal((await api(srv.url,"character",{
+      name:"兌換角色甲",gender:"other",stats:defaultStats()
+    },a.cookie)).status,200);
+    assert.equal((await api(srv.url,"character",{
+      name:"兌換角色乙",gender:"other",stats:defaultStats()
+    },b.cookie)).status,200);
+    const db=new DatabaseSync(join(srv.directory,"multi.sqlite"));
+    try{
+      const userId=db.prepare("SELECT user_id FROM characters WHERE name=?")
+        .get("兌換角色甲").user_id;
+      db.prepare("INSERT INTO character_coupons(user_id,quantity) VALUES(?,?)").run(userId,1);
+    }finally{db.close();}
+    const payload={sourceIndex:0,originalName:"福引券",requestId:"phase51_multi_redeem_01"};
+    assert.equal((await api(srv.url,"coupon/redeem",payload)).status,401);
+    assert.equal((await api(srv.url,"coupon/redeem",payload,b.cookie)).status,400);
+    const claimed=await api(srv.url,"coupon/redeem",payload,a.cookie);
+    assert.equal(claimed.status,200);
+    assert.equal(claimed.result.couponBalance,0);
+    assert.equal(claimed.result.couponRedemptions.length,1);
+    const other=await api(srv.url,"state",undefined,b.cookie);
+    assert.equal(other.result.couponBalance,0);
+    assert.equal(other.result.couponRedemptions.length,0);
+    assert.equal(other.result.legacyInventory.filter(x=>x.origin==="coupon").length,0);
+    assert.equal((await api(srv.url,"coupon/redeem",{
+      ...payload,requestId:"phase51_multi_redeem_02"
+    },a.cookie)).status,400);
+    assert.equal((await api(srv.url,"coupon/redeem",payload,a.cookie)).result.couponResult.replayed,true);
+  }finally{await srv.stop();}
+});
