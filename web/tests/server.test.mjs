@@ -4722,7 +4722,7 @@ test("第56階段單機 HTTP：High/Low 空桌原版種子、真實現金輸贏�
       guess:"equal",requestId:"phase56_invalid_guess"
     })).status,400);
     assert.equal((await api(srv.url,"arcade/highlow/play",{
-      guess:"hi",requestId:"too_short"
+      guess:"hi",requestId:"short"
     })).status,400);
     const firstPayload={guess:"hi",requestId:"phase56_first_round"};
     const first=await api(srv.url,"arcade/highlow/play",firstPayload);
