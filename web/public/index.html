@@ -213,6 +213,14 @@
             <div><dt>頭腦能量</dt><dd id="brain-energy"></dd></div>
             <div><dt>目前職業</dt><dd id="current-job"></dd></div>
           </dl>
+          <div id="job-level-progress" class="job-level-progress" role="group" aria-label="目前職業經驗與精通進度">
+            <div class="job-level-progress-heading">
+              <span id="job-level-xp">本級經驗 0 / 100 XP</span>
+              <span id="job-next-level">距離下一級尚需 100 XP</span>
+            </div>
+            <progress id="job-level-bar" max="100" value="0" aria-label="距離下一級的經驗進度"></progress>
+            <p id="job-mastery-status" class="small">距離 Lv.15 精通尚需 1500 XP</p>
+          </div>
           <section class="physique-summary" aria-labelledby="physique-summary-title">
             <h3 id="physique-summary-title">體格資訊</h3>
             <dl class="stats status-physique">
@@ -222,13 +230,8 @@
           </section>
           <details class="status-details"><summary>更多角色資訊</summary><dl class="stats status-extra">
             <div><dt>工作次數</dt><dd id="work-count"></dd></div>
-            <div><dt>目前職業經驗</dt><dd id="job-experience"></dd></div>
-            <div><dt>目前職業等級</dt><dd id="job-level"></dd></div>
-            <div><dt>目前職業精通進度</dt><dd class="mastery-status">
-              <span id="job-mastery-status">尚未就職</span>
-              <progress id="job-mastery-bar" max="1500" value="0" aria-label="目前職業的精通經驗進度"></progress>
-            </dd></div>
-            <div><dt>精通職業</dt><dd id="mastered-job"></dd></div>
+            <div><dt>目前職業累計經驗</dt><dd id="job-experience"></dd></div>
+            <div><dt>最近精通職業</dt><dd id="mastered-job"></dd></div>
             <div><dt>飽足度</dt><dd id="hunger-status"></dd></div>
             <div><dt>目前狀態</dt><dd id="condition-status"></dd></div>
             <div><dt>疾病</dt><dd id="health-status"></dd></div>
@@ -252,6 +255,7 @@
             <button id="work" class="primary" type="button">前往工作</button>
             <button id="refresh" class="secondary full" type="button">更新狀態</button>
             <p id="cooldown" class="small"></p>
+            <p id="work-cost-status" class="small"></p>
             <p id="work-payday-status" class="small" aria-live="polite">工作完成後將依職業發薪週期結算薪資。</p>
           </div>
         </section>
@@ -512,7 +516,7 @@
       <div id="facility-pane-jobs" class="facility-pane" role="tabpanel" aria-labelledby="facility-tab-jobs" tabindex="0">
         <section class="card" id="jobs-panel">
           <div class="heading"><div><div class="eyebrow">職業介紹所</div><h2>選擇工作</h2></div><span id="job-count" class="muted"></span></div>
-          <p class="small" id="jobs-mastery-status">目前職業精通進度：尚未就職。</p>
+          <p class="small job-rank-help">職業名稱後的 * 代表原版職業階級（階級減一顆星），不同於角色目前的職業等級。</p>
           <div class="filters">
             <label class="sr-only" for="job-search">搜尋職業</label>
             <input id="job-search" placeholder="搜尋職業名稱">

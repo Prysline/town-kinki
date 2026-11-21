@@ -65,16 +65,48 @@ test("職業條件只列真正大於零的需求，保留非零體格條件與�
   assert.match(script,/details\.append\(finance\)/);
   assert.match(script,/button\.disabled = Boolean\(job\.reason\)/);
 });
-test("職業精通有清楚的 15 級／1500 經驗進度，與既有精通紀錄分開",()=>{
-  assert.match(html,/id="job-mastery-status"/);
-  assert.match(html,/id="job-mastery-bar" max="1500" value="0"/);
-  assert.match(html,/id="jobs-mastery-status"/);
-  assert.match(script,/const masteryTargetXp=1500/);
-  assert.match(script,/state\.jobLevel>=15/);
-  assert.match(script,/距離精通還需 /);
-  assert.match(script,/el\("job-mastery-bar"\)\.value=Math\.min\(currentMasteryXp,masteryTargetXp\)/);
+test("職業名稱緊貼原版等級，只有本級 100 XP 進度與 15 級精通文字，不再重複 1500 XP 長條",()=>{
+  assert.match(html,/<dt>目前職業<\/dt><dd id="current-job"><\/dd>/);
+  assert.match(script,/state\.currentJob\.name\+"（Lv\."\+jobLevel\+"）"/);
+  assert.match(html,/id="job-level-progress"/);
+  assert.match(html,/id="job-level-xp"/);
+  assert.match(html,/id="job-next-level"/);
+  assert.match(html,/id="job-level-bar" max="100" value="0"/);
+  assert.match(script,/const currentLevelXp=jobExperience%100/);
+  assert.match(script,/text\("job-level-xp","本級經驗 "\+currentLevelXp\+" \/ 100 XP"\)/);
+  assert.match(script,/text\("job-next-level","距離 Lv\."\+\(jobLevel\+1\)\+" 還差 "\+\(100-currentLevelXp\)\+" XP"\)/);
+  assert.match(script,/el\("job-level-bar"\)\.value=currentLevelXp/);
+  assert.match(script,/jobLevel>=15\?"已達 Lv\.15 精通門檻"/);
+  assert.match(script,/1500-jobExperience/);
   assert.match(script,/text\("mastered-job", c\.masteredJob \|\| "無"\)/);
-  assert.match(css,/\.game-shell \.mastery-status progress\{/);
+  assert.match(html,/<dt>最近精通職業<\/dt><dd id="mastered-job"/);
+  assert.doesNotMatch(html,/id="jobs-mastery-status"/);
+  assert.doesNotMatch(html,/id="job-mastery-bar"/);
+  assert.doesNotMatch(html,/id="job-level"/);
+  assert.match(css,/\.game-shell \.job-level-progress\[hidden\]\{display:none\}/);
+  assert.match(css,/\.game-shell \.job-level-progress progress\{/);
+});
+test("職業介紹所還原原版階級星號與就職資格，不混用個人等級",()=>{
+  assert.match(html,/id="jobs-panel"/);
+  assert.match(html,/職業名稱後的 \* 代表原版職業階級/);
+  assert.match(script,/const rankStars=job\.rank>1\?"\*"\.repeat\(job\.rank-1\):""/);
+  assert.match(script,/title\.textContent = job\.name \+ rankStars/);
+  assert.match(script,/job\.reason\?\(job\.previousJob/);
+  assert.match(script,/尚未解鎖：/);
+  assert.match(script,/目前未達就職條件：/);
+  assert.match(script,/meta\.append\(title,eligibility,desc,requirements\)/);
+  assert.match(script,/button\.disabled = Boolean\(job\.reason\)/);
+  assert.match(css,/\.job \.job-eligibility\.locked/);
+});
+test("工作能量需求與發薪週期保留在操作區，和職業經驗進度分離",()=>{
+  assert.match(html,/id="work-cost-status"/);
+  assert.match(html,/id="work-payday-status"/);
+  assert.match(script,/const workJob=job\?state\.jobs\?\.find\(entry=>entry\.key===job\.key\):null/);
+  assert.match(script,/每次工作消耗：身體能量 /);
+  assert.match(script,/頭腦能量 /);
+  assert.match(script,/job\.workProgress/);
+  assert.match(script,/job\.worksUntilPayday/);
+  assert.doesNotMatch(script,/text\("jobs-mastery-status"/);
 });
 
 test("城鎮快捷工作只切到工作頁籤，不會自動出勤或受工作冷卻停用",()=>{
