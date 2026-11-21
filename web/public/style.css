@@ -37,6 +37,9 @@
 .map-unknown{background:#fbe6e6a8}
 .map-unknown-text{font-size:1.1rem;font-weight:bold;color:#aa3a39}
 .map-editor{margin:.8rem 0;background:#f2f7f2;border:1px solid #d0dfd2;border-radius:9px;padding:.8rem}
+.map-starter{margin:.75rem 0;padding:.85rem;border:1px solid #cddbd0;border-radius:9px;background:#f4f8f3}
+.map-starter p{margin:.4rem 0 .75rem;line-height:1.6}
+.map-starter button{max-width:100%;white-space:normal}
 .map-editor label{margin-bottom:.4rem}
 .map-editor-switch{display:flex;align-items:center;gap:.5rem;margin-bottom:.55rem!important}
 .map-editor-switch input{width:auto;margin:0}
