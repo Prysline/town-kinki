@@ -65,9 +65,12 @@ async function api(path, data) {
 function notify(message, error = false) {
   const target = el("notice");
   target.hidden = false;
-  target.textContent = message;
+  text("notice-message", message);
   target.classList.toggle("error", error);
+  target.setAttribute("role", error ? "alert" : "status");
+  target.setAttribute("aria-live", error ? "assertive" : "polite");
 }
+el("notice-close").addEventListener("click", () => { el("notice").hidden = true; });
 
 function text(id, value) { el(id).textContent = value; }
 
@@ -190,13 +193,19 @@ function updateCompactVisibility(){
     bodyRowBottom:statusView?el("body-energy").closest("div").getBoundingClientRect().bottom:Infinity,
     profileTabsBottom:!statusView?el("profile-view-tabs").getBoundingClientRect().bottom:Infinity
   });
-  el("compact-status").hidden=!show;
+  const compact=el("compact-status");
+  compact.hidden=!show;
   document.body.classList.toggle("compact-status-active",show);
+  if(show)document.body.style.setProperty("--compact-status-height",
+    Math.ceil(compact.getBoundingClientRect().height)+"px");
+  else document.body.style.removeProperty("--compact-status-height");
 }
 function renderCompactStatus(character){
   text("compact-character-name",character.name);
   text("compact-body-energy",character.bodyEnergy+" / "+state.maxBodyEnergy);
   text("compact-brain-energy",character.brainEnergy+" / "+state.maxBrainEnergy);
+  text("compact-money",money(character.money));
+  text("compact-bank",money(character.bank));
   el("compact-body-bar").value=state.maxBodyEnergy>0?
     Math.max(0,Math.min(100,character.bodyEnergy/state.maxBodyEnergy*100)):0;
   el("compact-brain-bar").value=state.maxBrainEnergy>0?
@@ -2474,6 +2483,8 @@ function renderBank() {
   el("bank-transfer-panel").hidden = state.mode !== "multi";
   const account = state.bankAccount;
   if (!account) return;
+  text("bank-available-cash",money(state.character.money));
+  text("bank-available-balance",money(state.character.bank));
   renderLoan();
   text("term-balance", "目前定期存款：" + money(account.termBalance));
   text("bank-interest-day", account.lastInterestDay
@@ -2652,6 +2663,10 @@ async function action(path, data, message) {
         (result.payment==="credit"?"普通銀行存款扣除 ":"現金花費 ")+money(result.paid) +
         (gains ? "，能力提升：" + gains : "") +
         (result.weightLoss ? "，體重減少 "+result.weightLoss.toFixed(2)+" 公斤" : "") + "。");
+    } else if (path === "bank") {
+      const result=state.bankResult;
+      notify((result.action==="deposit"?"存款":"提款")+"完成："+money(data.amount)+
+        "；目前現金："+money(result.money)+"；普通銀行存款："+money(result.bank)+"。");
     } else if (message) notify(message);
     if (path === "login" || path === "register") closeRoom();
     render();
@@ -2699,8 +2714,7 @@ el("bank-form").addEventListener("submit", event => {
   event.preventDefault();
   const actionName = event.submitter?.value === "withdraw" ? "withdraw" : "deposit";
   const amount = Number(new FormData(event.currentTarget).get("amount"));
-  action("bank", { action: actionName, amount },
-    (actionName === "deposit" ? "存款" : "提款") + "完成：" + money(amount));
+  action("bank", { action: actionName, amount });
 });
 let pendingTransfer = null;
 el("bank-transfer-form").addEventListener("submit", async event => {
