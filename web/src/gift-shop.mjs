@@ -1,4 +1,5 @@
 // gifutoya.cgi::gifutoya_do 與 command.pl::gift_souhu_syori 的本人道具及跨玩家移交。
+import { heldInventoryRows,inventoryLife } from "./inventory-life.mjs";
 // 原版 33 欄 item；舊存檔僅唯讀，Web 新購／收禮的完整交易才可修改。
 export const GIFT_SHOP_SYMBOL="ギフト屋";
 export const GIFT_CONVERSION_FEE=50000;
@@ -125,12 +126,11 @@ function nextLine(db,userId){
   if(!Number.isSafeInteger(next))throw new Error("禮品物品流水號超出範圍");
   return next;
 }
-function countCategory(db,userId,category){
-  return db.prepare([
-    "SELECT COUNT(*) AS n FROM legacy_inventory_items",
-    "WHERE user_id=? AND category=? AND durability>0"
-  ].join(" ")).get(userId,category).n;
+function countCategory(db,userId,category,now){
+  return heldInventoryRows(db,userId,now).filter(row=>
+    row.category===category&&inventoryLife(row,now).remaining>0).length;
 }
+
 function addItem(db,userId,line,origin,fields,now){
   db.prepare([
     "INSERT INTO legacy_inventory_items(user_id,original_id,source_line,category,original_name,",
@@ -210,7 +210,7 @@ export function convertToGift(db,userId,{
       throw new Error("角色目前城鎮沒有禮品店");
     if(character.money<GIFT_CONVERSION_FEE)
       throw new Error("禮品轉換手續費 50,000 元，現金不足");
-    if(countCategory(db,userId,"ギフト")>=GIFT_PURCHASED_LIMIT)
+    if(countCategory(db,userId,"ギフト",now)>=GIFT_PURCHASED_LIMIT)
       throw new Error("本人禮品已達 10 格上限");
     const row=sourceRow(db,userId,sourceLine);
     const original=rawFields(row);
@@ -268,7 +268,7 @@ export function sendGift(db,userId,{
       throw new Error("優惠券原版特例尚未移植，不能透過一般禮品寄送");
     const remaining=rest(row,now);
     if(quantity>remaining)throw new Error("送出數量超過禮品剩餘耐久");
-    if(countCategory(db,recipient.user_id,"ギフト商品")>=GIFT_RECEIVED_LIMIT)
+    if(countCategory(db,recipient.user_id,"ギフト商品",now)>=GIFT_RECEIVED_LIMIT)
       throw new Error("收件人的已收禮品達到 10 格上限");
     const nowSeconds=Math.floor(now/1000);
     const received=[...original];

@@ -3,7 +3,7 @@ import { shouldShowCompactEnergy } from "./energy-visibility.js";
 import { townTimePhase } from "./time-theme.js";
 import { groupedStatLines } from "./shop-effects.js";
 import { displayEquipmentName,displayVendingName,displayKnownItemName,displayEquipmentCategory,displayKnownItemCategory } from "./item-translations.js";
-import { itemCooldownRemaining,itemCooldownText,itemRemainingDurability } from "./item-cooldown.js";
+import { itemCooldownRemaining,itemCooldownText,itemRemainingDurability,formatItemCountdown } from "./item-cooldown.js";
 const el = id => document.getElementById(id);
 let state = null;
 let requestedLegacyIconUrl = null;
@@ -1296,6 +1296,20 @@ function updateInventoryCooldowns(){
   if(!state?.character||el("inventory-panel").hidden)return;
   const now=browserGameNow();
   let expired=false;
+  // 日制過期與回制 0 耐久的清除時間皆以伺服器給的 removeAt 為準。
+  for(const card of el("legacy-inventory-list").querySelectorAll(".inventory-item[data-remove-at]")){
+    const at=Number(card.dataset.removeAt);
+    const remaining=at-now;
+    const label=card.querySelector(".inventory-removing");
+    if(label&&remaining>0)label.textContent="已用盡，等待移除 "+formatItemCountdown(remaining);
+    if(remaining<=0){
+      card.hidden=true; // 尚未取得新的 snapshot 也不繼續展示過期道具
+      const key="remove:"+state.character.name+":"+card.dataset.sourceLine+":"+at;
+      if(!inventoryCooldownSyncRequested.has(key)){
+        inventoryCooldownSyncRequested.add(key);expired=true;
+      }
+    }
+  }
   for(const node of el("legacy-inventory-list").querySelectorAll(".inventory-cooldown[data-ready-at]")){
     const readyAt=Number(node.dataset.readyAt);
     const key=node.dataset.cooldownKey;
@@ -1351,6 +1365,10 @@ function renderLegacyItems(){
     heading.textContent="▼ "+displayKnownItemCategory(category);section.append(heading);
     for(const item of grouped.get(category)){
       const card=document.createElement("article");card.className="inventory-item";
+      if(Number.isSafeInteger(item.removeAt)){
+        card.dataset.removeAt=String(item.removeAt);
+        card.dataset.sourceLine=String(item.sourceLine);
+      }
       const info=item.details??null;
       const actionInfo=actions.get(item.sourceLine);
       const head=document.createElement("div");head.className="inventory-item-heading";
@@ -1368,7 +1386,12 @@ function renderLegacyItems(){
       const controls=document.createElement("div");controls.className="inventory-item-controls";
       if(actionInfo){
         const status=document.createElement("span");status.className="small inventory-item-status";
-        if(!actionInfo.canUse&&itemCooldownRemaining(actionInfo,browserGameNow())>0){
+        if(amount<=0&&item.unit==="回"&&
+           Number.isSafeInteger(item.removeAt)&&item.removeAt>browserGameNow()){
+          status.classList.add("inventory-removing");
+          status.textContent="已用盡，等待移除 "+
+            formatItemCountdown(item.removeAt-browserGameNow());
+        }else if(!actionInfo.canUse&&itemCooldownRemaining(actionInfo,browserGameNow())>0){
           status.classList.add("inventory-cooldown");
           status.dataset.readyAt=String(actionInfo.readyAt);
           status.dataset.reason=actionInfo.reason??"";
