@@ -4,7 +4,7 @@ import {readFileSync} from "node:fs";
 import {DatabaseSync} from "node:sqlite";
 import {listLegacyInventoryItems} from "../src/legacy-inventory.mjs";
 import {retailItemDetails} from "../src/retail.mjs";
-import {itemCooldownRemaining,formatItemCountdown,itemCooldownText} from "../public/item-cooldown.js";
+import {itemCooldownRemaining,formatItemCountdown,itemCooldownText,itemRemainingDurability} from "../public/item-cooldown.js";
 import {groupedStatLines} from "../public/shop-effects.js";
 
 const app=readFileSync(new URL("../public/app.js",import.meta.url),"utf8");
@@ -25,6 +25,17 @@ test("冷卻以伺服器 readyAt 與遊戲時間倒數，歸零不自行越過�
   assert.equal(formatItemCountdown(3723000),"01:02:03");
   assert.equal(formatItemCountdown(90061000),"1 天 01:01:01");
 });
+test("原版日制物品顯示實際剩餘天數，回制與無效購入日期不亂算",()=>{
+  const bought=1_700_000_000;
+  const item={durability:30,unit:"日",purchasedAt:bought};
+  const now=bought*1000+9*86400000+1000;
+  assert.equal(itemRemainingDurability(item,null,now),21);
+  assert.equal(itemRemainingDurability(item,{remaining:12},now),12);
+  assert.equal(itemRemainingDurability({durability:3,unit:"回",purchasedAt:bought},null,now),3);
+  assert.equal(itemRemainingDurability({...item,purchasedAt:null},null,now),30);
+  assert.equal(itemRemainingDurability(item,null,now+45*86400000),0);
+});
+
 test("個人物品安全取得原版效果，壞資料保留清單而不憑空產生效果",()=>{
   const db=new DatabaseSync(":memory:");
   try{
