@@ -5184,3 +5184,196 @@ test("第58階段多人HTTP：只限制連續最後玩家，其他玩家插入�
       .result.instantLotoResult.replayed,true);
   }finally{await srv.stop();}
 });
+
+
+// 讓單機六號樂透測試穩定從台北當地05:40開始，不依賴跑測試的實際時鐘。
+function anchorSoloLoto6BeforeSix(srv){
+  const parts=new Intl.DateTimeFormat("en-US",{
+    timeZone:"Asia/Taipei",hour:"2-digit",minute:"2-digit",second:"2-digit",
+    hourCycle:"h23"
+  }).formatToParts(new Date());
+  const get=name=>Number(parts.find(x=>x.type===name)?.value??0);
+  const elapsed=(((get("hour")*60+get("minute"))*60)+get("second"))*1000;
+  const day=86400000,target=5*3600000+40*60000;
+  const offset=(target-elapsed+day)%day;
+  const db=new DatabaseSync(join(srv.directory,"solo.sqlite"));
+  try{db.prepare("UPDATE solo_clock SET offset_ms=? WHERE id=1").run(offset);}
+  finally{db.close();}
+}
+
+test("第59階段單機HTTP：六號樂透在06:00由玩家明確觸發，銀行入帳、二次購票及重啟均保存",async()=>{
+  let srv=await start("solo");
+  const directory=srv.directory;
+  try{
+    assert.equal((await api(srv.url,"arcade/loto6/buy",{
+      numbers:[1,2,3,4,5,6],requestId:"phase59_no_character"
+    })).status,400);
+    const created=await api(srv.url,"character",{
+      name:"第59階段六號樂透玩家",gender:"other",stats:defaultStats()
+    });
+    assert.equal(created.status,200);
+    assert.equal(created.result.loto6.available,false);
+    assert.equal(created.result.loto6.price,2500);
+    assert.deepEqual(created.result.loto6.prizes,
+      [0,2500,5000,100000,1000000,10000000,100000000]);
+    assert.equal((await api(srv.url,"arcade/loto6/buy",{
+      numbers:[1,2,3,4,5,6],requestId:"phase59_no_arcade"
+    })).status,400);
+    assert.equal((await api(srv.url,"arcade/loto6/check",{})).status,400);
+    const starter=await api(srv.url,"solo/map/starter",{});
+    assert.equal(starter.status,200);
+    assert.equal(starter.result.mapStarterResult.placed,21);
+    assert.equal(starter.result.loto6.available,true);
+    anchorSoloLoto6BeforeSix(srv);
+    const initial=(await api(srv.url,"state")).result;
+    assert.equal(initial.loto6.hour,5);
+    assert.equal(initial.loto6.due,false);
+    assert.equal(initial.loto6.pendingCount,0);
+    const beginMoney=initial.character.money,beginBank=initial.character.bank;
+    const manual={numbers:[1,2,3,4,5,6],random:false,
+      requestId:"phase59_http_manual"};
+    assert.equal((await api(srv.url,"arcade/loto6/buy",{
+      numbers:[1,1,2,3,4,5],requestId:"phase59_invalid_repeated"
+    })).status,400);
+    assert.equal((await api(srv.url,"arcade/loto6/buy",{
+      numbers:[0,2,3,4,5,6],requestId:"phase59_invalid_zero"
+    })).status,400);
+    assert.equal((await api(srv.url,"arcade/loto6/buy",{
+      random:"true",requestId:"phase59_invalid_random"
+    })).status,400);
+    const bought=await api(srv.url,"arcade/loto6/buy",manual);
+    assert.equal(bought.status,200);
+    assert.deepEqual(bought.result.loto6TicketResult.numbers,manual.numbers);
+    assert.equal(bought.result.loto6TicketResult.randomSelected,false);
+    assert.equal(bought.result.character.money,beginMoney-2500);
+    assert.equal(bought.result.character.bank,beginBank);
+    assert.equal(bought.result.loto6.myPendingCount,1);
+    assert.equal(bought.result.loto6.pendingCount,1);
+    assert.equal(bought.result.loto6.lastDraw,null);
+    const replay=await api(srv.url,"arcade/loto6/buy",manual);
+    assert.equal(replay.status,200);
+    assert.equal(replay.result.loto6TicketResult.replayed,true);
+    assert.equal(replay.result.character.money,beginMoney-2500);
+    assert.equal((await api(srv.url,"arcade/loto6/buy",{
+      ...manual,numbers:[1,2,3,4,5,7]
+    })).status,400);
+    const random=await api(srv.url,"arcade/loto6/buy",{
+      random:true,requestId:"phase59_http_random"
+    });
+    assert.equal(random.status,200);
+    const ticket=random.result.loto6TicketResult;
+    assert.equal(ticket.randomSelected,true);
+    assert.equal(ticket.numbers.length,6);
+    assert.equal(new Set(ticket.numbers).size,6);
+    assert.ok(ticket.numbers.every(n=>Number.isInteger(n)&&n>=1&&n<=36));
+    assert.equal(random.result.character.money,beginMoney-5000);
+    assert.equal(random.result.loto6.myPendingCount,2);
+    assert.equal((await api(srv.url,"arcade/loto6/check",{})).result.loto6DrawResult.drawn,false);
+    assert.equal((await api(srv.url,"state")).result.loto6.pendingCount,2);
+    assert.equal((await api(srv.url,"solo/time/advance",{preset:"30m"})).status,200);
+    const ready=await api(srv.url,"state");
+    assert.equal(ready.result.loto6.hour,6);
+    assert.equal(ready.result.loto6.due,true);
+    assert.equal(ready.result.loto6.myPendingCount,2);
+    // GET /api/state 不會在背景或單純讀取狀態時開獎。
+    assert.equal(ready.result.loto6.lastDraw,null);
+    const draw=await api(srv.url,"arcade/loto6/check",{});
+    assert.equal(draw.status,200);
+    const result=draw.result.loto6DrawResult;
+    assert.equal(result.drawn,true);
+    assert.equal(result.reason,"06:00");
+    assert.equal(result.ticketCount,2);
+    assert.equal(result.winningNumbers.length,6);
+    assert.equal(new Set(result.winningNumbers).size,6);
+    const set=new Set(result.winningNumbers);
+    const manualHits=manual.numbers.filter(n=>set.has(n)).length;
+    const randomHits=ticket.numbers.filter(n=>set.has(n)).length;
+    const prizes=[0,2500,5000,100000,1000000,10000000,100000000];
+    const expected=prizes[manualHits]+prizes[randomHits];
+    assert.equal(result.totalPrize,expected);
+    assert.equal(draw.result.character.money,beginMoney-5000);
+    assert.equal(draw.result.character.bank,beginBank+expected);
+    assert.equal(draw.result.loto6.myPendingCount,0);
+    assert.equal(draw.result.loto6.pendingCount,0);
+    assert.equal(draw.result.loto6.history.length,2);
+    assert.equal(draw.result.loto6.history[1].matches,manualHits);
+    assert.equal(draw.result.loto6.history[0].matches,randomHits);
+    assert.equal((await api(srv.url,"arcade/loto6/check",{}))
+      .result.loto6DrawResult.drawn,false);
+    const afterDraw=await api(srv.url,"arcade/loto6/buy",{
+      numbers:[1,2,3,4,5,6],requestId:"phase59_http_next_round"
+    });
+    assert.equal(afterDraw.status,200);
+    assert.equal(afterDraw.result.loto6.pendingCount,1);
+    assert.equal(afterDraw.result.loto6.lastDraw.id,result.drawId);
+    assert.equal(afterDraw.result.character.money,beginMoney-7500);
+    const savedBank=afterDraw.result.character.bank;
+    await srv.stop({preserveData:true});
+    srv=await start("solo",undefined,directory);
+    const restored=await api(srv.url,"state");
+    assert.equal(restored.status,200);
+    assert.equal(restored.result.loto6.lastDraw.id,result.drawId);
+    assert.equal(restored.result.loto6.history.length,3);
+    assert.equal(restored.result.loto6.pendingCount,1);
+    assert.equal(restored.result.character.bank,savedBank);
+    assert.equal(restored.result.character.money,beginMoney-7500);
+    const again=await api(srv.url,"arcade/loto6/buy",manual);
+    assert.equal(again.status,200);
+    assert.equal(again.result.loto6TicketResult.replayed,true);
+    assert.equal(again.result.character.money,beginMoney-7500);
+  }finally{await srv.stop();}
+});
+
+test("第59階段多人HTTP：六號樂透共用待開獎注數、各自現金與彩券紀錄隔離",async()=>{
+  const seed=dir=>{
+    const db=new DatabaseSync(join(dir,"multi.sqlite"));
+    try{
+      db.exec([
+        "CREATE TABLE town_maps(town_id INTEGER PRIMARY KEY,",
+        "original_name TEXT NOT NULL DEFAULT '',",
+        "original_record TEXT NOT NULL DEFAULT '',",
+        "source TEXT NOT NULL,tiles_json TEXT NOT NULL,",
+        "updated_at INTEGER NOT NULL);"
+      ].join(" "));
+      const tiles=Array(192).fill("");tiles[0]="ゲーセン";
+      db.prepare("INSERT INTO town_maps(town_id,original_name,source,tiles_json,updated_at) VALUES(?,?,?,?,?)")
+        .run(0,"測試街區","legacy-import",JSON.stringify(tiles),Date.now());
+    }finally{db.close();}
+  };
+  const srv=await start("multi",seed);
+  try{
+    const a=await api(srv.url,"register",{
+      username:"phase59Loto6UserA",password:"phase59-strong-password-a"
+    });
+    const b=await api(srv.url,"register",{
+      username:"phase59Loto6UserB",password:"phase59-strong-password-b"
+    });
+    assert.equal(a.status,200);assert.equal(b.status,200);
+    assert.equal((await api(srv.url,"character",{
+      name:"六號彩券甲",gender:"other",stats:defaultStats()
+    },a.cookie)).status,200);
+    assert.equal((await api(srv.url,"character",{
+      name:"六號彩券乙",gender:"other",stats:defaultStats()
+    },b.cookie)).status,200);
+    const ticket={numbers:[1,2,3,4,5,6],requestId:"phase59_multi_same_code"};
+    assert.equal((await api(srv.url,"arcade/loto6/buy",ticket)).status,401);
+    const first=await api(srv.url,"arcade/loto6/buy",ticket,a.cookie);
+    assert.equal(first.status,200);
+    const second=await api(srv.url,"arcade/loto6/buy",ticket,b.cookie);
+    assert.equal(second.status,200);
+    assert.equal(first.result.loto6TicketResult.replayed,false);
+    assert.equal(second.result.loto6TicketResult.replayed,false);
+    const aState=(await api(srv.url,"state",undefined,a.cookie)).result;
+    const bState=(await api(srv.url,"state",undefined,b.cookie)).result;
+    assert.equal(aState.loto6.pendingCount,bState.loto6.pendingCount);
+    assert.equal(aState.loto6.history.length,1);
+    assert.equal(bState.loto6.history.length,1);
+    assert.equal(aState.loto6.history[0].numbers.length,6);
+    assert.equal(bState.loto6.history[0].numbers.length,6);
+    assert.equal((await api(srv.url,"arcade/loto6/buy",ticket,a.cookie))
+      .result.loto6TicketResult.replayed,true);
+    assert.equal((await api(srv.url,"arcade/loto6/buy",{
+      numbers:[6,5,4,3,2,1],requestId:"phase59_multi_same_code"
+    },b.cookie)).status,400);
+  }finally{await srv.stop();}
+});
