@@ -29,6 +29,15 @@ export function parseOriginalRoadTransport(iniSource,libSource,makerSource,treas
   const pairSource=/%idou_syudan\s*=\s*\(([^;]+)\);/s.exec(iniSource)?.[1];
   const matches=pairSource?[...pairSource.matchAll(/'([^']+)'\s*,\s*'(\d+)'/g)]:[];
   const speeds=new Map(matches.map(x=>[x[1],Number(x[2])]));
+  // 兩個「迷路」區塊的差異是原版實際行為關鍵：事故內真的覆寫town_no，
+  // 單純迷路只抽no_rand卻沒使用它，message又會直接exit。
+  const lostMarker="if ($in{'maigo'} eq 'yes')";
+  const branches=makerSource.split(lostMarker);
+  const safeNonAccident=branches.length===3&&
+    branches[1].includes("$in{'town_no'} = $no_rand;")&&
+    branches[2].includes("$no_rand=int(rand(4));")&&
+    !branches[2].split("&event_happen;")[0].includes("$in{'town_no'} = $no_rand;");
+  const messageBody=libSource.split("sub message {")[1]?.split("sub message_only {")[0];
   const checks=[
     libSource.includes('if ($in{\'command\'} eq "mati_idou" || $in{\'command\'} eq "mati_idou2")'),
     libSource.includes('&motimono_kensa("$_")'),
@@ -56,6 +65,7 @@ export function parseOriginalRoadTransport(iniSource,libSource,makerSource,treas
      speeds.get("フェラーリ")!==2||speeds.get("ミグ25")!==0||
      speeds.get("ローラースルーゴーゴー")!==20||
      [...speeds.values()].some(v=>!Number.isSafeInteger(v)||v<0||v>3600)||
+     !safeNonAccident||!messageBody?.includes("exit;")||
      checks.some(x=>!x))
     throw new Error("原版公路移動載具秒數、鍛鍊、事故或迷路分支已變更");
   const items=treasureCatalog.pools.special.filter(item=>speeds.has(item.name));
