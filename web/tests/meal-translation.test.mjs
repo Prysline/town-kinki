@@ -30,7 +30,7 @@ test("既有翻譯保留，特殊食物名稱翻譯不牽涉用餐判定",()=>{
   assert.equal(MEAL_ZH_TW["カツ丼"],"炸豬排蓋飯");
   assert.equal(MEAL_ZH_TW["とろろご飯"],"山藥泥飯");
   assert.equal(MEAL_ZH_TW["ハッピーターン"],"Happy Turn米果");
-  assert.equal(MEAL_ZH_TW["ブラジャーランチ"],"胸罩午餐");
+  assert.equal(MEAL_ZH_TW["ブラジャーランチ"],"雙拼丼飯午餐");
   const [sample]=parseLegacyMeals(secondSource,"second");
   assert.equal(sample.originalName,"牛丼2");
   assert.equal(sample.name,"牛肉蓋飯");
