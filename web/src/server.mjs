@@ -854,7 +854,7 @@ async function handle(req, res) {
       let loto6TicketResult;
       try{
         loto6TicketResult=buyLoto6Ticket(db,user.id,loto6Source,{
-          numbers:data.numbers,requestId:data.requestId,
+          numbers:data.numbers,random:data.random??false,requestId:data.requestId,
           now:gameNow(),timeZone:GAME_TIMEZONE
         });
       }catch(error){throw new HttpError(400,error.message);}
