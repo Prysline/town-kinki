@@ -77,15 +77,15 @@ test("品牌型號、限定商品及系列玩笑譯名符合目前的校對提�
 });
 
 test("Web 以繁體中文顯示與搜尋，但請求保留原始 SKU、名稱及類別",()=>{
-  assert.match(app,/from "\.\/retail-beauty-electronics-translations\.js"/);
-  assert.match(app,/name\.textContent=displayRetailBeautyElectronicsName\(displayKnownItemName\(item\.name\)\)/);
-  assert.match(app,/const displayProductName=shopName==="自動販賣機"\?displayVendingName:displayRetailBeautyElectronicsName/);
+  assert.match(app,/from "\.\/retail-item-translations\.js"/);
+  assert.match(app,/name\.textContent=displayRetailItemName\(item\.name\)/);
+  assert.match(app,/const displayProductName=shopName==="自動販賣機"\?displayVendingName:displayRetailItemName/);
   assert.match(app,/document\.createTextNode\(displayProductName\(item\.name\)\)/);
-  assert.match(app,/displayRetailBeautyElectronicsName\(item\.name\)\.toLocaleLowerCase\("zh-TW"\)\.includes\(search\)/);
-  assert.match(app,/displayRetailBeautyElectronicsCategory\(item\.category\)\.toLocaleLowerCase\("zh-TW"\)/);
-  assert.match(app,/displayRetailBeautyElectronicsName\(purchase\.name\)/);
-  assert.match(app,/displayRetailBeautyElectronicsName\(entry\.name\)/);
-  assert.match(app,/displayRetailBeautyElectronicsName\(stock\.name\)/);
+  assert.match(app,/displayRetailItemName\(item\.name\)\.toLocaleLowerCase\("zh-TW"\)\.includes\(search\)/);
+  assert.match(app,/displayRetailItemCategory\(item\.category\)\.toLocaleLowerCase\("zh-TW"\)/);
+  assert.match(app,/displayRetailItemName\(purchase\.name\)/);
+  assert.match(app,/displayRetailItemName\(entry\.name\)/);
+  assert.match(app,/displayRetailItemName\(stock\.name\)/);
   assert.match(app,/submitLegacyUse\(item\.sourceLine,item\.name\)/);
   assert.match(app,/pendingRetailPurchase=\{shop:item\.shop,sku:item\.sku,quantity,payment/);
   assert.match(app,/const duplicate=owned\.some\(x=>x\.name===item\.name\)/);
