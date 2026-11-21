@@ -11,6 +11,7 @@ import {
 } from "./engine.mjs";
 import { parseLegacySchool, parseLegacyGym, parseLegacyClassroom, calendarDay, trainingAvailability, performTraining } from "./training.mjs";
 import { initTownMapTable, bootstrapLegacyTownMaps, publicTownMap, editTownTile } from "./town-storage.mjs";
+import { createSoloStarterTown } from "./solo-starter-town.mjs";
 import { trainDestinations, travelByTrain } from "./transport.mjs";
 import { parseHouseCatalog, initHousingTables, listHouses, publicHouseCatalog, buildHouse, renameHouse, sellHouse, getHouseSaleQuote, listHouseEvents, remodelHouse, listHouseRemodelEvents } from "./housing.mjs";
 import { initRoomsTables, ROOM_TYPES, setRoomSlots, viewRoom, addRoomPost, deleteRoomPost } from "./rooms.mjs";
@@ -989,6 +990,15 @@ async function handle(req, res) {
       return sendJson(res, 200, snapshot(user));
     }
 
+    if (path === "/api/solo/map/starter") {
+      if (MODE !== "solo") throw new HttpError(403, "只有單機模式可以建立試玩街區");
+      const character = getCharacter(user.id);
+      if (!character) throw new HttpError(409, "請先建立角色");
+      let result;
+      try { result = createSoloStarterTown(db, character.townId); }
+      catch (error) { throw new HttpError(400, error.message); }
+      return sendJson(res, 200, {...snapshot(user),mapStarterResult:result});
+    }
     if (path === "/api/map/tile") {
       if (MODE !== "solo") throw new HttpError(403, "多人模式只能由伺服器管理員匯入街區地圖");
       const character = getCharacter(user.id);
