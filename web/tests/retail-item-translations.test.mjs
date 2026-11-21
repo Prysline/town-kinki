@@ -8,15 +8,16 @@ import { DESSERT_FASTFOOD_ZH_TW } from "../public/retail-dessert-fastfood-transl
 import { RETAIL_DRINK_ZH_TW,RETAIL_ALCOHOL_ZH_TW } from "../public/retail-drink-alcohol-translations.js";
 import { RETAIL_SPORTS_MEDICINE_ZH_TW } from "../public/retail-sports-medicine-translations.js";
 import { RETAIL_BEAUTY_ELECTRONICS_ZH_TW } from "../public/retail-beauty-electronics-translations.js";
+import { RETAIL_FLOWERS_ZH_TW } from "../public/retail-flower-translations.js";
 
 const groups=[
   EQUIPMENT_ZH_TW,VENDING_ZH_TW,RETAIL_FOOD_ZH_TW,DESSERT_FASTFOOD_ZH_TW,
   RETAIL_DRINK_ZH_TW,RETAIL_ALCOHOL_ZH_TW,RETAIL_SPORTS_MEDICINE_ZH_TW,
-  RETAIL_BEAUTY_ELECTRONICS_ZH_TW
+  RETAIL_BEAUTY_ELECTRONICS_ZH_TW,RETAIL_FLOWERS_ZH_TW
 ];
 const app=readFileSync(new URL("../public/app.js",import.meta.url),"utf8");
 
-test("共用入口保留已合併的四批及美容電化產品全部原文名稱對照",()=>{
+test("共用入口保留先前已確認品項與本批花卉所有原文名稱對照",()=>{
   const unique=new Map();
   for(const group of groups)for(const [original,chinese] of Object.entries(group)){
     if(unique.has(original))
@@ -24,15 +25,16 @@ test("共用入口保留已合併的四批及美容電化產品全部原文名�
     else unique.set(original,chinese);
     assert.equal(displayRetailItemName(original),chinese,original);
   }
-  assert.ok(unique.size>=162,"百貨翻譯不得遺失前四批或美容電化產品");
+  assert.ok(unique.size>=189,"百貨翻譯不得遺失先前已確認品項及花卉");
   assert.equal(displayRetailItemName("未知物品"),"未知物品");
 });
 
-test("共用入口將前五批類別合成繁體中文且未知類別回退原文",()=>{
+test("共用入口將已確認類別與花卉轉成繁體中文且未知類別回退原文",()=>{
   const expected={
     "食料品":"食品","デザート":"甜點","ファーストフード":"速食",
     "ドリンク":"飲料","アルコール":"酒類","スポーツ用品":"運動用品",
     "薬":"藥品","美容":"美容用品","電化製品":"電器用品",
+    "お花":"花卉",
     "武器":"武器","御守":"護身符"
   };
   for(const [original,chinese] of Object.entries(expected))
