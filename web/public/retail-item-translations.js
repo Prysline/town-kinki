@@ -6,6 +6,7 @@ import { displayDessertFastFoodName,displayDessertFastFoodCategory } from "./ret
 import { displayRetailDrinkAlcoholName,displayRetailDrinkAlcoholCategory } from "./retail-drink-alcohol-translations.js";
 import { displayRetailSportsMedicineName,displayRetailSportsMedicineCategory } from "./retail-sports-medicine-translations.js";
 import { displayRetailBeautyElectronicsName,displayRetailBeautyElectronicsCategory } from "./retail-beauty-electronics-translations.js";
+import { displayRetailFlowerName,displayRetailFlowerCategory } from "./retail-flower-translations.js";
 
 const ITEM_NAME_TRANSLATORS=Object.freeze([
   displayKnownItemName,
@@ -13,7 +14,8 @@ const ITEM_NAME_TRANSLATORS=Object.freeze([
   displayDessertFastFoodName,
   displayRetailDrinkAlcoholName,
   displayRetailSportsMedicineName,
-  displayRetailBeautyElectronicsName
+  displayRetailBeautyElectronicsName,
+  displayRetailFlowerName
 ]);
 const ITEM_CATEGORY_TRANSLATORS=Object.freeze([
   displayKnownItemCategory,
@@ -21,7 +23,8 @@ const ITEM_CATEGORY_TRANSLATORS=Object.freeze([
   displayDessertFastFoodCategory,
   displayRetailDrinkAlcoholCategory,
   displayRetailSportsMedicineCategory,
-  displayRetailBeautyElectronicsCategory
+  displayRetailBeautyElectronicsCategory,
+  displayRetailFlowerCategory
 ]);
 
 export const displayRetailItemName=name=>
