@@ -679,6 +679,33 @@
           <h3>本人最近20張彩券</h3>
           <div id="arcade-loto6-history"></div>
         </section>
+        <section class="card" id="arcade-cardw-panel">
+          <div class="heading">
+            <div><div class="eyebrow">原版遊樂中心 · cardw2.cgi</div><h2>多卡挑戰</h2></div>
+            <span class="muted">共用倍率 · 五種課程</span>
+          </div>
+          <details class="explain">
+            <summary>原版多卡規則、真實成功機率與單機差異</summary>
+            <p class="small">原版「cardw2.cgi」五種課程的基本金額為10,000／100,000／1,000,000／10,000,000／100,000,000元。實際賭注＝課程基本金額×所有玩家共用的目前倍率，空白原版紀錄從倍率1開始；成功獲得同額現金、倍率加1，失敗扣除同額、倍率重設為1。原版畫面標示機率80%／65%／50%／35%／20%，但程式使用抽1～100且「抽到大於或等於門檻就失敗」，因此真正成功機率是79%／64%／49%／34%／19%；下方同時呈現兩者，不擅自修正來源。原版實際各課程冷卻均設為0分鐘，但明訂同一位玩家不能連續抽卡；多人Web保留此限制，單機因沒有其他玩家，改為本人每隔原版基本行動5秒可續玩。下注需足額現金，伺服器抽牌並以SQLite原子更新本人現金、全服倍率與交易紀錄；最近20局只顯示本人的結果。此遊戲不會得到道具。</p>
+          </details>
+          <p id="arcade-cardw-status" class="small" role="status"></p>
+          <div class="filters retail-filters">
+            <label for="arcade-cardw-course">選擇多卡課程
+              <select id="arcade-cardw-course">
+                <option value="0">1萬元課程（畫面80%／實際79%）</option>
+                <option value="1">10萬元課程（畫面65%／實際64%）</option>
+                <option value="2">100萬元課程（畫面50%／實際49%）</option>
+                <option value="3">1,000萬元課程（畫面35%／實際34%）</option>
+                <option value="4">1億元課程（畫面20%／實際19%）</option>
+              </select>
+            </label>
+          </div>
+          <p id="arcade-cardw-quote" class="small"></p>
+          <button type="button" id="arcade-cardw-submit" disabled>確認本局賭注並抽卡</button>
+          <p id="arcade-cardw-result" class="small" aria-live="polite"></p>
+          <h3>本人最近20局多卡紀錄</h3>
+          <div id="arcade-cardw-history"></div>
+        </section>
       </div>
       <div id="facility-pane-training" class="facility-pane" role="tabpanel" aria-labelledby="facility-tab-training" tabindex="0" hidden>
         <section class="card" id="school-panel">
