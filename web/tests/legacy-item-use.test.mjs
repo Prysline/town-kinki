@@ -632,3 +632,65 @@ test("原版特殊權益的日制商品與變造日期仍不能被當成一般�
   }finally{db.close();}
 });
 
+
+test("原版「薬／ランダム品」每次獨立抽 17 項 0～10，歷史記錄實際抽值且不改原始 33 欄",()=>{
+  const fields=originalItem("薬","ランダム品");
+  const indices=[2,3,4,5,6,7,8,10,11,12,13,14,15,16,18,19,20];
+  assert.equal(fields[9],"無");
+  assert.ok(indices.every(i=>fields[i]==="10"));
+  assert.equal(supportsLegacyItemUse(fields),true);
+  const db=createDb();
+  try{
+    addItem(db,1,fields);
+    const upper=useLegacyItem(db,1,1,"random_upper_0001",NOW,limit=>limit-1);
+    assert.equal(upper.replayed,false);
+    for(const key of STAT_KEYS){
+      assert.equal(upper.changes.stats[key],10,"原版隨機上限："+key);
+      assert.equal(read(db).stats[key],30);
+    }
+    assert.equal(db.prepare("SELECT remaining FROM legacy_item_usage").get().remaining,9);
+    assert.equal(useLegacyItem(db,1,1,"random_upper_0001",NOW+1,()=>0).replayed,true);
+    assert.throws(()=>useLegacyItem(db,1,1,"random_cooldown",NOW+179999,()=>0),/間隔/);
+    const lower=useLegacyItem(db,1,1,"random_lower_0002",NOW+180000,()=>0);
+    assert.deepEqual(lower.changes.stats,{});
+    for(const key of STAT_KEYS)assert.equal(read(db).stats[key],30);
+    assert.equal(db.prepare("SELECT remaining FROM legacy_item_usage").get().remaining,8);
+    const before=db.prepare("SELECT COUNT(*) AS n FROM legacy_item_use_history").get().n;
+    assert.throws(()=>useLegacyItem(db,1,1,"random_invalid_003",NOW+360000,()=>11),/隨機道具/);
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM legacy_item_use_history").get().n,before);
+    assert.equal(db.prepare("SELECT remaining FROM legacy_item_usage").get().remaining,8);
+    const middle=useLegacyItem(db,1,1,"random_middle_003",NOW+360000,limit=>Math.floor(limit/2));
+    for(const key of STAT_KEYS){
+      assert.equal(middle.changes.stats[key],5);
+      assert.equal(read(db).stats[key],35);
+    }
+    assert.equal(db.prepare("SELECT remaining FROM legacy_item_usage").get().remaining,7);
+    assert.equal(listLegacyItemUseHistory(db,1).length,3);
+    assert.deepEqual(JSON.parse(db.prepare("SELECT raw_fields_json FROM legacy_inventory_items").get().raw_fields_json),fields);
+  }finally{db.close();}
+});
+
+test("偽造ランダム品的分類、能力上限、單價或間隔一律不能取得亂數效果",()=>{
+  const source=originalItem("薬","ランダム品");
+  const versions=[
+    f=>{f[0]="書籍";},
+    f=>{f[2]="100000";},
+    f=>{f[10]="-10";},
+    f=>{f[17]="1";},
+    f=>{f[23]="0";},
+    f=>{f[29]="偽造品";},
+    f=>{f[9]="効果";},
+    f=>{f[27]="-500";}
+  ];
+  const db=createDb();
+  try{
+    for(const [i,modify] of versions.entries()){
+      const f=[...source];modify(f);
+      addItem(db,i+1,f);
+      assert.equal(supportsLegacyItemUse(f),false,"偽造變體 "+i);
+      assert.throws(()=>useLegacyItem(db,1,i+1,"random_forged_"+i,NOW,()=>10),/尚未支援/);
+    }
+    assert.equal(listLegacyItemActions(db,1,{bodyEnergy:25,brainEnergy:35,lastMealAt:0},NOW).length,0);
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM legacy_item_use_history").get().n,0);
+  }finally{db.close();}
+});
