@@ -624,3 +624,18 @@ test("現金與普通存款同時出現在固定狀態列及銀行表單，交�
   assert.match(css,/top:var\(--compact-status-height,64px\)/);
   assert.match(script,/getBoundingClientRect\(\)\.height/);
 });
+
+
+test("第50階段：單機首次遊玩可自願建立非原版試玩街區，已有配置不顯示入口",()=>{
+  assert.match(html,/id="solo-starter-town"/);
+  assert.match(html,/id="solo-starter-create"/);
+  assert.match(html,/不是原版歷史地圖/);
+  assert.match(html,/不會覆蓋已有資料/);
+  assert.match(script,/el\("solo-starter-town"\)\.hidden=!\(state\.mode==="solo"&&!map\.configured\)/);
+  assert.match(script,/map\.source === "web-solo-starter"/);
+  assert.match(script,/不是原版歷史街區/);
+  assert.match(script,/el\("solo-starter-create"\)\.addEventListener\("click"/);
+  assert.match(script,/window\.confirm\("將在目前城鎮建立一張 Web 試玩街區/);
+  assert.match(script,/action\("solo\/map\/starter",\{\}/);
+  assert.match(css,/\.map-starter\{/);
+});
