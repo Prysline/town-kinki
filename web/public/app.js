@@ -2,6 +2,7 @@ import { townCellAction } from "./town-home.js";
 import { shouldShowCompactEnergy } from "./energy-visibility.js";
 import { townTimePhase } from "./time-theme.js";
 import { groupedStatLines } from "./shop-effects.js";
+import { displayEquipmentName,displayVendingName,displayKnownItemName,displayEquipmentCategory,displayKnownItemCategory } from "./item-translations.js";
 import { itemCooldownRemaining,itemCooldownText,itemRemainingDurability } from "./item-cooldown.js";
 const el = id => document.getElementById(id);
 let state = null;
@@ -1347,13 +1348,13 @@ function renderLegacyItems(){
   for(const category of [...grouped.keys()].sort((x,y)=>x.localeCompare(y,"ja"))){
     const section=document.createElement("section");section.className="inventory-category";
     const heading=document.createElement("h4");heading.className="inventory-category-heading";
-    heading.textContent="▼ "+category;section.append(heading);
+    heading.textContent="▼ "+displayKnownItemCategory(category);section.append(heading);
     for(const item of grouped.get(category)){
       const card=document.createElement("article");card.className="inventory-item";
       const info=item.details??null;
       const actionInfo=actions.get(item.sourceLine);
       const head=document.createElement("div");head.className="inventory-item-heading";
-      const name=document.createElement("strong");name.textContent=item.name;
+      const name=document.createElement("strong");name.textContent=displayKnownItemName(item.name);
       const durability=document.createElement("span");durability.className="inventory-item-remaining";
       const amount=itemRemainingDurability(item,actionInfo,browserGameNow());
       durability.textContent="剩餘 "+amount+(item.unit??"");
@@ -1743,6 +1744,8 @@ function retailEffectDetails(item){
 const shopCartSelections=new Map();
 // 原版兩種店均為「一商品一列、分類分段、選一件後統一結帳」。
 function renderShopTable(target,goods,{shopName,onPurchase,emptyText}){
+  // 商店、確認與背包顯示中文；商品 SKU 和後端原始日文資料保持不變。
+  const displayProductName=shopName==="自動販賣機"?displayVendingName:name=>name;
   target.replaceChildren();
   if(!goods.length){
     const empty=document.createElement("p");empty.className="small";
@@ -1805,7 +1808,7 @@ function renderShopTable(target,goods,{shopName,onPurchase,emptyText}){
     for(const option of qty.options)
       option.disabled=Boolean(item)&&Number(option.value)>item.stock;
     quote.textContent=!item?"先在上方表格選擇一項商品。":
-      "已選："+item.name+"｜合計 "+money(total)+"（"+(bank?"普通存款":"現金")+"）"+
+      "已選："+displayProductName(item.name)+"｜合計 "+money(total)+"（"+(bank?"普通存款":"現金")+"）"+
       (!available?"｜庫存不足":!affordable?"｜餘額不足":"");
     button.disabled=!item||item.stock<=0||!available||!affordable;
     button.textContent=!item?"請先選擇商品":item.stock<=0?"售完":
@@ -1817,7 +1820,7 @@ function renderShopTable(target,goods,{shopName,onPurchase,emptyText}){
       category=item.category;
       const group=document.createElement("tr");group.className="shop-category-row";
       const th=document.createElement("th");th.scope="rowgroup";th.colSpan=5;
-      th.textContent="▼ "+category;group.append(th);body.append(group);
+      th.textContent="▼ "+(shopName==="自動販賣機"?displayKnownItemCategory(category):category);group.append(th);body.append(group);
     }
     const row=document.createElement("tr");row.className="shop-product-row";
     const nameCell=document.createElement("td");
@@ -1832,7 +1835,7 @@ function renderShopTable(target,goods,{shopName,onPurchase,emptyText}){
         payment:payment.value});
       update();
     });
-    label.append(radio,document.createTextNode(item.name));nameCell.append(label);
+    label.append(radio,document.createTextNode(displayProductName(item.name)));nameCell.append(label);
     const price=document.createElement("td");price.className="shop-price";
     price.textContent=money(item.price);
     const effectCell=document.createElement("td");effectCell.className="shop-effect-cell";
@@ -2118,7 +2121,7 @@ async function submitVendingPurchase(item,quantity,payment,cardSourceLine){
   const total=item.price*quantity;
   const method=payment==="bank"?"普通銀行存款（有效信用卡）":"現金";
   if(!window.confirm("確定在自動販賣機以"+method+"支付 "+money(total)+
-     "，購買「"+item.name+"」×"+quantity+" 嗎？"))return;
+     "，購買「"+displayVendingName(item.name)+"」×"+quantity+" 嗎？"))return;
   if(!pendingVendingPurchase||pendingVendingPurchase.sku!==item.sku||
      pendingVendingPurchase.quantity!==quantity||
      pendingVendingPurchase.payment!==payment||
@@ -2133,7 +2136,7 @@ async function submitVendingPurchase(item,quantity,payment,cardSourceLine){
     pendingVendingPurchase=null;
     render();
     notify(result.replayed?"自動販賣機的這筆購物已完成，沒有重複扣款。":
-      "已在自動販賣機買入「"+result.name+"」×"+result.quantity+
+      "已在自動販賣機買入「"+displayVendingName(result.name)+"」×"+result.quantity+
       "，"+(payment==="bank"?"普通銀行存款":"現金")+"支付 "+money(result.paid)+
       (result.merged?"；同品耐久已合併。":"；物品已入庫。"));
   }catch(error){notify(error.message,true);}
@@ -2159,7 +2162,7 @@ function renderVending(){
   for(const entry of (state.retailPurchases??[]).filter(x=>x.shop==="vending")){
     const line=document.createElement("li");
     line.textContent=new Date(entry.createdAt).toLocaleString("zh-TW")+
-      "｜"+entry.name+" ×"+entry.quantity+"｜"+
+      "｜"+displayVendingName(entry.name)+" ×"+entry.quantity+"｜"+
       (entry.payment==="bank"?"信用卡／普通存款":"現金")+"支付 "+money(entry.paid)+
       (entry.merged?"｜已合併耐久":"")+
       "｜目前對應持有物耐久 "+(entry.remaining??"?")+(entry.unit??"");
@@ -2181,7 +2184,7 @@ async function submitEquipmentAction(action,{sku,itemId,name,amount,powerUp=0,us
   if(!Object.hasOwn(captions,action))return;
   const moneyText=(action==="buy"||action==="forge")?"支付 "+money(-amount):
     action==="sell"?"收入 "+money(amount):"把同類原裝備退回倉庫";
-  if(!window.confirm("確定"+captions[action]+"「"+name+"」嗎？"+
+  if(!window.confirm("確定"+captions[action]+"「"+displayEquipmentName(name)+"」嗎？"+
     "（"+moneyText+"）"))return;
   if(!pendingEquipmentAction||pendingEquipmentAction.action!==action||
      pendingEquipmentAction.sku!==sku||pendingEquipmentAction.itemId!==itemId)
@@ -2197,7 +2200,7 @@ async function submitEquipmentAction(action,{sku,itemId,name,amount,powerUp=0,us
     pendingEquipmentAction=null;
     render();
     notify(result.replayed?"這筆裝備交易已處理，沒有重複扣款或變更裝備。":
-      "已"+captions[action]+"「"+result.name+"」。"+
+      "已"+captions[action]+"「"+displayEquipmentName(result.name)+"」。"+
       ((action==="buy"||action==="forge")?"從現金扣除 "+money(-result.amount):
         action==="sell"?"現金增加 "+money(result.amount):"同類原裝備已退回倉庫。"));
   }catch(error){notify(error.message,true);}
@@ -2215,7 +2218,7 @@ function renderEquipment(){
   for(const item of state.equipmentGoods??[]){
     const tile=document.createElement("div");tile.className="training-tile";
     const heading=document.createElement("strong");
-    heading.textContent=item.name+"｜"+item.category;
+    heading.textContent=displayEquipmentName(item.name)+"｜"+displayEquipmentCategory(item.category);
     const note=document.createElement("p");note.className="small";
     note.textContent="威力 "+item.power+"｜命中 "+item.accuracy+"%｜可使用 "+item.uses+
       " 次｜售價 "+money(item.price);
@@ -2240,7 +2243,7 @@ function renderEquipment(){
   for(const item of owned){
     const tile=document.createElement("div");tile.className="training-tile";
     const title=document.createElement("strong");
-    title.textContent=item.name+"｜"+item.category+"｜"+
+    title.textContent=displayEquipmentName(item.name)+"｜"+displayEquipmentCategory(item.category)+"｜"+
       (item.status==="equipped"?"已裝備":"倉庫");
     const note=document.createElement("p");note.className="small";
     note.textContent="威力 "+item.power+"｜命中 "+item.accuracy+"%｜剩餘使用 "+item.uses+
@@ -2271,7 +2274,7 @@ function renderEquipment(){
         const wrapper=document.createElement("label");
         wrapper.textContent=label;
         const input=document.createElement("select");
-        input.setAttribute("aria-label",item.name+"鍛造"+label);
+        input.setAttribute("aria-label",displayEquipmentName(item.name)+"鍛造"+label);
         for(const count of choices){
           const option=document.createElement("option");
           option.value=String(count);
@@ -2325,7 +2328,7 @@ function renderEquipment(){
     const row=document.createElement("li");
     const label={buy:"購買",equip:"換裝",sell:"出售",forge:"鍛造"}[tx.action]??tx.action;
     row.textContent=new Date(tx.createdAt).toLocaleString("zh-TW")+"｜"+
-      label+"｜"+tx.name+"｜"+
+      label+"｜"+displayEquipmentName(tx.name)+"｜"+
       (tx.amount<0?"現金支出 "+money(-tx.amount):
        tx.amount>0?"現金收入 "+money(tx.amount):"無金額變動");
     list.append(row);
