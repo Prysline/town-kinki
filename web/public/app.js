@@ -2,7 +2,7 @@ import { townCellAction } from "./town-home.js";
 import { shouldShowCompactEnergy } from "./energy-visibility.js";
 import { townTimePhase } from "./time-theme.js";
 import { groupedStatLines } from "./shop-effects.js";
-import { displayEquipmentName,displayVendingName,displayKnownItemName,displayEquipmentCategory } from "./item-translations.js";
+import { displayEquipmentName,displayVendingName,displayKnownItemName,displayEquipmentCategory,displayKnownItemCategory } from "./item-translations.js";
 import { itemCooldownRemaining,itemCooldownText,itemRemainingDurability } from "./item-cooldown.js";
 const el = id => document.getElementById(id);
 let state = null;
@@ -1348,7 +1348,7 @@ function renderLegacyItems(){
   for(const category of [...grouped.keys()].sort((x,y)=>x.localeCompare(y,"ja"))){
     const section=document.createElement("section");section.className="inventory-category";
     const heading=document.createElement("h4");heading.className="inventory-category-heading";
-    heading.textContent="▼ "+category;section.append(heading);
+    heading.textContent="▼ "+displayKnownItemCategory(category);section.append(heading);
     for(const item of grouped.get(category)){
       const card=document.createElement("article");card.className="inventory-item";
       const info=item.details??null;
@@ -1819,7 +1819,7 @@ function renderShopTable(target,goods,{shopName,onPurchase,emptyText}){
       category=item.category;
       const group=document.createElement("tr");group.className="shop-category-row";
       const th=document.createElement("th");th.scope="rowgroup";th.colSpan=5;
-      th.textContent="▼ "+category;group.append(th);body.append(group);
+      th.textContent="▼ "+(shopName==="自動販賣機"?displayKnownItemCategory(category):category);group.append(th);body.append(group);
     }
     const row=document.createElement("tr");row.className="shop-product-row";
     const nameCell=document.createElement("td");
