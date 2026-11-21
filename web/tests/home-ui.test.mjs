@@ -860,6 +860,27 @@ test("第60階段：多卡五課程、實際79至19%成功率、原子下注與�
   assert.ok(!script.includes("innerHTML=r.stake"));
 });
 
+test("第61階段：四寶箱有來源獎池、扣款與真實33欄入庫／直接狀態的安全顯示",()=>{
+  for(const id of ["arcade-treasure-panel","arcade-treasure-status","arcade-treasure-box",
+    "arcade-treasure-quote","arcade-treasure-open","arcade-treasure-result",
+    "arcade-treasure-history"])
+    assert.ok(html.includes('id="'+id+'"'));
+  for(const key of ["copper","silver","gold","special"])
+    assert.ok(html.includes('value="'+key+'">'));
+  assert.ok(html.includes("otakara.cgi"));
+  assert.ok(html.includes("原始110筆獎品"));
+  assert.ok(html.includes("33、34、38、109"));
+  assert.ok(html.includes("金塊屬於直接現金獎品"));
+  assert.ok(script.includes("function renderTreasure(){"));
+  assert.ok(script.includes("renderTreasure();"));
+  assert.ok(script.includes('await api("arcade/treasure/open"'));
+  assert.ok(script.includes("pendingTreasureOpen"));
+  assert.ok(script.includes("treasureBusy"));
+  assert.ok(script.includes("document.createElement"));
+  assert.ok(script.includes("history.replaceChildren()"));
+  assert.ok(!script.includes("innerHTML=round.itemName"));
+});
+
 test("第53階段：原版釣場與餌料商店實際有入庫交易 UI 且拒絕虛構漁獲",()=>{
   for(const key of ["釣り","販売1"])
     assert.deepEqual(townCellAction(describeTile(key)),{
