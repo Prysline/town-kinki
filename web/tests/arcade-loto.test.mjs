@@ -133,9 +133,9 @@ test("同一請求碼重送只回原結果、不可換下注與選號；其他�
     assert.equal(replay.delta,first.delta);
     assert.equal(cash(db),money);
     assert.equal(count(db),1);
-    assert.throws(()=>play(db,{stake:500,requestId:"phase58_share_key"}),/不可更換/);
+    assert.throws(()=>play(db,{stake:500,requestId:"phase58_share_key"}),/不能更換/);
     assert.throws(()=>play(db,{stake:1000,chosenDigits:[0,0,0,0,0,1],
-      requestId:"phase58_share_key"}),/不可更換/);
+      requestId:"phase58_share_key"}),/不能更換/);
     const second=play(db,{userId:2,requestId:"phase58_share_key"});
     assert.equal(second.replayed,false);
     assert.equal(count(db),2);
