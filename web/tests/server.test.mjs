@@ -4347,3 +4347,112 @@ test("第51階段多人 HTTP：角色各自券點與獎品不得跨帳號借用"
     assert.equal((await api(srv.url,"coupon/redeem",payload,a.cookie)).result.couponResult.replayed,true);
   }finally{await srv.stop();}
 });
+
+
+test("第53階段單機 HTTP：買真正原版魚餌→釣魚耗餌及100秒冷卻→賣漁獲→重啟存檔完整保留",async()=>{
+  let srv=await start("solo");
+  const dir=srv.directory;
+  try{
+    assert.equal((await api(srv.url,"fishing/bait/buy",{
+      sku:"fake",requestId:"phase53_no_character"
+    })).status,400);
+    const created=await api(srv.url,"character",{
+      name:"第53階段釣魚居民",gender:"other",stats:defaultStats()
+    });
+    assert.equal(created.status,200);
+    assert.equal(created.result.fishing.fishingAvailable,false);
+    assert.equal(created.result.fishing.baitShopAvailable,false);
+    assert.deepEqual(created.result.fishing.baitGoods,[]);
+    const starter=await api(srv.url,"solo/map/starter",{});
+    assert.equal(starter.status,200);
+    assert.equal(starter.result.mapStarterResult.placed,19);
+    assert.equal(starter.result.map.cells[3*16+5].key,"販売1");
+    assert.equal(starter.result.map.cells[3*16+6].key,"釣り");
+    assert.equal(starter.result.fishing.fishingAvailable,true);
+    assert.equal(starter.result.fishing.baitShopAvailable,true);
+    assert.equal(starter.result.fishing.baitGoods.length,4);
+    const shrimp=starter.result.fishing.baitGoods.find(x=>x.name==="小エビ");
+    assert.ok(shrimp);
+    assert.equal(shrimp.price,100);
+    assert.equal(shrimp.durability,1);
+    assert.equal(shrimp.stock,50);
+    assert.equal((await api(srv.url,"fishing/bait/buy",{
+      sku:"fake",requestId:"phase53_fake_bait"
+    })).status,400);
+    const before=starter.result.character.money;
+    const payload={sku:shrimp.sku,requestId:"phase53_http_buy"};
+    const bought=await api(srv.url,"fishing/bait/buy",payload);
+    assert.equal(bought.status,200);
+    assert.equal(bought.result.fishingResult.name,"小エビ");
+    assert.equal(bought.result.character.money,before-100);
+    assert.equal(bought.result.fishing.baitGoods.find(x=>x.sku===shrimp.sku).stock,49);
+    assert.equal(bought.result.legacyInventory.some(x=>
+      x.name==="小エビ"&&x.origin==="fishing"),true);
+    const fishBait=bought.result.fishingResult.sourceLine;
+    const repeat=await api(srv.url,"fishing/bait/buy",payload);
+    assert.equal(repeat.status,200);
+    assert.equal(repeat.result.fishingResult.replayed,true);
+    assert.equal(repeat.result.character.money,before-100);
+    const first=await api(srv.url,"fishing/cast",{
+      sourceLine:fishBait,requestId:"phase53_http_cast"
+    });
+    assert.equal(first.status,200);
+    assert.equal(first.result.fishingResult.baitName,"小エビ");
+    assert.equal(typeof first.result.fishingResult.caught,"boolean");
+    assert.equal(first.result.fishing.baitOptions.some(x=>x.sourceLine===fishBait),false);
+    if(first.result.fishingResult.caught){
+      const name=first.result.fishingResult.catchName;
+      assert.ok(["小魚","ミニたこ","ホタルイカ"].includes(name));
+      assert.equal(first.result.legacyInventory.some(x=>x.name===name&&x.origin==="fishing"),true);
+    }
+    assert.equal((await api(srv.url,"fishing/cast",{
+      sourceLine:fishBait,requestId:"phase53_http_second_cast"
+    })).status,400);
+    assert.equal((await api(srv.url,"fishing/cast",{
+      sourceLine:fishBait,requestId:"phase53_http_cast"
+    })).result.fishingResult.replayed,true);
+    // 競價支線用原版 sea.cgi 的真實「小魚」33欄來源，只在測試 DB
+    // 注入一件釣獲來驗證 HTTP 賣出；正式玩家無可自行指定漁獲的 API。
+    const src=decodeLegacyText(readFileSync(join(root,"..","sea.cgi")));
+    const line=src.split("\n").find(x=>x.includes("'魚<>小魚<>"));
+    assert.ok(line);
+    let raw=line.match(/'([^']+)'/)[1].replace(/\\n$/,"").split("<>");
+    if(raw.length===34&&raw[33]==="")raw.pop();
+    assert.equal(raw.length,33);
+    const itemLine=7000999;
+    const db=new DatabaseSync(join(dir,"solo.sqlite"));
+    try{
+      const userId=db.prepare("SELECT user_id FROM characters WHERE name=?")
+        .get("第53階段釣魚居民").user_id;
+      raw[30]=String(Math.floor(first.result.gameTimeMs/1000));
+      db.prepare([
+        "INSERT INTO legacy_inventory_items(user_id,original_id,source_line,",
+        "category,original_name,effect,durability,durability_unit,purchased_at,",
+        "last_used_at,raw_fields_json) VALUES(?,'__web_fishing__',7000999,",
+        "'魚','小魚','無',1,'回',?,0,?)"
+      ].join(" ")).run(userId,Number(raw[30]),JSON.stringify(raw));
+    }finally{db.close();}
+    const sell=await api(srv.url,"fishing/sell",{
+      sourceLine:itemLine,requestId:"phase53_http_sale"
+    });
+    assert.equal(sell.status,200);
+    assert.equal(sell.result.fishingResult.name,"小魚");
+    assert.ok(sell.result.fishingResult.paid>=51&&sell.result.fishingResult.paid<=150);
+    assert.equal(sell.result.fishing.sellOptions.some(x=>x.sourceLine===itemLine),false);
+    assert.equal(sell.result.fishing.history[0].action,"sell");
+    const savedMoney=sell.result.character.money;
+    const savedHistory=sell.result.fishing.history.length;
+    await srv.stop({preserveData:true});
+    srv=await start("solo",undefined,dir);
+    const after=await api(srv.url,"state");
+    assert.equal(after.status,200);
+    assert.equal(after.result.character.money,savedMoney);
+    assert.equal(after.result.fishing.history.length,savedHistory);
+    assert.equal(after.result.fishing.baitGoods.find(x=>x.sku===shrimp.sku).stock,49);
+    assert.equal(after.result.fishing.sellOptions.some(x=>x.sourceLine===itemLine),false);
+    assert.equal((await api(srv.url,"fishing/sell",{
+      sourceLine:itemLine,requestId:"phase53_http_sale"
+    })).result.fishingResult.replayed,true);
+    assert.equal((await api(srv.url,"state")).result.character.money,savedMoney);
+  }finally{await srv.stop();}
+});
