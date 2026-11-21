@@ -283,6 +283,35 @@ test("原版教室必須導向獨立教室，而非誤開學校或健身房",()=
   assert.match(script,/state\.classroomCooldownMs/);
 });
 
+test("課程不可用時恢復整張灰階與卡片倒數，停用由真實課程資格控制",()=>{
+  assert.match(css,/\.game-shell \.training-tile\.is-unavailable\{background:#e5e7e5/);
+  assert.match(css,/\.game-shell \.training-tile\.is-unavailable button:disabled/);
+  assert.match(css,/\.game-shell \.training-tile \.training-countdown/);
+  assert.match(script,/const countdown=document\.createElement\("p"\)/);
+  assert.match(script,/countdown\.setAttribute\("role","timer"\)/);
+  assert.match(script,/tile\.classList\.toggle\("is-unavailable",unavailable\)/);
+  assert.match(script,/submit\.disabled=unavailable/);
+  assert.match(script,/blocked\.textContent=reason\?\?""/);
+  assert.match(script,/paymentSelect\?\.addEventListener\("change",\(\)=>update\(\)\)/);
+  assert.match(script,/tile\.append\(countdown,blocked,submit\)/);
+});
+test("學校跨日、健身房與教室各自倒數且每秒刷新，到期需重新取後端資格",()=>{
+  assert.match(script,/function schoolWaitUntilTomorrow\(now\)/);
+  assert.match(script,/character\.lastSchoolDay!==today/);
+  assert.match(script,/timeZone:zone,hour:"2-digit",minute:"2-digit",second:"2-digit"/);
+  assert.match(script,/gym:Math\.max\(0,\(state\?\.character\?\.gymReadyAt\?\?0\)-now\)/);
+  assert.match(script,/classroom:Math\.max\(0,\(state\?\.character\?\.classroomReadyAt\?\?0\)-now\)/);
+  assert.match(script,/function formatTrainingWait\(ms\)/);
+  assert.match(script,/updateTrainingCountdowns\(\); \/\/ 每秒刷新課程灰階和剩餘時間/);
+  assert.match(script,/for\(const update of trainingTileUpdates\)update\(waits\)/);
+  assert.match(script,/cooldownReason\?"正在更新課程狀態…":originalReason/);
+  assert.match(script,/api\("state"\)\.then\(fresh=>\{state=fresh;render\(\);\}\)/);
+  assert.match(script,/const unavailable=wait>0\|\|Boolean\(reason\)/);
+  assert.match(script,/state\.schoolRemainingToday&&character\.lastSchoolDay&&waits\.school===0/);
+  assert.match(script,/state\.gymCooldownMs>0&&character\.gymReadyAt&&waits\.gym===0/);
+  assert.match(script,/state\.classroomCooldownMs>0&&character\.classroomReadyAt&&waits\.classroom===0/);
+});
+
 test("住宅與真實空地擁有獨立導覽，不會誤把其他土地或道路送去建屋",()=>{
   assert.deepEqual(townCellAction({key:"webhouse_5",houseId:5,category:"house"}),
     {kind:"house",houseId:5});

@@ -241,6 +241,17 @@ main{max-width:1100px;margin:.8rem auto;padding:0 .7rem;min-height:unset}
 .game-shell .training-grid{gap:.5rem;grid-template-columns:repeat(auto-fit,minmax(205px,1fr))}
 .game-shell .training-tile{padding:.65rem;gap:.35rem;border-radius:4px}
 .game-shell .training-tile p.small{margin:.1rem 0}
+/* 課程暫時不可使用時，整張卡片灰階，不能只靠按鈕透明度辨識狀態。 */
+.game-shell .training-tile.is-unavailable{background:#e5e7e5;border-color:#b8bfba;color:#515b54}
+.game-shell .training-tile.is-unavailable strong{color:#4c5650}
+.game-shell .training-tile.is-unavailable p.small{color:#58645b}
+.game-shell .training-tile.is-unavailable button:disabled{background:#858e87;
+  border-color:#778079;color:#fff;opacity:1;cursor:not-allowed}
+.game-shell .training-tile .training-countdown{margin:.15rem 0 0;padding:.3rem .45rem;
+  border-radius:4px;border:1px solid #b7bcb7;background:#f1f2f0;
+  color:#555f57;font-weight:750;font-size:.82rem;line-height:1.45;
+  font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.game-shell .training-tile .training-countdown[hidden]{display:none}
 .game-shell .housing-form{gap:.55rem;margin:.5rem 0 .8rem}
 .game-shell .owned-house{padding:.6rem;border-radius:4px}
 .game-shell .bank-term,.game-shell .bank-passbook{margin-top:.55rem;padding-top:.4rem}
