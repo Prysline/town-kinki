@@ -1879,7 +1879,7 @@ function renderEquipment(){
 
 
 let pendingGiftAction=null;
-async function submitGiftAction(action,{sourceLine,quantity,recipientName,name}){
+async function submitGiftAction(action,{sourceLine,quantity,recipientName,name,message}){
   const converted=action==="convert";
   if(!converted&&action!=="send")return;
   if(!window.confirm(converted?
@@ -1889,11 +1889,12 @@ async function submitGiftAction(action,{sourceLine,quantity,recipientName,name})
   if(!pendingGiftAction||pendingGiftAction.action!==action||
      pendingGiftAction.sourceLine!==sourceLine||
      pendingGiftAction.quantity!==quantity||
-     pendingGiftAction.recipientName!==recipientName){
-    pendingGiftAction={action,sourceLine,quantity,recipientName,requestId:crypto.randomUUID()};
+     pendingGiftAction.recipientName!==recipientName||
+     pendingGiftAction.message!==message){
+    pendingGiftAction={action,sourceLine,quantity,recipientName,message,requestId:crypto.randomUUID()};
   }
   const payload={sourceLine,quantity,requestId:pendingGiftAction.requestId};
-  if(!converted)payload.recipientName=recipientName;
+  if(!converted){payload.recipientName=recipientName;payload.message=message;}
   try{
     state=await api("gift/"+action,payload);
     const result=state.giftResult;
@@ -1955,18 +1956,26 @@ function renderGiftShop(){
       qty.type="number";qty.min="1";qty.max=String(item.quantity);
       qty.step="1";qty.value="1";
       quantityLabel.append(qty);
+      const messageLabel=document.createElement("label");
+      messageLabel.textContent="隨禮附上的站內信內容（必填）";
+      const message=document.createElement("textarea");
+      message.rows=2;message.maxLength=1000;
+      message.placeholder="寫給收件人的訊息（最多 1,000 字）";
+      message.value="送給你的禮物";
+      messageLabel.append(message);
       const button=document.createElement("button");
-      button.type="button";button.textContent="送出禮品";
+      button.type="button";button.textContent="寄禮並寄送雙方站內信";
       button.addEventListener("click",()=>{
         const count=Number(qty.value);
         const to=person.value.trim();
-        if(!to||!Number.isSafeInteger(count)||count<1||count>item.quantity){
-          notify("請填寫收件人角色名稱與有效份數",true);return;
+        if(!to||!Number.isSafeInteger(count)||count<1||count>item.quantity||
+           !message.value.trim()||message.value.length>1000){
+          notify("請填寫收件人、有效份數及 1～1,000 字的信件內容",true);return;
         }
         submitGiftAction("send",{sourceLine:item.sourceLine,
-          quantity:count,recipientName:to,name:item.name});
+          quantity:count,recipientName:to,name:item.name,message:message.value.trim()});
       });
-      tile.append(label,quantityLabel,button);
+      tile.append(label,quantityLabel,messageLabel,button);
     }
     target.append(tile);
   }
@@ -1991,6 +2000,29 @@ function renderGiftShop(){
     const note=document.createElement("p");note.className="small";
     note.textContent="尚無禮品轉換與寄送紀錄。";
     history.append(note);
+  }
+  const mailbox=el("gift-mail");
+  mailbox.replaceChildren();
+  const mails=state.giftMail??[];
+  if(mails.length){
+    const entries=document.createElement("ol");entries.className="health-event-list";
+    for(const mail of mails){
+      const item=document.createElement("li");
+      const heading=document.createElement("strong");
+      heading.textContent=(mail.direction==="inbox"?"收件｜來自 ":"寄件｜寄給 ")+
+        mail.otherName+"｜"+new Date(mail.createdAt).toLocaleString("zh-TW");
+      const body=document.createElement("p");body.className="small";
+      body.textContent=mail.message;
+      const gift=document.createElement("p");gift.className="small";
+      gift.textContent="禮品：「"+mail.giftName+"」×"+mail.quantity+" 回（日）";
+      item.append(heading,body,gift);
+      entries.append(item);
+    }
+    mailbox.append(entries);
+  }else{
+    const note=document.createElement("p");note.className="small";
+    note.textContent="目前沒有經由 Web 寄禮產生的收件或寄件紀錄。";
+    mailbox.append(note);
   }
 }
 
