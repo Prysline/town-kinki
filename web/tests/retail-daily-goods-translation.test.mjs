@@ -59,7 +59,7 @@ test("四張信用卡原有效期、原始效果及銀行扣款識別不因譯�
     "クレジットカード":["信用卡","3"],
     "ゴールドクレジットカード":["黃金信用卡","7"],
     "スペシャルクレジットカード":["特別信用卡","5"],
-    "ブラタンメンバーズカード":["布拉坦會員卡","7"]
+    "ブラタンメンバーズカード":["胸罩鎮會員卡","7"]
   };
   for(const [original,[display,days]] of Object.entries(cards)){
     const fields=rows.find(x=>x.fields[1]===original)?.fields;
