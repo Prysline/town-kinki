@@ -202,7 +202,7 @@ export function listLegacyInventoryItems(db,userId,limit=50,toDetails=null){
     return {
     sourceLine:x.source_line,category:x.category,name:x.original_name,
     durability:x.durability,unit:x.durability_unit,purchasedAt:x.purchased_at,
-    details,readOnly:!["__web_retail__","__web_gift__","__web_recycle__","__web_store__"].includes(x.original_id),
+    ...(details?{details}:{}),readOnly:!["__web_retail__","__web_gift__","__web_recycle__","__web_store__"].includes(x.original_id),
     ...(x.original_id==="__web_retail__"?{origin:"retail"}:
       x.original_id==="__web_gift__"?{origin:"gift"}:
       x.original_id==="__web_recycle__"?{origin:"recycle"}:
