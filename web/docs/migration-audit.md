@@ -11,7 +11,7 @@
 ## 稽核方法與未驗證邊界
 
 - 實際讀取原版 `town_lib.pl::check_BMI`（L507–520）、`basic.cgi` 工作／物品片段、`command.pl` 食堂片段、`event.pl` #01～#46 分支、`dat_dir` 原始課程與菜單表及 Web 對應模組；樹狀目錄和 README 用於確定其餘模組的範圍。
-- **歷史整合證據**：截至 PR #18，PR #9～#18 已合併；PR #18 整合提交 `6ce7fdbfc...` 的 GitHub Actions run `44670824358` 為 success。之後版本一律由 GitHub PR／Actions 查核；**尚未以真實瀏覽器或真實玩家資料備份完成驗收**。
+- **歷史整合證據**：截至 PR #18，PR #9～#18 已合併；PR #18 整合提交 `6ce7fdbfc...` 的 GitHub Actions run `44670824358` 為 success。之後版本一律由 GitHub PR／Actions 查核；**尚未以真實瀏覽器或新版 Web 存檔備份完成驗收**。
 - 原版玩家的私人存檔不在需求內；`member/<ID>/mono.cgi` 僅作為原版商品資料格式與玩法來源，原始四城街區資料皆空白，現行單機試玩布局是 Web 新配置。
 - 與原版有意採用的安全模型差異（非負金額／能力、安全整數、HTTP session、Web 延伸性別）需記錄保留，未經批准不可為等價而直接退回不安全行為。
 
@@ -46,11 +46,11 @@
 | ID／功能 | 原版來源 | Web 現況／來源 | 判定 | 差異／相依 | 優先度 | 驗收／切片 |
 |---|---|---|---|---|---|---|
 | WK-01 能量上限及自然恢復 | town_ini.cgi；game.cgi；basic.cgi | src/engine.mjs；src/server.mjs | 部分完成 | Web 有上限與恢復；需核對所有轉職／體格事件的加扣條件 | P1 | 上下限、十秒刻度、快轉／多角色隔離（31） |
-| WK-02 工作薪資、經驗、冷卻 | dat_dir/job.cgi；basic.cgi::do_work L2838–2961 | src/engine.mjs::performWork；src/server.mjs::/api/work、/api/job/payment；src/banking.mjs；public/app.js | **核心已修（PR #24／#28／#29），待玩家實機驗收** | 出勤依職業發薪週期累積；薪資及升級獎金可依已保存偏好入現金或普通存款，銀行記帳；UI 顯示本週期出勤與精通進度，工作快捷只開分頁。WK-06 入職限定性別／身高誤套工作已於第48階段修正；真實玩家存檔與瀏覽器仍待核實 | P1（驗收） | 週期發薪 1／5／10 次、角色資料／工作回應、收款順序、銀行帳簿、真實玩家環境（後續） |
+| WK-02 工作薪資、經驗、冷卻 | dat_dir/job.cgi；basic.cgi::do_work L2838–2961 | src/engine.mjs::performWork；src/server.mjs::/api/work、/api/job/payment；src/banking.mjs；public/app.js | **核心已修（PR #24／#28／#29），待玩家實機驗收** | 出勤依職業發薪週期累積；薪資及升級獎金可依已保存偏好入現金或普通存款，銀行記帳；UI 顯示本週期出勤與精通進度，工作快捷只開分頁。WK-06 入職限定性別／身高誤套工作已於第48階段修正；新版 Web 存檔與瀏覽器仍待核實 | P1（驗收） | 週期發薪 1／5／10 次、角色資料／工作回應、收款順序、銀行帳簿、真實玩家環境（後續） |
 | WK-03 飢餓／疾病修正工作 | top.pl L258-L273；basic.cgi | src/dining.mjs L82-L103；src/health.mjs | 部分完成 | 未用餐玩家以 provisional 5 經驗預設；非原版完整懲罰 | P1 | 新角色尚無用餐紀錄、重症、狀態六級實測（31） |
 | WK-04 職業需求數值表及現有能力對照 | basic.cgi::job_change L2751–L2781；job.cgi::top L18–L29；dat_dir/job.cgi | src/engine.mjs::parseLegacyJobs；src/server.mjs::snapshot jobs；public/app.js::jobRequirementsPanel／renderJobs | **核心修復（PR #22），顯示精簡（PR #29），待瀏覽器驗收** | 伺服器仍提供完整 17 項原始能力與資格判定；UI 依使用者要求**只顯示需求 > 0 的能力門檻**，其他 BMI／身高／性別／前置精通有條件才顯示；不再列出一堆 0 或強制顯示當前能力值 | P1（驗收） | 150 筆職業條件、375／768px／桌面真實操作、轉職拒絕與原始數值對照 |
 | WK-05 薪資與獎金領取方式 | basic.cgi::do_work L2920–2953、L2974–2998；town_maker.cgi L142–146 | src/engine.mjs::performWork；src/server.mjs::/api/job/payment、/api/work；src/banking.mjs::recordBankEntry；public/app.js | **核心缺漏已修復（PR #24），新角色偏好由 Web 保存** | 可選現金／普通存款；實際工作薪資與升級獎金按偏好分流，銀行帳簿分筆、SQLite 交易回滾；新 Web 角色領薪方式預設 cash，之後以本人選擇為準 | P1（Web 存檔／驗收） | 已有 engine、HTTP/SQLite、UI 測試；待新版 Web 領款偏好重啟、極端金額及瀏覽器驗收 |
-| WK-06 任職後工作再檢查條件 | basic.cgi::job_change L2695–2719；do_work L2867–2879 | src/engine.mjs::eligibility／performWork；tests/engine.test.mjs／server.test.mjs | **第48階段已修工作重驗差異，待真實玩家與瀏覽器驗收** | 原版選職時檢查性別／身高，工作時仍查能力／BMI／能量／冷卻而不重驗性別／身高；Web 現已分離兩階段限制，保留轉職門檻與出勤其餘條件 | P1（驗收） | 真實原版職業警官在 HTTP 轉職後身高下降，重選拒絕但正式工作成功；引擎涵蓋性別變更、BMI、能量及冷卻。見 [第48階段驗收](phase48-core-gameplay-restart.md) |
+| WK-06 任職後工作再檢查條件 | basic.cgi::job_change L2695–2719；do_work L2867–2879 | src/engine.mjs::eligibility／performWork；tests/engine.test.mjs／server.test.mjs | **第48階段已修工作重驗差異，待新 Web 角色與瀏覽器驗收** | 原版選職時檢查性別／身高，工作時仍查能力／BMI／能量／冷卻而不重驗性別／身高；Web 現已分離兩階段限制，保留轉職門檻與出勤其餘條件 | P1（驗收） | 真實原版職業警官在 HTTP 轉職後身高下降，重選拒絕但正式工作成功；引擎涵蓋性別變更、BMI、能量及冷卻。見 [第48階段驗收](phase48-core-gameplay-restart.md) |
 | WK-07 工作工廠職業投稿／清單 | unit.pl L69；job.cgi::top L13–74；job.cgi::make L80–87；log_dir/joblog.cgi | Web 只載入 dat_dir/job.cgi 正式職業 | **確定缺漏** | 原版允許提交候選職業到 joblog，並顯示投稿條件；不是直接加入正式職業表；此 fork joblog 0 bytes | P2 | 投稿欄位、權限、審核邊界、顯示與真實投稿樣本（後續） |
 
 ### 03 學校／健身房／教室
@@ -62,7 +62,7 @@
 | TR-03 健身房課程資料與原版執行來源 | dat_dir/gym.cgi（9 筆課程）；town_lib.pl::gym_sprit；manual.html L145–146 | src/training.mjs::parseLegacyGym、performTraining | 部分完成（根據資料運作） | 本 fork 根目錄無可執行 gym.cgi；Web 暫把「間」作分鐘；不能將另一設施 kyushitu.cgi 的減重、信用付款等同健身房的原版效果 | P1（來源邊界） | 欄位、增益、費用、冷卻回歸；找不到實際 gym CGI 時不宣稱完整等價 |
 | TR-04 教室獨立訓練設施 | unit.pl L152；kyushitu.cgi::kyushitu／kyushitu_go L30–175；dat_dir/kyushitu.cgi（4 筆） | src/training.mjs::parseLegacyClassroom／performTraining；src/server.mjs::/api/train；public/index.html::classroom-panel | **四課及兩種付款路徑已實作（PR #23／#27），待驗收** | 四課、17 項能力增益、雙能量、減重、分鐘間隔與獨立冷卻；現金或本人有效原版格式信用卡付款，未實作購卡商店 | P1 | 原始課程與付款測試、新 Web 角色操作及瀏覽器驗收 |
 | TR-05 教室訓練減重 | kyushitu.cgi::kyushitu_go L121–143 | src/training.mjs::performTraining（type=classroom）、src/engine.mjs::bodyMassIndex | **原版核心公式已實作（PR #23）** | 減重 (身體消耗+頭腦消耗)/100 公斤、更新 BMI；Web 為安全設最低 1kg，和原版沒有下限不同；不挪用到健身房 | P1（驗收） | 四課消耗、連續操作、Web 存檔、極端低體重與 BMI 回歸 |
-| TR-06 教室信用物品付款 | kyushitu.cgi L68–84、L108–118；dat_dir/syouhin.cgi L366–369 四種信用卡 | src/legacy-credit.mjs；src/training.mjs；src/server.mjs::/api/train；public/app.js | **有效原版匯入信用卡付款已修復（PR #27，購卡流程未移植）** | 本人持有的 33 欄原版格式卡片須符合效果、日耐久與購入日且尚未到期；銀行足額才可入課，教室付款在同筆 SQLite 交易扣普通存款並記帳。沒有原始卡片就不可憑空刷卡。原版購卡商店仍未移植 | P1（部分完成） | 有效／過期／偽造／跨玩家／銀行不足／重複請求測試通過；新 Web 存檔與瀏覽器驗收待完成 |
+| TR-06 教室信用物品付款 | kyushitu.cgi L68–84、L108–118；dat_dir/syouhin.cgi L366–369 四種信用卡 | src/legacy-credit.mjs；src/training.mjs；src/server.mjs::/api/train；public/app.js | **本人有效原版格式信用卡付款已修復（PR #27，新 Web 購卡流程待核對）** | 本人持有的 33 欄原版格式卡片須符合效果、日耐久與購入日且尚未到期；銀行足額才可入課，教室付款在同筆 SQLite 交易扣普通存款並記帳。沒有原始卡片就不可憑空刷卡。原版購卡商店仍未移植 | P1（部分完成） | 有效／過期／偽造／跨玩家／銀行不足／重複請求測試通過；新 Web 存檔與瀏覽器驗收待完成 |
 
 ### 04 飲食／熱量
 
@@ -71,15 +71,15 @@
 | FD-01 原版雙菜單與售價三倍 | dat_dir/syouhin.cgi；dat_dir/syokudou2.cgi；command.pl::syokudou／syokudou2 | src/dining.mjs::parseLegacyMeals；src/dining-stock.mjs；src/server.mjs::snapshot／api/meal/eat | **雙食堂與每日菜單核心已移植（PR #31），待實機驗收** | 原版兩食品來源、三倍售價、各最多 30 道抽選及原始庫存量已接入 Web；原版全局 log 與城市 flag 的差異見 FD-03 | P1（驗收） | 食品來源欄、售價、份數、舊玩家與實際操作 |
 | FD-02 用餐 60 分鐘與熱量增重 | town_ini.cgi L73；command.pl L1330-L1355 | src/dining.mjs L52-L69,L105-L125 | 已完成（核心公式） | 原版可能涉及不同菜單的共用時段；需測試跨菜單防重 | P1 | 60 分鐘臨界、熱量÷1000、多模式同時請求（31） |
 | FD-03 每日隨機菜單與剩餘數量 | command.pl L920–1082、L1162–1324；syokuzisuru L1086–1159、syokuzisuru2；town_ini.cgi L84–88；town_maker.cgi L354–360 | src/dining-stock.mjs；src/server.mjs::snapshot／api/meal/eat；public/app.js／index.html | **每日抽選、共用庫存及原子扣庫存已修復（PR #31），待實機驗收** | 兩家每日各抽最多 30，道具資料第 25 欄為庫存；跨日或有庫存品項 <=25 時補貨；後端拒絕未上架／售完，UI 顯示日期／剩餘量。原版補貨判斷混入個人現金（且顯示端有額外價格乘算），Web 只依實際庫存判斷避免任意低現金玩家造成重整；原版共享 syokudoulog 與各城 flag 的關係仍待真實地圖驗證 | P1（已修／待驗收） | 單元／單機跨日／兩玩家共用／售完不扣款／SQLite 回滾已測；仍需實機及原版備份驗收 |
-| FD-04 飢餓分類與舊角色保護 | top.pl L258-L273；town_ini.cgi L71-L73 | src/dining.mjs L52-L68,L82-L103 | 部分完成 | 原版 3000 日刪角規則與 Web 保護不一致；不可直接破壞存檔 | P1 | 標記保留差異，設計遷移與玩家告知（後續） |
+| FD-04 飢餓分類與新 Web 角色保護 | top.pl L258-L273；town_ini.cgi L71-L73 | src/dining.mjs L52-L68,L82-L103 | 部分完成 | 原版 3000 日刪角規則與 Web 保護不一致；不可直接破壞存檔 | P1 | 標記保留差異，設計新版 Web 資料更新安全與玩家告知（後續） |
 
 ### 05 地圖／交通
 
 | ID／功能 | 原版來源 | Web 現況／來源 | 判定 | 差異／相依 | 優先度 | 驗收／切片 |
 |---|---|---|---|---|---|---|
 | MP-01 四城 12×16 格與圖示 | top.pl；admin2.cgi；town_ini.cgi | src/town-map.mjs；public/town-home.js | 部分完成 | 格子和圖示有實作；原始填充街區資料需另查 | P1 | 每城尺寸、已知／未知符號、原始文件反查（31） |
-| MP-02 原版 townlog 匯入／地圖編輯 | log_dir/townlog0.cgi ～ townlog3.cgi；town_maker.cgi | src/town-storage.mjs；src/solo-starter-town.mjs；scripts/town-map.mjs | **原版匯入仍待真實檔；第50階段僅改善單機試玩入口** | 這個 fork 四份原始 townlog 檔皆為 0 byte，無原版真實街區可還原；第50階段 [單機優先與空白街區稽核](phase50-solo-first-play-audit.md) 新增需玩家自行確認、只建立在空白且無住宅的城鎮之 Web 試玩布局，與原版真實地圖分開，不覆蓋任何已有配置 | P0（單機首次遊玩）／P1（真實舊檔） | 空檔與真實檔 round-trip、本人同城試玩初始化與拒覆蓋、住宅／購物與重啟、真實瀏覽器驗收（後續） |
-| MP-03 車站／交通票券與跨城成本 | station.cgi；town_ini.cgi；商品檔 | src/transport.mjs；src/server.mjs::/api/move；public/app.js；public/town-home.js | **基本車站收費已移植（PR #26），其他交通票券待驗證** | 四城六組票價與跨城扣現金已實作；實際原版其他交通券／道具是否有獨立效果仍需追來源 | P1（部分完成） | 12 種方向、同城／欠費／多人隔離已測；舊存檔與瀏覽器驗收待完成 |
+| MP-02 原版 townlog 匯入／地圖編輯 | log_dir/townlog0.cgi ～ townlog3.cgi；town_maker.cgi | src/town-storage.mjs；src/solo-starter-town.mjs；scripts/town-map.mjs | **原版世界佈局原始檔皆為空，單機改用明示的 Web 試玩街區** | 這個 fork 四份原始 townlog 檔皆為 0 byte，無原版真實街區可還原；第50階段 [單機優先與空白街區稽核](phase50-solo-first-play-audit.md) 新增需玩家自行確認、只建立在空白且無住宅的城鎮之 Web 試玩布局，與原版真實地圖分開，不覆蓋任何已有配置 | P0（單機首次遊玩） | 空白原始地圖與新版 Web 配置 round-trip、本人同城試玩初始化與拒覆蓋、住宅／購物與重啟、真實瀏覽器驗收（後續） |
+| MP-03 車站／交通票券與跨城成本 | station.cgi；town_ini.cgi；商品檔 | src/transport.mjs；src/server.mjs::/api/move；public/app.js；public/town-home.js | **基本車站收費已移植（PR #26），其他交通票券待驗證** | 四城六組票價與跨城扣現金已實作；實際原版其他交通券／道具是否有獨立效果仍需追來源 | P1（部分完成） | 12 種方向、同城／欠費／多人隔離已測；新 Web 存檔與瀏覽器驗收待完成 |
 | MP-04 車站六組票價及跨城移動 | unit.pl L85；station.cgi::idou L99–116、L135–169 | src/transport.mjs；src/server.mjs::/api/move；public/app.js／town-home.js | **原版票價與地圖入口已修復（PR #26）** | 6 組雙向票價 950／780／1210／950／2210／1530 均會扣現金；拒絕同城、非法目的地與餘額不足；原版 5 秒僅前端倒數，未虛構伺服器冷卻 | P1（實機驗收） | 12 方向、SQLite 原子交易／失敗回滾與兩玩家隔離已測 |
 | MP-05 原版地圖互動入口覆蓋率 | unit.pl::get_unit L62–191（43 個表單入口）；top.pl L472–490 | src/town-map.mjs::MAP_SYMBOLS；public/town-home.js::FACILITY_PANELS／station | **入口清冊已核對；各設施未全部盤點／移植** | 43 個原版互動入口的現行代碼／可操作狀態依 [入口盤點](phase30-entrypoint-coverage.md) 為準；原始統計在第31～51階段後已過時。原版 gamerand.cgi 等入口內還有多個未逐函式盤點的子 CGI。詳 [入口表](phase30-entrypoint-coverage.md) 與 [新增待辦總清冊](phase30-open-audit-backlog.md) | P1 | 按來源逐原版執行路徑、交易、真實街區存檔、瀏覽器驗收 |
 
@@ -223,7 +223,7 @@
 | UI-04 部署／監控／備份 | 原始 CGI 運行環境；README | web/package.json；.github/workflows/town-web.yml | 部分完成 | CI 有測試；尚無正式營運安全／備份定期還原驗證 | P2 | 部署檢查、日誌、備份和恢復演練（後續） |
 | UI-05 地圖教室獨立入口 | unit.pl L152：教室→kyushitu.cgi；dat_dir/kyushitu.cgi 四課 | public/town-home.js::FACILITY_PANELS["教室"]="classroom-panel"；public/index.html::classroom-panel | **已修正錯誤導覽（PR #23）** | 地圖教室不再誤導至學校；已與獨立教室資料及訓練連動 | P1（驗收） | home-ui.test.mjs 及 server／training 測試已涵蓋，待手機與桌面實際操作 |
 
-**實際修復進度（2026-11-20）**：PR #22 職業需求、#23 教室四課與導覽、#24 薪資收款、#26 車站六組票價、#27 有效原版格式信用卡付款、#28 發薪進度與偏好時序、#29 教室快轉冷卻／職業門檻精簡／精通進度／工作快捷均已合併。PR #31 已接入原版每日食堂菜單、共用庫存及點餐交易；尚未完成原版購卡商店、缺少五個事件、釣魚、問卷、投稿、股票、拍賣及完整遊樂中心玩法；詳 [總清冊](phase30-open-audit-backlog.md)。**CI 成功不等於玩家實機與舊存檔驗收完成；不以盤點文件替代實作**。
+**實際修復進度（2026-11-20）**：PR #22 職業需求、#23 教室四課與導覽、#24 薪資收款、#26 車站六組票價、#27 有效原版格式信用卡付款、#28 發薪進度與偏好時序、#29 教室快轉冷卻／職業門檻精簡／精通進度／工作快捷均已合併。PR #31 已接入原版每日食堂菜單、共用庫存及點餐交易；尚未完成原版購卡商店、缺少五個事件、釣魚、問卷、投稿、股票、拍賣及完整遊樂中心玩法；詳 [總清冊](phase30-open-audit-backlog.md)。**CI 成功不等於玩家實機與新版 Web 存檔驗收完成；不以盤點文件替代實作**。
 
 ## 第一輪重大發現與應先修項
 
