@@ -22,7 +22,7 @@ import { initCharacterEvents, settleDailyIllnessEvent, listCharacterEvents, getC
 import { getCockroachChallenge,claimCockroach } from "./event-cockroach.mjs";
 import { parseLegacyInsurance, initInventoryTables, inventoryOverview, hasActiveHealthInsurance, listInsurancePurchases, buyHealthInsurance } from "./inventory.mjs";
 import { listLegacyInventoryItems } from "./legacy-inventory.mjs";
-import {parseLegacyRetailCatalog,initRetailTables,ensureRetailDay,listRetailStock,listRetailPurchases,buyRetailItem,RETAIL_SHOPS} from "./retail.mjs";
+import {parseLegacyRetailCatalog,initRetailTables,ensureRetailDay,listRetailStock,listRetailPurchases,buyRetailItem,retailItemDetails,RETAIL_SHOPS} from "./retail.mjs";
 import {parseLegacyVendingCatalog,initVendingTables,ensureVendingRotation,listVendingStock,vendingPeriodKey,VENDING_SYMBOL,VENDING_SHOP} from "./vending.mjs";
 import {parseLegacyEquipmentCatalog,initEquipmentTables,listEquipmentItems,listEquipmentTransactions,buyEquipment,equipEquipment,sellEquipment,forgeEquipment,EQUIPMENT_SYMBOL} from "./equipment.mjs";
 import {initGiftTables,GIFT_SHOP_SYMBOL,listGiftSources,listGiftEvents,listGiftMail,convertToGift,sendGift} from "./gift-shop.mjs";
@@ -282,7 +282,11 @@ function snapshot(user) {
       ensureVendingRotation(db,vendingCatalog,now,GAME_TIMEZONE);
       db.exec("COMMIT");
     }catch(error){db.exec("ROLLBACK");throw error;}
-    vendingGoods=listVendingStock(db,vendingCatalog);
+    // 與百貨共用同一份原版 33 欄效果解讀，只向前端傳必要明細。
+    const bySku=new Map(vendingCatalog.map(item=>[item.sku,item]));
+    vendingGoods=listVendingStock(db,vendingCatalog).map(good=>({
+      ...good,details:retailItemDetails(bySku.get(good.sku))
+    }));
   }
   const equipmentAvailable=Boolean(retailMap?.configured&&
     retailMap.cells.some(cell=>cell.key===EQUIPMENT_SYMBOL));
