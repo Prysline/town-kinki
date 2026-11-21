@@ -5,7 +5,7 @@ import {STAT_KEYS,maxBodyEnergy,maxBrainEnergy,bodyMassIndex,recoverEnergy} from
 import {diseaseFromIndex} from "./health.mjs";
 import {readTownMap} from "./town-storage.mjs";
 import {heldInventoryRows,inventoryLife} from "./inventory-life.mjs";
-import {initLegacyInventoryTables} from "./legacy-inventory.mjs";
+import {initLegacyItemUseTables} from "./legacy-item-use.mjs";
 
 export const TREASURE_SYMBOL="ゲーセン";
 export const TREASURE_ORIGIN="__web_treasure__";
@@ -104,7 +104,8 @@ export function parseOriginalTreasure(gamerandSource,treasureSource,datSource,se
     cooldownMs:minute*60_000});
 }
 export function initTreasureTables(db){
-  initLegacyInventoryTables(db);
+  // 寶箱可能在首次開箱後就進行「回」制耐久合併；獨立初始化時亦須有使用紀錄表。
+  initLegacyItemUseTables(db);
   db.exec([
     "CREATE TABLE IF NOT EXISTS arcade_treasure_rounds(",
     "id INTEGER PRIMARY KEY AUTOINCREMENT,",
