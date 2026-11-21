@@ -1,0 +1,26 @@
+name: TOWN Web tests
+on:
+  push:
+    paths:
+      - 'web/**'
+      - 'dat_dir/job.cgi'
+      - '.github/workflows/town-web.yml'
+  pull_request:
+    paths:
+      - 'web/**'
+      - 'dat_dir/job.cgi'
+      - '.github/workflows/town-web.yml'
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm test
+        working-directory: web
+      - run: node --check src/server.mjs
+        working-directory: web
+      - run: node --check public/app.js
+        working-directory: web
