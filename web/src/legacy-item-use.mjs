@@ -100,7 +100,12 @@ function parseArchivedItem(row){
   const parts=raw[9].split(",");
   const compound=parts.length===3&&COMPOUND_SUFFIXES.has(parts[2]);
   if(parts.length>2&&!compound)return null;
-  const effect=parts[0];
+  // basic.cgi::item 先檢查收到的ギフト商品之效果欄「食料品」/「ファ」，
+  // 再將其恢復成食品或速食。Web 保留原始 33 欄及已收禮品來源，
+  // 只在實際使用時推導食物語義，避免誤把普通ギフト當作可食物品。
+  const receivedFood=row.category==="ギフト商品"&&(
+    (parts.length===1&&COMPOUND_SUFFIXES.has(parts[0]))||compound);
+  const effect=receivedFood&&parts.length===1?"無":parts[0];
   // basic.cgi::item_do 對「効果」與「ステータス」沒有獨立特殊分支：
   // 前者只有原版 4 款明確記載 -500 能量恢復的飲食品可安全放行。
   const itemKey=row.category+"\t"+row.original_name;
@@ -142,7 +147,7 @@ function parseArchivedItem(row){
   if(calories<0&&!originalEdge)return null;
   const lastUsedSec=nonnegative(raw[26]||"0","最後使用時間",Number.MAX_SAFE_INTEGER);
   const originalRemaining=nonnegative(String(row.durability),"原始耐久",1000000);
-  const food=FOOD_TYPES.has(row.category);
+  const food=FOOD_TYPES.has(row.category)||receivedFood;
   const next=lastUsedSec*1000+intervalMinutes*60000;
   if(!Number.isSafeInteger(next))throw new Error("原始物品冷卻日期超出安全範圍");
   return {sourceLine:row.source_line,name:row.original_name,category:row.category,
