@@ -136,7 +136,8 @@ function transact(db,userId,requestId,now,action,sourceLine,quantity,toUserId,wo
       if(previous.action!==action||previous.source_line!==sourceLine||
          previous.quantity!==quantity||
          (previous.recipient_user_id??null)!==(toUserId??null)||
-         previous.message!==message)
+         (previous.message!==message&&!(previous.message===""&&
+           action==="send"&&message===DEFAULT_GIFT_MESSAGE)))
         throw new Error("禮品請求編號已用於其他商品、數量、收件人或訊息");
       db.exec("COMMIT");
       return {action,sourceLine,quantity,name:previous.name,
