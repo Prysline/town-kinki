@@ -556,7 +556,7 @@
           <p id="arcade-dice-status" class="small" role="status"></p>
           <details class="explain">
             <summary>原始骰子遊戲規則與 Web 安全差異</summary>
-            <p class="small">原版每次擲兩顆六面骰：先從 0～35 等機率抽一個整數，再推算兩顆骰面。猜總和是奇數或偶數；猜中增加所選下注額，猜錯扣除同額現金。可下注 10,000、50,000、100,000、500,000 或 1,000,000 元，同一玩家每局間隔 5 分鐘。Web 版需在所在城鎮有「ゲーセン」建築、下注現金必須足夠；原版可在現金不足時下注，但 Web 為保護現金存檔而拒絕。結果以伺服器擲骰、本人 SQLite 原子交易結算，重複請求不會重複輸贏。只顯示本人的最近 20 局；其餘卡牌、樂透、福引和寶箱尚未移植。</p>
+            <p class="small">原版每次擲兩顆六面骰：先從 0～35 等機率抽一個整數，再推算兩顆骰面。猜總和是奇數或偶數；猜中增加所選下注額，猜錯扣除同額現金。可下注 10,000、50,000、100,000、500,000 或 1,000,000 元，同一玩家每局間隔 5 分鐘。Web 版需在所在城鎮有「ゲーセン」建築、下注現金必須足夠；原版可在現金不足時下注，但 Web 為保護現金存檔而拒絕。結果以伺服器擲骰、本人 SQLite 原子交易結算，重複請求不會重複輸贏。只顯示本人的最近 20 局；High／Low 已於下方面板開放，其他卡牌、樂透、福引和寶箱尚未移植。</p>
           </details>
           <div class="filters retail-filters">
             <label for="arcade-dice-guess">猜測總和
@@ -574,6 +574,31 @@
           <p id="arcade-dice-result" class="small" aria-live="polite"></p>
           <h3>本人最近 20 局紀錄</h3>
           <div id="arcade-dice-history"></div>
+        </section>
+        <section class="card" id="arcade-highlow-panel">
+          <div class="heading">
+            <div><div class="eyebrow">原版卡牌遊戲 · donus4</div><h2>High／Low（猜高低）</h2></div>
+            <span class="muted">donut.cgi／town_ini.cgi</span>
+          </div>
+          <details class="explain">
+            <summary>原版牌桌與 Web 單機適配</summary>
+            <p class="small">五種點數 1～5 等機率抽一張，選比前一張「高」或「低」。猜對獲得牌桌累積張數 × 10,000 元；猜錯扣除同額並重置桌面為這次抽到的一張牌。抽到同點數時，原版設定為獲勝且金額 × 2。原版遊戲紀錄是一張跨玩家共用牌桌，原始空檔首次抽牌時前卡未設定、數值比較按 0 計算，桌上預設一張「1」；因此第一局猜高必勝、猜低必敗，這不是 Web 另外設計的機率。遊戲原始設定為10分鐘間隔，還有依未確認的連抽旗標控制相鄰玩家回合；Web 單機允許本人在滿10分鐘後接續玩，並以帳號隔離本人歷史、保留共用牌桌。必須在有「ゲーセン」的城鎮且有足額現金。所有抽牌及獎懲由伺服器處理並防重送。</p>
+          </details>
+          <p id="arcade-highlow-status" class="small" role="status"></p>
+          <p id="arcade-highlow-table" class="small"></p>
+          <div class="filters retail-filters">
+            <label for="arcade-highlow-guess">選擇押注方向
+              <select id="arcade-highlow-guess">
+                <option value="hi">比前一張高</option>
+                <option value="low">比前一張低</option>
+              </select>
+            </label>
+          </div>
+          <p id="arcade-highlow-quote" class="small" role="status"></p>
+          <button type="button" id="arcade-highlow-submit" disabled>確認猜高低並抽牌</button>
+          <p id="arcade-highlow-result" class="small" aria-live="polite"></p>
+          <h3>本人最近 20 局 High／Low 紀錄</h3>
+          <div id="arcade-highlow-history"></div>
         </section>
       </div>
       <div id="facility-pane-training" class="facility-pane" role="tabpanel" aria-labelledby="facility-tab-training" tabindex="0" hidden>
