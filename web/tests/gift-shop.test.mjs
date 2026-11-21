@@ -442,7 +442,7 @@ test("P0：第46階段既有信箱表完整帶資料遷移，保存 ID／時間�
     assert.deepEqual(db.prepare([
       "SELECT id,user_id,event_id,direction,other_name,message,gift_name,quantity,created_at",
       "FROM gift_mail_messages ORDER BY id"
-    ].join(" ")).all(),[
+    ].join(" ")).all().map(row=>({...row})),[
       {id:70,user_id:1,event_id:11,direction:"sent",other_name:"收件人",
         message:"原版已寫入的寄件副本",gift_name:"舊禮品",quantity:2,created_at:999},
       {id:71,user_id:2,event_id:11,direction:"inbox",other_name:"寄件人",
