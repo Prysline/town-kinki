@@ -176,6 +176,18 @@ main{max-width:1100px;margin:.8rem auto;padding:0 .7rem;min-height:unset}
 .game-shell .town small{display:none}
 .game-shell .town.active{background:#d1e9d5;border:2px solid #316444}
 .game-shell .town-main .map-scroll{margin:.35rem 0;padding:2px;border-radius:3px}
+/* 城鎮地圖格是 button，但不可繼承下方一般按鈕 36px 最小高度及內距：
+   地圖 track 固定 34px，若按鈕實高 36px 會覆蓋下一列，造成格線錯位。
+   此規則比 .game-shell button 更具體，預覽區的 span 格子則維持原尺寸。 */
+.game-shell .town-map .map-cell{
+  box-sizing:border-box;
+  width:34px;height:34px;
+  min-width:34px;min-height:34px;
+  max-width:34px;max-height:34px;
+  padding:0;margin:0;
+  border-radius:0;
+  align-self:stretch;justify-self:stretch;
+}
 .game-shell .town-main #map-source{margin:.3rem 0}
 .game-shell .town-main #map-selection{min-height:0}
 .game-shell .map-editor{padding:.55rem;margin:.5rem 0;border-radius:3px}
