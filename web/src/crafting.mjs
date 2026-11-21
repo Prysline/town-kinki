@@ -1,3 +1,4 @@
+import { heldInventoryRows,inventoryLife } from "./inventory-life.mjs";
 // 第54階段：依 gouseiya.cgi 與 dat_dir/gousei.cgi 移植單機合成屋。
 // 配方與成品保留原版 33 欄；操作只使用本人 Web 背包，不能由前端指定成品或價格。
 import {LEGACY_ITEM_FIELDS} from "./legacy-inventory.mjs";
@@ -71,14 +72,10 @@ export function initCraftingTables(db){
     "ON crafting_transactions(user_id,id);"
   ].join(" "));
 }
-function rows(db,userId){
-  return db.prepare([
-    "SELECT i.*,u.remaining AS web_remaining,u.last_used_at_ms AS web_last_used_at",
-    "FROM legacy_inventory_items i LEFT JOIN legacy_item_usage u",
-    "ON u.user_id=i.user_id AND u.source_line=i.source_line",
-    "WHERE i.user_id=? ORDER BY i.source_line"
-  ].join(" ")).all(userId).map(x=>({...x,
-    remaining:Math.max(0,x.web_remaining??x.durability)}));
+function rows(db,userId,now){
+  return heldInventoryRows(db,userId,now).map(x=>({...x,
+    web_last_used_at:x.last_used_at_ms,
+    remaining:inventoryLife(x,now).remaining}));
 }
 function checkedFields(row){
   let fields;
@@ -150,7 +147,7 @@ export function craftItem(db,userId,recipes,{recipeKey,quantity,requestId,now}={
     if(!character)throw new Error("請先建立角色");
     if(!currentTownHasCrafting(db,character.town_id))
       throw new Error("目前所在城鎮沒有原版合成屋");
-    const all=rows(db,userId);
+    const all=rows(db,userId,now);
     if(quantity>availableBatches(all,recipe))
       throw new Error("合成材料不足、同品超過五份或背包已達 25 格上限");
     // 確保每一份材料來自本人可核對的 33 欄 Web 持有物；同名多列可按行號依序扣除。
@@ -215,11 +212,11 @@ export function craftItem(db,userId,recipes,{recipeKey,quantity,requestId,now}={
     return {...result,replayed:false};
   }catch(error){db.exec("ROLLBACK");throw error;}
 }
-export function craftingOverview(db,userId,recipes){
+export function craftingOverview(db,userId,recipes,now=Date.now()){
   const character=db.prepare("SELECT town_id FROM characters WHERE user_id=?").get(userId);
   if(!character)return {available:false,recipes:[],history:[]};
   const available=currentTownHasCrafting(db,character.town_id);
-  const all=rows(db,userId);
+  const all=rows(db,userId,now);
   const options=recipes.map(recipe=>({
     key:recipe.key,name:recipe.name,category:recipe.category,
     durability:recipe.durability,unit:recipe.unit,fee:0,

@@ -763,6 +763,42 @@ test("第55階段：原版遊樂中心地圖入口與安全下注面板已接真
   assert.ok(!script.includes("innerHTML=round.guess"));
 });
 
+test("第56階段：遊樂中心新增HighLow真實下注、牌桌與本人紀錄，安全DOM呈現",()=>{
+  for(const id of ["arcade-highlow-panel","arcade-highlow-status",
+    "arcade-highlow-table","arcade-highlow-guess","arcade-highlow-quote",
+    "arcade-highlow-submit","arcade-highlow-result","arcade-highlow-history"])
+    assert.ok(html.includes('id="'+id+'"'));
+  assert.ok(html.includes("donut.cgi／town_ini.cgi"));
+  assert.ok(html.includes("同點數"));
+  assert.ok(script.includes("function renderArcadeHighLow(){"));
+  assert.ok(script.includes("renderArcadeHighLow();"));
+  assert.ok(script.includes('await api("arcade/highlow/play"'));
+  assert.ok(script.includes("pendingArcadeHighLow"));
+  assert.ok(script.includes("arcadeHighLowSubmitting"));
+  assert.ok(script.includes("document.createElement"));
+  assert.ok(!script.includes("innerHTML=round.drawnCard"));
+});
+
+test("第57階段：三種donus模式、原版卡牌資料與安全DOM表單皆接真實API",()=>{
+  for(const id of ["arcade-donuts-panel","arcade-donuts-status",
+    "arcade-donuts-mode","arcade-donuts-table","arcade-donuts-quote",
+    "arcade-donuts-submit","arcade-donuts-result","arcade-donuts-history"])
+    assert.ok(html.includes('id="'+id+'"'));
+  assert.ok(html.includes("gamerand.cgi／donut.cgi"));
+  for(const mode of ["donus","donus2","donus3"])
+    assert.ok(html.includes('value="'+mode+'"'));
+  assert.ok(html.includes("第一、二種"));
+  assert.ok(html.includes("第三種"));
+  assert.ok(script.includes("function renderArcadeDonuts(){"));
+  assert.ok(script.includes("renderArcadeDonuts();"));
+  assert.ok(script.includes('await api("arcade/donuts/draw"'));
+  assert.ok(script.includes("pendingArcadeDonut"));
+  assert.ok(script.includes("arcadeDonutSubmitting"));
+  assert.ok(script.includes("history.replaceChildren()"));
+  assert.ok(script.includes("document.createElement"));
+  assert.ok(!script.includes("innerHTML=round.drawnCard"));
+});
+
 test("第53階段：原版釣場與餌料商店實際有入庫交易 UI 且拒絕虛構漁獲",()=>{
   for(const key of ["釣り","販売1"])
     assert.deepEqual(townCellAction(describeTile(key)),{

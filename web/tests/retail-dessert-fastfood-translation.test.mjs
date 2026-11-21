@@ -71,13 +71,13 @@ test("未收錄品名及非目標分類回退原文",()=>{
 
 test("Web 介面顯示繁體中文、可搜尋中文，但操作維持原始 SKU、名稱及類別",()=>{
   assert.match(app,/from "\.\/retail-dessert-fastfood-translations\.js"/);
-  assert.match(app,/displayDessertFastFoodName\(displayKnownItemName\(item\.name\)\)/);
-  assert.match(app,/const displayProductName=shopName==="自動販賣機"\?displayVendingName:displayDessertFastFoodName/);
+  assert.match(app,/displayRetailItemName\(item\.name\)/);
+  assert.match(app,/const displayProductName=shopName==="自動販賣機"\?displayVendingName:displayRetailItemName/);
   assert.match(app,/document\.createTextNode\(displayProductName\(item\.name\)\)/);
-  assert.match(app,/displayDessertFastFoodName\(item\.name\)\.toLocaleLowerCase\("zh-TW"\)\.includes\(search\)/);
-  assert.match(app,/displayDessertFastFoodCategory\(item\.category\)\.toLocaleLowerCase\("zh-TW"\)/);
-  assert.match(app,/displayDessertFastFoodName\(purchase\.name\)/);
-  assert.match(app,/displayDessertFastFoodName\(entry\.name\)/);
+  assert.match(app,/displayRetailItemName\(item\.name\)\.toLocaleLowerCase\("zh-TW"\)\.includes\(search\)/);
+  assert.match(app,/displayRetailItemCategory\(item\.category\)\.toLocaleLowerCase\("zh-TW"\)/);
+  assert.match(app,/displayRetailItemName\(purchase\.name\)/);
+  assert.match(app,/displayRetailItemName\(entry\.name\)/);
   assert.match(app,/submitLegacyUse\(item\.sourceLine,item\.name\)/);
   assert.match(app,/pendingRetailPurchase=\{shop:item\.shop,sku:item\.sku,quantity,payment/);
   assert.match(app,/const duplicate=owned\.some\(x=>x\.name===item\.name\)/);

@@ -23,6 +23,8 @@ import {parseLegacyCouponCatalog} from "./coupon-catalog.mjs";
 import {parseOriginalFishing,initFishingTables,ensureFishingStock,fishingOverview,buyFishingBait,castFishing,sellFishingCatch} from "./fishing.mjs";
 import {parseOriginalCrafting,initCraftingTables,craftingOverview,craftItem} from "./crafting.mjs";
 import {parseOriginalArcadeDice,initArcadeDiceTables,arcadeDiceOverview,playArcadeDice} from "./arcade-dice.mjs";
+import {parseOriginalArcadeHighLow,initArcadeHighLowTables,arcadeHighLowOverview,playArcadeHighLow} from "./arcade-highlow.mjs";
+import {parseOriginalArcadeDonuts,initArcadeDonutTables,arcadeDonutsOverview,playArcadeDonut} from "./arcade-donuts.mjs";
 import {initCouponRedemptionTables,listCouponRewards,listCouponRedemptions,redeemEventCoupon,COUPON_SHOP_SYMBOL} from "./coupon-redemption.mjs";
 import { getCockroachChallenge,claimCockroach } from "./event-cockroach.mjs";
 import { parseLegacyInsurance, initInventoryTables, inventoryOverview, hasActiveHealthInsurance, listInsurancePurchases, buyHealthInsurance } from "./inventory.mjs";
@@ -102,6 +104,8 @@ initCouponRedemptionTables(db);
 initFishingTables(db);
 initCraftingTables(db);
 initArcadeDiceTables(db);
+initArcadeHighLowTables(db);
+initArcadeDonutTables(db);
 initInventoryTables(db);
 initDiningStockTables(db);
 initLegacyItemUseTables(db);
@@ -147,6 +151,16 @@ const craftingCatalog=parseOriginalCrafting(decodeLegacyText(readFileSync(resolv
 const arcadeDiceSource=parseOriginalArcadeDice(
   decodeLegacyText(readFileSync(resolve(REPO_ROOT,"gamerand.cgi"))),
   decodeLegacyText(readFileSync(resolve(REPO_ROOT,"saikoro.cgi")))
+);
+const arcadeHighLowSource=parseOriginalArcadeHighLow(
+  decodeLegacyText(readFileSync(resolve(REPO_ROOT,"gamerand.cgi"))),
+  decodeLegacyText(readFileSync(resolve(REPO_ROOT,"donut.cgi"))),
+  decodeLegacyText(readFileSync(resolve(REPO_ROOT,"town_ini.cgi")))
+);
+const arcadeDonutsSource=parseOriginalArcadeDonuts(
+  decodeLegacyText(readFileSync(resolve(REPO_ROOT,"gamerand.cgi"))),
+  decodeLegacyText(readFileSync(resolve(REPO_ROOT,"donut.cgi"))),
+  decodeLegacyText(readFileSync(resolve(REPO_ROOT,"town_ini.cgi")))
 );
 const wholesaleCatalog=parseWholesaleCatalog(decodeLegacyText(readFileSync(resolve(REPO_ROOT,"dat_dir","syouhin.cgi"))));
 const vendingCatalog=parseLegacyVendingCatalog(decodeLegacyText(readFileSync(resolve(REPO_ROOT,"dat_dir","jihanki.cgi"))));
@@ -385,13 +399,15 @@ function snapshot(user) {
     couponRewards:updated?listCouponRewards(couponCatalog,getCouponBalance(db,user.id),couponShopAvailable):[],
     couponRedemptions:updated?listCouponRedemptions(db,user.id):[],
     fishing:updated?fishingOverview(db,user.id,fishingCatalog,now,today):null,
-    crafting:updated?craftingOverview(db,user.id,craftingCatalog):null,
+    crafting:updated?craftingOverview(db,user.id,craftingCatalog,now):null,
     arcadeDice:updated?arcadeDiceOverview(db,user.id,arcadeDiceSource,now):null,
+    arcadeHighLow:updated?arcadeHighLowOverview(db,user.id,arcadeHighLowSource,now):null,
+    arcadeDonuts:updated?arcadeDonutsOverview(db,user.id,arcadeDonutsSource,now):null,
     cockroachChallenge: updated ? getCockroachChallenge(db,user.id,now) : null,
     hospital: updated ? getTreatmentQuote(updated,hasActiveHealthInsurance(db,user.id,insuranceItem,now)) : null,
     insurance: updated ? inventoryOverview(db,user.id,insuranceItem,now) : null,
     insurancePurchases: updated ? listInsurancePurchases(db,user.id) : [],
-    legacyInventory: updated ? listLegacyInventoryItems(db,user.id,50,retailItemDetails) : [],
+    legacyInventory: updated ? listLegacyInventoryItems(db,user.id,50,retailItemDetails,now) : [],
     retailAvailable,retailGoods,retailDay:updated?today:null,
     retailPurchases:updated?listRetailPurchases(db,user.id):[],
     vendingAvailable,vendingGoods,
@@ -787,6 +803,26 @@ async function handle(req, res) {
         });
       }catch(error){throw new HttpError(400,error.message);}
       return sendJson(res,200,{...snapshot(user),arcadeDiceResult});
+    }
+
+    if(path==="/api/arcade/highlow/play"){
+      let arcadeHighLowResult;
+      try{
+        arcadeHighLowResult=playArcadeHighLow(db,user.id,arcadeHighLowSource,{
+          guess:data.guess,requestId:data.requestId,now:gameNow()
+        });
+      }catch(error){throw new HttpError(400,error.message);}
+      return sendJson(res,200,{...snapshot(user),arcadeHighLowResult});
+    }
+
+    if(path==="/api/arcade/donuts/draw"){
+      let arcadeDonutResult;
+      try{
+        arcadeDonutResult=playArcadeDonut(db,user.id,arcadeDonutsSource,{
+          mode:data.mode,requestId:data.requestId,now:gameNow()
+        });
+      }catch(error){throw new HttpError(400,error.message);}
+      return sendJson(res,200,{...snapshot(user),arcadeDonutResult});
     }
 
     if (path === "/api/coupon/redeem") {

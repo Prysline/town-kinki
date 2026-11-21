@@ -1,3 +1,4 @@
+import { heldInventoryRows,inventoryLife } from "./inventory-life.mjs";
 // recycle.cgi：全玩家共用二手貨架與真實資產交易，僅修改 Web 來源的 33 欄。
 export const RECYCLE_SYMBOL="リサイ";
 export const RECYCLE_MAX_LISTINGS=50;
@@ -159,10 +160,9 @@ export function buyFromRecycle(db,userId,{listingId,requestId,now,hasBuilding}={
     if(!item)throw new Error("回收商品已售出或超過保存期");
     if(item.sale_price>char.money)throw new Error("回收商品購買現金不足");
     // 原版非禮品統一以リサイクル分類重新入庫；食料品、ファーストフード維持原類別。
-    const rows=db.prepare([
-      "SELECT category,durability FROM legacy_inventory_items WHERE user_id=?"
-    ].join(" ")).all(userId);
-    if(rows.filter(x=>x.durability>0&&!["ギフト","ギフト商品"].includes(x.category)).length>=25)
+    const rows=heldInventoryRows(db,userId,now);
+    if(rows.filter(x=>inventoryLife(x,now).remaining>0&&
+      !["ギフト","ギフト商品"].includes(x.category)).length>=25)
       throw new Error("一般持有物已達 25 格限制");
     let f;try{f=JSON.parse(item.raw_fields_json);}catch{}
     if(!Array.isArray(f)||f.length!==33)throw new Error("二手商品資料已損壞");

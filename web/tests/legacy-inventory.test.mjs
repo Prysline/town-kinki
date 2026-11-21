@@ -99,16 +99,16 @@ test("合法已匯入角色 ID 才能收回原始物品，全部 33 欄存入唯
     assert.equal(archive.length,2);
     assert.deepEqual(JSON.parse(archive[0].raw_fields_json),parsed.records[0].rawFields);
     assert.deepEqual(JSON.parse(archive[1].raw_fields_json),parsed.records[1].rawFields);
-    assert.equal(listLegacyInventoryItems(db,1).length,2);
-    assert.equal(listLegacyInventoryItems(db,2).length,0);
-    assert.equal(listLegacyInventoryItems(db,1)[0].readOnly,true);
+    assert.equal(listLegacyInventoryItems(db,1,50,null,ORIGINAL_NOW).length,2);
+    assert.equal(listLegacyInventoryItems(db,2,50,null,ORIGINAL_NOW).length,0);
+    assert.equal(listLegacyInventoryItems(db,1,50,null,ORIGINAL_NOW)[0].readOnly,true);
     assert.equal(hasActiveHealthInsurance(db,1,insurance,ORIGINAL_NOW),true);
     assert.equal(hasActiveHealthInsurance(db,2,insurance,ORIGINAL_NOW),false);
     assert.equal(db.prepare("SELECT source_file,source_hash,item_count FROM legacy_inventory_imports WHERE original_id='00042'").get().source_file,"mono.cgi");
     assert.throws(()=>importLegacyInventory(db,parsed,opts),/已匯入/);
     assert.throws(()=>importLegacyInventory(db,parsed,{...opts,originalId:"unknown"}),/找不到/);
     initLegacyInventoryTables(db);
-    assert.equal(listLegacyInventoryItems(db,1).length,2);
+    assert.equal(listLegacyInventoryItems(db,1,50,null,ORIGINAL_NOW).length,2);
   }finally{db.close();}
 });
 
@@ -147,7 +147,9 @@ test("原版健康保險已過期時只封存物品，不啟用折扣，也不�
     const summary=importLegacyInventory(db,parsed,opts);
     assert.equal(summary.insuranceRestored,false);
     assert.equal(db.prepare("SELECT active_until FROM inventory_items WHERE user_id=1").get().active_until,ORIGINAL_NOW+60*DAY_MS);
-    assert.equal(listLegacyInventoryItems(db,1).length,1);
+    // 已失效的保險仍保存完整封存，但不屬於當前可持有物。
+    assert.equal(listLegacyInventoryItems(db,1,50,null,ORIGINAL_NOW).length,0);
+    assert.equal(db.prepare("SELECT COUNT(*) n FROM legacy_inventory_items WHERE user_id=1").get().n,1);
   }finally{db.close();}
 });
 
@@ -181,7 +183,7 @@ test("CLI 預覽不寫檔，正式匯入建立私有原始備份且原始檔不�
     if(process.platform!=="win32")assert.equal(statSync(saved).mode&0o777,0o600);
     const stored=new DatabaseSync(dbFile);
     try{
-      assert.equal(listLegacyInventoryItems(stored,1).length,2);
+      assert.equal(listLegacyInventoryItems(stored,1,50,null,ORIGINAL_NOW).length,2);
       assert.equal(stored.prepare("SELECT COUNT(*) n FROM legacy_inventory_imports").get().n,1);
     }finally{stored.close();}
     const repeated=execute(["--file",file,"--id","00042","--apply","--mode","solo","--accept-partial"]);

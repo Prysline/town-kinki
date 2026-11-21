@@ -69,7 +69,7 @@ test("物品沿用百貨的完整能力增減格式，不使用等 X 項摘要",
     "能力 +1：音樂、外貌｜能力 +5：健康");
   assert.match(app,/function itemInventoryEffects\(/);
   assert.match(app,/groupedStatLines\(info\.effects,labels,info\.randomizedEffects\)/);
-  assert.match(server,/listLegacyInventoryItems\(db,user\.id,50,retailItemDetails\)/);
+  assert.match(server,/listLegacyInventoryItems\(db,user\.id,50,retailItemDetails,now\)/);
 });
 test("物品為主；保險續購、使用紀錄與來源說明置於可展開區域",()=>{
   const a=html.indexOf('id="inventory-panel"');
