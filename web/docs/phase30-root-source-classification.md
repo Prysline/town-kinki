@@ -1,5 +1,7 @@
 # 第 30 階段：根目錄 CGI／Perl 檔案第二層覆蓋率（2026-11-20）
 
+> **現行範圍**：只重製原版玩法，不需要舊玩家存檔匯入、相容與真實舊玩家檔驗收；以 [專案範圍決策](project-scope-no-legacy-player-import.md) 為準。
+
 > 依 `feature/web-dual-mode-phase1`、PR #33 後版本，以 Git tree 遍歷根目錄的 `*.cgi`／`*.pl` **67 個檔**，交叉比對 `migration-audit.md`、`phase30-open-audit-backlog.md`、`phase30-entrypoint-coverage.md` 的明確引用；此結果只是**檔案與原始程式來源覆蓋**，不是原版 67 個可玩設施。原版實際部署、真實玩家紀錄、所有管理員及多層 CGI 的函式仍需分層驗證。
 
 ## 交叉比對結果
