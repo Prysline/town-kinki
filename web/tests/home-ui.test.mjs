@@ -534,3 +534,8 @@ test("原版右側物品頁籤保留保險、消耗品與使用紀錄，地圖�
   assert.match(css,/overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain/);
   assert.match(script,/el\("insurance-buy-form"\)\.addEventListener/);
 });
+
+test("百貨ランダム品明確標註 17 項獨立隨機 0～上限，不誤顯成固定增加",()=>{
+  assert.match(script,/info\.randomizedEffects\?" \+0～\+"\+value/);
+  assert.match(script,/每項獨立隨機/);
+});
