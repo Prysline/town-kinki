@@ -121,7 +121,7 @@ test("中魚與不中魚都扣一回，同步寫入100秒釣魚冷卻；時間�
   try{
     const item=source.bait.find(x=>x.name==="魚ルアー（小）");
     const bait=buy(db,item.sku).sourceLine;
-    const lose=cast(db,bait,"phase53_cast_lost",now,n=>n===3?1:0);
+    const lose=cast(db,bait,"phase53_cast_lost",now,n=>n===5?1:0);
     assert.equal(lose.caught,false);
     assert.equal(lose.catchName,null);
     assert.equal(fishingOverview(db,1,source,now,day).baitOptions[0].remaining,4);
@@ -168,7 +168,7 @@ test("請求重送只回放記帳結果；同 ID 不可換魚、買餌或改動�
     assert.equal(fishingOverview(db,1,source,now,day).history.length,2);
     assert.equal(held(db).filter(x=>x.category==="魚").length,1);
     assert.throws(()=>sell(db,bought.sourceLine,"phase53_replay_cast"),/相同操作識別碼/);
-    assert.throws(()=>cast(db,99999,"phase53_bad_bait"),/不是原版可釣魚/);
+    assert.throws(()=>cast(db,99999,"phase53_bad_bait",now+100000),/不是原版可釣魚/);
     assert.throws(()=>buy(db,"fake","phase53_fake_shop"),/不是原版/);
   }finally{db.close();}
 });
@@ -222,7 +222,7 @@ test("原版五份同魚類持有上限與25格上限阻止多領，新增失敗
 test("釣魚寫入漁獲與出售記帳失敗時整筆回滾，保留 Web 現金、魚餌與出釣紀錄",()=>{
   const db=setup();
   try{
-    const bait=buy(db,source.bait[0].sku).sourceLine;
+    const bait=buy(db,source.bait.find(x=>x.name==="小エビ").sku).sourceLine;
     db.exec([
       "CREATE TRIGGER stop_fish_prize BEFORE INSERT ON legacy_inventory_items",
       "WHEN NEW.category='魚' BEGIN SELECT RAISE(ABORT,'prize denied'); END;"
