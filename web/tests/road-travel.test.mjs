@@ -46,7 +46,8 @@ function setupRetailRoad(){
   return db;
 }
 function buyRetailVehicle(db,name,{userId=1,now=NOW,quantity=1}={}){
-  const item=retailCatalog.find(row=>row.name===name&&row.category==="乗り物");
+  const source=rules.retailVehicles.find(row=>row.name===name);
+  const item=retailCatalog.find(row=>row.name===name&&row.sku===source?.sku);
   assert.ok(item,"原版百貨存在此交通商品："+name);
   const day="2026-11-22";
   const selected=retailCatalog.filter(row=>rules.retailVehicles.some(v=>v.sku===row.sku));
@@ -573,23 +574,24 @@ test("第64階段多人巴士交易與本人抵達隔離、相同請求碼可分
   }finally{db.close();}
 });
 
-test("第65階段來源：只接受5種百貨原版「乗り物」且非専門店限定、保留20種移動速度",()=>{
+test("第65階段既有五種普通百貨載具保持原速度，並兼容第66階段新增來源",()=>{
   assert.equal(rules.vehicles.length,19,"原寶箱獎池存在19種20名公路載具");
-  assert.deepEqual(rules.retailVehicles.map(x=>[x.name,x.seconds,x.sku]).sort((a,b)=>a[2].localeCompare(b[2])),[
+  const firstFive=rules.retailVehicles.filter(x=>x.category==="乗り物"&&!x.rawFields[29].includes("専門店限定商品"));
+  assert.deepEqual(firstFive.map(x=>[x.name,x.seconds,x.sku]).sort((a,b)=>a[2].localeCompare(b[2])),[
     ["ナナハン",7,"legacy-332"],["ドゥカティ",7,"legacy-333"],
     ["自転車",15,"legacy-334"],["スーパーカブ",10,"legacy-337"],
     ["ローラースルーゴーゴー",20,"legacy-338"]
   ]);
-  assert.ok(rules.retailVehicles.every(x=>x.origin===RETAIL_ITEM_ORIGIN&&
+  assert.ok(firstFive.every(x=>x.origin===RETAIL_ITEM_ORIGIN&&
     x.category==="乗り物"&&!x.rawFields[29].includes("専門店限定商品")));
   assert.throws(()=>parseOriginalRoadTransport(ini,lib,maker,treasure,
-    retailCatalog.filter(x=>x.name!=="自転車")),/來源、分類或限制已變更/);
+    retailCatalog.filter(x=>x.name!=="自転車")),/來源、分類或備註已變更/);
   assert.throws(()=>parseOriginalRoadTransport(ini,lib,maker,treasure,
-    retailCatalog.map(x=>x.name==="自転車"?{...x,originalLine:999}:x)),/來源、分類或限制已變更/);
+    retailCatalog.map(x=>x.name==="自転車"?{...x,originalLine:999}:x)),/來源、分類或備註已變更/);
   assert.throws(()=>parseOriginalRoadTransport(ini,lib,maker,treasure,
     retailCatalog.map(x=>x.name==="自転車"?{
       ...x,rawFields:x.rawFields.map((v,i)=>i===29?"専門店限定商品":v)
-    }:x)),/來源、分類或限制已變更/);
+    }:x)),/來源、分類或備註已變更/);
 });
 
 test("第65階段五輛原版百貨車實際交易入庫後可公路出發，腳踏車鍛鍊與事故耐久維持原版",()=>{
@@ -597,7 +599,8 @@ test("第65階段五輛原版百貨車實際交易入庫後可公路出發，腳
   try{
     db.prepare("UPDATE characters SET money=100000000 WHERE user_id=1").run();
     const receipts=new Map();
-    for(const vehicle of rules.retailVehicles){
+    for(const vehicle of rules.retailVehicles.filter(x=>x.category==="乗り物"&&
+      !x.rawFields[29].includes("専門店限定商品"))){
       const bought=buyRetailVehicle(db,vehicle.name);
       assert.equal(bought.replayed,false);
       receipts.set(vehicle.name,bought);
@@ -610,7 +613,9 @@ test("第65階段五輛原版百貨車實際交易入庫後可公路出發，腳
     const choices=roadOverview(db,1,rules,NOW).choices;
     assert.equal(choices.length,5);
     assert.ok(choices.every(x=>x.origin==="retail"));
-    assert.deepEqual(choices.map(x=>x.name).sort(),rules.retailVehicles.map(x=>x.name).sort());
+    assert.deepEqual(choices.map(x=>x.name).sort(),rules.retailVehicles
+      .filter(x=>x.category==="乗り物"&&!x.rawFields[29].includes("専門店限定商品"))
+      .map(x=>x.name).sort());
     const bicycle=receipts.get("自転車");
     const before=db.prepare("SELECT money FROM characters WHERE user_id=1").get().money;
     const trip=start(db,{vehicleSourceLine:bicycle.sourceLine,requestId:"phase65_retail_bike_1",
@@ -636,7 +641,7 @@ test("第65階段五輛原版百貨車實際交易入庫後可公路出發，腳
   }finally{db.close();}
 });
 
-test("第65階段來源保護：無真實本人百貨購買流水、偽造33欄、錯誤帳號及専門店限定車都不能上路",()=>{
+test("第65～66階段來源保護：無本人購買流水、偽造33欄及跨帳號車輛都不能上路",()=>{
   const db=setupRetailRoad();
   try{
     const bicycle=retailCatalog.find(x=>x.name==="自転車"&&x.category==="乗り物");
@@ -669,8 +674,9 @@ test("第65階段來源保護：無真實本人百貨購買流水、偽造33欄�
       day:"2026-11-22",now:NOW,hasBuilding:()=>true
     });
     assert.ok(specialBuy.sourceLine);
-    assert.equal(roadOverview(db,1,rules,NOW).choices.length,0,
-      "即使現有百貨目錄允許交易專門店商品，也不在本次啟用其公路效果");
+    assert.equal(roadOverview(db,1,rules,NOW).choices.length,1,
+      "原版百貨可取得専門店標記商品，真實百貨購買後應能搭車");
+    assert.equal(roadOverview(db,1,rules,NOW).choices[0].name,"アルファロメオ");
   }finally{db.close();}
 });
 
@@ -699,5 +705,96 @@ test("第65階段百貨車需要相符購物流水與完整33欄，使用次數�
     db.prepare("INSERT INTO legacy_item_usage(user_id,source_line,remaining,last_used_at_ms) VALUES(?,?,0,0)")
       .run(1,bought.sourceLine);
     assert.equal(roadOverview(db,1,rules,NOW).choices.length,0,"車輛耐久耗盡不可上路");
+  }finally{db.close();}
+});
+
+test("第66階段完整來源：11種百貨乗り物與7種ギフト均對應原版公路且分類不決定可否選車",()=>{
+  const vehicles=rules.retailVehicles;
+  assert.equal(vehicles.length,18);
+  assert.equal(new Set(vehicles.map(x=>x.name)).size,18);
+  assert.equal(vehicles.filter(x=>x.category==="乗り物").length,11);
+  assert.equal(vehicles.filter(x=>x.category==="ギフト").length,7);
+  assert.deepEqual(vehicles.filter(x=>x.rawFields[29].includes("専門店限定商品"))
+    .map(x=>x.sku).sort(),[
+      "legacy-328","legacy-329","legacy-330","legacy-331","legacy-335","legacy-336"
+    ]);
+  assert.deepEqual(vehicles.filter(x=>x.category==="ギフト").map(x=>x.sku).sort(),[
+    "legacy-390","legacy-391","legacy-392","legacy-393",
+    "legacy-394","legacy-395","legacy-396"
+  ]);
+  for(const vehicle of vehicles){
+    assert.equal(vehicle.origin,RETAIL_ITEM_ORIGIN);
+    assert.equal(vehicle.rawFields[9],"無");
+    assert.equal(vehicle.rawFields[22],"回");
+    assert.ok(vehicle.rawFields[29].includes("※移動手段です。"));
+    assert.ok(Number.isSafeInteger(vehicle.seconds)&&vehicle.seconds>=0);
+  }
+  assert.throws(()=>parseOriginalRoadTransport(ini,lib,maker,treasure,
+    retailCatalog.filter(x=>x.name!=="ベスパ")),/來源、分類或備註已變更/);
+  assert.throws(()=>parseOriginalRoadTransport(ini,lib,maker,treasure,
+    retailCatalog.map(x=>x.name==="ベスパ"?{...x,category:"乗り物"}:x)),
+    /來源、分類或備註已變更/);
+  assert.throws(()=>parseOriginalRoadTransport(ini,lib,maker,treasure,
+    retailCatalog.map(x=>x.name==="ボルボ"?{...x,rawFields:x.rawFields.map((f,i)=>
+      i===29?"※移動手段です。":f)}:x)),/來源、分類或備註已變更/);
+});
+
+test("第66階段：18種百貨原始商品真實扣款、33欄入庫及實際選車，ギフト米格25零秒仍手動抵達",()=>{
+  const db=setupRetailRoad();
+  try{
+    db.prepare("UPDATE characters SET money=10000000000 WHERE user_id=1").run();
+    const receipts=[];
+    for(const vehicle of rules.retailVehicles){
+      const balance=db.prepare("SELECT money FROM characters WHERE user_id=1").get().money;
+      const bought=buyRetailVehicle(db,vehicle.name);
+      assert.equal(bought.replayed,false);
+      assert.ok(bought.paid>0);
+      assert.equal(db.prepare("SELECT money FROM characters WHERE user_id=1").get().money,balance-bought.paid);
+      const row=db.prepare("SELECT * FROM legacy_inventory_items WHERE user_id=1 AND source_line=?").get(bought.sourceLine);
+      assert.equal(row.original_id,RETAIL_ITEM_ORIGIN);
+      assert.equal(row.category,vehicle.category);
+      assert.equal(JSON.parse(row.raw_fields_json).length,33);
+      receipts.push(bought);
+    }
+    const choices=roadOverview(db,1,rules,NOW).choices;
+    assert.equal(choices.length,18);
+    assert.deepEqual(choices.map(x=>x.name).sort(),rules.retailVehicles.map(x=>x.name).sort());
+    assert.equal(db.prepare("SELECT COUNT(*) n FROM retail_purchases WHERE user_id=1").get().n,18);
+    assert.equal(db.prepare("SELECT COUNT(*) n FROM legacy_inventory_items WHERE user_id=1").get().n,18);
+    const mig=receipts.find(x=>x.name==="ミグ25");
+    const trip=start(db,{vehicleSourceLine:mig.sourceLine,requestId:"phase66_gift_mig",lostRoll:4,rolls:[9]});
+    assert.equal(trip.seconds,0);
+    assert.equal(trip.vehicleName,"ミグ25");
+    assert.equal(trip.pending,true);
+    assert.equal(trip.accident,undefined);
+    assert.equal(town(db),0,"零秒不自動移城");
+    const done=arrive(db,{tripId:trip.id,now:NOW});
+    assert.equal(done.accident,false);
+    assert.equal(done.toTownId,1);
+    assert.equal(town(db),1);
+  }finally{db.close();}
+});
+
+test("第66階段：ギフト原始類別及百貨收據不可偽造，耐久零時選單必須移除",()=>{
+  const db=setupRetailRoad();
+  try{
+    db.prepare("UPDATE characters SET money=1000000000 WHERE user_id=1").run();
+    const bought=buyRetailVehicle(db,"ベスパ");
+    assert.equal(roadOverview(db,1,rules,NOW).choices.length,1);
+    const raw=db.prepare("SELECT raw_fields_json FROM legacy_inventory_items WHERE user_id=1 AND source_line=?").get(bought.sourceLine).raw_fields_json;
+    const malformed=JSON.parse(raw);malformed[0]="乗り物";
+    db.prepare("UPDATE legacy_inventory_items SET category='乗り物',raw_fields_json=? WHERE user_id=1 AND source_line=?")
+      .run(JSON.stringify(malformed),bought.sourceLine);
+    assert.equal(roadOverview(db,1,rules,NOW).choices.length,0);
+    assert.throws(()=>start(db,{vehicleSourceLine:bought.sourceLine,requestId:"phase66_fake_category"}),/合法持有/);
+    db.prepare("UPDATE legacy_inventory_items SET category='ギフト',raw_fields_json=? WHERE user_id=1 AND source_line=?")
+      .run(raw,bought.sourceLine);
+    db.prepare("UPDATE retail_purchases SET name='錯誤來源' WHERE user_id=1 AND source_line=?").run(bought.sourceLine);
+    assert.equal(roadOverview(db,1,rules,NOW).choices.length,0);
+    db.prepare("UPDATE retail_purchases SET name='ベスパ' WHERE user_id=1 AND source_line=?").run(bought.sourceLine);
+    assert.equal(roadOverview(db,1,rules,NOW).choices.length,1);
+    db.prepare("INSERT INTO legacy_item_usage(user_id,source_line,remaining,last_used_at_ms) VALUES(?,?,0,0)")
+      .run(1,bought.sourceLine);
+    assert.equal(roadOverview(db,1,rules,NOW).choices.length,0);
   }finally{db.close();}
 });
