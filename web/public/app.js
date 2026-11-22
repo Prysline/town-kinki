@@ -1177,6 +1177,7 @@ function renderRoadTravel(){
     const option=document.createElement("option");
     option.value=String(item.sourceLine);
     option.textContent=displayRetailItemName(item.name)+"（"+
+      (item.origin==="retail"?"百貨":"寶箱")+"、"+
       item.seconds+"秒、耐久 "+item.remaining+"）";
     vehicle.append(option);
   }
@@ -1237,14 +1238,14 @@ function updateRoadCountdown(){
       "，搭乘 "+(pending.byBus?"巴士":displayRetailItemName(pending.vehicleName))+
       (left>0?"；距離抵達還有 "+Math.ceil(left/1000)+" 秒。":
         "；現在可完成抵達。"):
-    "目前尚未出發。可徒步、搭乘500元巴士，或選擇本人從原版寶箱取得的載具；只有巴士收取現金車資。");
+    "目前尚未出發。可徒步、搭乘500元巴士，或選擇本人實際取得的原版寶箱／百貨載具；只有巴士收取現金車資。");
   text("road-travel-quote",pending?
     "已儲存行程 ID "+pending.id+"｜原版路程 "+pending.seconds+
     " 秒｜在完成抵達之前，禁止再搭電車或開啟另一段公路旅程。":
     "預計路程："+(valid?seconds+" 秒":byBus&&!affordable?
       "巴士車資500元，現金不足":"請選擇有效目的地與載具")+
     (byBus?"｜巴士車資"+info.busFare+"元，原版5秒、不會迷路或事故，也不會鍛鍊。":
-      "｜可用寶箱載具 "+(info.choices??[]).length+
+      "｜可用寶箱／百貨載具 "+(info.choices??[]).length+
       " 件｜有載具時事故機率 1/"+(info.accidentDenominator??10)+
       "，事故扣1耐久；徒步不扣載具。"+
       (state.character.townId===3?"｜從和歌山出發不會迷路。":
