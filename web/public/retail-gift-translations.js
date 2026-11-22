@@ -13,7 +13,7 @@ export const RETAIL_GIFTS_ZH_TW=Object.freeze({
   "ポルシェ": "保時捷",
   "ジャガー": "捷豹",
   "キャデラック": "凱迪拉克",
-  "ミグ25": "MiG-25",
+  "ミグ25": "米格-25戰鬥機",
   "BMW": "BMW",
   "フェアレディZ": "日產 Fairlady Z",
   "ベスパ": "偉士牌",

@@ -56,6 +56,8 @@ test("原版禮品車輛維持交通工具辨識，不因翻譯而改成其他�
   // 船艦大和的備註提到移動，但原版移動工具表未將其列入；不虛構功能。
   assert.ok(!townIni.includes("'船艦大和'"));
   assert.equal(displayRetailItemName("ポルシェ"),"保時捷");
+  assert.equal(RETAIL_GIFTS_ZH_TW["ミグ25"],"米格-25戰鬥機");
+  assert.equal(displayRetailItemName("ミグ25"),"米格-25戰鬥機");
   assert.equal(displayRetailItemName("フェアレディZ"),"日產 Fairlady Z");
   assert.equal(displayRetailItemName("ディズニーDENPO"),"迪士尼電報");
   assert.equal(displayRetailItemName("未知禮品"),"未知禮品");
