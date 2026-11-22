@@ -556,6 +556,52 @@ test("單機：學校與健身房使用原始資料並防止重複取得能力�
   } finally { await srv.stop(); }
 });
 
+test("單機 HTTP：健身房運動扣能量／扣款與減重同筆保存，BMI 更新、失敗不重複減重且重啟不丟失",async()=>{
+  const srv=await start("solo");
+  let restarted=null;
+  try{
+    const created=await api(srv.url,"character",{
+      name:"運動減重居民",gender:"other",stats:defaultStats()
+    });
+    assert.equal(created.status,200);
+    const before=created.result.character;
+    const walk=created.result.trainingLessons.find(x=>x.key==="gym-3");
+    assert.ok(walk);
+    assert.equal(walk.energyCost,8);
+    assert.equal(walk.weightLoss,0.08,"API 預覽需提供 Web 補完減重數字");
+    const trained=await api(srv.url,"train",{
+      key:"gym-3",price:0,weightLoss:900
+    });
+    assert.equal(trained.status,200);
+    assert.equal(trained.result.trainingResult.weightLoss,0.08,
+      "只用後端原始 gym 課程資料計算，不接受前端自稱的減重數字");
+    const expectedWeight=Math.round((before.weight-0.08)*100)/100;
+    const expectedBmi=Math.round(expectedWeight/((before.height/100)**2)*10)/10;
+    assert.equal(trained.result.character.weight,expectedWeight);
+    assert.equal(trained.result.character.bmi,expectedBmi);
+    assert.equal(trained.result.character.bodyEnergy,before.bodyEnergy-8);
+    assert.equal(trained.result.character.money,before.money-800);
+    assert.equal(trained.result.character.stats.kenkou,before.stats.kenkou+3);
+    assert.equal(trained.result.character.gymReadyAt>0,true);
+    const tooSoon=await api(srv.url,"train",{key:"gym-2"});
+    assert.equal(tooSoon.status,400);
+    const unchanged=(await api(srv.url,"state")).result;
+    assert.equal(unchanged.character.weight,expectedWeight);
+    assert.equal(unchanged.character.money,before.money-800);
+    await srv.stop({preserveData:true});
+    restarted=await start("solo",null,srv.directory);
+    const loaded=(await api(restarted.url,"state")).result;
+    assert.equal(loaded.character.weight,expectedWeight);
+    assert.equal(loaded.character.bmi,expectedBmi);
+    assert.equal(loaded.character.money,before.money-800);
+    assert.equal(loaded.character.stats.kenkou,before.stats.kenkou+3);
+    assert.equal(loaded.trainingLessons.find(x=>x.key==="gym-3").weightLoss,0.08);
+  }finally{
+    if(restarted)await restarted.stop();
+    else await srv.stop();
+  }
+});
+
 test("多人：課程限制分別記錄在每位玩家資料中", async () => {
   const srv = await start("multi");
   try {
