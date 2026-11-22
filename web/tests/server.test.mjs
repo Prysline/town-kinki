@@ -5845,3 +5845,112 @@ test("第62階段多人HTTP：公路行程與請求碼本人隔離，別人不�
     assert.equal((await api(srv.url,"move",{townId:2},a.cookie)).status,400);
   }finally{await srv.stop();}
 });
+
+test("第64階段單機HTTP：巴士500元5秒、請求重播、跨重啟、到站後仍可搭電車",async()=>{
+  let srv=await start("solo");
+  const dir=srv.directory;
+  try{
+    anchorSoloTestAtNoon(srv);
+    const created=await api(srv.url,"character",{
+      name:"第64階段巴士乘客",gender:"other",stats:defaultStats()
+    });
+    assert.equal(created.status,200);
+    const before=created.result.character.money;
+    assert.equal(created.result.roadTravel.busFare,500);
+    assert.equal(created.result.roadTravel.busSeconds,5);
+    const payload={toTownId:2,byBus:true,requestId:"phase64_http_solo_bus"};
+    const booked=await api(srv.url,"road/start",payload);
+    assert.equal(booked.status,200);
+    const trip=booked.result.roadStartResult;
+    assert.equal(trip.byBus,true);assert.equal(trip.farePaid,500);
+    assert.equal(trip.seconds,5);assert.equal(trip.vehicleName,"バス");
+    assert.equal(trip.pending,true);
+    assert.equal(trip.accident,undefined);assert.equal(trip.lost,undefined);
+    assert.equal(booked.result.character.money,before-500);
+    assert.equal(booked.result.character.townId,0);
+    assert.equal((await api(srv.url,"road/start",payload)).result.roadStartResult.replayed,true);
+    assert.equal((await api(srv.url,"road/start",{
+      ...payload,byBus:false
+    })).status,400,"同碼不得將巴士偷換成免費徒步");
+    assert.equal((await api(srv.url,"road/start",{
+      toTownId:1,byBus:true,requestId:"phase64_http_overlap"
+    })).status,400);
+    assert.equal((await api(srv.url,"move",{townId:1})).status,400);
+    assert.equal((await api(srv.url,"road/arrive",{tripId:trip.id})).status,400);
+    const db=new DatabaseSync(join(dir,"solo.sqlite"));
+    try{
+      assert.deepEqual({...db.prepare("SELECT by_bus,fare_paid,lost,accident,rerouted FROM arcade_road_trips WHERE id=?").get(trip.id)},
+        {by_bus:1,fare_paid:500,lost:0,accident:0,rerouted:0});
+    }finally{db.close();}
+    await srv.stop({preserveData:true});
+    srv=await start("solo",undefined,dir);
+    const resumed=await api(srv.url,"state");
+    assert.equal(resumed.result.roadTravel.pending.id,trip.id);
+    assert.equal(resumed.result.character.money,before-500);
+    assert.equal((await api(srv.url,"solo/time/advance",{preset:"5m"})).status,200);
+    const arrived=await api(srv.url,"road/arrive",{tripId:trip.id});
+    assert.equal(arrived.status,200);
+    const result=arrived.result.roadArrivalResult;
+    assert.equal(result.pending,false);
+    assert.equal(result.byBus,true);assert.equal(result.farePaid,500);
+    assert.equal(result.accident,false);assert.equal(result.lost,false);
+    assert.equal(result.rerouted,false);assert.deepEqual(result.exercise,{});
+    assert.equal(result.toTownId,2);
+    assert.equal(arrived.result.character.townId,2);
+    assert.equal(arrived.result.character.money,before-500);
+    assert.equal(arrived.result.roadTravel.history[0].byBus,true);
+    assert.equal((await api(srv.url,"road/arrive",{tripId:trip.id}))
+      .result.roadArrivalResult.replayed,true);
+    assert.equal((await api(srv.url,"move",{townId:1})).status,200,
+      "巴士到站後原版車站電車不能退化");
+  }finally{await srv.stop();}
+});
+
+test("第64階段多人HTTP：500元巴士付款與到站權限依帳號隔離、餘額不足不可出發",async()=>{
+  const srv=await start("multi");
+  try{
+    const a=await api(srv.url,"register",{
+      username:"phase64BusUserA",password:"phase64-strong-password-a"
+    });
+    const b=await api(srv.url,"register",{
+      username:"phase64BusUserB",password:"phase64-strong-password-b"
+    });
+    assert.equal(a.status,200);assert.equal(b.status,200);
+    const ca=await api(srv.url,"character",{
+      name:"巴士甲",gender:"other",stats:defaultStats()
+    },a.cookie);
+    const cb=await api(srv.url,"character",{
+      name:"巴士乙",gender:"other",stats:defaultStats()
+    },b.cookie);
+    assert.equal(ca.status,200);assert.equal(cb.status,200);
+    const db=new DatabaseSync(join(srv.directory,"multi.sqlite"));
+    try{
+      const bId=db.prepare("SELECT user_id FROM characters WHERE name=?").get("巴士乙").user_id;
+      db.prepare("UPDATE characters SET money=499 WHERE user_id=?").run(bId);
+    }finally{db.close();}
+    const payload={toTownId:1,byBus:true,requestId:"phase64_same_multi_bus"};
+    assert.equal((await api(srv.url,"road/start",payload)).status,401);
+    const first=await api(srv.url,"road/start",payload,a.cookie);
+    assert.equal(first.status,200);
+    assert.equal(first.result.character.money,ca.result.character.money-500);
+    assert.equal((await api(srv.url,"road/start",payload,b.cookie)).status,400,
+      "B 的現金不足不能搭別人的巴士");
+    assert.equal((await api(srv.url,"state",undefined,b.cookie)).result.character.money,499);
+    assert.equal((await api(srv.url,"road/arrive",{
+      tripId:first.result.roadStartResult.id
+    },b.cookie)).status,400);
+    const aTrip=(await api(srv.url,"state",undefined,a.cookie)).result.roadTravel.pending;
+    const bTrip=(await api(srv.url,"state",undefined,b.cookie)).result.roadTravel.pending;
+    assert.equal(aTrip.byBus,true);assert.equal(bTrip,null);
+    const db2=new DatabaseSync(join(srv.directory,"multi.sqlite"));
+    try{
+      const bId=db2.prepare("SELECT user_id FROM characters WHERE name=?").get("巴士乙").user_id;
+      db2.prepare("UPDATE characters SET money=100000 WHERE user_id=?").run(bId);
+    }finally{db2.close();}
+    const second=await api(srv.url,"road/start",payload,b.cookie);
+    assert.equal(second.status,200);
+    assert.notEqual(second.result.roadStartResult.id,first.result.roadStartResult.id);
+    assert.equal(second.result.character.money,99500);
+    assert.equal((await api(srv.url,"road/start",payload,a.cookie)).result.roadStartResult.replayed,true);
+  }finally{await srv.stop();}
+});
