@@ -493,12 +493,35 @@ body.compact-status-active .game-shell .facility-pane{scroll-margin-top:7rem}
 }
 
 /* 原版物品欄：商品分類與可使用性優先，購買及歷史收合，不重複技術欄位。 */
+/* 容量是「有效格數」而不是耐久回數；小螢幕自動由三欄折行。 */
+.inventory-capacity{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.35rem;margin:.35rem 0}
+.inventory-capacity>div{min-width:0;display:grid;gap:.16rem;padding:.4rem .45rem;
+  border:1px solid #d6c99f;border-radius:4px;background:#fff6da;color:#3b412c}
+.inventory-capacity span{font-size:.74rem;color:#5f543a}
+.inventory-capacity strong{font-size:.86rem;line-height:1.25;font-variant-numeric:tabular-nums;
+  overflow-wrap:anywhere;color:#28452d}
+.inventory-capacity-rules{margin:.35rem 0 .55rem;padding:.3rem .45rem;
+  border:1px solid #dad7c5;border-radius:4px;background:#fffdf5;color:#344533}
+.inventory-capacity-rules>summary{cursor:pointer;font-weight:650;font-size:.78rem;color:#345740}
+.inventory-capacity-rules .small{margin:.3rem 0}
+@media(max-width:480px){
+  .inventory-capacity{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .inventory-capacity>div:first-child{grid-column:1/-1}
+}
 .inventory-catalog{display:grid;gap:.5rem;min-width:0}
 .inventory-category{min-width:0}
 .game-shell .inventory-panel .inventory-category-heading{
-  margin:.5rem 0 .15rem;padding:.35rem .45rem;border:1px solid #dbcb94;
-  background:#fff0ac;color:#493a23;border-radius:3px;font-size:.83rem
+  display:list-item;margin:.35rem 0 0;padding:.42rem .55rem;border:1px solid #dbcb94;
+  background:#fff0ac;color:#493a23;border-radius:3px;font-size:.83rem;
+  font-weight:750;cursor:pointer;list-style-position:inside
 }
+.game-shell .inventory-panel .inventory-category[open]>.inventory-category-heading{
+  border-radius:3px 3px 0 0
+}
+.game-shell .inventory-panel .inventory-category-heading:focus-visible{
+  outline:2px solid #215c43;outline-offset:2px
+}
+.inventory-category-items{display:grid;gap:0;min-width:0}
 .inventory-item{padding:.45rem .5rem;border:1px solid #e4dcc2;border-top:0;background:#fffdf5;
   min-width:0;display:grid;gap:.28rem;color:#2c3a2d}
 .inventory-item:nth-of-type(odd){background:#fff9ea}
