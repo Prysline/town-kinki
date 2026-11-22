@@ -216,6 +216,26 @@ test("Chrome：桌面→768px平板→375px手機，操作真實建角／工作�
     await until(chrome,"parseInt(document.querySelector('#work-count')?.textContent||'0',10)>=1","實際工作完成");
     await click(chrome,"#solo-starter-create");
     await until(chrome,"document.querySelector('#solo-starter-town')?.hidden===true","試玩街區完成");
+    await until(chrome,"document.querySelector('#solo-play-guide')?.hidden===false",
+      "試玩街區開始提供新手可操作入口");
+    // 真正 Chrome 滑鼠點擊新手推薦，不能只以靜態連結或直接 HTTP 當作地圖可達性。
+    await click(chrome,'#solo-play-guide button[data-facility="fishing-panel"]');
+    assert.equal(await evaluate(chrome,"document.activeElement?.id"),"fishing-panel");
+    assert.equal(await evaluate(chrome,"document.querySelector('#facility-pane-shops')?.hidden"),false);
+    await click(chrome,'#solo-play-guide button[data-facility="inventory-panel"]');
+    assert.equal(await evaluate(chrome,"document.querySelector('#inventory-panel')?.hidden"),false);
+    // 21 格實體試玩街區：真實點 D5 優惠券、D7 釣場、D8 合成、D9 遊樂中心。
+    for(const [cell,panel,pane] of [
+      ["D5","event-panel","events"],["D7","fishing-panel","shops"],
+      ["D8","crafting-panel","shops"],["D9","arcade-dice-panel","games"]
+    ]){
+      await click(chrome,'#town-map button[aria-label^='+JSON.stringify(cell+"：")+']');
+      assert.equal(await evaluate(chrome,"document.activeElement?.id"),panel,
+        cell+" 真正地圖點擊應聚焦可操作的設施");
+      assert.equal(await evaluate(chrome,
+        "document.querySelector('#facility-pane-"+pane+"')?.hidden"),false,
+        cell+" 的所屬設施分頁應開啟");
+    }
     await click(chrome,"#facility-tab-bank");
     await fill(chrome,'#bank-form [name="amount"]',"100");
     const before=await evaluate(chrome,"(async()=>{const j=await(await fetch('/api/state')).json();return {money:j.character.money,bank:j.character.bank}})()");

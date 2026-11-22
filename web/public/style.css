@@ -40,6 +40,9 @@
 .map-starter{margin:.75rem 0;padding:.85rem;border:1px solid #cddbd0;border-radius:9px;background:#f4f8f3}
 .map-starter p{margin:.4rem 0 .75rem;line-height:1.6}
 .map-starter button{max-width:100%;white-space:normal}
+.solo-play-guide h3{margin:.1rem 0 .45rem}
+.starter-guide-actions{display:flex;gap:.5rem;flex-wrap:wrap;margin:.6rem 0}
+.starter-guide-actions button{flex:0 1 auto}
 .map-editor label{margin-bottom:.4rem}
 .map-editor-switch{display:flex;align-items:center;gap:.5rem;margin-bottom:.55rem!important}
 .map-editor-switch input{width:auto;margin:0}

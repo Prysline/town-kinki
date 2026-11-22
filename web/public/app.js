@@ -385,6 +385,8 @@ function renderTownMap() {
   const editor = el("map-editor");
   editor.hidden = !map.editable;
   el("solo-starter-town").hidden=!(state.mode==="solo"&&!map.configured);
+  // 只在玩家親自啟用的 Web 試玩街區呈現，不替原版／自訂地圖虛構設施。
+  el("solo-play-guide").hidden=!(state.mode==="solo"&&map.source==="web-solo-starter");
   const palette = el("map-palette");
   const previousSymbol = palette.value;
   palette.replaceChildren();
@@ -4505,6 +4507,10 @@ el("mail-compose").addEventListener("submit",event=>{
   submitPrivateMail(recipientName,message);
 });
 el("facility-shortcuts").addEventListener("click",event=>{
+  const button=event.target.closest("button[data-facility]");
+  if(button)goToFacility(button.dataset.facility);
+});
+el("solo-play-guide").addEventListener("click",event=>{
   const button=event.target.closest("button[data-facility]");
   if(button)goToFacility(button.dataset.facility);
 });

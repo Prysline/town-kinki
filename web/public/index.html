@@ -184,6 +184,19 @@
             <p class="small">這份原版儲存庫沒有四座城鎮的實際街區存檔；目前的空白地圖不是遊戲故障。可以自行建立只含已知原版建築代碼的 Web 試玩街區，快速使用百貨店、食堂、職業介紹所、教室及住宅用空地。<strong>這不是原版歷史地圖</strong>，只在此城鎮尚未配置任何街區、房屋時提供；不會覆蓋已有資料。</p>
             <button id="solo-starter-create" type="button">建立這座城鎮的單機試玩街區</button>
           </section>
+          <section id="solo-play-guide" class="map-starter solo-play-guide" hidden aria-labelledby="solo-play-guide-title">
+            <h3 id="solo-play-guide-title">第一次在試玩街區遊玩？</h3>
+            <p class="small">可以先工作取得現金，再逛百貨、到背包使用物品。釣魚要先購買魚餌，合成需要真正持有材料；遊樂中心有下注風險。這些按鈕只帶你前往已存在的功能，不會自動扣款或贈送物品。</p>
+            <div class="starter-guide-actions" aria-label="單機試玩推薦入口">
+              <button type="button" data-facility="jobs-panel">工作賺錢</button>
+              <button type="button" data-facility="retail-panel">逛百貨</button>
+              <button type="button" data-facility="inventory-panel">查看背包</button>
+              <button type="button" data-facility="fishing-panel">釣魚與買餌</button>
+              <button type="button" data-facility="crafting-panel">合成屋</button>
+              <button type="button" data-facility="arcade-dice-panel">遊樂中心</button>
+            </div>
+            <p class="small">也可以直接點地圖上的建築，例如 D5「クーポン」兌換所、D7「釣り」釣場、D8「合成」合成屋與 D9「ゲーセン」遊樂中心。這是 Web 試玩地圖，不是原版歷史街區。</p>
+          </section>
           <details class="explain"><summary>地圖操作說明</summary><p class="small">點擊已配置的建築圖示可開啟已支援設施；尚未移植的設施只顯示說明，不會產生虛構操作。</p></details>
           
           <div class="map-scroll" tabindex="0" aria-label="城鎮街區地圖，可水平捲動">
