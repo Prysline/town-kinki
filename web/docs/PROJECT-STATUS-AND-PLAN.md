@@ -62,7 +62,7 @@
 | BK-01 | 普通與定存、計息與帳簿 | 部分實作 | 既有盤點列有程式／測試線索；本輪未逐項重跑，需按風險核對 | 未驗（無真人實機證據） | 原版完整等價性待核實（不得以入口／測試數量代替） | [`migration-audit.md`](migration-audit.md) 原始 CGI 與 Web 來源列；src/banking.mjs；tests/banking.test.mjs | 先查核：利率已有 Web 規則，計息觸發時點與原版不完全同等 | P2 |
 | BK-02 | 玩家轉帳與額度 | 部分實作 | 既有盤點列有程式／測試線索；本輪未逐項重跑，需按風險核對 | 未驗（無真人實機證據） | 原版完整等價性待核實（不得以入口／測試數量代替） | [`migration-audit.md`](migration-audit.md) 原始 CGI 與 Web 來源列；src/banking.mjs；src/server.mjs | 先查核：身份校驗與原子交易已載明；需逐項反查原始限制 | 後續／P2 |
 | BK-03 | 住宅貸款及每日還款 | 部分實作 | 既有盤點列有程式／測試線索；本輪未逐項重跑，需按風險核對 | 未驗（無真人實機證據） | 原版完整等價性待核實（不得以入口／測試數量代替） | [`migration-audit.md`](migration-audit.md) 原始 CGI 與 Web 來源列；src/banking.mjs；tests/loans.test.mjs | 先查核：負餘額與違約模式保留 Web 差異；無法稱為等價 | P2 |
-| BK-04 | 原版定期徵稅 | 未實作 | 尚無針對原版跨日徵稅執行的 Web 驗證證據 | 未驗（無真人實機證據） | 已確認原版 `town_maker.cgi::login_view` 有徵稅路徑；Web 缺該流程 | `town_maker.cgi::login_view`、[來源重盤點](phase30-source-recheck.md)、`src/server.mjs` | 核實當前 Web 日期結算未執行的稅務扣款、風險與單機可達條件；定義安全入帳測試 | P1（先確認現行缺口） |
+| BK-04 | 原版定期徵稅 | 指定範圍已實作（Web 安全差異） | `tests/banking.test.mjs` 稅率／K 點／快照／不足額／回滾；`tests/server.test.mjs` 單機快轉星期一→扣款→防重→SQLite 重啟；CI 以 GitHub 實際結果為準 | 未驗（無真人實機證據） | 星期一按前次已存資產徵稅；Web 使用遊戲當地日期，普通存款不足整筆記未繳且不自動追繳，舊 Web SQLite 首次使用當日不補課；K 點來源仍預設 0，尚未移植取得機制 | `town_maker.cgi::login_view`；`src/banking.mjs`、`src/server.mjs`、`public/app.js`、`tests/banking.test.mjs`、`tests/server.test.mjs` | 依新資產快照完成每日結算；待 CI、真人 UI 驗收及欠稅後續政策，不能宣稱完全等價 | P1（指定範圍） |
 | BK-05 | 原版 A～E 股票市場及持股紀錄 | 未實作 | 無已移植玩法驗證；原版來源需核對 | 未驗（無真人實機證據） | 原版已確認有程式或資料；可達條件仍依來源核定 | [`migration-audit.md`](migration-audit.md) 原始 CGI 與 Web 來源列；src/banking.mjs 只有銀行／貸款模組，無股價交易 | 先查核：原版有獨立五類股價、持股、交易與清算記錄；不可因 Web 已有銀行而算股票已移植 | 後續／P2 |
 | IT-01 | 原版 33 欄商品格式與 Web 背包 | 部分實作 | `inventory-capacity-collapsible.test.mjs` 核對原版 25／10／10 格與分類 HTML；`browser-viewport-smoke.test.mjs` 真實 Chrome 操作背包兩種分類、收合持續性與 375／768px 檢視；其餘 33 欄與物品範圍仍依各專項回歸 | 未驗（無真人實機證據） | 原版完整等價性待核實（不得以入口／測試數量代替） | [`migration-audit.md`](migration-audit.md) 原始 CGI 與 Web 來源列；src/legacy-inventory.mjs；src/legacy-item-use.mjs | 先查核：Web 新商品使用原版 33 欄與已核實作用，不需舊玩家持有物匯入 | P1 |
 | IT-02 | 可確認消耗品／耐久 | 部分實作（PR #98 寵物／信用卡，新增七款原版食物標記修復） | 既有日／回耐久、17 能力、冷卻與防重；[PR #98](https://github.com/Prysline/town-kinki/pull/98) 寵物／卡片及 Chrome UI；`legacy-item-use.test.mjs` 新增七款逐筆來源、能力／熱量／BMI／食物共用60分鐘限制及偽造來源拒絕，`server.test.mjs` 新增真實百貨購買兩款→使用→拒絕→重啟→快轉再用測試；CI 與 PR 結果以最新 GitHub 紀錄為準 | 未驗（無真人實機證據） | 原版 `command.pl::buy_syouhin` 會依 `食料品`／`ファ` 標記改分類；`basic.cgi::item_do` 仍按普通食物扣耐久、提升能力、加熱量並要求用餐冷卻。Web 先前會轉類但把這兩種標記當成不支援，並非原版沒有使用功能 | [原版商品來源](https://github.com/Prysline/town-kinki/blob/master/dat_dir/syouhin.cgi)、`src/retail.mjs`、`src/legacy-item-use.mjs`、`tests/legacy-item-use.test.mjs`、`tests/server.test.mjs`、[七款來源差異](#2026-11-23-it-02原版食物標記轉類後無法使用的修復) | 僅放行七款來源不變欄位相符的實際食物標記，原 33 欄保持唯讀，現金／庫存／耐久／冷卻與防重仍由既有交易保護；其他特殊商品、不同類別或未核實效果不自動擴大；真人 UI 操作仍未驗收 | P1 |
@@ -205,3 +205,12 @@
 - [原版舊玩家匯入排除政策](project-scope-no-legacy-player-import.md)；[最新合併 PR](https://github.com/Prysline/town-kinki/pulls?q=is%3Apr+is%3Amerged)；[CI](https://github.com/Prysline/town-kinki/actions)。
 
 此檔不修改原始 CGI、Web API、遊戲規則或 SQLite schema；只為下次開發提供可回查的現行判讀與排序。
+
+
+### 2026-11-23 BK-04：星期一原版徵稅的 Web 安全移植
+
+- **原版基準**：`town_maker.cgi::login_view` 原版在日期變更且本地星期一，先計普通／定期利息與住宅貸款，再以**先前保存**的 `k_sousisan` 算出稅；資產不超過 100 萬免稅，往上級距 1%／3%／5%／7%。K 點 25／50／100／250／500／1000 有不同折扣，不能當成單調倍率。
+- **實作範圍**：`bank_tax_state` 保存最近主畫面已存資產快照（現金＋普通存款＋超級定期－尚未還款總額，負數稅基按零計）；`bank_tax_assessments` 以 `(user_id,tax_day)` 做唯一結算紀錄。每次首次跨日結算於遊戲當地星期一發生，稅額依**前次快照**計算，不補計缺席的多個星期一。完整普通存款支付才從普通銀行扣除，銀行通帳記「每週納稅」；沒有正額稅則只留稅務紀錄。
+- **Web 安全差異**：原版可以把銀行扣成負值；Web 不允許負餘額，普通存款不足時整筆記為未繳，暫不追繳、不動現金／定存。原版用伺服器星期一；單機 Web 使用可快轉的遊戲當地日期，避免真實星期與遊戲日期衝突。超出 JS 安全整數範圍拒絕更新並保持交易回滾。
+- **舊檔相容**：只 `CREATE TABLE IF NOT EXISTS` 新稅務表，不更動舊有帳戶欄位和餘額；在初次讀取舊 Web 角色時建立當日稅基快照，不追溯舊日期扣款。這不是舊 CGI 存檔匯入。
+- **可驗證範圍**：`tests/banking.test.mjs` 覆蓋免稅／級距／K 點／快照／不足額／回滾；`tests/server.test.mjs` 透過真實 HTTP 單機快轉星期一、檢查銀行帳簿與重啟持久化。通過測試只能代表自動驗證，不等於真人 Chrome 實際驗收。

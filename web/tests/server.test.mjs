@@ -1128,6 +1128,70 @@ test("多人：非屋主無法改裝，同時改裝依伺服器餘額只扣一�
 });
 
 
+test("BK-04 單機星期一真實 HTTP：快轉徵稅、重送、SQLite 重啟與帳簿一致",async()=>{
+  const srv=await start("solo");
+  let restarted=null;
+  try{
+    const created=await api(srv.url,"character",{
+      name:"每週稅務居民",gender:"other",stats:defaultStats()
+    });
+    assert.equal(created.status,200);
+    const now=Date.now();
+    const format=new Intl.DateTimeFormat("en-US",{
+      timeZone:"Asia/Taipei",weekday:"short",year:"numeric",month:"2-digit",day:"2-digit",
+      hour:"2-digit",minute:"2-digit",second:"2-digit",hourCycle:"h23"
+    });
+    const parts=Object.fromEntries(format.formatToParts(new Date(now))
+      .filter(p=>p.type!=="literal").map(p=>[p.type,p.value]));
+    const weekday={Sun:0,Mon:1,Tue:2,Wed:3,Thu:4,Fri:5,Sat:6}[parts.weekday];
+    const elapsed=((Number(parts.hour)*60+Number(parts.minute))*60+Number(parts.second))*1000;
+    const week=7*86400000;
+    const offset=((7-weekday)%7*86400000+43200000-elapsed+week)%week;
+    const sunParts=Object.fromEntries(format.formatToParts(new Date(now+offset))
+      .filter(p=>p.type!=="literal").map(p=>[p.type,p.value]));
+    const sunday=sunParts.year+"-"+sunParts.month+"-"+sunParts.day;
+    const monday=new Date(Date.parse(sunday+"T12:00:00Z")+86400000)
+      .toISOString().slice(0,10);
+    assert.equal(sunParts.weekday,"Sun");
+    const sqlitePath=join(srv.directory,"solo.sqlite");
+    const db=new DatabaseSync(sqlitePath);
+    try{
+      db.prepare("UPDATE solo_clock SET offset_ms=? WHERE id=1").run(offset);
+      // 略過與稅務無關的原版隨機每日事件，避免先在主畫面獲得現金獎勵。
+      db.prepare("UPDATE characters SET money=0,bank=2000000,kpoint=0,last_event_day=? WHERE name='每週稅務居民'").run(monday);
+      db.prepare("UPDATE bank_accounts SET last_interest_day=?").run(sunday);
+    }finally{db.close();}
+    const before=await api(srv.url,"state");
+    assert.equal(before.status,200);
+    assert.equal(before.result.bankTax.snapshotDay,sunday);
+    assert.equal(before.result.bankTax.assessmentBase,2000000);
+    const moved=await api(srv.url,"solo/time/advance",{preset:"1d"});
+    assert.equal(moved.status,200);
+    assert.equal(moved.result.bankTax.lastAssessment.due,20000);
+    assert.equal(moved.result.bankTax.lastAssessment.paid,20000);
+    assert.equal(moved.result.bankTax.lastAssessment.assessmentBase,2000000);
+    assert.equal(moved.result.character.bank,1990000);
+    assert.deepEqual(moved.result.bankLedger.slice(0,2).map(x=>x.action),
+      ["每週納稅","普通存款利息"]);
+    const replay=await api(srv.url,"state");
+    assert.equal(replay.result.character.bank,1990000);
+    assert.equal(replay.result.bankTax.lastAssessment.day,moved.result.bankTax.lastAssessment.day);
+    await srv.stop({preserveData:true});
+    restarted=await start("solo",null,srv.directory);
+    const persistent=await api(restarted.url,"state");
+    assert.equal(persistent.result.character.bank,1990000);
+    assert.equal(persistent.result.bankTax.lastAssessment.paid,20000);
+    const saved=new DatabaseSync(sqlitePath);
+    try{
+      assert.equal(saved.prepare("SELECT COUNT(*) n FROM bank_tax_assessments").get().n,1);
+      assert.equal(saved.prepare("SELECT SUM(debit) n FROM bank_ledger WHERE action='每週納稅'").get().n,20000);
+    }finally{saved.close();}
+  } finally{
+    if(restarted)await restarted.stop();
+    else await srv.stop();
+  }
+});
+
 test("單機：普通與定期存款每日計息一次，帳簿記錄與全額解約均能持久化", async () => {
   const srv=await start("solo");
   try {
