@@ -762,7 +762,7 @@ test("第66階段：18種百貨原始商品真實扣款、33欄入庫及實際�
     assert.equal(db.prepare("SELECT COUNT(*) n FROM retail_purchases WHERE user_id=1").get().n,18);
     assert.equal(db.prepare("SELECT COUNT(*) n FROM legacy_inventory_items WHERE user_id=1").get().n,18);
     const mig=receipts.find(x=>x.name==="ミグ25");
-    const trip=start(db,{vehicleSourceLine:mig.sourceLine,requestId:"phase66_gift_mig",lostRoll:4});
+    const trip=start(db,{vehicleSourceLine:mig.sourceLine,requestId:"phase66_gift_mig",lostRoll:4,rolls:[9]});
     assert.equal(trip.seconds,0);
     assert.equal(trip.vehicleName,"ミグ25");
     assert.equal(trip.pending,true);
