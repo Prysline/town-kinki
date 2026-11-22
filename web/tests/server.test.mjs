@@ -6117,3 +6117,70 @@ test("第65階段多人HTTP：兩位真實百貨購買者各自搭自己的輪�
     },a.cookie)).result.roadStartResult.replayed,true);
   }finally{await srv.stop();}
 });
+
+test("第66階段單機HTTP：専門店標示與ギフト原始車真正從百貨購買，分別出發、重啟到站",async()=>{
+  let srv=await start("solo");
+  const directory=srv.directory;
+  try{
+    assert.equal((await api(srv.url,"character",{
+      name:"第66階段百貨分類驗證",gender:"other",stats:defaultStats()
+    })).status,200);
+    assert.equal((await api(srv.url,"map/tile",{row:0,column:0,symbol:"デパ"})).status,200);
+    const target=["legacy-331","legacy-396"];
+    const sqlite=new DatabaseSync(join(directory,"solo.sqlite"));
+    try{
+      for(const sku of target){
+        const found=sqlite.prepare("SELECT position FROM retail_stock WHERE shop='depart1' AND sku=?").get(sku);
+        if(!found){
+          const replacement=sqlite.prepare([
+            "SELECT position FROM retail_stock WHERE shop='depart1' AND sku NOT IN (?,?)",
+            "ORDER BY position LIMIT 1"
+          ].join(" ")).get(...target);
+          assert.ok(replacement);
+          sqlite.prepare("UPDATE retail_stock SET sku=?,remaining=10 WHERE shop='depart1' AND position=?")
+            .run(sku,replacement.position);
+        }
+      }
+      sqlite.prepare("UPDATE retail_stock SET remaining=10 WHERE shop='depart1' AND sku IN (?,?)").run(...target);
+      sqlite.prepare("UPDATE characters SET money=100000000 WHERE name='第66階段百貨分類驗證'").run();
+    }finally{sqlite.close();}
+    const before=(await api(srv.url,"state")).result;
+    assert.equal(before.roadTravel.choices.length,0);
+    const receipts=[];
+    for(const [sku,name] of [["legacy-331","カローラ"],["legacy-396","ベスパ"]]){
+      const purchased=await api(srv.url,"retail/buy",{
+        shop:"depart1",sku,requestId:"phase66_http_buy_"+sku,quantity:1
+      });
+      assert.equal(purchased.status,200);
+      assert.equal(purchased.result.retailResult.name,name);
+      receipts.push(purchased.result.retailResult);
+      const choice=purchased.result.roadTravel.choices.find(x=>x.sourceLine===purchased.result.retailResult.sourceLine);
+      assert.ok(choice);
+      assert.equal(choice.origin,"retail");
+    }
+    assert.equal((await api(srv.url,"state")).result.roadTravel.choices.length,2);
+    const vehicle=receipts.find(x=>x.name==="ベスパ");
+    const balance=(await api(srv.url,"state")).result.character.money;
+    const started=await api(srv.url,"road/start",{
+      toTownId:1,vehicleSourceLine:vehicle.sourceLine,requestId:"phase66_gift_bike_depart"
+    });
+    assert.equal(started.status,200);
+    assert.equal(started.result.roadStartResult.vehicleName,"ベスパ");
+    assert.equal(started.result.roadStartResult.seconds,10);
+    assert.equal(started.result.character.money,balance);
+    const tripId=started.result.roadStartResult.id;
+    assert.equal((await api(srv.url,"road/arrive",{tripId})).status,400);
+    await srv.stop({preserveData:true});
+    srv=await start("solo",undefined,directory);
+    const restarted=(await api(srv.url,"state")).result;
+    assert.equal(restarted.roadTravel.pending.id,tripId);
+    assert.equal(restarted.roadTravel.choices.length,2);
+    assert.equal((await api(srv.url,"solo/time/advance",{preset:"5m"})).status,200);
+    const arrived=await api(srv.url,"road/arrive",{tripId});
+    assert.equal(arrived.status,200);
+    assert.equal(arrived.result.roadArrivalResult.vehicleName,"ベスパ");
+    assert.ok(arrived.result.roadTravel.choices.some(x=>x.name==="カローラ"),
+      "已購入専門店標記車仍保留原版公路用途");
+    assert.equal((await api(srv.url,"road/arrive",{tripId})).result.roadArrivalResult.replayed,true);
+  }finally{await srv.stop();}
+});
