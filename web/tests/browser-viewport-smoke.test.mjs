@@ -133,9 +133,14 @@ async function dismiss(cdp){
 }
 async function click(cdp,selector){
   await dismiss(cdp);
+  // 先完成瞬間捲動，再等待前端 scroll handler 同步顯示／隱藏固定狀態列；
+  // 直接在同一 JS task 捲動並取 elementFromPoint 會錯把舊遮罩狀態當成按鈕阻擋。
+  await evaluate(cdp,"(function(){document.querySelector("+JSON.stringify(selector)+")"+
+    "?.scrollIntoView({behavior:'instant',block:'center',inline:'nearest'});return true;})()");
+  await pause(200);
   const info=await evaluate(cdp,"(function(){const e=document.querySelector("+JSON.stringify(selector)+");"+
     "if(!e)return {error:'missing'};if(e.disabled)return {error:'disabled'};"+
-    "e.scrollIntoView({block:'center',inline:'nearest'});const r=e.getBoundingClientRect();"+
+    "const r=e.getBoundingClientRect();"+
     "const x=r.left+r.width/2,y=r.top+r.height/2;"+
     "if(!r.width||!r.height)return {error:'zero-size'};"+
     "const point=document.elementFromPoint(x,y);if(!point||!(e===point||e.contains(point)))"+
