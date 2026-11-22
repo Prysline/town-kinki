@@ -80,9 +80,15 @@ test("已核對台灣版書名與原始拼字只影響顯示，不改識別",()=
     "ハリー・ポッターと死の秘宝":"哈利波特：死神的聖物",
     "一志松本の滑らない話":"松本人志的絕不冷場故事",
     "鉄拳作品集　こんな○○は××だ!　3":"鐵拳作品集：這樣的○○是××！第3集",
-    "ニューズウイーク":"Newsweek",
-    "フラワー":"Flower"
+    "ニューズウイーク":"新聞週刊",
+    "フラワー":"Flower",
+    "成り上がり":"反敗為勝",
+    "サイエンス":"《科學》期刊",
+    "脳を鍛える大人の計算ドリル":"鍛鍊大人腦筋的計算習題"
   };
   for(const [name,expected] of Object.entries(cases))
     assert.equal(displayRetailItemName(name),expected,name);
+  // 原版固定使用大字「イ」：另一種日文寫法不得誤加為來源 key。
+  assert.ok(!Object.hasOwn(RETAIL_BOOKS_ZH_TW,"ニューズウィーク"));
+  assert.equal(displayRetailItemName("ニューズウィーク"),"ニューズウィーク");
 });
