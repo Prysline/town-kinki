@@ -555,6 +555,82 @@ test("ステータス 原版三款實際只套用能力／能量欄位，不偽�
     assert.throws(()=>use(db,1,"invalid-status-01"),/尚未支援/);
   }finally{db.close();}
 });
+test("原版七款單段食料品／ファ商品購買時轉類，照 item_do 食物規則增加能力、體重、更新 BMI 並扣回數",()=>{
+  const catalog=originalCatalogRows().filter(f=>["食料品","ファ"].includes(f[9]));
+  const sources=[
+    ["ちゃんこ","どすこいちゃんこ","食料品"],
+    ["ちゃんこ","どすこいつまみ食い","ファーストフード"],
+    ["東北名産店","笹かまぼこ","食料品"],
+    ["東北名産店","きりたんぽ鍋セット","食料品"],
+    ["東北名産店","秋田名物稲庭うどん","食料品"],
+    ["東北名産店","仙台名物牛タン焼き","食料品"],
+    ["東北名産店","仙台名物ずんだもち","食料品"]
+  ];
+  assert.deepEqual(catalog.map(f=>[f[0],f[1]]),sources.map(x=>x.slice(0,2)),
+    "目前這份 fork 的原始商品表只有七款單段食物轉類標記");
+  for(const [originalCategory,name,convertedCategory] of sources){
+    const fields=originalItem(originalCategory,name);
+    assert.equal(supportsLegacyItemUse(fields),false,
+      "未經購入轉類的原始商品不應冒充已轉類食品");
+    fields[0]=convertedCategory;
+    assert.equal(supportsLegacyItemUse(fields),true,name+" 應可預覽直接使用");
+    const db=createDb();
+    try{
+      db.prepare("UPDATE characters SET stats_json=?,body_energy=400,brain_energy=400,recovered_at=? WHERE user_id=1")
+        .run(JSON.stringify(Object.fromEntries(STAT_KEYS.map(k=>[k,1000]))),NOW);
+      addItem(db,1,fields);
+      const before=read(db);
+      const first=use(db,1,"converted-food-use-01");
+      assert.equal(first.replayed,false);
+      assert.equal(first.changes.food,true);
+      const expectedWeight=Math.round((before.weight+Number(fields[25]||0)/1000)*100)/100;
+      const result=read(db);
+      assert.equal(result.weight,expectedWeight,name);
+      assert.equal(result.bmi,Math.round(expectedWeight/((before.height/100)**2)*10)/10,name);
+      assert.equal(result.last_meal_at,NOW,name);
+      assert.equal(result.body_energy,before.body_energy-Number(fields[27]||0),name);
+      assert.equal(result.brain_energy,before.brain_energy-Number(fields[28]||0),name);
+      for(const [key,index] of STAT_KEYS.map((k,i)=>[k,[2,3,4,5,6,7,8,10,11,12,13,14,15,16,18,19,20][i]]))
+        assert.equal(result.stats[key],before.stats[key]+Number(fields[index]||0),name+" "+key);
+      const remaining=db.prepare("SELECT remaining FROM legacy_item_usage WHERE user_id=1 AND source_line=1").get().remaining;
+      assert.equal(remaining,Number(fields[21])-1,name);
+      assert.equal(use(db,1,"converted-food-use-01",NOW+1000).replayed,true,"相同 requestId 須防重");
+      assert.throws(()=>use(db,1,"converted-food-too-soon",NOW+59000),
+        Number(fields[21])>1?/60 分鐘/:/耐久已用盡/,name);
+      assert.equal(read(db).weight,expectedWeight,"冷卻失敗不可重複增重");
+      assert.deepEqual(JSON.parse(db.prepare("SELECT raw_fields_json FROM legacy_inventory_items WHERE user_id=1").get().raw_fields_json),
+        fields,"使用後不可修改原始 33 欄");
+    }finally{db.close();}
+  }
+});
+
+test("食物轉類的使用白名單拒絕未轉類、同名偽造與原始效果／價格／增益欄遭變造",()=>{
+  const legit=originalItem("ちゃんこ","どすこいちゃんこ");
+  legit[0]="食料品";
+  const cases=[
+    ["別種分類",f=>f[0]="ちゃんこ"],
+    ["同名冒用",f=>f[1]="仿製どすこいちゃんこ"],
+    ["錯誤標記",f=>f[9]="ファ"],
+    ["價格遭竄改",f=>f[17]="1"],
+    ["能力遭竄改",f=>f[2]="999"],
+    ["使用間隔遭竄改",f=>f[23]="0"],
+    ["熱量遭竄改",f=>f[25]="9999"],
+    ["能源消耗遭竄改",f=>f[27]="-500"],
+    ["耐久單位遭竄改",f=>f[22]="日"]
+  ];
+  for(const [label,mutate] of cases){
+    const fields=[...legit];mutate(fields);
+    assert.equal(supportsLegacyItemUse(fields),false,label);
+    const db=createDb();
+    try{
+      addItem(db,1,fields);
+      assert.throws(()=>use(db,1,"unverified-food-use"),/尚未支援/,label);
+      assert.equal(db.prepare("SELECT COUNT(*) AS n FROM legacy_item_use_history").get().n,0);
+      assert.equal(db.prepare("SELECT COUNT(*) AS n FROM legacy_item_usage").get().n,0);
+    }finally{db.close();}
+  }
+});
+
 test("有第三段原版食物標記的體重效果會正常生效，並遵守食物冷卻限制",()=>{
   const examples=[
     ["ちゃんこ","どすこいスーパーちゃんこ","ウエイトアップ,1,食料品",1],

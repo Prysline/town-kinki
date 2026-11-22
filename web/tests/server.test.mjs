@@ -6445,3 +6445,107 @@ test("單機實體百貨：購入ガチャピン與特殊信用卡後可背包�
     else await srv.stop();
   }
 });
+
+
+test("IT-02 單機 HTTP：百貨原版食物轉類購入→真正使用→60 分鐘限制→重啟→再吃，不變造原版資料與資產",async()=>{
+  const srv=await start("solo");
+  let resumed=null;
+  try{
+    const created=await api(srv.url,"character",{
+      name:"原版食物轉類居民",gender:"other",stats:defaultStats()
+    });
+    assert.equal(created.status,200);
+    anchorSoloTestAtNoon(srv);
+    assert.equal((await api(srv.url,"map/tile",{row:0,column:0,symbol:"デパ"})).status,200);
+    const catalog=parseLegacyRetailCatalog(decodeLegacyText(
+      readFileSync(resolve(root,"../dat_dir/syouhin.cgi"))
+    ));
+    const names=["どすこいちゃんこ","どすこいつまみ食い"];
+    const chosen=names.map(name=>{
+      const item=catalog.find(x=>x.name===name);
+      assert.ok(item,"原版商品必須存在："+name);
+      return item;
+    });
+    const sqlite=new DatabaseSync(join(srv.directory,"solo.sqlite"));
+    try{
+      const shelf=sqlite.prepare("SELECT sku,position FROM retail_stock WHERE shop='depart1'").all();
+      assert.equal(shelf.length,110);
+      const targets=new Set(chosen.map(x=>x.sku));
+      const present=new Set(shelf.map(x=>x.sku));
+      const replace=shelf.filter(x=>!targets.has(x.sku));
+      for(const item of chosen){
+        if(!present.has(item.sku)){
+          const slot=replace.shift();assert.ok(slot);
+          sqlite.prepare("UPDATE retail_stock SET sku=?,remaining=5 WHERE shop='depart1' AND position=?")
+            .run(item.sku,slot.position);
+        }else sqlite.prepare("UPDATE retail_stock SET remaining=5 WHERE shop='depart1' AND sku=?")
+          .run(item.sku);
+      }
+    }finally{sqlite.close();}
+    const initial=(await api(srv.url,"state")).result;
+    for(const item of chosen){
+      const listed=initial.retailGoods.find(x=>x.sku===item.sku&&x.shop==="depart1");
+      assert.ok(listed&&listed.stock>0);
+      assert.equal(listed.details.usage,"supported","百貨購前應提示可直接使用："+item.name);
+    }
+    const receipts=[];
+    for(let i=0;i<chosen.length;i++){
+      const bought=await api(srv.url,"retail/buy",{
+        shop:"depart1",sku:chosen[i].sku,requestId:"it02_food_marker_buy_"+i
+      });
+      assert.equal(bought.status,200,chosen[i].name);
+      const line=bought.result.retailResult.sourceLine;
+      assert.equal(bought.result.legacyInventory.find(x=>x.sourceLine===line).category,
+        i===0?"食料品":"ファーストフード","百貨購入時應按原版轉類");
+      assert.ok(bought.result.legacyItemActions.some(x=>x.sourceLine===line&&x.canUse),
+        "新購商品須有使用入口");
+      receipts.push(line);
+    }
+    const consumed=await api(srv.url,"inventory/legacy/use",{
+      sourceLine:receipts[0],requestId:"it02_food_marker_use_first"
+    });
+    assert.equal(consumed.status,200);
+    assert.equal(consumed.result.itemUseResult.changes.food,true);
+    assert.equal(consumed.result.itemUseResult.changes.weight,1.5);
+    assert.equal(consumed.result.itemUseResult.changes.stats.kokugo,2);
+    assert.equal(consumed.result.character.weight,61.5);
+    assert.equal(consumed.result.character.stats.kokugo,initial.character.stats.kokugo+2);
+    assert.equal(consumed.result.legacyItemActions.find(x=>x.sourceLine===receipts[0]).remaining,
+      chosen[0].durability-1);
+    assert.match(consumed.result.legacyItemActions.find(x=>x.sourceLine===receipts[1]).reason,/60 分鐘/);
+    const noRepeat=await api(srv.url,"inventory/legacy/use",{
+      sourceLine:receipts[1],requestId:"it02_food_marker_blocked"
+    });
+    assert.equal(noRepeat.status,400);
+    assert.equal((await api(srv.url,"state")).result.character.weight,61.5);
+    await srv.stop({preserveData:true});
+    resumed=await start("solo",null,srv.directory);
+    const saved=(await api(resumed.url,"state")).result;
+    assert.equal(saved.character.weight,61.5);
+    assert.equal(saved.legacyItemActions.find(x=>x.sourceLine===receipts[0]).remaining,
+      chosen[0].durability-1);
+    const replay=await api(resumed.url,"inventory/legacy/use",{
+      sourceLine:receipts[0],requestId:"it02_food_marker_use_first"
+    });
+    assert.equal(replay.status,200);
+    assert.equal(replay.result.itemUseResult.replayed,true);
+    assert.equal(replay.result.character.weight,61.5);
+    assert.equal((await api(resumed.url,"solo/time/advance",{preset:"1h"})).status,200);
+    const second=await api(resumed.url,"inventory/legacy/use",{
+      sourceLine:receipts[1],requestId:"it02_food_marker_use_second"
+    });
+    assert.equal(second.status,200);
+    assert.equal(second.result.itemUseResult.changes.food,true);
+    assert.equal(second.result.character.weight,63);
+    assert.equal(second.result.character.stats.kokugo,initial.character.stats.kokugo+4);
+    assert.equal(second.result.character.money,initial.character.money-
+      chosen[0].unitPrice-chosen[1].unitPrice);
+    assert.equal(second.result.legacyItemActions.find(x=>x.sourceLine===receipts[1]).remaining,
+      chosen[1].durability-1);
+    assert.equal(second.result.legacyItemHistory.length,2,
+      "跨重啟後仍只記錄兩次真實使用，重送／拒絕都不多算");
+  }finally{
+    if(resumed)await resumed.stop();
+    else await srv.stop();
+  }
+});
