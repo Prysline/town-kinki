@@ -1,18 +1,18 @@
 // TOWN 原版 dat_dir/syouhin.cgi：乗り物 11、ペット 7、餌 4，合計 22 列。
 // 僅顯示層翻譯：保留原始 CGI 名稱、分類、SKU、效果、備註與耐久。
-// 特有品牌及角色保留原名以防混淆；ナナハン指 750cc，ローラースルーGOGO 是三輪滑板車。
+// 品名採人工校對後的臺灣慣用譯名；ナナハン指 750cc，ローラースルーGOGO 顯示為三輪滑板車。
 export const RETAIL_VEHICLES_ZH_TW=Object.freeze({
-  "アルファロメオ": "Alfa Romeo（愛快羅密歐）",
-  "ボルボ": "Volvo（富豪）",
-  "ロールスロイス": "Rolls-Royce（勞斯萊斯）",
-  "カローラ": "Toyota Corolla",
+  "アルファロメオ": "愛快羅密歐",
+  "ボルボ": "富豪",
+  "ロールスロイス": "勞斯萊斯",
+  "カローラ": "豐田 Corolla",
   "ナナハン": "750cc 重機",
-  "ドゥカティ": "Ducati（杜卡迪）",
+  "ドゥカティ": "杜卡迪",
   "自転車": "腳踏車",
-  "スカイラインGTR": "Nissan Skyline GT-R",
-  "ベンツ": "Mercedes-Benz（賓士）",
-  "スーパーカブ": "Honda Super Cub",
-  "ローラースルーゴーゴー": "Roller Through GOGO（三輪滑板車）"
+  "スカイラインGTR": "日產 Skyline GT-R",
+  "ベンツ": "賓士",
+  "スーパーカブ": "本田小狼",
+  "ローラースルーゴーゴー": "三輪滑板車"
 });
 export const RETAIL_PETS_ZH_TW=Object.freeze({
   "キリン": "長頸鹿",
@@ -21,7 +21,7 @@ export const RETAIL_PETS_ZH_TW=Object.freeze({
   "豚": "豬",
   "チンパンジー": "黑猩猩",
   "ゴリラ": "大猩猩",
-  "ガチャピン": "Gachapin（綠色恐龍）"
+  "ガチャピン": "卡恰賓"
 });
 export const RETAIL_BAIT_ZH_TW=Object.freeze({
   "魚ルアー（中）": "釣魚路亞（中）",

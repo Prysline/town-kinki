@@ -61,13 +61,35 @@ test("原始 SKU、商品分類、來源行與效果不因顯示翻譯而改變"
 test("專有車款、角色名稱與原文未知商品維持可辨識的名稱",()=>{
   const expected={
     "ナナハン":"750cc 重機",
-    "スカイラインGTR":"Nissan Skyline GT-R",
-    "ローラースルーゴーゴー":"Roller Through GOGO（三輪滑板車）",
-    "ガチャピン":"Gachapin（綠色恐龍）",
+    "スカイラインGTR":"日產 Skyline GT-R",
+    "ローラースルーゴーゴー":"三輪滑板車",
+    "ガチャピン":"卡恰賓",
     "魚ルアー（大）":"釣魚路亞（大）"
   };
   for(const [original,translated] of Object.entries(expected))
     assert.equal(displayRetailItemName(original),translated);
   assert.equal(displayRetailItemName("未知商品"),"未知商品");
   assert.equal(displayRetailItemCategory("未知分類"),"未知分類");
+});
+
+// 人工校對固定值：避免日後重新引入英中並列的舊商品顯示名稱。
+test("交通工具與卡恰賓採用人工確認的臺灣繁中名稱",()=>{
+  const expected={
+  "アルファロメオ": "愛快羅密歐",
+  "ボルボ": "富豪",
+  "ロールスロイス": "勞斯萊斯",
+  "カローラ": "豐田 Corolla",
+  "ナナハン": "750cc 重機",
+  "ドゥカティ": "杜卡迪",
+  "自転車": "腳踏車",
+  "スカイラインGTR": "日產 Skyline GT-R",
+  "ベンツ": "賓士",
+  "スーパーカブ": "本田小狼",
+  "ローラースルーゴーゴー": "三輪滑板車",
+  "ガチャピン": "卡恰賓"
+};
+  for(const [original,localized] of Object.entries(expected)){
+    assert.equal(displayRetailTransportPetsBaitName(original),localized,original);
+    assert.equal(displayRetailItemName(original),localized,original);
+  }
 });
