@@ -7,7 +7,7 @@ import {RETAIL_DVD_ZH_TW,displayRetailDvdName,displayRetailDvdCategory} from "..
 import {displayRetailItemName,displayRetailItemCategory} from "../public/retail-item-translations.js";
 
 const raw=decodeLegacyText(readFileSync(new URL("../../dat_dir/syouhin.cgi",import.meta.url)));
-const rows=raw.split(/\\r?\\n/).map((line,i)=>({line:i+1,fields:line.split("<>")}));
+const rows=raw.split(/\r?\n/).map((line,i)=>({line:i+1,fields:line.split("<>")}));
 const source=rows.filter(x=>x.fields[0]==="DVD");
 
 // 33 個來源鍵包含原版拼字（例如 KILL BIL、vo.1），絕不修成另一個 key。
