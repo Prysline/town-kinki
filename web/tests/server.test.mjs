@@ -5954,3 +5954,90 @@ test("第64階段多人HTTP：500元巴士付款與到站權限依帳號隔離�
     assert.equal((await api(srv.url,"road/start",payload,a.cookie)).result.roadStartResult.replayed,true);
   }finally{await srv.stop();}
 });
+
+test("第65階段單機HTTP：百貨真購原版腳踏車與輪滑車、迷路事故、跨重啟、到站電車回歸",async()=>{
+  let srv=await start("solo");
+  const directory=srv.directory;
+  try{
+    anchorSoloTestAtNoon(srv);
+    const created=await api(srv.url,"character",{
+      name:"第65階段百貨公路客",gender:"other",stats:defaultStats()
+    });
+    assert.equal(created.status,200);
+    assert.equal((await api(srv.url,"map/tile",{
+      row:0,column:0,symbol:"デパ"
+    })).status,200);
+    const targetSkus=["legacy-334","legacy-338"];
+    const database=new DatabaseSync(join(directory,"solo.sqlite"));
+    try{
+      for(const sku of targetSkus){
+        const present=database.prepare("SELECT position FROM retail_stock WHERE shop='depart1' AND sku=?").get(sku);
+        if(present)continue;
+        const replace=database.prepare([
+          "SELECT position FROM retail_stock WHERE shop='depart1'",
+          "AND sku NOT IN (?,?) ORDER BY position LIMIT 1"
+        ].join(" ")).get(...targetSkus);
+        assert.ok(replace);
+        database.prepare("UPDATE retail_stock SET sku=?,remaining=20 WHERE shop='depart1' AND position=?")
+          .run(sku,replace.position);
+      }
+      database.prepare("UPDATE retail_stock SET remaining=20 WHERE shop='depart1' AND sku IN (?,?)")
+        .run(...targetSkus);
+      database.prepare("UPDATE characters SET money=1000000 WHERE name='第65階段百貨公路客'").run();
+    }finally{database.close();}
+    const before=(await api(srv.url,"state")).result;
+    assert.equal(before.roadTravel.choices.length,0);
+    const purchaseLines=new Map();
+    for(const [sku,name] of [["legacy-334","自転車"],["legacy-338","ローラースルーゴーゴー"]]){
+      const bought=await api(srv.url,"retail/buy",{
+        shop:"depart1",sku,quantity:1,requestId:"phase65_http_buy_"+sku
+      });
+      assert.equal(bought.status,200,name+" 必須真實 HTTP 購買入庫");
+      assert.equal(bought.result.retailResult.name,name);
+      assert.ok(bought.result.retailResult.paid>0);
+      purchaseLines.set(name,bought.result.retailResult.sourceLine);
+      assert.ok(bought.result.roadTravel.choices.some(x=>x.sourceLine===bought.result.retailResult.sourceLine&&x.origin==="retail"));
+    }
+    const state=await api(srv.url,"state");
+    assert.equal(state.result.roadTravel.choices.length,2);
+    const bike=state.result.roadTravel.choices.find(x=>x.name==="自転車");
+    assert.equal(bike.seconds,15);
+    const balance=state.result.character.money;
+    const payload={toTownId:1,vehicleSourceLine:bike.sourceLine,
+      requestId:"phase65_http_retail_bike"};
+    const started=await api(srv.url,"road/start",payload);
+    assert.equal(started.status,200);
+    assert.equal(started.result.roadStartResult.vehicleName,"自転車");
+    assert.equal(started.result.roadStartResult.seconds,15);
+    assert.equal(started.result.roadStartResult.pending,true);
+    assert.equal(started.result.roadStartResult.lost,undefined);
+    assert.equal(started.result.character.money,balance,"已購入載具出發不再額外收費");
+    assert.equal((await api(srv.url,"road/start",payload)).result.roadStartResult.replayed,true);
+    assert.equal((await api(srv.url,"move",{townId:2})).status,400);
+    const trip=started.result.roadStartResult;
+    const db=new DatabaseSync(join(directory,"solo.sqlite"));
+    let actual;
+    try{
+      actual=db.prepare("SELECT to_town,requested_to_town,lost,rerouted,accident FROM arcade_road_trips WHERE id=?").get(trip.id);
+      assert.equal(actual.lost,1,"百貨輪滑車只要合法持有即原版必迷路");
+      assert.equal(actual.rerouted,actual.accident?1:0);
+      assert.equal(actual.requested_to_town,1);
+    }finally{db.close();}
+    await srv.stop({preserveData:true});
+    srv=await start("solo",undefined,directory);
+    const resume=(await api(srv.url,"state")).result;
+    assert.equal(resume.roadTravel.pending.id,trip.id);
+    assert.equal(resume.character.money,balance);
+    assert.equal(resume.roadTravel.choices.some(x=>x.sourceLine===purchaseLines.get("ローラースルーゴーゴー")),true);
+    assert.equal((await api(srv.url,"solo/time/advance",{preset:"5m"})).status,200);
+    const arrived=await api(srv.url,"road/arrive",{tripId:trip.id});
+    assert.equal(arrived.status,200);
+    const done=arrived.result.roadArrivalResult;
+    assert.equal(done.lost,true);
+    assert.equal(done.rerouted,Boolean(actual.accident));
+    assert.equal(done.toTownId,actual.to_town);
+    assert.equal(arrived.result.character.townId,actual.to_town);
+    assert.equal((await api(srv.url,"road/arrive",{tripId:trip.id})).result.roadArrivalResult.replayed,true);
+    assert.equal((await api(srv.url,"move",{townId:(actual.to_town+1)%4})).status,200);
+  }finally{await srv.stop();}
+});
