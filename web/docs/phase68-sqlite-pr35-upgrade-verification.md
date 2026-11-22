@@ -20,7 +20,7 @@
 
 ## 證據與未完成事項
 
-- 對應 PR：[測試補強 PR #94](https://github.com/Prysline/town-kinki/pull/94)。只有該 PR 的**最終 HEAD** push 與 pull_request CI 均成功，才可以在現行計畫將此單一歷史版本的自動驗證記為已通過。
+- **已完成並合併**：[測試補強 PR #94](https://github.com/Prysline/town-kinki/pull/94)，其[最終 HEAD push CI](https://github.com/Prysline/town-kinki/actions/runs/45020757083) 與 [PR CI](https://github.com/Prysline/town-kinki/actions/runs/45020761866)、[合併後 Web push](https://github.com/Prysline/town-kinki/actions/runs/45021154461) 與 [PR #1 回歸](https://github.com/Prysline/town-kinki/actions/runs/45021159489) 均成功。這只能證明 **PR #35 代表性歷史 schema 子集**通過自動驗證，不可延伸為完整跨版本矩陣。
 - **已知已有證據**：第48階段同一 SQLite 跨兩次 Node 重啟；第67階段現行版 WAL 備份→新目錄還原→HTTP 續玩。這裡補的是不同版本資料表欄位與舊資產保護，絕不重做那些流程。
 - **仍待**：其他真正有 schema 變更的中期／後期 Web 歷史版本（釣魚、合成、郵件、公路等）、不同 OS／設備的實地還原、真人桌面與375／768px瀏覽器操作、部署備份輪替及正式環境安全。
 
