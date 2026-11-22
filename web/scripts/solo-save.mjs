@@ -3,7 +3,7 @@
 // backup 使用 SQLite 線上快照（含 WAL 中已提交交易），不可直接複製使用中的 .sqlite。
 // restore 只還原到沒有 solo.sqlite 的新資料夾，不覆寫目前單機存檔。
 import { DatabaseSync, backup } from "node:sqlite";
-import { chmodSync, copyFileSync, existsSync, linkSync, mkdirSync, rmSync, statSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, linkSync, mkdirSync, rmSync, statSync, openSync, readSync, closeSync } from "node:fs";
 import { createHash, randomBytes } from "node:crypto";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -41,6 +41,16 @@ export function parseOptions(args){
   };
 }
 
+function fileSha256(file){
+  const hash=createHash("sha256");
+  const fd=openSync(file,"r");
+  const chunk=Buffer.allocUnsafe(1024*1024);
+  try{
+    let n;
+    while((n=readSync(fd,chunk,0,chunk.length,null))>0)hash.update(chunk.subarray(0,n));
+    return hash.digest("hex");
+  }finally{closeSync(fd);}
+}
 function sourceDatabase(file){
   if(!existsSync(file)||!statSync(file).isFile())
     throw new Error("找不到單機 SQLite 存檔／備份檔："+file);
@@ -63,11 +73,7 @@ export function verifySoloDatabase(file){
     const clock=db.prepare("SELECT COUNT(*) AS n FROM solo_clock WHERE id=1").get().n;
     if(users<1||clock!==1||characters>users)
       throw new Error("單機角色或遊戲時間資料缺失");
-    return {users,characters,bytes:statSync(file).size,
-      sha256:createHash("sha256").update(
-        // 用串流外部工具算檔案雜湊可減記憶體；此處驗證完整 SQLite 後只回報基本摘要。
-        file
-      ).digest("hex")};
+    return {users,characters,bytes:statSync(file).size,sha256:fileSha256(file)};
   }finally{db.close();}
 }
 
@@ -114,8 +120,8 @@ export function restoreSolo({dataDir,file}){
     copyFileSync(file,temp);
     chmodSync(temp,0o600);
     const copied=verifySoloDatabase(temp);
-    if(original.bytes!==copied.bytes)
-      throw new Error("複製後的備份大小與來源不一致");
+    if(original.sha256!==copied.sha256)
+      throw new Error("複製後的備份雜湊與來源不一致");
     publishNewFile(temp,destination);
     return {file:destination,...copied};
   }finally{rmSync(temp,{force:true});}
