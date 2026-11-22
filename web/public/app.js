@@ -3991,14 +3991,18 @@ function renderBank() {
     : "尚無計息紀錄，將以首次讀取日期開始記錄。");
   const tax=state.bankTax;
   const lastTax=tax?.lastAssessment;
-  text("bank-tax-status", !tax ?
+  const totalUnpaid=BigInt(tax?.unpaidTotal??"0");
+  const arrears=totalUnpaid>0n
+    ? "｜歷史累計未繳 " + money(totalUnpaid) + "（" + tax.unpaidPeriods + " 期；不自動追繳）"
+    : "｜目前沒有歷史未繳稅款";
+  text("bank-tax-status", (!tax ?
     "尚未建立稅務快照。" : !lastTax ?
     "每週一依前次保存資產徵稅；資產 100 萬元以下免稅。既有玩家不補課更新前的稅款。" :
     "最近結算：" + lastTax.day + "｜稅基 " + money(lastTax.assessmentBase) +
     "｜稅率 " + lastTax.ratePercent + "%｜K 點 " + lastTax.kpoint +
     "｜應繳 " + money(lastTax.due) + "｜已繳 " + money(lastTax.paid) +
-    (lastTax.unpaid ? "｜未繳 " + money(lastTax.unpaid) +
-      "（普通存款不足，本期不自動追繳）" : "。"));
+    (lastTax.unpaid ? "｜本期未繳 " + money(lastTax.unpaid) : "")) +
+    (tax ? arrears : ""));
   el("term-cancel").disabled = account.termBalance <= 0;
   const target = el("bank-ledger-list");
   target.replaceChildren();

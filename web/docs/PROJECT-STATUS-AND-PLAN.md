@@ -214,3 +214,9 @@
 - **Web 安全差異**：原版可以把銀行扣成負值；Web 不允許負餘額，普通存款不足時整筆記為未繳，暫不追繳、不動現金／定存。原版用伺服器星期一；單機 Web 使用可快轉的遊戲當地日期，避免真實星期與遊戲日期衝突。超出 JS 安全整數範圍拒絕更新並保持交易回滾。
 - **舊檔相容**：只 `CREATE TABLE IF NOT EXISTS` 新稅務表，不更動舊有帳戶欄位和餘額；在初次讀取舊 Web 角色時建立當日稅基快照，不追溯舊日期扣款。這不是舊 CGI 存檔匯入。
 - **可驗證範圍**：`tests/banking.test.mjs` 覆蓋免稅／級距／K 點／快照／不足額／回滾；`tests/server.test.mjs` 透過真實 HTTP 單機快轉星期一、檢查銀行帳簿與重啟持久化。通過測試只能代表自動驗證，不等於真人 Chrome 實際驗收。
+
+### 2026-11-23 BK-04 後續稅務歷史與升級驗收補強
+
+- **可重現缺口**：PR #103 的 `bank_tax_assessments` 永久保存逐週 `unpaid`，但 `bankTaxOverview` 及銀行介面原本只顯示最新結算。若前週欠繳、後週付清，最新 `unpaid=0` 不能代表沒有先前欠稅，玩家會失去可見的歷史提示。
+- **最小修正**：`bankTaxOverview` 新增歷史 `unpaidPeriods` 與十進位字串 `unpaidTotal`，從逐週紀錄累加，不更改角色餘額、既有稅額或結算紀錄。以 BigInt 累加避免 SQLite `SUM` 與 JS 安全整數溢位；瀏覽器使用既有 `Intl.NumberFormat` 呈現 BigInt，銀行頁面同時顯示本期與歷史未繳。欠稅仍**不自動追繳**。
+- **新增驗收**：`banking.test.mjs` 覆蓋「先欠後繳」與房貸還款／計息／納稅順序，`server.test.mjs` 在臨時 SQLite 模擬舊 Web 已有銀行帳戶但尚無稅務表的週一啟動／重啟；`browser-viewport-smoke.test.mjs` 以真正 Chrome 在 1440、768、375px 驗證銀行文字，該 Chrome 自動化**不代表真人實際操作**。CI 成功與否須以本補強 PR 最新執行結果核定。

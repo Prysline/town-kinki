@@ -489,7 +489,14 @@ export function bankTaxOverview(db,userId) {
     "SELECT tax_day,assessment_base,kpoint,rate_percent,gross,discount,due,paid,unpaid " +
     "FROM bank_tax_assessments WHERE user_id=? ORDER BY tax_day DESC LIMIT 1"
   ).get(userId);
+  // 「最新一週已繳」不代表較早週次的未繳款不存在。
+  // 各期金額雖是安全整數，跨多期的 SUM 可能超出 JS/SQLite 整數範圍。
+  const unpaidRows=db.prepare(
+    "SELECT unpaid FROM bank_tax_assessments WHERE user_id=? AND unpaid>0"
+  ).all(userId);
+  const unpaidTotal=unpaidRows.reduce((sum,row)=>sum+BigInt(row.unpaid),0n);
   return {assessmentBase:state?.assessment_base??null,snapshotDay:state?.snapshot_day??null,
+    unpaidTotal:unpaidTotal.toString(),unpaidPeriods:unpaidRows.length,
     lastAssessment:last?{day:last.tax_day,assessmentBase:last.assessment_base,kpoint:last.kpoint,
       ratePercent:last.rate_percent,gross:last.gross,discount:last.discount,
       due:last.due,paid:last.paid,unpaid:last.unpaid}:null};

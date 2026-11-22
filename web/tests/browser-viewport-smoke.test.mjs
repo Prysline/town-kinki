@@ -224,6 +224,21 @@ test("Chrome：桌面→768px平板→375px手機，操作真實建角／工作�
     const after=await evaluate(chrome,"(async()=>{const j=await(await fetch('/api/state')).json();return {money:j.character.money,bank:j.character.bank}})()");
     assert.equal(after.money,before.money-100,"Chrome 存款應真實扣現金");
     assert.equal(after.bank,before.bank+100,"Chrome 存款應真實增加銀行資產");
+    // 僅在隔離 Chrome 測試存檔加入兩週稅務紀錄，驗證 UI 不隱藏較早欠稅。
+    const historyDb=new DatabaseSync(join(workspace,"sqlite","solo.sqlite"));
+    try{
+      const add=historyDb.prepare(
+        "INSERT INTO bank_tax_assessments(user_id,tax_day,assessment_base,kpoint,rate_percent,gross,discount,due,paid,unpaid,created_at) VALUES(1,?,?,0,1,?,0,?,?,?,?)"
+      );
+      add.run("2026-01-05",5000000,50000,50000,0,50000,1000);
+      add.run("2026-01-12",6000000,60000,60000,60000,0,2000);
+    }finally{historyDb.close();}
+    await click(chrome,"#refresh");
+    await until(chrome,"document.querySelector('#bank-tax-status')?.textContent?.includes('歷史累計未繳')","銀行顯示跨週欠稅");
+    const taxText=await evaluate(chrome,"document.querySelector('#bank-tax-status')?.textContent");
+    assert.match(taxText,/最近結算：2026-01-12/);
+    assert.match(taxText,/歷史累計未繳 50,000 元/);
+    assert.match(taxText,/1 期/);
     await click(chrome,"#facility-tab-shops");
     await until(chrome,"document.querySelectorAll('#retail-items .shop-product-row').length>0","百貨貨架 UI");
     const sku=await evaluate(chrome,"(async()=>{const s=await(await fetch('/api/state')).json();"+
@@ -248,6 +263,8 @@ test("Chrome：桌面→768px平板→375px手機，操作真實建角／工作�
       await click(chrome,"#facility-tab-bank");
       assert.equal(await evaluate(chrome,"document.querySelector('#facility-pane-bank')?.hidden"),false);
       assert.ok((await evaluate(chrome,"document.querySelector('#bank-available-balance')?.textContent?.length"))>0);
+      assert.match(await evaluate(chrome,"document.querySelector('#bank-tax-status')?.textContent"),/歷史累計未繳 50,000 元/,
+        width+"px 銀行應持續呈現歷史欠稅");
     }
     await viewport(chrome,1440,900);
     await click(chrome,"#logout");
