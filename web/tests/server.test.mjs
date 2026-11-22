@@ -6353,6 +6353,152 @@ test("第66階段單機HTTP：専門店標示與ギフト原始車真正從百�
   }finally{await srv.stop();}
 });
 
+test("DB-04／BK-04：真實單機兩週已繳與未繳稅→WAL備份→新目錄還原→續玩不重扣",async()=>{
+  const srv=await start("solo");
+  const directory=srv.directory;
+  const backups=mkdtempSync(join(tmpdir(),"town-db04-tax-backup-"));
+  const restoredDir=mkdtempSync(join(tmpdir(),"town-db04-tax-restore-"));
+  let resumed=null;
+  const runSoloSave=(...args)=>spawnSync(process.execPath,["scripts/solo-save.mjs",...args],{
+    cwd:root,encoding:"utf8"
+  });
+  const readPersisted=(dir)=>{
+    const database=new DatabaseSync(join(dir,"solo.sqlite"),{readOnly:true});
+    try{
+      const user=database.prepare("SELECT user_id FROM characters WHERE name='稅務備份居民'").get();
+      assert.ok(user);
+      const id=user.user_id;
+      return {
+        character:database.prepare("SELECT money,bank,kpoint FROM characters WHERE user_id=?").get(id),
+        account:database.prepare("SELECT term_balance,last_interest_day FROM bank_accounts WHERE user_id=?").get(id),
+        taxState:database.prepare("SELECT assessment_base,snapshot_day FROM bank_tax_state WHERE user_id=?").get(id),
+        assessments:database.prepare(
+          "SELECT tax_day,assessment_base,kpoint,rate_percent,gross,discount,due,paid,unpaid "+
+          "FROM bank_tax_assessments WHERE user_id=? ORDER BY tax_day"
+        ).all(id),
+        ledger:database.prepare(
+          "SELECT account_type,action,debit,credit,balance FROM bank_ledger WHERE user_id=? ORDER BY id"
+        ).all(id),
+        offset:database.prepare("SELECT offset_ms FROM solo_clock WHERE id=1").get().offset_ms
+      };
+    }finally{database.close();}
+  };
+  try{
+    const created=await api(srv.url,"character",{
+      name:"稅務備份居民",gender:"other",stats:defaultStats()
+    });
+    assert.equal(created.status,200);
+    const now=Date.now();
+    const formatter=new Intl.DateTimeFormat("en-US",{
+      timeZone:"Asia/Taipei",weekday:"short",year:"numeric",month:"2-digit",
+      day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit",hourCycle:"h23"
+    });
+    const parts=ms=>Object.fromEntries(formatter.formatToParts(new Date(ms))
+      .filter(p=>p.type!=="literal").map(p=>[p.type,p.value]));
+    const real=parts(now);
+    const weekday={Sun:0,Mon:1,Tue:2,Wed:3,Thu:4,Fri:5,Sat:6}[real.weekday];
+    const elapsed=((Number(real.hour)*60+Number(real.minute))*60+Number(real.second))*1000;
+    const week=7*86400000;
+    const offset=(((7-weekday)%7)*86400000+43200000-elapsed+week)%week;
+    const target=parts(now+offset);
+    assert.equal(target.weekday,"Sun");
+    const sunday=target.year+"-"+target.month+"-"+target.day;
+    const firstMonday=new Date(Date.parse(sunday+"T12:00:00Z")+86400000)
+      .toISOString().slice(0,10);
+    const secondMonday=new Date(Date.parse(sunday+"T12:00:00Z")+8*86400000)
+      .toISOString().slice(0,10);
+    const liveDb=new DatabaseSync(join(directory,"solo.sqlite"));
+    try{
+      // 只在隔離測試角色設定初始資產與時鐘；未來事件日期避免隨機獎金干擾。
+      liveDb.prepare("UPDATE solo_clock SET offset_ms=? WHERE id=1").run(offset);
+      liveDb.prepare(
+        "UPDATE characters SET money=5000000,bank=1000,kpoint=0,last_event_day=?,last_health_day=? WHERE name='稅務備份居民'"
+      ).run(secondMonday,secondMonday);
+      liveDb.prepare("UPDATE bank_accounts SET last_interest_day=?").run(sunday);
+    }finally{liveDb.close();}
+    const sundayState=await api(srv.url,"state");
+    assert.equal(sundayState.status,200);
+    assert.equal(sundayState.result.bankTax.snapshotDay,sunday);
+    assert.equal(sundayState.result.bankTax.assessmentBase,5001000);
+    const owed=await api(srv.url,"solo/time/advance",{preset:"1d"});
+    assert.equal(owed.status,200);
+    assert.equal(owed.result.bankTax.lastAssessment.day,firstMonday);
+    assert.equal(owed.result.bankTax.lastAssessment.due,50010);
+    assert.equal(owed.result.bankTax.lastAssessment.paid,0);
+    assert.equal(owed.result.bankTax.lastAssessment.unpaid,50010);
+    assert.equal(owed.result.bankTax.unpaidTotal,"50010");
+    assert.equal(owed.result.bankTax.unpaidPeriods,1);
+    // 後週用正式銀行 API 存入現金，保留前週欠稅（不補扣、不追繳）。
+    const deposited=await api(srv.url,"bank",{action:"deposit",amount:1000000});
+    assert.equal(deposited.status,200);
+    assert.equal(deposited.result.character.money,4000000);
+    for(let i=0;i<7;i++){
+      const advanced=await api(srv.url,"solo/time/advance",{preset:"1d"});
+      assert.equal(advanced.status,200,"單機日快轉應保持可用："+i);
+      if(i<6)assert.equal(advanced.result.bankTax.lastAssessment.day,firstMonday);
+      else{
+        assert.equal(advanced.result.bankTax.lastAssessment.day,secondMonday);
+        assert.ok(advanced.result.bankTax.lastAssessment.due>0);
+        assert.equal(advanced.result.bankTax.lastAssessment.paid,
+          advanced.result.bankTax.lastAssessment.due);
+        assert.equal(advanced.result.bankTax.lastAssessment.unpaid,0);
+        assert.equal(advanced.result.bankTax.unpaidTotal,"50010");
+        assert.equal(advanced.result.bankTax.unpaidPeriods,1);
+      }
+    }
+    const before=(await api(srv.url,"state")).result;
+    const original=readPersisted(directory);
+    assert.equal(original.assessments.length,2);
+    assert.deepEqual(original.assessments.map(x=>x.tax_day),[firstMonday,secondMonday]);
+    assert.deepEqual(original.assessments.map(x=>x.unpaid),[50010,0]);
+    assert.equal(original.ledger.filter(x=>x.action==="每週納稅").length,1);
+    assert.equal(original.taxState.snapshot_day,secondMonday);
+    const file=join(backups,"tax-wal-snapshot.sqlite");
+    const backup=runSoloSave("backup","--data-dir",directory,"--output",file);
+    assert.equal(backup.status,0,backup.stderr||backup.stdout);
+    const verify=runSoloSave("verify","--file",file);
+    assert.equal(verify.status,0,verify.stderr||verify.stdout);
+    // 證明備份是獨立快照：之後原存檔的合法提款不應污染已匯出的資料。
+    const withdrawal=await api(srv.url,"bank",{action:"withdraw",amount:500});
+    assert.equal(withdrawal.status,200);
+    assert.equal(withdrawal.result.character.bank,before.character.bank-500);
+    assert.notDeepEqual(readPersisted(directory).character,original.character);
+    const restore=runSoloSave("restore","--file",file,"--data-dir",restoredDir);
+    assert.equal(restore.status,0,restore.stderr||restore.stdout);
+    const refuse=runSoloSave("restore","--file",file,"--data-dir",restoredDir);
+    assert.notEqual(refuse.status,0,"還原不可覆寫已存在的 SQLite");
+    assert.deepEqual(readPersisted(restoredDir),original,
+      "銀行、稅基、兩期納稅／欠稅、帳簿與單機時鐘必須逐項保存");
+    await srv.stop({preserveData:true});
+    resumed=await start("solo",undefined,restoredDir);
+    const restored=(await api(resumed.url,"state")).result;
+    assert.equal(restored.character.money,before.character.money);
+    assert.equal(restored.character.bank,before.character.bank);
+    assert.deepEqual(restored.bankTax,before.bankTax);
+    assert.deepEqual(restored.bankLedger,before.bankLedger);
+    assert.equal(restored.gameTimeOffsetMs,before.gameTimeOffsetMs);
+    assert.deepEqual(readPersisted(restoredDir),original,
+      "重啟讀取當天狀態不能再次扣稅或改寫快照");
+    const replay=await api(resumed.url,"state");
+    assert.equal(replay.result.character.bank,before.character.bank);
+    assert.equal(replay.result.bankTax.unpaidTotal,"50010");
+    assert.deepEqual(readPersisted(restoredDir),original);
+    const continued=await api(resumed.url,"bank",{action:"withdraw",amount:100});
+    assert.equal(continued.status,200,"還原後仍可正常進行銀行操作");
+    assert.equal(continued.result.character.bank,before.character.bank-100);
+    assert.equal(continued.result.bankTax.unpaidTotal,"50010");
+    const finalData=readPersisted(restoredDir);
+    assert.deepEqual(finalData.assessments,original.assessments);
+    assert.equal(finalData.ledger.filter(x=>x.action==="每週納稅").length,1);
+    assert.equal(finalData.ledger.length,original.ledger.length+1);
+  }finally{
+    await resumed?.stop();
+    await srv.stop();
+    rmSync(backups,{recursive:true,force:true});
+    rmSync(restoredDir,{recursive:true,force:true});
+  }
+});
+
 test("第67階段單機首次遊玩真存檔：建角→工作→銀行→百貨與背包→WAL備份→在新資料夾還原並繼續遊玩",async()=>{
   let srv=await start("solo");
   anchorSoloTestAtNoon(srv);

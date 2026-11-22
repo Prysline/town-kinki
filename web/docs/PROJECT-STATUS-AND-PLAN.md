@@ -220,3 +220,9 @@
 - **可重現缺口**：PR #103 的 `bank_tax_assessments` 永久保存逐週 `unpaid`，但 `bankTaxOverview` 及銀行介面原本只顯示最新結算。若前週欠繳、後週付清，最新 `unpaid=0` 不能代表沒有先前欠稅，玩家會失去可見的歷史提示。
 - **最小修正**：`bankTaxOverview` 新增歷史 `unpaidPeriods` 與十進位字串 `unpaidTotal`，從逐週紀錄累加，不更改角色餘額、既有稅額或結算紀錄。以 BigInt 累加避免 SQLite `SUM` 與 JS 安全整數溢位；瀏覽器使用既有 `Intl.NumberFormat` 呈現 BigInt，銀行頁面同時顯示本期與歷史未繳。欠稅仍**不自動追繳**。
 - **新增驗收**：`banking.test.mjs` 覆蓋「先欠後繳」與房貸還款／計息／納稅順序，`server.test.mjs` 在臨時 SQLite 模擬舊 Web 已有銀行帳戶但尚無稅務表的週一啟動／重啟；`browser-viewport-smoke.test.mjs` 以真正 Chrome 在 1440、768、375px 驗證銀行文字，該 Chrome 自動化**不代表真人實際操作**。CI 成功與否須以本補強 PR 最新執行結果核定。
+
+### 2026-11-23 DB-04／BK-04：有歷史欠稅的單機 WAL 備份→還原驗收
+
+- **新增而非重做**：第67階段已涵蓋原單機建角、工作、銀行、購物、物品、備份與還原。BK-04 後續已涵蓋兩週欠稅可見性、單機跨日、SQLite 重啟與舊存檔升級；此前缺少**同一份真實單機 SQLite 含兩個星期一（一週未繳、一週已繳）**時，經既有線上 WAL 備份工具、雜湊驗證及新資料夾還原後繼續遊玩的一致性測試。
+- **驗證案例**：`tests/server.test.mjs` 新增單機 HTTP 日快轉至兩個星期一：先用低普通存款產生欠稅，再以正式銀行存款 API 建立可繳額度，於次週正常繳稅；核對 `bank_tax_state`、`bank_tax_assessments`、普通存款、帳簿、`solo_clock`，在伺服器運作中透過正式 `scripts/solo-save.mjs` CLI 執行 WAL 備份／驗證／新資料夾還原。備份後原存檔另行提款，還原結果仍須逐項與備份瞬間一致；恢復伺服器後多次 `/api/state` 不雙扣，繼續銀行操作不抹去兩週歷史，且拒絕覆寫已存在的還原目標。
+- **範圍界線**：只新增回歸證據，不更動備份程式、SQLite schema、稅率、欠稅政策、原版 CGI 或玩家正式資料。CI 依實際 GitHub 記錄確認；Node HTTP／SQLite 自動化不代表真人操作或跨 OS／設備驗收。
