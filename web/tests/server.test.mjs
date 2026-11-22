@@ -6184,3 +6184,105 @@ test("第66階段單機HTTP：専門店標示與ギフト原始車真正從百�
     assert.equal((await api(srv.url,"road/arrive",{tripId})).result.roadArrivalResult.replayed,true);
   }finally{await srv.stop();}
 });
+
+test("第67階段單機首次遊玩真存檔：建角→工作→銀行→百貨與背包→WAL備份→在新資料夾還原並繼續遊玩",async()=>{
+  let srv=await start("solo");
+  anchorSoloTestAtNoon(srv);
+  const directory=srv.directory;
+  const backups=mkdtempSync(join(tmpdir(),"town-phase67-backup-"));
+  const restoredDir=mkdtempSync(join(tmpdir(),"town-phase67-restore-"));
+  let resumed=null;
+  const runSoloSave=(...args)=>spawnSync(process.execPath,["scripts/solo-save.mjs",...args],{
+    cwd:root,encoding:"utf8"
+  });
+  try{
+    const created=await api(srv.url,"character",{
+      name:"第67階段單機存檔居民",gender:"other",stats:defaultStats()
+    });
+    assert.equal(created.status,200);
+    assert.equal((await api(srv.url,"job/payment",{payment:"bank"})).status,200);
+    const worked=await api(srv.url,"work",{});
+    assert.equal(worked.status,200);
+    assert.equal(worked.result.character.bank,1000);
+    const deposit=await api(srv.url,"bank",{action:"deposit",amount:10000});
+    assert.equal(deposit.status,200);
+    const tile=await api(srv.url,"map/tile",{row:0,column:0,symbol:"デパ"});
+    assert.equal(tile.status,200);
+    const catalog=parseLegacyRetailCatalog(
+      decodeLegacyText(readFileSync(new URL("../../dat_dir/syouhin.cgi",import.meta.url)))
+    );
+    const book=catalog.find(x=>x.category==="書籍"&&x.name==="無駄知識を覚える本");
+    assert.ok(book);
+    const liveDb=new DatabaseSync(join(directory,"solo.sqlite"));
+    try{
+      if(!liveDb.prepare("SELECT 1 FROM retail_stock WHERE shop='depart1' AND sku=?").get(book.sku)){
+        const slot=liveDb.prepare("SELECT position FROM retail_stock WHERE shop='depart1' AND sku<>? ORDER BY position LIMIT 1").get(book.sku);
+        assert.ok(slot);
+        liveDb.prepare("UPDATE retail_stock SET sku=?,remaining=? WHERE shop='depart1' AND position=?")
+          .run(book.sku,book.originalStock,slot.position);
+      }
+    }finally{liveDb.close();}
+    const purchase={shop:"depart1",sku:book.sku,quantity:1,requestId:"phase67_backup_buy"};
+    const bought=await api(srv.url,"retail/buy",purchase);
+    assert.equal(bought.status,200);
+    const sourceLine=bought.result.retailResult.sourceLine;
+    const use={sourceLine,requestId:"phase67_backup_use"};
+    assert.equal((await api(srv.url,"inventory/legacy/use",use)).status,200);
+    const preBackup=(await api(srv.url,"state")).result;
+    assert.equal(preBackup.character.salaryPayment,"bank");
+    assert.equal(preBackup.retailPurchases.length,1);
+    const snapshot=join(backups,"solo-milestone.sqlite");
+    const backup=runSoloSave("backup","--data-dir",directory,"--output",snapshot);
+    assert.equal(backup.status,0,backup.stderr||backup.stdout);
+    assert.match(backup.stdout,/已建立單機存檔快照/);
+    const verify=runSoloSave("verify","--file",snapshot);
+    assert.equal(verify.status,0,verify.stderr||verify.stdout);
+    // 原單機繼續玩，還原點不應跟著改變。
+    const mutation=await api(srv.url,"bank",{action:"deposit",amount:2000});
+    assert.equal(mutation.status,200);
+    assert.equal(mutation.result.character.bank,preBackup.character.bank+2000);
+    const restore=runSoloSave("restore","--file",snapshot,"--data-dir",restoredDir);
+    assert.equal(restore.status,0,restore.stderr||restore.stdout);
+    assert.match(restore.stdout,/新資料夾/);
+    const refusal=runSoloSave("restore","--file",snapshot,"--data-dir",restoredDir);
+    assert.notEqual(refusal.status,0,"還原到已有 solo.sqlite 的位置必須拒絕，避免丟失進度");
+    await srv.stop({preserveData:true});
+    resumed=await start("solo",undefined,restoredDir);
+    const state=(await api(resumed.url,"state")).result;
+    assert.equal(state.character.name,preBackup.character.name);
+    assert.equal(state.character.money,preBackup.character.money);
+    assert.equal(state.character.bank,preBackup.character.bank);
+    assert.equal(state.character.jobWorkCount,1);
+    assert.equal(state.character.salaryPayment,"bank");
+    assert.deepEqual(state.character.stats,preBackup.character.stats);
+    assert.equal(state.map.cells[0].key,"デパ");
+    assert.equal(state.retailPurchases.length,1);
+    assert.equal(state.legacyItemActions.find(x=>x.sourceLine===sourceLine)?.remaining,
+      preBackup.legacyItemActions.find(x=>x.sourceLine===sourceLine)?.remaining);
+    assert.equal((await api(resumed.url,"work",{})).status,400,
+      "還原不能重設冷卻並重複領取薪資");
+    const purchaseReplay=await api(resumed.url,"retail/buy",purchase);
+    assert.equal(purchaseReplay.status,200);
+    assert.equal(purchaseReplay.result.retailResult.replayed,true);
+    const useReplay=await api(resumed.url,"inventory/legacy/use",use);
+    assert.equal(useReplay.status,200);
+    assert.equal(useReplay.result.itemUseResult.replayed,true);
+    const moved=await api(resumed.url,"solo/time/advance",{preset:"5m"});
+    assert.equal(moved.status,200);
+    const workedAgain=await api(resumed.url,"work",{});
+    assert.equal(workedAgain.status,200);
+    assert.equal(workedAgain.result.character.jobWorkCount,2);
+    assert.equal(workedAgain.result.character.bank,state.character.bank+1000);
+    await resumed.stop({preserveData:true});
+    resumed=await start("solo",undefined,restoredDir);
+    const afterRestart=(await api(resumed.url,"state")).result;
+    assert.equal(afterRestart.character.jobWorkCount,2);
+    assert.equal(afterRestart.character.bank,state.character.bank+1000);
+    assert.equal(afterRestart.retailPurchases.length,1);
+  }finally{
+    await resumed?.stop();
+    await srv.stop();
+    rmSync(backups,{force:true,recursive:true});
+    rmSync(restoredDir,{force:true,recursive:true});
+  }
+});
