@@ -846,9 +846,10 @@ test("原版七種寵物：六種回制按 17 能力／身高體重生效，ガ�
       assert.equal(db.prepare("SELECT remaining FROM legacy_item_usage WHERE user_id=1").get().remaining,
         remaining);
       assert.deepEqual(JSON.parse(db.prepare("SELECT raw_fields_json FROM legacy_inventory_items WHERE user_id=1").get().raw_fields_json),raw);
+      const afterFirst=read(db);
       const replay=use(db,1,"original-pet-01",NOW+1000);
       assert.equal(replay.replayed,true,"同筆操作不可重複增加能力");
-      assert.deepEqual(read(db).stats,read(db).stats);
+      assert.deepEqual(read(db),afterFirst,"同一 requestId 不得第二次變更角色");
       assert.throws(()=>use(db,1,"original-pet-cooldown",NOW+1000),/間隔/);
       if(name==="ガチャピン"){
         assert.equal(first.changes.stats.love,15);
