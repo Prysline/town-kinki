@@ -88,9 +88,9 @@ function seedPR35(dir){
     insert(db,"users",{id:1,username:"__local_player__",password_salt:"old-salt",password_hash:"old-hash",created_at:now});
     insert(db,"characters",{user_id:1,name:"PR35舊版居民",gender:"other",town_id:0,
       money:80000,bank:12000,body_energy:90,brain_energy:90,recovered_at:now,
-      job_id:"legacy-2",work_progress:2,last_work_at:now,work_count:3,height:165,
+      job_id:"legacy-2",work_progress:2,last_work_at:now+5400000,work_count:3,height:165,
       bmi:22,stats_json:JSON.stringify(stats()),weight:61.5,job_experience:29,
-      job_work_count:3,salary_payment:"bank",created_at:now,last_meal_at:now,
+      job_work_count:3,salary_payment:"bank",created_at:now,last_meal_at:now+5400000,
       last_health_day:"9999-12-31",last_event_day:"9999-12-31",kpoint:7});
     insert(db,"solo_clock",{id:1,offset_ms:5400000});
     insert(db,"bank_accounts",{user_id:1,term_balance:1000000,last_interest_day:"9999-12-31"});
