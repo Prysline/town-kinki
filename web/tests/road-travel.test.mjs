@@ -9,6 +9,8 @@ import {
   beginRoadTrip,arriveRoadTrip,ROAD_WALKING_NAME,ROAD_HISTORY_LIMIT
 } from "../src/road-travel.mjs";
 import {heldInventoryRows,inventoryLife} from "../src/inventory-life.mjs";
+import {parseLegacyRetailCatalog,initRetailTables,ensureRetailDay,buyRetailItem,RETAIL_ITEM_ORIGIN}
+  from "../src/retail.mjs";
 
 function original(path){
   return decodeLegacyText(readFileSync(new URL("../../"+path,import.meta.url)));
@@ -17,7 +19,8 @@ const ini=original("town_ini.cgi"),lib=original("town_lib.pl"),
   maker=original("town_maker.cgi");
 const treasure=parseOriginalTreasure(original("gamerand.cgi"),original("otakara.cgi"),
   original("dat_dir/otakara.cgi"),ini);
-const rules=parseOriginalRoadTransport(ini,lib,maker,treasure);
+const retailCatalog=parseLegacyRetailCatalog(original("dat_dir/syouhin.cgi"));
+const rules=parseOriginalRoadTransport(ini,lib,maker,treasure,retailCatalog);
 const NOW=Date.parse("2026-11-22T12:00:00Z");
 const stats=()=>Object.fromEntries(STAT_KEYS.map(k=>[k,20]));
 function setup(){
@@ -35,6 +38,24 @@ function setup(){
   initTreasureTables(db);
   initRoadTravelTables(db);
   return db;
+}
+function setupRetailRoad(){
+  const db=setup();
+  db.exec("ALTER TABLE characters ADD COLUMN bank INTEGER NOT NULL DEFAULT 0");
+  initRetailTables(db);
+  return db;
+}
+function buyRetailVehicle(db,name,{userId=1,now=NOW,quantity=1}={}){
+  const item=retailCatalog.find(row=>row.name===name&&row.category==="乗り物");
+  assert.ok(item,"原版百貨存在此交通商品："+name);
+  const day="2026-11-22";
+  const selected=retailCatalog.filter(row=>rules.retailVehicles.some(v=>v.sku===row.sku));
+  ensureRetailDay(db,selected,day,()=>0);
+  return buyRetailItem(db,userId,selected,{
+    shop:"depart1",sku:item.sku,
+    requestId:"phase65_buy_"+name+"_"+userId+"_"+quantity,
+    now,day,quantity,hasBuilding:()=>true
+  });
 }
 function giveVehicle(db,name,{userId=1,sourceLine=3000001,remaining=null,origin=TREASURE_ORIGIN,
   mutateFields}={}){
@@ -89,13 +110,13 @@ test("原版町移動：徒步10秒、20個Hash載具、1/10事故與寶箱可�
   assert.equal(rules.vehicles.find(x=>x.name==="ミグ25").seconds,0);
   assert.equal(rules.vehicles.find(x=>x.name==="ローラースルーゴーゴー").seconds,20);
   assert.throws(()=>parseOriginalRoadTransport(ini.replace("$matiidou_time = '10';","$matiidou_time = '11';"),
-    lib,maker,treasure),/已變更/);
+    lib,maker,treasure,retailCatalog),/已變更/);
   assert.throws(()=>parseOriginalRoadTransport(ini.replace("'ポルシェ','3'","'ポルシェ','4'"),
-    lib,maker,treasure),/已變更/);
+    lib,maker,treasure,retailCatalog),/已變更/);
   assert.throws(()=>parseOriginalRoadTransport(ini.replace("$ziko_kakuritu = '10';","$ziko_kakuritu = '11';"),
-    lib,maker,treasure),/已變更/);
+    lib,maker,treasure,retailCatalog),/已變更/);
   assert.throws(()=>parseOriginalRoadTransport(ini,lib,maker.replace("$syo_taikyuu -- ;","$syo_taikyuu -= 2 ;"),
-    treasure),/已變更/);
+    treasure,retailCatalog),/已變更/);
 });
 
 test("徒步公路移動是持久的兩階段：步行可鍛鍊5項、未到10秒不能抵達",()=>{
@@ -268,13 +289,13 @@ test("20筆畫面紀錄上限與全量存檔，刪除角色後交易與物品外
 test("第63階段來源：四號城出發不迷路；其他城持有ローラースルーゴーゴー必迷路，否則1/5",()=>{
   assert.throws(()=>parseOriginalRoadTransport(ini,
     lib.replace("if ($in{'maemati'} != 3){","if ($in{'maemati'} != 2){"),
-    maker,treasure),/已變更/);
+    maker,treasure,retailCatalog),/已變更/);
   assert.throws(()=>parseOriginalRoadTransport(ini,
     lib.replace("if (int(rand(5)+1) == 1){","if (int(rand(3)+1) == 1){"),
-    maker,treasure),/已變更/);
+    maker,treasure,retailCatalog),/已變更/);
   assert.throws(()=>parseOriginalRoadTransport(ini,lib,
     maker.replace("$in{'town_no'} = $no_rand;","$in{'town_no'} = 1;"),
-    treasure),/已變更/);
+    treasure,retailCatalog),/已變更/);
 });
 
 test("第63階段單純迷路無事故：原版只顯示迷路，不會真正使用 rand(4) 改寫目的地",()=>{
@@ -444,7 +465,7 @@ test("第64階段來源防改：原版巴士500元、5秒、取消迷路及事�
      "if ($ziko_idousyudan eq 'バス'){$ziko_flag  = \"on\";}"]
   ]){
     assert.ok(lib.includes(change[0]),"原始來源確有待防改分支："+change[0]);
-    assert.throws(()=>parseOriginalRoadTransport(ini,lib.replace(...change),maker,treasure),
+    assert.throws(()=>parseOriginalRoadTransport(ini,lib.replace(...change),maker,treasure,retailCatalog),
       /已變更/);
   }
 });
