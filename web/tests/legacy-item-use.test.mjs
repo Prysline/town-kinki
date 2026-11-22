@@ -624,13 +624,12 @@ test("一般書籍「日」耐久以購入後已過整天數計算；期限內�
     assert.equal(db.prepare("SELECT COUNT(*) n FROM legacy_item_use_history").get().n,2);
   }finally{db.close();}
 });
-test("原版特殊權益的日制商品與變造日期仍不能被當成一般書籍使用",()=>{
+test("原版未核實特殊權益及變造日期仍不能被當成一般日制道具使用",()=>{
   const db=createDb();
   try{
     for(const [i,category,name] of [
-      [1,"日用品","健康保険"],[2,"日用品","クレジットカード"],
-      [3,"日用品","防犯カメラ"],[4,"ペット","ガチャピン"],
-      [5,"ギフト","船艦大和"]
+      [1,"日用品","健康保険"],[2,"日用品","防犯カメラ"],
+      [3,"ギフト","船艦大和"]
     ]){
       const f=originalItem(category,name);
       f[30]=String(Math.floor(NOW/1000));
@@ -639,14 +638,14 @@ test("原版特殊權益的日制商品與變造日期仍不能被當成一般�
       assert.throws(()=>use(db,i,"restricted-day-"+i),/尚未支援/);
     }
     const noDate=originalItem("書籍","こちら葛飾区亀有公園前派出所　全巻");
-    addItem(db,6,noDate);
-    assert.throws(()=>use(db,6,"invalid-day-time"),/尚未支援/);
+    addItem(db,4,noDate);
+    assert.throws(()=>use(db,4,"invalid-day-time"),/尚未支援/);
     const forged=originalItem("書籍","こちら葛飾区亀有公園前派出所　全巻");
     forged[30]=String(Math.floor(NOW/1000));
-    addItem(db,7,forged);
-    db.prepare("UPDATE legacy_inventory_items SET purchased_at=? WHERE source_line=7")
+    addItem(db,5,forged);
+    db.prepare("UPDATE legacy_inventory_items SET purchased_at=? WHERE source_line=5")
       .run(Number(forged[30])+86400);
-    assert.throws(()=>use(db,7,"mismatched-day-time"),/尚未支援/);
+    assert.throws(()=>use(db,5,"mismatched-day-time"),/尚未支援/);
   }finally{db.close();}
 });
 
@@ -815,5 +814,122 @@ test("負熱量與空治療數值不接受任意同名、變造來源、負治�
     assert.equal(supportsLegacyItemUse(fakeBook),false);
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM legacy_item_use_history").get().n,0);
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM legacy_item_usage").get().n,0);
+  }finally{db.close();}
+});
+
+test("原版七種寵物：六種回制按 17 能力／身高體重生效，ガチャピン日制每 120 分鐘可再用",()=>{
+  const names=["キリン","子猫","子豚","豚","チンパンジー","ゴリラ","ガチャピン"];
+  for(const name of names){
+    const db=createDb();
+    try{
+      const raw=originalItem("ペット",name);
+      assert.equal(raw.length,33);
+      assert.equal(supportsLegacyItemUse(raw),true,name);
+      if(raw[22]==="日")raw[30]=String(Math.floor(NOW/1000)-60);
+      const strong=Object.fromEntries(STAT_KEYS.map(key=>[key,1000]));
+      db.prepare("UPDATE characters SET stats_json=?,body_energy=400,brain_energy=400 WHERE user_id=1")
+        .run(JSON.stringify(strong));
+      addItem(db,1,raw);
+      const before=read(db);
+      const first=use(db,1,"original-pet-01");
+      assert.equal(first.replayed,false);
+      const statIndices=[2,3,4,5,6,7,8,10,11,12,13,14,15,16,18,19,20];
+      for(const [i,key] of STAT_KEYS.entries())
+        assert.equal(read(db).stats[key],1000+Number(raw[statIndices[i]]),name+"／"+key);
+      const effect=raw[9].split(",");
+      assert.equal(first.changes.height,effect[0]==="身長"?Number(effect[1]):0);
+      assert.equal(first.changes.weight,effect[0]==="ウエイトアップ"?Number(effect[1]):0);
+      assert.equal(first.changes.bodyEnergy,-Number(raw[27]||0));
+      assert.equal(first.changes.brainEnergy,-Number(raw[28]||0));
+      assert.equal(read(db,2).stats.love,20,"其他玩家能力不得改變");
+      const remaining=Number(raw[21])-(raw[22]==="回"?1:0);
+      assert.equal(db.prepare("SELECT remaining FROM legacy_item_usage WHERE user_id=1").get().remaining,
+        remaining);
+      assert.deepEqual(JSON.parse(db.prepare("SELECT raw_fields_json FROM legacy_inventory_items WHERE user_id=1").get().raw_fields_json),raw);
+      const replay=use(db,1,"original-pet-01",NOW+1000);
+      assert.equal(replay.replayed,true,"同筆操作不可重複增加能力");
+      assert.deepEqual(read(db).stats,read(db).stats);
+      assert.throws(()=>use(db,1,"original-pet-cooldown",NOW+1000),/間隔/);
+      if(name==="ガチャピン"){
+        assert.equal(first.changes.stats.love,15);
+        assert.equal(first.changes.stats.unique,15);
+        assert.equal(first.changes.stats.etti,15);
+        const second=use(db,1,"original-pet-02",NOW+120*60000);
+        assert.equal(second.changes.stats.love,15);
+        assert.equal(db.prepare("SELECT remaining FROM legacy_item_usage").get().remaining,3);
+        const expires=Number(raw[30])*1000+3*DAY;
+        assert.throws(()=>use(db,1,"original-pet-expired",expires),/過期/);
+      }
+      assert.equal(before.money,read(db).money,"背包使用不得扣商品售價");
+      assert.equal(before.bank,read(db).bank,"背包使用不得扣銀行");
+      assert.equal(listLegacyItemUseHistory(db,1).length,name==="ガチャピン"?2:1);
+    }finally{db.close();}
+  }
+});
+
+test("原版四種信用卡：直接背包使用與銀行付款用途並存；時間、全能力增益與日制耐久按商品檔",()=>{
+  const names=[
+    ["クレジットカード",3,0],
+    ["ゴールドクレジットカード",7,0],
+    ["スペシャルクレジットカード",5,15],
+    ["ブラタンメンバーズカード",7,180]
+  ];
+  const statIndices=[2,3,4,5,6,7,8,10,11,12,13,14,15,16,18,19,20];
+  for(const [name,days,interval] of names){
+    const db=createDb();
+    try{
+      const raw=originalItem("日用品",name);
+      assert.equal(raw[9],"クレジット");
+      assert.equal(raw[22],"日");
+      assert.equal(Number(raw[21]),days);
+      assert.equal(Number(raw[23]),interval);
+      assert.equal(supportsLegacyItemUse(raw),true,name);
+      raw[30]=String(Math.floor(NOW/1000)-60);
+      addItem(db,1,raw);
+      const first=use(db,1,"credit-item-use-01");
+      for(const [i,key] of STAT_KEYS.entries())
+        assert.equal(first.changes.stats[key]??0,Number(raw[statIndices[i]]),name+"／"+key);
+      assert.equal(first.changes.bodyEnergy,0);
+      assert.equal(first.changes.brainEnergy,0);
+      assert.equal(read(db).money,100000);
+      assert.equal(read(db).bank,50000);
+      assert.equal(db.prepare("SELECT remaining FROM legacy_item_usage").get().remaining,days);
+      assert.deepEqual(JSON.parse(db.prepare("SELECT raw_fields_json FROM legacy_inventory_items").get().raw_fields_json),raw);
+      assert.equal(use(db,1,"credit-item-use-01",NOW+DAY).replayed,true);
+      assert.equal(listLegacyItemUseHistory(db,1).length,1);
+      if(interval>0)
+        assert.throws(()=>use(db,1,"credit-item-too-soon",NOW+1000),/間隔/);
+      const second=use(db,1,"credit-item-use-02",NOW+interval*60000);
+      assert.equal(second.replayed,false);
+      assert.equal(db.prepare("SELECT remaining FROM legacy_item_usage").get().remaining,days);
+      assert.equal(listLegacyItemUseHistory(db,1).length,2);
+      const expires=Number(raw[30])*1000+days*DAY;
+      assert.throws(()=>use(db,1,"credit-item-expired",expires),/過期/);
+    }finally{db.close();}
+  }
+});
+
+test("白名單只承認原版日制寵物與信用卡的效果欄、間隔及能力；偽造能力或其他特殊物品不得使用",()=>{
+  const db=createDb();
+  try{
+    const cases=[
+      ["ペット","ガチャピン",18,"999"],
+      ["ペット","ガチャピン",23,"0"],
+      ["日用品","スペシャルクレジットカード",2,"999"],
+      ["日用品","ブラタンメンバーズカード",23,"0"],
+      ["日用品","クレジットカード",9,"無"],
+      ["日用品","ゴールドクレジットカード",27,"-500"]
+    ];
+    for(const [i,[category,name,index,value]] of cases.entries()){
+      const raw=originalItem(category,name);
+      raw[30]=String(Math.floor(NOW/1000)-60);
+      raw[index]=value;
+      addItem(db,i+1,raw);
+      assert.equal(supportsLegacyItemUse(raw),false,name+" 欄 "+index);
+      assert.throws(()=>use(db,i+1,"forged-day-"+String(i).padStart(4,"0")),/尚未支援/);
+    }
+    assert.equal(listLegacyItemActions(db,1,{bodyEnergy:25,brainEnergy:35,lastMealAt:0},NOW).length,0);
+    assert.equal(db.prepare("SELECT COUNT(*) n FROM legacy_item_usage").get().n,0);
+    assert.equal(db.prepare("SELECT COUNT(*) n FROM legacy_item_use_history").get().n,0);
   }finally{db.close();}
 });
