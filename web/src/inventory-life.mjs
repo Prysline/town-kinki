@@ -54,3 +54,21 @@ export function heldInventoryRows(db,userId,now=Date.now()){
   ).all(userId);
   return rows.filter(row=>inventoryLife(row,now).visible);
 }
+
+// 單一資料來源：容量使用目前有效的持有格，不用原始封存筆數或前端前 50 筆。
+// 原版 town_ini.cgi: 一般物品 25、本人禮品 10、收到的禮品 10。
+// 同一物品最多 5 組是耐久合併限制，不是 5 個格位。
+export function inventorySlotUsage(db,userId,now=Date.now()){
+  const used={general:0,purchasedGift:0,receivedGift:0};
+  for(const row of heldInventoryRows(db,userId,now)){
+    if(inventoryLife(row,now).remaining<=0)continue;
+    if(row.category==="ギフト")used.purchasedGift++;
+    else if(row.category==="ギフト商品")used.receivedGift++;
+    else used.general++;
+  }
+  return {
+    general:{used:used.general,limit:25},
+    purchasedGift:{used:used.purchasedGift,limit:10},
+    receivedGift:{used:used.receivedGift,limit:10}
+  };
+}

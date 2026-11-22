@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
 import {DatabaseSync} from "node:sqlite";
-import {inventoryLife,heldInventoryRows} from "../src/inventory-life.mjs";
+import {inventoryLife,heldInventoryRows,inventorySlotUsage} from "../src/inventory-life.mjs";
 import {initLegacyItemUseTables} from "../src/legacy-item-use.mjs";
 import {listLegacyInventoryItems} from "../src/legacy-inventory.mjs";
 
@@ -111,4 +111,40 @@ test("前端提供等待移除倒數，時間到重新取得伺服器狀態",()=
   assert.match(app,/status\.classList\.add\("inventory-removing"\)/);
   assert.match(app,/card\.hidden=true/);
   assert.match(app,/api\("state"\)\.then\(next=>\{state=next;render\(\);\}\)/);
+});
+
+test("25／10／10 分開統計有效格數，已用盡與到期道具不占用容量",()=>{
+  const db=setup();
+  try{
+    add(db,{line:1,name:"有效飲料",durability:3});
+    add(db,{line:2,name:"耗盡道具",durability:1,interval:3,
+      remaining:0,lastUsedMs:NOW-60_000});
+    add(db,{line:3,name:"已過期",unit:"日",durability:1,
+      purchased:Math.floor(NOW/1000)-2*86400});
+    add(db,{line:4,name:"自己轉換的禮品",category:"ギフト",durability:2});
+    add(db,{line:5,name:"收到的禮品",category:"ギフト商品",durability:1});
+    const cap=inventorySlotUsage(db,1,NOW);
+    assert.deepEqual(cap,{
+      general:{used:1,limit:25},
+      purchasedGift:{used:1,limit:10},
+      receivedGift:{used:1,limit:10}
+    });
+    assert.equal(heldInventoryRows(db,1,NOW).length,4,
+      "冷卻中耐久 0 仍可暫留畫面，但不占可用容量");
+    assert.equal(db.prepare("SELECT COUNT(*) n FROM legacy_inventory_items").get().n,5,
+      "原始封存不可因容量統計刪除");
+  }finally{db.close();}
+});
+
+test("容量依完整有效持有資料計算，不受清單 50 筆顯示上限影響",()=>{
+  const db=setup();
+  try{
+    for(let i=1;i<=51;i++)add(db,{line:i,name:"道具"+i,durability:2});
+    add(db,{line:52,name:"禮品",category:"ギフト",durability:1});
+    assert.equal(listLegacyInventoryItems(db,1,50,null,NOW).length,50);
+    assert.deepEqual(inventorySlotUsage(db,1,NOW),{
+      general:{used:51,limit:25},purchasedGift:{used:1,limit:10},
+      receivedGift:{used:0,limit:10}
+    });
+  }finally{db.close();}
 });

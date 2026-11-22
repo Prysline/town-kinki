@@ -283,6 +283,16 @@
           <section class="card inventory-panel" id="inventory-panel" role="tabpanel" aria-labelledby="profile-tab-inventory" hidden>
             <div class="eyebrow">持有物</div>
             <h3>我的物品</h3>
+            <div class="inventory-capacity" role="group" aria-label="目前持有物與原版持有上限">
+              <div><span>一般物品</span><strong id="inventory-general-usage">— / 25 格</strong></div>
+              <div><span>自購禮品</span><strong id="inventory-purchased-gift-usage">— / 10 格</strong></div>
+              <div><span>收到的禮品</span><strong id="inventory-received-gift-usage">— / 10 格</strong></div>
+            </div>
+            <details class="inventory-capacity-rules">
+              <summary>持有上限與計算方式</summary>
+              <p class="small">原版規則：一般持有物最多 25 格，自購／轉換的禮品最多 10 格，收到的禮品最多 10 格；分別計算，不是全部加在一起。</p>
+              <p class="small">同一商品上限 5 組，原版會依剩餘耐久合併；這是商品數量限制，不等於 5 個背包格。已失效物品與已用盡、待移除的物品不計入可用容量。</p>
+            </details>
             <p id="inventory-summary" class="small"></p>
             <p id="inventory-insurance-inline" class="small" hidden></p>
             <div id="legacy-inventory-list" class="inventory-catalog"></div>
