@@ -70,7 +70,7 @@ test("未收錄品名及非目標分類回退原文",()=>{
 });
 
 test("Web 介面顯示繁體中文、可搜尋中文，但操作維持原始 SKU、名稱及類別",()=>{
-  assert.match(app,/from "\.\/retail-dessert-fastfood-translations\.js"/);
+  assert.match(app,/from "\.\/retail-item-translations\.js"/);
   assert.match(app,/displayRetailItemName\(item\.name\)/);
   assert.match(app,/const displayProductName=shopName==="自動販賣機"\?displayVendingName:displayRetailItemName/);
   assert.match(app,/document\.createTextNode\(displayProductName\(item\.name\)\)/);
