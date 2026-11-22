@@ -12,6 +12,8 @@
 
 > **第 49 階段獨立私人站內信**：依 [原版收寄雙方紀錄與共用信箱規則](docs/phase49-unified-private-mail.md)，城鎮快捷與設施分頁新增獨立「郵件」，支援純文字寄信、本人刪信、寄禮附信和普通信共用每人收／寄合計 50 封、重送防重、舊信箱資料無損升級及多人資料隔離；朋友地址簿、K 點數附信、已讀狀態尚未移植。功能有 HTTP 與單元回歸，但實機視覺驗收及新版 Web 存檔仍待核實。
 
+> **第 67 階段單機新版存檔保全**：第48階段已有工作／銀行／百貨／用餐跨Node重啟回歸，但仍缺可操作的**SQLite一致備份與還原**。第67階段新增 [單機 WAL 快照、完整性驗證與還原到新DATA_DIR](docs/phase67-solo-save-backup-restore.md)：不覆寫既有存檔、不讀寫 CGI 舊玩家檔，並以真正單機角色買物／使用／扣款／工作冷卻及快轉後重啟測試。**本輪沒有新增多人玩法**，手機／桌面真人操作仍待獨立驗收。
+
 > **第 50 階段單機遊玩優先**：先解決新玩家因原版四份 `townlog` 空檔而只有空白地圖的阻塞。已新增[單機首次遊玩稽核與可選擇試玩街區](docs/phase50-solo-first-play-audit.md)：玩家可以明確確認後建立**只使用原版已知設施代碼的 Web 試玩配置**，供百貨購物、用餐、訓練與住宅空地等既有正式交易操作；不冒充原版歷史地圖，不自動初始化、不覆寫有任何配置或住宅的城鎮，不送額外資金。單機遊玩、道具、事件與可單人操作的特殊設施為後續優先，現有多人功能保留但暫不擴充為首要目標。
 
 > **第 53 階段：單機原版釣魚、魚餌商店與漁獲販售**：依 [sea.cgi、hanbai1.cgi 的來源與交易驗收](docs/phase53-fishing-economy.md)，**新建**的單機試玩街區在 D6 餌料店、D7 釣場加入真正可操作入口；玩家可用現金買四款原版餌料，依原版100秒冷卻及原始機率扣一回餌料釣12種魚，漁獲完整33欄進本人背包，也能當魚餌或在原版競價場出售並取得原版隨機價格。所有交易使用同一 SQLite 原子記帳、防重及回滾，不需要原版舊玩家檔。
@@ -73,6 +75,19 @@ cd web
 npm test
 npm start
 ```
+
+單機進度備份與還原（另開終端機執行；只處理新版 Web SQLite）：
+
+```sh
+# 在 web/ 內，伺服器仍運作也可建立一致快照
+node scripts/solo-save.mjs backup --data-dir ./data --output ./backups/solo-2026-11-22.sqlite
+node scripts/solo-save.mjs verify --file ./backups/solo-2026-11-22.sqlite
+# 停止原單機伺服器後，還原到全新資料夾；不會覆寫 data/solo.sqlite
+node scripts/solo-save.mjs restore --file ./backups/solo-2026-11-22.sqlite --data-dir ./restored-solo
+DATA_DIR=./restored-solo npm start
+```
+
+每次備份請指定**不同新檔名**。若目標資料夾已有單機資料庫或 WAL 旁檔，還原會拒絕。備份檔含角色資產，請妥善保管。完整保護與操作限制見 [第67階段](docs/phase67-solo-save-backup-restore.md)。
 
 預設進入單機模式，開啟 http://127.0.0.1:3000 即可建立角色。資料存於 `web/data/solo.sqlite`，瀏覽器清除 Cookie 不會刪除本機角色。
 
