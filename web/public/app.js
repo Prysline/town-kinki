@@ -1607,7 +1607,7 @@ function renderLegacyItems(){
           "（記錄位置 "+item.sourceLine+"；原始內容不在此頁修改）",
         "Web 使用狀態："+(actionInfo?"已核對可使用規則，受冷卻與角色條件限制":
           info?.usage==="automatic"?"自動處理":
-          info?.usage==="payment"?"支援有效信用卡付款":
+          info?.usage==="payment"?"支援有效信用卡付款；亦可在背包依原版規則使用":
           info?.usage==="gift"?"禮品，請於寄送介面操作":
           item.origin==="fishing"?"請至原版釣場釣魚或出售":"尚未支援手動使用")
       ];
@@ -1935,7 +1935,7 @@ function retailEffectDetails(item){
     "原版備註："+(info.comment?.trim()||"沒有提供文字備註"),
     "Web 生效狀態："+(
       info.usage==="automatic"?"已支援：健康保險於醫院自動計算，不需手動使用":
-      info.usage==="payment"?"已支援：有效期內可於支援信用卡的商店從普通銀行付款":
+      info.usage==="payment"?"已支援：有效期內可於支援信用卡的商店從普通銀行付款；也可在背包依原版規則使用（部分卡片具有能力增益）":
       info.usage==="gift"?"屬於禮品：可依禮品寄送規則操作，不是一般直接使用道具":
       info.usage==="supported"?"已支援：購買後可在持有物執行使用（仍受冷卻、體力等條件限制）":
       "目前尚未支援直接使用；顯示原始數值不代表效果已能執行")
