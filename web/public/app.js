@@ -1177,7 +1177,7 @@ function renderRoadTravel(){
     const option=document.createElement("option");
     option.value=String(item.sourceLine);
     option.textContent=displayRetailItemName(item.name)+"（"+
-      (item.origin==="retail"?"百貨":"寶箱")+"、"+
+      (item.origin==="retail"?(item.category==="ギフト"?"百貨禮品":"百貨"):"寶箱")+"、"+
       item.seconds+"秒、耐久 "+item.remaining+"）";
     vehicle.append(option);
   }
