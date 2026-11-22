@@ -63,7 +63,9 @@ test("日本電影與台灣熟悉的作品名採人工校對的繁中片名",()=
     "キューブ":"異次元殺陣",
     "リベリオン":"重裝任務",
     "ハリー・ポッターと賢者の石":"哈利波特：神秘的魔法石",
-    "スキージャンプ・ペア　オフィシャル":"雙人跳台滑雪 官方版"
+    "スキージャンプ・ペア　オフィシャル":"雙人跳台滑雪 官方版",
+    "一人ごっつ":"一人松本",
+    "人生のゲームムービー":"人生遊戲電影"
   };
   for(const [original,localized] of Object.entries(cases))
     assert.equal(displayRetailItemName(original),localized,original);
