@@ -16,7 +16,7 @@ const chanko=rows.filter(x=>x.fields[0]==="ちゃんこ");
 const gold=rows.filter(x=>x.fields[0]==="金の箱");
 const STAT_INDEX=[2,3,4,5,6,7,8,10,11,12,13,14,15,16,18,19,20];
 
-test("原版相撲火鍋 8 列與金色寶箱 1 列均有對應繁中名稱，不改來源鍵",()=>{
+test("原版相撲料理 8 列與金色寶箱 1 列均有對應繁中名稱，不改來源鍵",()=>{
   const groups=[
     ["ちゃんこ",chanko,RETAIL_CHANKO_ZH_TW,2],
     ["金の箱",gold,RETAIL_GOLD_BOX_ZH_TW,405]
@@ -33,7 +33,7 @@ test("原版相撲火鍋 8 列與金色寶箱 1 列均有對應繁中名稱，�
       assert.ok(items.some(x=>x.fields[1]===name),"來源沒有此鍵："+name);
     assert.equal(displayRetailItemCategory(category),displayRetailChankoGoldCategory(category));
   }
-  assert.equal(displayRetailItemCategory("ちゃんこ"),"相撲火鍋");
+  assert.equal(displayRetailItemCategory("ちゃんこ"),"相撲料理");
   assert.equal(displayRetailItemCategory("金の箱"),"金色寶箱");
 });
 
@@ -79,6 +79,6 @@ test("Landmaster 保留原始金箱分類、特殊效果及戰車備註，未虛
   assert.match(item.rawFields[29],/移動手段です/);
   assert.ok(!ini.includes("'ランドマスター'"),"原版移動設定沒有 Landmaster，不能新增該功能");
   assert.equal(retailItemDetails(item).effectCode,"万能,");
-  assert.equal(displayRetailItemName("ランドマスター"),"Landmaster");
+  assert.equal(displayRetailItemName("ランドマスター"),"Landmaster地對空戰車");
   assert.equal(displayRetailItemName("未知相撲商品"),"未知相撲商品");
 });
