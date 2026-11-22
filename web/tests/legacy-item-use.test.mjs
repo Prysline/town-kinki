@@ -839,8 +839,8 @@ test("原版七種寵物：六種回制按 17 能力／身高體重生效，ガ�
       const effect=raw[9].split(",");
       assert.equal(first.changes.height,effect[0]==="身長"?Number(effect[1]):0);
       assert.equal(first.changes.weight,effect[0]==="ウエイトアップ"?Number(effect[1]):0);
-      assert.equal(first.changes.bodyEnergy,-Number(raw[27]||0));
-      assert.equal(first.changes.brainEnergy,-Number(raw[28]||0));
+      assert.equal(first.changes.bodyEnergy+Number(raw[27]||0),0);
+      assert.equal(first.changes.brainEnergy+Number(raw[28]||0),0);
       assert.equal(read(db,2).stats.love,20,"其他玩家能力不得改變");
       const remaining=Number(raw[21])-(raw[22]==="回"?1:0);
       assert.equal(db.prepare("SELECT remaining FROM legacy_item_usage WHERE user_id=1").get().remaining,
