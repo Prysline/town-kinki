@@ -362,3 +362,48 @@ test("日期錯誤、稅務寫入失敗時連同利息、帳簿、稅基一同�
     assert.equal(db.prepare("SELECT COUNT(*) n FROM bank_tax_assessments").get().n,0);
   }finally{db.close();}
 });
+
+test("BK-04 跨週欠稅：後週繳清仍顯示先前未繳期數與總額",()=>{
+  const db=createDb();
+  try{
+    settleBankInterest(db,1,"2026-11-22",1000);
+    db.prepare("UPDATE characters SET bank=1000 WHERE user_id=1").run();
+    const first=settleBankInterest(db,1,"2026-11-23",2000);
+    assert.equal(first.tax.unpaid,60000);
+    assert.equal(bankTaxOverview(db,1).unpaidTotal,"60000");
+    assert.equal(bankTaxOverview(db,1).unpaidPeriods,1);
+    // 下週之前重新累積普通存款；舊欠稅不會被追繳。
+    db.prepare("UPDATE characters SET bank=1000000 WHERE user_id=1").run();
+    settleBankInterest(db,1,"2026-11-29",3000);
+    const next=settleBankInterest(db,1,"2026-11-30",4000);
+    assert.ok(next.tax.paid>0);
+    assert.equal(next.tax.unpaid,0);
+    const overview=bankTaxOverview(db,1);
+    assert.equal(overview.lastAssessment.day,"2026-11-30");
+    assert.equal(overview.lastAssessment.unpaid,0);
+    assert.equal(overview.unpaidTotal,"60000","較早星期一欠稅不可被最新繳款遮蔽");
+    assert.equal(overview.unpaidPeriods,1);
+    assert.equal(db.prepare("SELECT COUNT(*) n FROM bank_tax_assessments WHERE unpaid>0").get().n,1);
+    initBankTables(db);
+    assert.equal(bankTaxOverview(db,1).unpaidTotal,"60000","重複初始化不可清除欠稅");
+    assert.equal(settleBankInterest(db,1,"2026-11-30",5000).applied,false);
+    assert.equal(bankTaxOverview(db,1).unpaidTotal,"60000");
+  }finally{db.close();}
+});
+
+test("BK-04 房貸先還再依保存淨資產納稅，入帳順序與失敗回滾一致",()=>{
+  const db=createDb();
+  try{
+    db.prepare("INSERT INTO bank_loans(user_id,principal,daily_payment,remaining_payments,original_payments,missed_attempts,last_attempt_day,borrowed_at) VALUES(1,100000,50000,2,2,0,'2026-11-22',100)").run();
+    settleBankInterest(db,1,"2026-11-22",200);
+    assert.equal(bankTaxOverview(db,1).assessmentBase,5900000);
+    const monday=settleBankInterest(db,1,"2026-11-23",300);
+    assert.deepEqual(monday.repayment,{paid:true,amount:50000,remainingPayments:1});
+    assert.equal(monday.tax.due,59000);
+    assert.equal(monday.tax.paid,59000);
+    assert.equal(db.prepare("SELECT bank FROM characters WHERE user_id=1").get().bank,896000);
+    assert.deepEqual(bankLedger(db,1).map(x=>x.action),
+      ["每週納稅","住宅貸款每日還款","普通存款利息"]);
+    assert.equal(db.prepare("SELECT remaining_payments FROM bank_loans WHERE user_id=1").get().remaining_payments,1);
+  }finally{db.close();}
+});

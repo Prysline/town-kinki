@@ -1128,6 +1128,64 @@ test("多人：非屋主無法改裝，同時改裝依伺服器餘額只扣一�
 });
 
 
+
+test("BK-04 舊 Web SQLite 升級於星期一：舊帳戶保留利息、初次不追溯扣稅",async()=>{
+  const srv=await start("solo");
+  let restarted=null;
+  try{
+    const created=await api(srv.url,"character",{
+      name:"升級驗證居民",gender:"other",stats:defaultStats()
+    });
+    assert.equal(created.status,200);
+    await srv.stop({preserveData:true});
+    const now=Date.now();
+    const tz=new Intl.DateTimeFormat("en-US",{
+      timeZone:"Asia/Taipei",weekday:"short",year:"numeric",month:"2-digit",day:"2-digit",
+      hour:"2-digit",minute:"2-digit",second:"2-digit",hourCycle:"h23"
+    });
+    const dateParts=t=>Object.fromEntries(tz.formatToParts(new Date(t))
+      .filter(p=>p.type!=="literal").map(p=>[p.type,p.value]));
+    const parts=dateParts(now);
+    const weekday={Sun:0,Mon:1,Tue:2,Wed:3,Thu:4,Fri:5,Sat:6}[parts.weekday];
+    const elapsed=((Number(parts.hour)*60+Number(parts.minute))*60+Number(parts.second))*1000;
+    const week=7*86400000;
+    const offset=(((8-weekday)%7)*86400000+43200000-elapsed+week)%week;
+    const mondayParts=dateParts(now+offset);
+    assert.equal(mondayParts.weekday,"Mon");
+    const monday=mondayParts.year+"-"+mondayParts.month+"-"+mondayParts.day;
+    const filename=join(srv.directory,"solo.sqlite");
+    const old=new DatabaseSync(filename);
+    try{
+      old.exec("DROP TABLE bank_tax_assessments; DROP TABLE bank_tax_state;");
+      old.prepare("UPDATE solo_clock SET offset_ms=? WHERE id=1").run(offset);
+      old.prepare("UPDATE characters SET money=0,bank=2000000,kpoint=0,last_event_day=?,last_health_day=?").run(monday,monday);
+      old.prepare("UPDATE bank_accounts SET last_interest_day='2025-01-01'").run();
+    }finally{old.close();}
+    restarted=await start("solo",null,srv.directory);
+    const first=await api(restarted.url,"state");
+    assert.equal(first.status,200);
+    assert.equal(first.result.character.name,"升級驗證居民");
+    assert.equal(first.result.character.money,0);
+    assert.equal(first.result.character.bank,2010000,"仍依舊存款計一次 0.5% 利息");
+    assert.equal(first.result.bankTax.snapshotDay,monday);
+    assert.equal(first.result.bankTax.assessmentBase,2010000);
+    assert.equal(first.result.bankTax.lastAssessment,null,"既有 Web 角色不追溯首次升級前週一稅");
+    assert.equal(first.result.bankTax.unpaidPeriods,0);
+    assert.equal(first.result.bankTax.unpaidTotal,"0");
+    const second=await api(restarted.url,"state");
+    assert.equal(second.result.character.bank,2010000);
+    const saved=new DatabaseSync(filename);
+    try{
+      assert.equal(saved.prepare("SELECT COUNT(*) n FROM bank_tax_assessments").get().n,0);
+      assert.equal(saved.prepare("SELECT COUNT(*) n FROM bank_tax_state").get().n,1);
+      assert.equal(saved.prepare("SELECT COUNT(*) n FROM bank_ledger WHERE action='普通存款利息'").get().n,1);
+    }finally{saved.close();}
+  }finally{
+    if(restarted)await restarted.stop();
+    else await srv.stop();
+  }
+});
+
 test("BK-04 單機星期一真實 HTTP：快轉徵稅、重送、SQLite 重啟與帳簿一致",async()=>{
   const srv=await start("solo");
   let restarted=null;
