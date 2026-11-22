@@ -3826,7 +3826,10 @@ function renderTraining() {
       (lesson.cooldownMs/60_000)+" 分鐘" :
       "費用 " + money(lesson.price) + "，" +
       (lesson.type === "school" ? "頭腦" : "身體") +
-      "能量消耗 " + lesson.energyCost;
+      "能量消耗 " + lesson.energyCost +
+      (lesson.type==="gym"?
+        "，Web 補完規則預計減重 "+(lesson.weightLoss??0).toFixed(2)+
+        " 公斤，間隔 "+(lesson.cooldownMs/60_000)+" 分鐘":"");
     const gains = document.createElement("p");
     gains.className = "small";
     const values = Object.entries(lesson.gains)

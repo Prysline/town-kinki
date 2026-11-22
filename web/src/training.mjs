@@ -1,5 +1,7 @@
 // 學校、健身房讀取原版資料表；獨立教室有 kyushitu.cgi 真正的執行依據。
-// 不將教室的減重與雙能量消耗套到只有資料表的 gym/school。
+// 健身房減重為 Web 補完：原 fork 有 gym 資料表，未找到健身房的可執行 CGI；
+// 參考原版 basic.cgi 工作消耗／100 計算，並非已驗證的原版健身房公式。
+// 教室 kyushitu.cgi 的雙能量減重另有獨立執行依據，不套用到 gym/school。
 import { STAT_KEYS, STAT_LABELS, recoverEnergy, bodyMassIndex } from "./engine.mjs";
 
 const BRAIN = ["kokugo", "suugaku", "rika", "syakai", "eigo", "ongaku", "bijutu"];
@@ -51,6 +53,7 @@ function records(source, type) {
       key: type + "-" + (index + 2), type, originalName,
       name: (school ? SCHOOL_ZH_TW : GYM_ZH_TW)[originalName] ?? originalName,
       price, energyCost, gains, cooldownMs,
+      ...(school?{}:{weightLoss:energyCost/100}),
       // 原版 gym_kouka / school_kouka 可能對其他行為有影響，尚未移植。
       extraEffect: fields[9]
     }];
@@ -141,8 +144,13 @@ export function performTraining(character, lesson, now = Date.now(), day = calen
   if(lesson.type==="school"){
     extra={brainEnergy:current.brainEnergy-lesson.energyCost,lastSchoolDay:day};
   }else if(lesson.type==="gym"){
+    // Web 補完規則：健身房減重 = 原始 gym.cgi 身體能量消耗 / 100。
+    // 原 fork 無可執行 gym CGI，僅能參照 basic.cgi::do_work 的既有減重比例。
+    // 採用 Web 現有最低 1kg 安全下限，訓練後同步更新 BMI。
+    const weight=Math.max(1,Math.round((current.weight-lesson.energyCost/100)*100)/100);
     extra={bodyEnergy:current.bodyEnergy-lesson.energyCost,
-      lastGymAt:now,gymReadyAt:now+lesson.cooldownMs};
+      lastGymAt:now,gymReadyAt:now+lesson.cooldownMs,
+      weight,bmi:bodyMassIndex(current.height,weight)};
   }else{
     // kyushitu.cgi::kyushitu_go L139–143：扣除兩種能量，體重減少兩種消耗／100。
     // 最低 1kg 為 Web 防止非物理負數的保護；原版未做此保護。
@@ -156,6 +164,6 @@ export function performTraining(character, lesson, now = Date.now(), day = calen
     money:current.money-(payment==="cash"?lesson.price:0),
     bank:current.bank-(payment==="credit"?lesson.price:0)};
   return {character:next,gained:lesson.gains,paid:lesson.price,payment,
-    lesson:lesson.name,weightLoss:lesson.type==="classroom"?
+    lesson:lesson.name,weightLoss:lesson.type==="classroom"||lesson.type==="gym"?
       Math.round((current.weight-next.weight)*100)/100:0};
 }

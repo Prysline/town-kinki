@@ -297,6 +297,13 @@ test("課程不可用時恢復整張灰階與卡片倒數，停用由真實課�
   assert.match(script,/paymentSelect\?\.addEventListener\("change",\(\)=>update\(\)\)/);
   assert.match(script,/tile\.append\(countdown,blocked,submit\)/);
 });
+test("健身房課程卡片明示 Web 補完減重預估，完成後呈現後端實際減重而非誤當原版公式",()=>{
+  assert.match(script,/lesson\.type==="gym"\?/);
+  assert.match(script,/Web 補完規則預計減重/);
+  assert.match(script,/lesson\.weightLoss\?\?0/);
+  assert.match(script,/result\.weightLoss \? "，體重減少 "/);
+});
+
 test("學校跨日、健身房與教室各自倒數且每秒刷新，到期需重新取後端資格",()=>{
   assert.match(script,/function schoolWaitUntilTomorrow\(now\)/);
   assert.match(script,/character\.lastSchoolDay!==today/);
