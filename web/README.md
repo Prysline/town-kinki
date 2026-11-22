@@ -4,7 +4,7 @@
 
 > **下一階段必讀：[現行功能狀態與開發計畫](docs/PROJECT-STATUS-AND-PLAN.md)**。它獨立區分「已實作／自動驗證／真人瀏覽器驗收／原版差異／真正未完成」。舊第30～67階段文件只作技術、PR 與決策證據，不能當最新待辦。
 >
-> **[正式產品範圍](docs/project-scope-no-legacy-player-import.md)**：**完全不做舊 CGI 玩家帳號、私人存檔、郵件、背包、銀行、住宅匯入／轉檔／相容驗收**。原版 CGI 是玩法來源；新 Web SQLite 存檔、升級、備份與還原仍是正式需求。原版 `log_dir/townlog0.cgi`～`townlog3.cgi` 全為空檔；21格單機試玩街區是自願建立的 Web 配置，並非原版歷史地圖。
+> **[正式產品範圍](docs/project-scope-no-legacy-player-import.md)**：**完全不需要考慮原版 CGI 舊玩家存檔匯入**；完全不做舊 CGI 玩家帳號、私人存檔、郵件、背包、銀行、住宅匯入／轉檔／相容驗收。原版 CGI 是玩法來源；新 Web SQLite 存檔、升級、備份與還原仍是正式需求。原版 `log_dir/townlog0.cgi`～`townlog3.cgi` 全為空檔；21格單機試玩街區是自願建立的 Web 配置，並非原版歷史地圖。
 
 ## 需求、安裝與啟動
 
