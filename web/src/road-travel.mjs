@@ -173,16 +173,17 @@ function rawMatch(row,vehicle){
 function availableVehicles(db,userId,source,now){
   // 百貨車必須有與來源行、姓名、真正的本人購物流水對應的紀錄。
   // 只有自行寫入同名文字、偽造來源ID或33欄不足以通過這項條件。
-  const retailReceipt=db.prepare([
+  const hasRetailReceipts=db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='retail_purchases'").get();
+  const retailReceipt=hasRetailReceipts?db.prepare([
     "SELECT 1 FROM retail_purchases WHERE user_id=? AND source_line=?",
     "AND sku=? AND name=? AND shop IN ('depart1','depart2') LIMIT 1"
-  ].join(" "));
+  ].join(" ")):null;
   return heldInventoryRows(db,userId,now).flatMap(row=>{
     const pool=row.original_id===TREASURE_ORIGIN?source.vehicles:
       row.original_id===RETAIL_ITEM_ORIGIN?source.retailVehicles:[];
     const v=pool.find(x=>x.name===row.original_name&&x.category===row.category);
     if(!v||!rawMatch(row,v))return [];
-    if(v.origin===RETAIL_ITEM_ORIGIN&&!retailReceipt.get(userId,row.source_line,v.sku,v.name))
+    if(v.origin===RETAIL_ITEM_ORIGIN&&!retailReceipt?.get(userId,row.source_line,v.sku,v.name))
       return [];
     const remaining=inventoryLife(row,now).remaining;
     if(!Number.isSafeInteger(remaining)||remaining<=0)return [];
