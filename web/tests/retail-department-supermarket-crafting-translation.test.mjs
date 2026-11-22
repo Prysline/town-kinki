@@ -36,8 +36,13 @@ test("百貨公司 3、超市 6、合成 4 原始商品列與翻譯完整對應"
 test("新分類的 SKU、名稱與特殊原版效果／耐久均由原始 CGI 管理",()=>{
   const categories=new Set(groups.map(x=>x[0]));
   const items=parseLegacyRetailCatalog(raw).filter(x=>categories.has(x.category));
-  assert.equal(items.length,13);
-  assert.equal(new Set(items.map(x=>x.sku)).size,13);
+  // 原版共 13 列，但 parser 排除價格為 0 的斷食套組與「秘伝商品」的 Tomcat。
+  // 翻譯仍逐列覆蓋原始 13 件；可安全販售目錄則只包含另外 11 件。
+  assert.equal(items.length,11);
+  assert.equal(new Set(items.map(x=>x.sku)).size,11);
+  const excluded=allRows.filter(x=>categories.has(x.fields[0])&&
+    !items.some(item=>item.originalLine===x.line)).map(x=>x.fields[1]).sort();
+  assert.deepEqual(excluded,["トムキャット","断食セット"].sort());
   for(const item of items){
     assert.equal(item.sku,"legacy-"+item.originalLine);
     assert.equal(item.rawFields[0],item.category);
@@ -45,6 +50,8 @@ test("新分類的 SKU、名稱與特殊原版效果／耐久均由原始 CGI �
   }
   const find=name=>allRows.find(x=>x.fields[1]===name).fields;
   assert.equal(find("断食セット")[9],"ダイエット,30,食料品");
+  assert.equal(find("断食セット")[17],"0");
+  assert.match(find("トムキャット")[29],/秘伝商品/);
   assert.equal(find("MHP2G")[9],"ギフト");
   assert.equal(find("トムキャット")[21],"6");
   assert.equal(find("トムキャット")[22],"回");
