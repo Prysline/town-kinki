@@ -4,7 +4,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { createServer } from "node:net";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, readFileSync } from "node:fs";
+import { DatabaseSync } from "node:sqlite";
+import { decodeLegacyText } from "../src/engine.mjs";
+import { parseLegacyRetailCatalog } from "../src/retail.mjs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { resolve, dirname } from "node:path";
@@ -139,17 +142,25 @@ async function click(cdp,selector){
   await dismiss(cdp);
   // 先完成瞬間捲動，再等待前端 scroll handler 同步顯示／隱藏固定狀態列；
   // 直接在同一 JS task 捲動並取 elementFromPoint 會錯把舊遮罩狀態當成按鈕阻擋。
-  await evaluate(cdp,"(function(){document.querySelector("+JSON.stringify(selector)+")"+
-    "?.scrollIntoView({behavior:'instant',block:'center',inline:'nearest'});return true;})()");
-  await pause(200);
-  const info=await evaluate(cdp,"(function(){const e=document.querySelector("+JSON.stringify(selector)+");"+
-    "if(!e)return {error:'missing'};if(e.disabled)return {error:'disabled'};"+
-    "const r=e.getBoundingClientRect();"+
-    "const x=r.left+r.width/2,y=r.top+r.height/2;"+
-    "if(!r.width||!r.height)return {error:'zero-size'};"+
-    "const point=document.elementFromPoint(x,y);if(!point||!(e===point||e.contains(point)))"+
-    "return {error:'blocked',tag:point?.tagName,id:point?.id,x,y};"+
-    "return {x,y};})()");
+  let info;
+  // SPA 可能在第一次捲動後又改變佈局；確認真實視窗命中點後才發送滑鼠事件。
+  // 不以 HTMLElement.click() 繞過不可見或被遮住的按鈕。
+  for(let attempt=0;attempt<5;attempt++){
+    await evaluate(cdp,"(function(){document.querySelector("+JSON.stringify(selector)+")"+
+      "?.scrollIntoView({behavior:'instant',block:'center',inline:'nearest'});return true;})()");
+    await pause(200+attempt*80);
+    info=await evaluate(cdp,"(function(){const e=document.querySelector("+JSON.stringify(selector)+");"+
+      "if(!e)return {error:'missing'};if(e.disabled)return {error:'disabled'};"+
+      "const r=e.getBoundingClientRect();"+
+      "const x=r.left+r.width/2,y=r.top+r.height/2;"+
+      "if(!r.width||!r.height)return {error:'zero-size'};"+
+      "if(x<0||y<0||x>=innerWidth||y>=innerHeight)"+
+      "return {error:'outside-viewport',x,y,viewport:[innerWidth,innerHeight]};"+
+      "const point=document.elementFromPoint(x,y);if(!point||!(e===point||e.contains(point)))"+
+      "return {error:'blocked',tag:point?.tagName,id:point?.id,x,y};"+
+      "return {x,y};})()");
+    if(!info.error||["missing","disabled","zero-size"].includes(info.error))break;
+  }
   assert.ok(!info.error,"點擊 "+selector+" 受阻："+JSON.stringify(info));
   await cdp.send("Input.dispatchMouseEvent",{type:"mouseMoved",x:info.x,y:info.y});
   await cdp.send("Input.dispatchMouseEvent",{type:"mousePressed",x:info.x,y:info.y,button:"left",clickCount:1});
@@ -248,6 +259,179 @@ test("Chrome：桌面→768px平板→375px手機，操作真實建角／工作�
     assert.equal(continued.name,"Chrome測試居民");
     assert.ok(continued.bank>=after.bank);
     assert.ok(continued.purchases>=1);
+  }finally{
+    await chrome?.stop();
+    await web?.stop();
+    rmSync(workspace,{force:true,recursive:true,maxRetries:50,retryDelay:200});
+  }
+});
+
+
+test("Chrome：健身房減重→真實百貨寵物／信用卡→背包使用／分類收合→信用付款→跨重啟與手機視埠",{
+  timeout:240000
+},async()=>{
+  const workspace=mkdtempSync(join(tmpdir(),"town-chrome-recent-"));
+  const dataDir=join(workspace,"sqlite");
+  let web=null,chrome=null;
+  try{
+    web=await startWeb(dataDir);
+    chrome=await openChrome(join(workspace,"chrome-profile"));
+    await chrome.send("Page.enable");
+    await chrome.send("Runtime.enable");
+    await viewport(chrome,1440,900);
+    await chrome.send("Page.navigate",{url:web.url});
+    await until(chrome,"!document.querySelector('#create')?.hidden","顯示新角色建立頁");
+    await evaluate(chrome,"window.confirm=()=>true");
+    await fill(chrome,'#create-form [name="name"]',"Chrome近期驗收");
+    await click(chrome,"#create-submit");
+    await until(chrome,"!document.querySelector('#game')?.hidden","建立單機角色");
+    await click(chrome,"#solo-starter-create");
+    await until(chrome,"document.querySelector('#solo-starter-town')?.hidden===true","單機試玩街區已建立");
+
+    // 先用真正的 Chrome 點擊健身房課程：不是直接 POST /api/train。
+    const initial=await evaluate(chrome,"(async()=>{const s=await(await fetch('/api/state')).json();return {character:s.character,lesson:s.trainingLessons.find(x=>x.key==='gym-3')}})()");
+    assert.equal(initial.character.weight,60);
+    assert.equal(initial.lesson.weightLoss,0.08);
+    await click(chrome,"#facility-tab-training");
+    await until(chrome,"document.querySelector('#gym-lessons .training-tile:nth-child(2) .small')?.textContent?.includes('Web 補完規則預計減重 0.08')","游泳以外的健走卡片提示 Web 減重");
+    await click(chrome,"#gym-lessons .training-tile:nth-child(2) button");
+    await until(chrome,"document.querySelector('#result-dialog')?.open && document.querySelector('#result-dialog-message')?.textContent?.includes('體重減少 0.08')","健走完成減重結果");
+    const afterGym=await evaluate(chrome,"(async()=>{const s=await(await fetch('/api/state')).json();return {character:s.character,gymCooldownMs:s.gymCooldownMs}})()");
+    assert.equal(afterGym.character.weight,59.92);
+    assert.equal(afterGym.character.stats.kenkou,initial.character.stats.kenkou+3);
+    assert.equal(afterGym.character.money,initial.character.money-800);
+    assert.equal(afterGym.character.bodyEnergy,initial.character.bodyEnergy-8);
+    assert.equal(afterGym.character.bmi,Math.round(59.92/((afterGym.character.height/100)**2)*10)/10);
+    assert.ok(afterGym.gymCooldownMs>0);
+    await click(chrome,"#profile-tab-status");
+    assert.match(await evaluate(chrome,"document.querySelector('#measurements')?.textContent"),/59\.92/);
+    assert.equal(await evaluate(chrome,"document.querySelector('#gym-lessons .training-tile:nth-child(2) button')?.disabled"),true);
+
+    // 只改獨立測試的 SQLite 貨架；正式遊戲仍由原版貨架每日隨機抽選。
+    const catalog=parseLegacyRetailCatalog(decodeLegacyText(
+      readFileSync(new URL("../../dat_dir/syouhin.cgi",import.meta.url))));
+    const selected=["ガチャピン","スペシャルクレジットカード"].map(name=>{
+      const item=catalog.find(x=>x.name===name);
+      assert.ok(item,"原版商品必須存在："+name);
+      return item;
+    });
+    const db=new DatabaseSync(join(dataDir,"solo.sqlite"));
+    try{
+      const listed=db.prepare("SELECT sku,position FROM retail_stock WHERE shop='depart1'").all();
+      assert.equal(listed.length,110);
+      const targets=new Set(selected.map(item=>item.sku));
+      const available=new Set(listed.map(item=>item.sku));
+      const slots=listed.filter(item=>!targets.has(item.sku));
+      for(const item of selected){
+        if(!available.has(item.sku)){
+          const slot=slots.shift();assert.ok(slot);
+          db.prepare("UPDATE retail_stock SET sku=?,remaining=5 WHERE shop='depart1' AND position=?").run(item.sku,slot.position);
+        }else db.prepare("UPDATE retail_stock SET remaining=5 WHERE shop='depart1' AND sku=?").run(item.sku);
+      }
+      db.prepare("UPDATE characters SET money=5000000,bank=3000000 WHERE name=?").run("Chrome近期驗收");
+    }finally{db.close();}
+    // 使用 UI 的「更新狀態」讓後端重新載入新的測試貨架。
+    await click(chrome,"#refresh");
+    const petSku=selected[0].sku,cardSku=selected[1].sku;
+    await until(chrome,"document.querySelector('#retail-items input[value="+JSON.stringify(petSku)+"]')!==null && document.querySelector('#retail-items input[value="+JSON.stringify(cardSku)+"]')!==null","測試貨架已呈現寵物與信用卡");
+    await click(chrome,"#facility-tab-shops");
+    await click(chrome,'#retail-items input[type="radio"][value='+JSON.stringify(petSku)+']');
+    await click(chrome,"#retail-items .shop-checkout button");
+    await until(chrome,"document.querySelector('#result-dialog')?.open && document.querySelector('#result-dialog-message')?.textContent?.includes('已購入')","玩家點擊購買寵物完成");
+
+    await click(chrome,"#profile-tab-inventory");
+    await until(chrome,"document.querySelector('#inventory-general-usage')?.textContent?.trim()==='1 / 25 格'","背包的一般物品顯示 1／25 格");
+    const petLine=await evaluate(chrome,"(async()=>{const s=await(await fetch('/api/state')).json();return s.legacyInventory.find(x=>x.name==='ガチャピン')?.sourceLine})()");
+    assert.ok(Number.isSafeInteger(petLine));
+    const petSelector='#legacy-inventory-list .inventory-item[data-source-line="'+petLine+'"]';
+    await until(chrome,"document.querySelector("+JSON.stringify(petSelector+" .inventory-item-controls button")+")?.disabled===false","加查賓背包使用按鈕可點");
+    await click(chrome,petSelector+" .inventory-item-controls button");
+    await until(chrome,"document.querySelector('#result-dialog')?.open && document.querySelector('#result-dialog-message')?.textContent?.includes('已使用')","玩家點擊使用寵物完成");
+    const afterPet=await evaluate(chrome,"(async()=>{const s=await(await fetch('/api/state')).json();return {stats:s.character.stats,item:s.legacyItemActions.find(x=>x.sourceLine==="+petLine+")}})()");
+    assert.equal(afterPet.stats.love,initial.character.stats.love+15);
+    assert.equal(afterPet.stats.unique,initial.character.stats.unique+15);
+    assert.equal(afterPet.stats.etti,initial.character.stats.etti+15);
+    assert.equal(afterPet.item.remaining,3,"原版日制寵物使用後不扣有效天數");
+    assert.equal(afterPet.item.canUse,false,"原版 120 分鐘冷卻仍存在");
+    assert.equal(await evaluate(chrome,"document.querySelector("+JSON.stringify(petSelector+" .inventory-item-controls button")+")?.disabled"),true);
+
+    await click(chrome,"#facility-tab-shops");
+    await click(chrome,'#retail-items input[type="radio"][value='+JSON.stringify(cardSku)+']');
+    await click(chrome,"#retail-items .shop-checkout button");
+    await until(chrome,"document.querySelector('#result-dialog')?.open && document.querySelector('#result-dialog-message')?.textContent?.includes('已購入')","玩家點擊購買信用卡完成");
+    await click(chrome,"#profile-tab-inventory");
+    await until(chrome,"document.querySelector('#inventory-general-usage')?.textContent?.trim()==='2 / 25 格'","背包容量 2／25 格");
+    assert.equal(await evaluate(chrome,"document.querySelectorAll('#legacy-inventory-list .inventory-category').length"),2,
+      "寵物與日用品應分為兩個背包分類");
+    const categories="#legacy-inventory-list details.inventory-category";
+    await click(chrome,categories+" > summary");
+    await until(chrome,"document.querySelector("+JSON.stringify(categories)+")?.open===false","分類可由滑鼠收合");
+    await click(chrome,"#profile-tab-status");
+    await click(chrome,"#refresh");
+    await click(chrome,"#profile-tab-inventory");
+    assert.equal(await evaluate(chrome,"document.querySelector("+JSON.stringify(categories)+")?.open"),false,
+      "收合選擇應跨畫面同步保留");
+    await click(chrome,categories+" > summary");
+    await until(chrome,"document.querySelector("+JSON.stringify(categories)+")?.open===true","分類可再次展開");
+
+    const cardLine=await evaluate(chrome,"(async()=>{const s=await(await fetch('/api/state')).json();return s.legacyInventory.find(x=>x.name==='スペシャルクレジットカード')?.sourceLine})()");
+    assert.ok(Number.isSafeInteger(cardLine));
+    const cardSelector='#legacy-inventory-list .inventory-item[data-source-line="'+cardLine+'"]';
+    await click(chrome,cardSelector+" .inventory-item-controls button");
+    await until(chrome,"document.querySelector('#result-dialog')?.open && document.querySelector('#result-dialog-message')?.textContent?.includes('已使用')","使用特殊信用卡後能力生效");
+    const afterCard=await evaluate(chrome,"(async()=>{const s=await(await fetch('/api/state')).json();return {stats:s.character.stats,bank:s.character.bank,money:s.character.money,card:s.classroomCreditCards.find(x=>x.sourceLine==="+cardLine+")}})()");
+    assert.equal(afterCard.stats.kokugo,initial.character.stats.kokugo+1);
+    assert.equal(afterCard.stats.love,initial.character.stats.love+16);
+    assert.ok(afterCard.card,"背包使用不應讓信用卡支付資格失效");
+
+    // 使用真實百貨 UI 的「信用卡」付款選單，核對只扣普通存款。
+    const affordable=await evaluate(chrome,"(async()=>{const s=await(await fetch('/api/state')).json();return s.retailGoods.find(x=>x.shop==='depart1'&&x.stock>0&&x.price>0&&x.price<=10000&&x.sku!=="+JSON.stringify(petSku)+"&&x.sku!=="+JSON.stringify(cardSku)+")?.sku||null})()");
+    assert.ok(affordable,"原版百貨貨架應有可用信用卡購買的平價商品");
+    await click(chrome,"#facility-tab-shops");
+    await click(chrome,'#retail-items input[type="radio"][value='+JSON.stringify(affordable)+']');
+    const select="#retail-items .shop-checkout select[aria-label$='付款方式']";
+    const chosen=await evaluate(chrome,"(function(){const el=document.querySelector("+JSON.stringify(select)+");if(!el)return false;el.value='card:"+cardLine+"';el.dispatchEvent(new Event('change',{bubbles:true}));return el.value==='card:"+cardLine+"';})()");
+    assert.equal(chosen,true,"信用卡仍列於真實百貨付款方式");
+    await click(chrome,"#retail-items .shop-checkout button");
+    await until(chrome,"document.querySelector('#result-dialog')?.open && document.querySelector('#result-dialog-message')?.textContent?.includes('普通存款支付')","信用卡付款成功提示");
+    const afterPayment=await evaluate(chrome,"(async()=>{const s=await(await fetch('/api/state')).json();return {bank:s.character.bank,money:s.character.money,stats:s.character.stats,purchases:s.retailPurchases.length,weight:s.character.weight,bmi:s.character.bmi}})()");
+    assert.ok(afterPayment.bank<afterCard.bank);
+    assert.equal(afterPayment.money,afterCard.money);
+    assert.equal(afterPayment.stats.kokugo,afterCard.stats.kokugo,"信用卡結帳本身不增加能力");
+    assert.equal(afterPayment.weight,59.92);
+
+    // 375／768px 用同一份持久角色資料，檢查背包容量、分類與可點擊狀態。
+    for(const width of [768,375]){
+      await viewport(chrome,width,width===375?812:1024);
+      await click(chrome,"#profile-tab-inventory");
+      assert.match(await evaluate(chrome,"document.querySelector('#inventory-general-usage')?.textContent"),/\/ 25 格/);
+      assert.ok(await evaluate(chrome,"document.querySelectorAll('#legacy-inventory-list .inventory-category').length>=2"));
+      await click(chrome,"#legacy-inventory-list .inventory-category > summary");
+      await click(chrome,"#legacy-inventory-list .inventory-category > summary");
+      await click(chrome,"#profile-tab-status");
+      assert.match(await evaluate(chrome,"document.querySelector('#measurements')?.textContent"),/59\.92/);
+    }
+
+    // Node 伺服器重啟：真正用瀏覽器重新導航，核對 UI 與後端持久資料。
+    await web.stop();
+    web=await startWeb(dataDir);
+    await viewport(chrome,1440,900);
+    await chrome.send("Page.navigate",{url:web.url});
+    await until(chrome,"Boolean(document.querySelector('#game')&&!document.querySelector('#game').hidden)||Boolean(document.querySelector('#solo-lobby')&&!document.querySelector('#solo-lobby').hidden)","重啟後已找到原角色");
+    const lobby=await evaluate(chrome,"!document.querySelector('#solo-lobby')?.hidden");
+    if(lobby)await click(chrome,"#solo-continue");
+    await until(chrome,"!document.querySelector('#game')?.hidden","重啟後繼續既有單機角色");
+    await click(chrome,"#profile-tab-status");
+    assert.match(await evaluate(chrome,"document.querySelector('#measurements')?.textContent"),/59\.92/);
+    const resumed=await evaluate(chrome,"(async()=>{const s=await(await fetch('/api/state')).json();return {bank:s.character.bank,money:s.character.money,stats:s.character.stats,weight:s.character.weight,bmi:s.character.bmi,purchases:s.retailPurchases.length,pet:s.legacyItemActions.find(x=>x.sourceLine==="+petLine+"),card:s.classroomCreditCards.find(x=>x.sourceLine==="+cardLine+")}})()");
+    assert.equal(resumed.weight,afterPayment.weight);
+    assert.equal(resumed.bmi,afterPayment.bmi);
+    assert.equal(resumed.bank,afterPayment.bank);
+    assert.equal(resumed.money,afterPayment.money);
+    assert.equal(resumed.stats.love,afterPayment.stats.love);
+    assert.equal(resumed.stats.kokugo,afterPayment.stats.kokugo);
+    assert.equal(resumed.purchases,afterPayment.purchases);
+    assert.ok(resumed.pet&&resumed.card,"重啟後仍持有原寵物及信用卡");
   }finally{
     await chrome?.stop();
     await web?.stop();
