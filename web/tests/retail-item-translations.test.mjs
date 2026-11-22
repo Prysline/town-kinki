@@ -16,6 +16,7 @@ import { RETAIL_TOHOKU_SPECIALTIES_ZH_TW,RETAIL_KANSAI_SPECIALTIES_ZH_TW } from 
 import { RETAIL_DEPARTMENT_ZH_TW,RETAIL_SUPERMARKET_ZH_TW,RETAIL_CRAFTING_ZH_TW } from "../public/retail-department-supermarket-crafting-translations.js";
 import { RETAIL_GIFTS_ZH_TW } from "../public/retail-gift-translations.js";
 import { RETAIL_SECRET_GOODS_ZH_TW } from "../public/retail-secret-goods-translations.js";
+import { RETAIL_CHANKO_ZH_TW,RETAIL_GOLD_BOX_ZH_TW } from "../public/retail-chanko-gold-translations.js";
 
 const groups=[
   EQUIPMENT_ZH_TW,VENDING_ZH_TW,RETAIL_FOOD_ZH_TW,DESSERT_FASTFOOD_ZH_TW,
@@ -25,7 +26,8 @@ const groups=[
   RETAIL_TOHOKU_SPECIALTIES_ZH_TW,RETAIL_KANSAI_SPECIALTIES_ZH_TW,
   RETAIL_DEPARTMENT_ZH_TW,RETAIL_SUPERMARKET_ZH_TW,RETAIL_CRAFTING_ZH_TW,
   RETAIL_GIFTS_ZH_TW,
-  RETAIL_SECRET_GOODS_ZH_TW
+  RETAIL_SECRET_GOODS_ZH_TW,
+  RETAIL_CHANKO_ZH_TW,RETAIL_GOLD_BOX_ZH_TW
 ];
 const app=readFileSync(new URL("../public/app.js",import.meta.url),"utf8");
 
@@ -37,7 +39,7 @@ test("共用入口保留所有已確認品項、花卉、日用品與遊戲名�
     else unique.set(original,chinese);
     assert.equal(displayRetailItemName(original),chinese,original);
   }
-  assert.ok(unique.size>=313,"百貨翻譯不得遺失已確認品項與新增秘密商品 14 列");
+  assert.ok(unique.size>=322,"百貨翻譯不得遺失已確認品項與相撲鍋、金色寶箱 9 列");
   assert.equal(displayRetailItemName("未知物品"),"未知物品");
 });
 
@@ -51,6 +53,7 @@ test("共用入口將已確認分類、花卉、日用品及遊戲轉成繁體�
     "東北名産店":"東北名產店","関西名産店":"關西名產店",
     "デパート":"百貨公司","スーパー":"超級市場","合成":"合成",
     "ギフト":"禮品","秘密の商品":"秘密商品",
+    "ちゃんこ":"相撲火鍋","金の箱":"金色寶箱",
     "武器":"武器","御守":"護身符"
   };
   for(const [original,chinese] of Object.entries(expected))
