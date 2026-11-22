@@ -6286,3 +6286,116 @@ test("第67階段單機首次遊玩真存檔：建角→工作→銀行→百貨
     rmSync(restoredDir,{force:true,recursive:true});
   }
 });
+
+test("單機實體百貨：購入ガチャピン與特殊信用卡後可背包使用，信用卡仍可結帳，重啟防重不掉資產",async()=>{
+  const srv=await start("solo");
+  let reopened=null;
+  try{
+    const created=await api(srv.url,"character",{
+      name:"寵物與卡片使用者",gender:"other",stats:defaultStats()
+    });
+    assert.equal(created.status,200);
+    anchorSoloTestAtNoon(srv);
+    const placed=await api(srv.url,"map/tile",{row:0,column:0,symbol:"デパ"});
+    assert.equal(placed.status,200);
+    const catalog=parseLegacyRetailCatalog(decodeLegacyText(
+      readFileSync(resolve(root,"../dat_dir/syouhin.cgi"))
+    ));
+    const selected=["ガチャピン","スペシャルクレジットカード"].map(name=>{
+      const item=catalog.find(x=>x.name===name);
+      assert.ok(item,"原版商品必須存在："+name);
+      return item;
+    });
+    // 在完整 110 件原版貨架上強制兩項測試商品出現：不改正式每日隨機上架規則。
+    const db=new DatabaseSync(join(srv.directory,"solo.sqlite"));
+    try{
+      const listed=db.prepare("SELECT sku,position FROM retail_stock WHERE shop='depart1'").all();
+      assert.equal(listed.length,110);
+      const targets=new Set(selected.map(x=>x.sku));
+      const available=new Set(listed.map(x=>x.sku));
+      const emptySlots=listed.filter(x=>!targets.has(x.sku));
+      for(const item of selected.filter(x=>!available.has(x.sku))){
+        const slot=emptySlots.shift();
+        assert.ok(slot);
+        db.prepare("UPDATE retail_stock SET sku=?,remaining=5 WHERE shop='depart1' AND position=?")
+          .run(item.sku,slot.position);
+      }
+      db.prepare("UPDATE characters SET money=5000000,bank=3000000 WHERE name=?")
+        .run("寵物與卡片使用者");
+    }finally{db.close();}
+    const shelf=(await api(srv.url,"state")).result.retailGoods;
+    for(const item of selected)
+      assert.ok(shelf.some(x=>x.sku===item.sku&&x.stock>0),
+        "測試貨架必須可取得："+item.name);
+    const petPurchase=await api(srv.url,"retail/buy",{
+      shop:"depart1",sku:selected[0].sku,requestId:"day_pet_purchase_01"
+    });
+    assert.equal(petPurchase.status,200);
+    const petLine=petPurchase.result.retailResult.sourceLine;
+    assert.ok(petPurchase.result.legacyItemActions.some(x=>x.sourceLine===petLine&&x.canUse));
+    const petUse=await api(srv.url,"inventory/legacy/use",{
+      sourceLine:petLine,requestId:"day_pet_direct_01"
+    });
+    assert.equal(petUse.status,200);
+    assert.equal(petUse.result.itemUseResult.changes.stats.love,15);
+    assert.equal(petUse.result.itemUseResult.changes.stats.unique,15);
+    assert.equal(petUse.result.itemUseResult.changes.stats.etti,15);
+    assert.equal(petUse.result.legacyItemActions.find(x=>x.sourceLine===petLine).remaining,3);
+    const petBlocked=await api(srv.url,"inventory/legacy/use",{
+      sourceLine:petLine,requestId:"day_pet_cooldown"
+    });
+    assert.equal(petBlocked.status,400);
+
+    const cardPurchase=await api(srv.url,"retail/buy",{
+      shop:"depart1",sku:selected[1].sku,requestId:"day_card_purchase_01"
+    });
+    assert.equal(cardPurchase.status,200);
+    const cardLine=cardPurchase.result.retailResult.sourceLine;
+    assert.ok(cardPurchase.result.classroomCreditCards.some(x=>x.sourceLine===cardLine));
+    assert.ok(cardPurchase.result.legacyItemActions.some(x=>x.sourceLine===cardLine&&x.canUse));
+    const cardUse=await api(srv.url,"inventory/legacy/use",{
+      sourceLine:cardLine,requestId:"day_card_direct_01"
+    });
+    assert.equal(cardUse.status,200);
+    assert.equal(cardUse.result.itemUseResult.changes.stats.kokugo,1);
+    assert.equal(cardUse.result.itemUseResult.changes.stats.etti,1);
+    assert.ok(cardUse.result.classroomCreditCards.some(x=>x.sourceLine===cardLine),
+      "背包使用不得使信用卡付款資格消失");
+    const bankBefore=cardUse.result.character.bank;
+    const moneyBefore=cardUse.result.character.money;
+    const affordable=cardUse.result.retailGoods.find(item=>
+      item.stock>0&&item.price>0&&item.price<=bankBefore&&
+      item.sku!==selected[0].sku&&item.sku!==selected[1].sku);
+    assert.ok(affordable);
+    const paid=await api(srv.url,"retail/buy",{
+      shop:"depart1",sku:affordable.sku,requestId:"card_after_direct_use",
+      payment:"bank",cardSourceLine:cardLine
+    });
+    assert.equal(paid.status,200);
+    assert.equal(paid.result.character.bank,bankBefore-affordable.price);
+    assert.equal(paid.result.character.money,moneyBefore);
+    assert.ok(paid.result.bankLedger.some(x=>x.action.includes("信用付款")));
+    const snapshotStats=paid.result.character.stats;
+    await srv.stop({preserveData:true});
+    reopened=await start("solo",null,srv.directory);
+    const after=(await api(reopened.url,"state")).result;
+    assert.equal(after.character.bank,bankBefore-affordable.price);
+    assert.deepEqual(after.character.stats,snapshotStats);
+    assert.equal(after.legacyItemActions.find(x=>x.sourceLine===petLine).remaining,3);
+    assert.ok(after.classroomCreditCards.some(x=>x.sourceLine===cardLine));
+    for(const [line,requestId] of [
+      [petLine,"day_pet_direct_01"],[cardLine,"day_card_direct_01"]
+    ]){
+      const replay=await api(reopened.url,"inventory/legacy/use",{
+        sourceLine:line,requestId
+      });
+      assert.equal(replay.status,200);
+      assert.equal(replay.result.itemUseResult.replayed,true);
+      assert.deepEqual(replay.result.character.stats,snapshotStats);
+      assert.equal(replay.result.character.bank,bankBefore-affordable.price);
+    }
+  }finally{
+    if(reopened)await reopened.stop();
+    else await srv.stop();
+  }
+});
