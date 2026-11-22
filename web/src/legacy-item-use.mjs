@@ -55,6 +55,47 @@ function isVerifiedDayUseItem(row,raw){
     (raw[28]||"0")===item.brain&&
     STATS_INDEX.every((index,i)=>raw[index]===String(item.stats[i])));
 }
+// command.pl::buy_syouhin 會把原版「食料品」／「ファ」效果標記的商品改為食物分類，
+// basic.cgi::item_do 對這兩個標記沒有額外特效，仍套用 17 能力、熱量、能量與回數。
+// 此 fork 的商品表恰有七款；只承認來源不變欄位，避免把任意不明效果當可食用。
+const VERIFIED_RECLASSIFIED_FOODS=new Map([
+  ["食料品\tどすこいちゃんこ",{
+    marker:"食料品",price:"3000",interval:"5",stock:"10",calories:"1500",
+    body:"",brain:"",bonuses:Array(17).fill(2)
+  }],
+  ["ファーストフード\tどすこいつまみ食い",{
+    marker:"ファ",price:"3000",interval:"5",stock:"10",calories:"1500",
+    body:"",brain:"",bonuses:Array(17).fill(2)
+  }],
+  ["食料品\t笹かまぼこ",{
+    marker:"食料品",price:"300",interval:"30",stock:"5",calories:"0",
+    body:"0",brain:"0",bonuses:[0,0,0,0,0,0,0,0,2,5,0,0,0,0,0,0,0]
+  }],
+  ["食料品\tきりたんぽ鍋セット",{
+    marker:"食料品",price:"2500",interval:"30",stock:"5",calories:"555",
+    body:"30",brain:"30",bonuses:Array(17).fill(3)
+  }],
+  ["食料品\t秋田名物稲庭うどん",{
+    marker:"食料品",price:"300",interval:"31",stock:"5",calories:"500",
+    body:"0",brain:"0",bonuses:[0,0,0,0,0,0,0,4,3,3,0,0,0,0,4,0,4]
+  }],
+  ["食料品\t仙台名物牛タン焼き",{
+    marker:"食料品",price:"2000",interval:"20",stock:"20",calories:"7000",
+    body:"0",brain:"0",bonuses:[0,0,0,0,0,0,0,0,5,5,0,5,5,5,0,0,0]
+  }],
+  ["食料品\t仙台名物ずんだもち",{
+    marker:"食料品",price:"200",interval:"10",stock:"20",calories:"200",
+    body:"0",brain:"0",bonuses:[0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0]
+  }]
+]);
+function isVerifiedReclassifiedFood(row,raw){
+  const source=VERIFIED_RECLASSIFIED_FOODS.get(row.category+"\t"+row.original_name);
+  return Boolean(source&&raw[9]===source.marker&&raw[22]==="回"&&
+    raw[17]===source.price&&raw[23]===source.interval&&
+    raw[24]===source.stock&&raw[25]===source.calories&&
+    raw[27]===source.body&&raw[28]===source.brain&&
+    STATS_INDEX.every((index,i)=>raw[index]===String(source.bonuses[i])));
+}
 const ENERGY_RECOVERY_ITEMS=new Map([
   ["ドリンク\t元気ミルク","-500,0"],
   ["ドリンク\t爽快ミルク","0,-500"],
@@ -150,13 +191,14 @@ function parseArchivedItem(row){
   // 原版信用卡有兩條獨立途徑：商店銀行付款；背包 item_do 套用原始能力欄。
   // 特殊卡 +1 全能力、會員卡 +2 前十四項；一般卡/金卡手動使用沒有能力增益。
   const originalCardUse=verifiedDayUse&&effect==="クレジット"&&parts.length===1;
-  if(!SPECIAL_TYPES.has(effect)&&!originalEnergyRecovery&&!originalStatus&&!originalCardUse)
+  const originalFoodMarker=parts.length===1&&isVerifiedReclassifiedFood(row,raw);
+  if(!SPECIAL_TYPES.has(effect)&&!originalEnergyRecovery&&!originalStatus&&!originalCardUse&&!originalFoodMarker)
     return null;
-  if(effect!=="無"&&!originalEnergyRecovery&&!originalStatus&&!originalCardUse&&!emptyMagnitude&&
+  if(effect!=="無"&&!originalEnergyRecovery&&!originalStatus&&!originalCardUse&&!originalFoodMarker&&!emptyMagnitude&&
      (parts.length!==2&&!compound||!/^\d+$/.test(parts[1])))return null;
   if(["無","効果","ステータス"].includes(effect)&&parts.length!==1)
     return null;
-  const magnitude=effect==="無"||originalEnergyRecovery||originalStatus||originalCardUse||emptyMagnitude?0:
+  const magnitude=effect==="無"||originalEnergyRecovery||originalStatus||originalCardUse||originalFoodMarker||emptyMagnitude?0:
     nonnegative(parts[1],"特殊效果",100000);
   let purchasedAt=null,expiresAt=null;
   if(unit==="日"){
