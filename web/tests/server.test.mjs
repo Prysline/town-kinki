@@ -10,7 +10,7 @@ import { DatabaseSync } from "node:sqlite";
 import { LEGACY_CHARACTER_FIELDS } from "../src/legacy-character.mjs";
 import { initLegacyInventoryTables } from "../src/legacy-inventory.mjs";
 import { decodeLegacyText } from "../src/engine.mjs";
-import { parseLegacyRetailCatalog } from "../src/retail.mjs";
+import { parseLegacyRetailCatalog, buyRetailItem } from "../src/retail.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const delay = ms => new Promise(done => setTimeout(done, ms));
@@ -6039,5 +6039,76 @@ test("第65階段單機HTTP：百貨真購原版腳踏車與輪滑車、迷路�
     assert.equal(arrived.result.character.townId,actual.to_town);
     assert.equal((await api(srv.url,"road/arrive",{tripId:trip.id})).result.roadArrivalResult.replayed,true);
     assert.equal((await api(srv.url,"move",{townId:(actual.to_town+1)%4})).status,200);
+  }finally{await srv.stop();}
+});
+
+test("第65階段多人HTTP：兩位真實百貨購買者各自搭自己的輪滑車，跨帳號來源不能冒用",async()=>{
+  const srv=await start("multi");
+  try{
+    const a=await api(srv.url,"register",{
+      username:"phase65RoadRetailA",password:"phase65-secure-pass-a"
+    });
+    const b=await api(srv.url,"register",{
+      username:"phase65RoadRetailB",password:"phase65-secure-pass-b"
+    });
+    assert.equal(a.status,200);assert.equal(b.status,200);
+    for(const [name,cookie] of [["公路百貨甲",a.cookie],["公路百貨乙",b.cookie]])
+      assert.equal((await api(srv.url,"character",{
+        name,gender:"other",stats:defaultStats()
+      },cookie)).status,200);
+    // 多人模式地圖編輯由管理員控制；此處僅在隔離測試資料庫使用
+    // 真正 buyRetailItem 購物函式建立合法本人交易，API 仍走生產環境公路端點。
+    const catalog=parseLegacyRetailCatalog(
+      decodeLegacyText(readFileSync(new URL("../../dat_dir/syouhin.cgi",import.meta.url)))
+    );
+    const vehicle=catalog.find(x=>x.sku==="legacy-338");
+    assert.equal(vehicle.name,"ローラースルーゴーゴー");
+    const db=new DatabaseSync(join(srv.directory,"multi.sqlite"));
+    let aLine,bLine;
+    try{
+      const currentDay=new Date(Date.now()+8*3600000).toISOString().slice(0,10);
+      const existing=db.prepare("SELECT position FROM retail_stock WHERE shop='depart1' AND sku=?").get(vehicle.sku);
+      if(!existing){
+        const replace=db.prepare("SELECT position FROM retail_stock WHERE shop='depart1' ORDER BY position LIMIT 1").get();
+        db.prepare("UPDATE retail_stock SET sku=?,remaining=10 WHERE shop='depart1' AND position=?")
+          .run(vehicle.sku,replace.position);
+      }else{
+        db.prepare("UPDATE retail_stock SET remaining=10 WHERE shop='depart1' AND sku=?").run(vehicle.sku);
+      }
+      const ids=[
+        db.prepare("SELECT user_id FROM characters WHERE name='公路百貨甲'").get().user_id,
+        db.prepare("SELECT user_id FROM characters WHERE name='公路百貨乙'").get().user_id
+      ];
+      const receipts=ids.map((id,i)=>buyRetailItem(db,id,catalog,{
+        shop:"depart1",sku:vehicle.sku,requestId:"phase65_multi_real_buy_"+i,
+        now:Date.now(),day:currentDay,hasBuilding:()=>true
+      }));
+      [aLine,bLine]=receipts.map(r=>r.sourceLine);
+      assert.notEqual(aLine,bLine);
+    }finally{db.close();}
+    const stateA=(await api(srv.url,"state",undefined,a.cookie)).result;
+    const stateB=(await api(srv.url,"state",undefined,b.cookie)).result;
+    assert.deepEqual(stateA.roadTravel.choices.map(x=>x.sourceLine),[aLine]);
+    assert.deepEqual(stateB.roadTravel.choices.map(x=>x.sourceLine),[bLine]);
+    assert.equal((await api(srv.url,"road/start",{
+      toTownId:1,vehicleSourceLine:aLine,requestId:"phase65_other_vehicle"
+    },b.cookie)).status,400);
+    const shared="phase65_multi_same_road";
+    const first=await api(srv.url,"road/start",{
+      toTownId:1,vehicleSourceLine:aLine,requestId:shared
+    },a.cookie);
+    const second=await api(srv.url,"road/start",{
+      toTownId:1,vehicleSourceLine:bLine,requestId:shared
+    },b.cookie);
+    assert.equal(first.status,200);assert.equal(second.status,200);
+    assert.notEqual(first.result.roadStartResult.id,second.result.roadStartResult.id);
+    assert.equal(first.result.roadStartResult.pending,true);
+    assert.equal(second.result.roadStartResult.pending,true);
+    assert.equal((await api(srv.url,"road/arrive",{
+      tripId:first.result.roadStartResult.id
+    },b.cookie)).status,400);
+    assert.equal((await api(srv.url,"road/start",{
+      toTownId:1,vehicleSourceLine:aLine,requestId:shared
+    },a.cookie)).result.roadStartResult.replayed,true);
   }finally{await srv.stop();}
 });
