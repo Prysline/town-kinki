@@ -19,6 +19,7 @@ import { RETAIL_SECRET_GOODS_ZH_TW } from "../public/retail-secret-goods-transla
 import { RETAIL_CHANKO_ZH_TW,RETAIL_GOLD_BOX_ZH_TW } from "../public/retail-chanko-gold-translations.js";
 import { RETAIL_DVD_ZH_TW } from "../public/retail-dvd-translations.js";
 import { RETAIL_BOOKS_ZH_TW } from "../public/retail-book-translations.js";
+import { RETAIL_ADULT_ZH_TW } from "../public/retail-adult-translations.js";
 
 const groups=[
   EQUIPMENT_ZH_TW,VENDING_ZH_TW,RETAIL_FOOD_ZH_TW,DESSERT_FASTFOOD_ZH_TW,
@@ -31,7 +32,8 @@ const groups=[
   RETAIL_SECRET_GOODS_ZH_TW,
   RETAIL_CHANKO_ZH_TW,RETAIL_GOLD_BOX_ZH_TW,
   RETAIL_DVD_ZH_TW,
-  RETAIL_BOOKS_ZH_TW
+  RETAIL_BOOKS_ZH_TW,
+  RETAIL_ADULT_ZH_TW
 ];
 const app=readFileSync(new URL("../public/app.js",import.meta.url),"utf8");
 
@@ -43,7 +45,7 @@ test("共用入口保留所有已確認品項、花卉、日用品與遊戲名�
     else unique.set(original,chinese);
     assert.equal(displayRetailItemName(original),chinese,original);
   }
-  assert.ok(unique.size>=399,"百貨翻譯不得遺失已確認品項與新增書籍 45 個名稱");
+  assert.ok(unique.size>=411,"百貨翻譯不得遺失已確認品項與成人用品 12 列");
   assert.equal(displayRetailItemName("未知物品"),"未知物品");
 });
 
@@ -58,7 +60,7 @@ test("共用入口將已確認分類、花卉、日用品及遊戲轉成繁體�
     "デパート":"百貨公司","スーパー":"超級市場","合成":"合成",
     "ギフト":"禮品","秘密の商品":"秘密商品",
     "ちゃんこ":"相撲料理","金の箱":"金色寶箱",
-    "DVD":"DVD","書籍":"書籍",
+    "DVD":"DVD","書籍":"書籍","アダルト":"成人用品",
     "武器":"武器","御守":"護身符"
   };
   for(const [original,chinese] of Object.entries(expected))
