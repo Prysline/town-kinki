@@ -193,7 +193,7 @@ test("Chrome：桌面→768px平板→375px手機，操作真實建角／工作�
     await until(chrome,"!document.querySelector('#work').disabled&&"+
       "document.querySelector('#current-job')?.textContent?.length>0","工作已可操作");
     await click(chrome,"#work");
-    await until(chrome,"Number(document.querySelector('#work-count')?.textContent||0)>=1","實際工作完成");
+    await until(chrome,"parseInt(document.querySelector('#work-count')?.textContent||'0',10)>=1","實際工作完成");
     await click(chrome,"#solo-starter-create");
     await until(chrome,"document.querySelector('#solo-starter-town')?.hidden===true","試玩街區完成");
     await click(chrome,"#facility-tab-bank");
