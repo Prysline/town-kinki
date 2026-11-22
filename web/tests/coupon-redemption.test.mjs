@@ -89,10 +89,13 @@ test("真實兌換：本人 Web 事件券扣點、完整33欄獎品入庫、重�
     for(let i=0;i<33;i++)if(i!==30)
       assert.equal(raw[i],catalog[0].rawFields[i],"不能修改原版獎品欄位 "+i);
     assert.equal(raw[30],String(Math.floor(now/1000)));
-    const inventory=listLegacyInventoryItems(db,1);
+    const inventory=listLegacyInventoryItems(db,1,50,null,now);
     assert.equal(inventory.length,1);
     assert.equal(inventory[0].origin,"coupon");
     assert.equal(inventory[0].readOnly,false);
+    const expiresAt=item.purchased_at*1000+item.durability*24*60*60*1000;
+    assert.equal(listLegacyInventoryItems(db,1,50,null,expiresAt-1).length,1);
+    assert.equal(listLegacyInventoryItems(db,1,50,null,expiresAt).length,0);
     assert.equal(redeem(db,"coupon_plain_0001").replayed,true);
     assert.equal(getCouponBalance(db,1),3);
     assert.equal(stored(db).length,1);
@@ -170,7 +173,7 @@ test("真實一般背包25格：已滿拒絕且不扣券；舊匯入物也必須
     assert.equal(result.replayed,false);
     assert.equal(stored(db).length,1);
     assert.equal(getCouponBalance(db,1),49);
-    assert.equal(listLegacyInventoryItems(db,1).length,25);
+    assert.equal(listLegacyInventoryItems(db,1,50,null,now).length,25);
   }finally{db.close();}
 });
 
