@@ -46,7 +46,8 @@ function setupRetailRoad(){
   return db;
 }
 function buyRetailVehicle(db,name,{userId=1,now=NOW,quantity=1}={}){
-  const item=retailCatalog.find(row=>row.name===name&&row.category==="乗り物");
+  const source=rules.retailVehicles.find(row=>row.name===name);
+  const item=retailCatalog.find(row=>row.name===name&&row.sku===source?.sku);
   assert.ok(item,"原版百貨存在此交通商品："+name);
   const day="2026-11-22";
   const selected=retailCatalog.filter(row=>rules.retailVehicles.some(v=>v.sku===row.sku));
