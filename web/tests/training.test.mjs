@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createCharacterData, decodeLegacyText } from "../src/engine.mjs";
+import { createCharacterData, decodeLegacyText, bodyMassIndex } from "../src/engine.mjs";
 import {
   parseLegacySchool, parseLegacyGym, parseLegacyClassroom, calendarDay,
   trainingAvailability, performTraining
@@ -29,6 +29,8 @@ test("原始學校與健身房清單全部解析並保留識別碼及繁體中�
   assert.equal(gyms[1].energyCost, 8);
   assert.equal(gyms[1].cooldownMs, 15 * 60 * 1000);
   assert.equal(gyms[1].gains.tairyoku, 2);
+  assert.equal(gyms[1].weightLoss, 0.08);
+  assert.equal(schools[0].weightLoss, undefined);
 });
 
 test("課程消耗現金與頭腦能量，依原始資料增加能力", () => {
@@ -61,13 +63,76 @@ test("健身房冷卻使用已完成的訓練間隔，不能換課程繞過", ()
   const player = createCharacterData("居民", "other", now);
   const walk = gyms.find(g => g.originalName === "ウォーキング");
   const swim = gyms.find(g => g.originalName === "スイミング");
-  const completed = performTraining(player, walk, now, "2026-11-18").character;
+  const trained=performTraining(player, walk, now, "2026-11-18");
+  const completed = trained.character;
+  assert.equal(trained.weightLoss,0.08);
+  assert.equal(completed.weight,59.92);
+  assert.equal(completed.bmi,bodyMassIndex(completed.height,completed.weight));
   assert.equal(completed.money, 99200);
   assert.equal(completed.stats.kenkou, player.stats.kenkou + 3);
   assert.equal(completed.bodyEnergy, player.bodyEnergy - 8);
   assert.equal(completed.gymReadyAt, now + 15 * 60 * 1000);
   assert.match(trainingAvailability(completed, swim, now + 60_000, "2026-11-18"), /健身房還需要/);
   assert.equal(trainingAvailability(completed, swim, now + 15 * 60 * 1000, "2026-11-18"), null);
+});
+
+test("健身房九項原始課程依身體消耗 / 100 減重，更新 BMI 並保留金錢／增益／能量／冷卻",()=>{
+  const now=Date.UTC(2026,10,18,5);
+  const expectedCosts=[24,8,12,18,5,14,10,100,100];
+  assert.deepEqual(gyms.map(lesson=>lesson.energyCost),expectedCosts);
+  const normal=createCharacterData("九項運動測試","other",now);
+  const base={...normal,
+    stats:Object.fromEntries(Object.keys(normal.stats).map(key=>[key,1000])),
+    bodyEnergy:400,money:1_500_000,
+    height:160,weight:60,bmi:bodyMassIndex(160,60)};
+  for(const lesson of gyms){
+    const trained=performTraining(base,lesson,now,"2026-11-18");
+    const after=trained.character;
+    const expectedLoss=lesson.energyCost/100;
+    const weight=Math.round((base.weight-expectedLoss)*100)/100;
+    assert.equal(lesson.weightLoss,expectedLoss,lesson.name);
+    assert.equal(trained.weightLoss,expectedLoss,lesson.name);
+    assert.equal(after.weight,weight,lesson.name);
+    assert.equal(after.bmi,bodyMassIndex(base.height,weight),lesson.name);
+    assert.equal(after.bodyEnergy,base.bodyEnergy-lesson.energyCost,lesson.name);
+    assert.equal(after.brainEnergy,base.brainEnergy,lesson.name);
+    assert.equal(after.money,base.money-lesson.price,lesson.name);
+    assert.equal(after.lastGymAt,now,lesson.name);
+    assert.equal(after.gymReadyAt,now+lesson.cooldownMs,lesson.name);
+    for(const [key,gain] of Object.entries(lesson.gains))
+      assert.equal(after.stats[key],base.stats[key]+gain,lesson.name+"／"+key);
+    assert.equal(base.weight,60,"訓練不可原地修改角色");
+  }
+});
+
+test("健身房 1 公斤下限、失敗不扣重及教室／學校規則互不改動",()=>{
+  const now=Date.UTC(2026,10,18,5);
+  const p=createCharacterData("體重下限測試","other",now);
+  const walk=gyms.find(lesson=>lesson.originalName==="ウォーキング");
+  const limited={...p,weight:1.03,bmi:bodyMassIndex(p.height,1.03)};
+  const trained=performTraining(limited,walk,now);
+  assert.equal(trained.character.weight,1);
+  assert.equal(trained.weightLoss,0.03,"返回實際減重，不能高估安全下限");
+  assert.equal(trained.character.bmi,bodyMassIndex(p.height,1));
+  const atMin={...p,weight:1,bmi:bodyMassIndex(p.height,1)};
+  const none=performTraining(atMin,walk,now);
+  assert.equal(none.character.weight,1);
+  assert.equal(none.weightLoss,0);
+  const blocked={...p,bodyEnergy:0};
+  assert.throws(()=>performTraining(blocked,walk,now),/身體能量不足/);
+  assert.equal(blocked.weight,p.weight);
+  const poor={...p,money:0};
+  assert.throws(()=>performTraining(poor,walk,now),/現金不足/);
+  assert.equal(poor.weight,p.weight);
+  const last=performTraining(p,walk,now).character;
+  assert.throws(()=>performTraining(last,walk,now+1),/健身房還需要等待/);
+  assert.equal(last.weight,59.92);
+  const school=performTraining(p,schools[0],now);
+  assert.equal(school.character.weight,p.weight);
+  assert.equal(school.weightLoss,0);
+  const classroom=performTraining(p,classrooms[0],now);
+  assert.equal(classroom.weightLoss,0.2);
+  assert.equal(classroom.character.weight,59.8);
 });
 
 test("不允許餘額不足、能量不足、無效訓練與不合法舊資料", () => {
