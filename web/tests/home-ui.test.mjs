@@ -917,6 +917,20 @@ test("第63階段：原版迷路／事故後改道只在抵達時公布，並列
   assert.ok(!script.includes("innerHTML=trip.rerouted"));
 });
 
+test("第64階段：原版500元巴士納入既有公路選單、現金檢查與安全DOM",()=>{
+  assert.ok(html.includes("第64階段新增原版 mati_idou2 巴士"));
+  assert.ok(html.includes("現金不足500元不可上車"));
+  assert.ok(script.includes('bus.value="bus"'));
+  assert.ok(script.includes('byBus,requestId:pendingRoadStart.requestId'));
+  assert.ok(script.includes("roadTravel.busSeconds"));
+  assert.ok(script.includes("info.busFare"));
+  assert.ok(script.includes("trip.farePaid"));
+  assert.ok(script.includes("巴士車資500元從現金扣款"));
+  assert.ok(script.includes("const affordable=!byBus||state.character.money>=info.busFare"));
+  assert.ok(script.includes("history.replaceChildren()"));
+  assert.ok(!script.includes("innerHTML=trip.farePaid"));
+});
+
 test("第53階段：原版釣場與餌料商店實際有入庫交易 UI 且拒絕虛構漁獲",()=>{
   for(const key of ["釣り","販売1"])
     assert.deepEqual(townCellAction(describeTile(key)),{
