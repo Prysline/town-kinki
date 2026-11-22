@@ -198,7 +198,7 @@ function availableVehicles(db,userId,source,now){
     const remaining=inventoryLife(row,now).remaining;
     if(!Number.isSafeInteger(remaining)||remaining<=0)return [];
     return [{sourceLine:row.source_line,name:v.name,seconds:v.seconds,remaining,
-      origin:v.origin===RETAIL_ITEM_ORIGIN?"retail":"treasure"}];
+      category:v.category,origin:v.origin===RETAIL_ITEM_ORIGIN?"retail":"treasure"}];
   });
 }
 function tripPublic(row){
