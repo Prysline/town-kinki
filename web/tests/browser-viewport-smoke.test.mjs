@@ -142,17 +142,25 @@ async function click(cdp,selector){
   await dismiss(cdp);
   // 先完成瞬間捲動，再等待前端 scroll handler 同步顯示／隱藏固定狀態列；
   // 直接在同一 JS task 捲動並取 elementFromPoint 會錯把舊遮罩狀態當成按鈕阻擋。
-  await evaluate(cdp,"(function(){document.querySelector("+JSON.stringify(selector)+")"+
-    "?.scrollIntoView({behavior:'instant',block:'center',inline:'nearest'});return true;})()");
-  await pause(200);
-  const info=await evaluate(cdp,"(function(){const e=document.querySelector("+JSON.stringify(selector)+");"+
-    "if(!e)return {error:'missing'};if(e.disabled)return {error:'disabled'};"+
-    "const r=e.getBoundingClientRect();"+
-    "const x=r.left+r.width/2,y=r.top+r.height/2;"+
-    "if(!r.width||!r.height)return {error:'zero-size'};"+
-    "const point=document.elementFromPoint(x,y);if(!point||!(e===point||e.contains(point)))"+
-    "return {error:'blocked',tag:point?.tagName,id:point?.id,x,y};"+
-    "return {x,y};})()");
+  let info;
+  // SPA 可能在第一次捲動後又改變佈局；確認真實視窗命中點後才發送滑鼠事件。
+  // 不以 HTMLElement.click() 繞過不可見或被遮住的按鈕。
+  for(let attempt=0;attempt<5;attempt++){
+    await evaluate(cdp,"(function(){document.querySelector("+JSON.stringify(selector)+")"+
+      "?.scrollIntoView({behavior:'instant',block:'center',inline:'nearest'});return true;})()");
+    await pause(200+attempt*80);
+    info=await evaluate(cdp,"(function(){const e=document.querySelector("+JSON.stringify(selector)+");"+
+      "if(!e)return {error:'missing'};if(e.disabled)return {error:'disabled'};"+
+      "const r=e.getBoundingClientRect();"+
+      "const x=r.left+r.width/2,y=r.top+r.height/2;"+
+      "if(!r.width||!r.height)return {error:'zero-size'};"+
+      "if(x<0||y<0||x>=innerWidth||y>=innerHeight)"+
+      "return {error:'outside-viewport',x,y,viewport:[innerWidth,innerHeight]};"+
+      "const point=document.elementFromPoint(x,y);if(!point||!(e===point||e.contains(point)))"+
+      "return {error:'blocked',tag:point?.tagName,id:point?.id,x,y};"+
+      "return {x,y};})()");
+    if(!info.error||["missing","disabled","zero-size"].includes(info.error))break;
+  }
   assert.ok(!info.error,"點擊 "+selector+" 受阻："+JSON.stringify(info));
   await cdp.send("Input.dispatchMouseEvent",{type:"mouseMoved",x:info.x,y:info.y});
   await cdp.send("Input.dispatchMouseEvent",{type:"mousePressed",x:info.x,y:info.y,button:"left",clickCount:1});
