@@ -8,15 +8,36 @@ import { DESSERT_FASTFOOD_ZH_TW } from "../public/retail-dessert-fastfood-transl
 import { RETAIL_DRINK_ZH_TW,RETAIL_ALCOHOL_ZH_TW } from "../public/retail-drink-alcohol-translations.js";
 import { RETAIL_SPORTS_MEDICINE_ZH_TW } from "../public/retail-sports-medicine-translations.js";
 import { RETAIL_BEAUTY_ELECTRONICS_ZH_TW } from "../public/retail-beauty-electronics-translations.js";
+import { RETAIL_FLOWERS_ZH_TW } from "../public/retail-flower-translations.js";
+import { RETAIL_DAILY_GOODS_ZH_TW } from "../public/retail-daily-goods-translations.js";
+import { RETAIL_GAMES_ZH_TW } from "../public/retail-game-translations.js";
+import { RETAIL_VEHICLES_ZH_TW,RETAIL_PETS_ZH_TW,RETAIL_BAIT_ZH_TW } from "../public/retail-transport-pets-bait-translations.js";
+import { RETAIL_TOHOKU_SPECIALTIES_ZH_TW,RETAIL_KANSAI_SPECIALTIES_ZH_TW } from "../public/retail-regional-specialties-translations.js";
+import { RETAIL_DEPARTMENT_ZH_TW,RETAIL_SUPERMARKET_ZH_TW,RETAIL_CRAFTING_ZH_TW } from "../public/retail-department-supermarket-crafting-translations.js";
+import { RETAIL_GIFTS_ZH_TW } from "../public/retail-gift-translations.js";
+import { RETAIL_SECRET_GOODS_ZH_TW } from "../public/retail-secret-goods-translations.js";
+import { RETAIL_CHANKO_ZH_TW,RETAIL_GOLD_BOX_ZH_TW } from "../public/retail-chanko-gold-translations.js";
+import { RETAIL_DVD_ZH_TW } from "../public/retail-dvd-translations.js";
+import { RETAIL_BOOKS_ZH_TW } from "../public/retail-book-translations.js";
+import { RETAIL_ADULT_ZH_TW } from "../public/retail-adult-translations.js";
 
 const groups=[
   EQUIPMENT_ZH_TW,VENDING_ZH_TW,RETAIL_FOOD_ZH_TW,DESSERT_FASTFOOD_ZH_TW,
   RETAIL_DRINK_ZH_TW,RETAIL_ALCOHOL_ZH_TW,RETAIL_SPORTS_MEDICINE_ZH_TW,
-  RETAIL_BEAUTY_ELECTRONICS_ZH_TW
+  RETAIL_BEAUTY_ELECTRONICS_ZH_TW,RETAIL_FLOWERS_ZH_TW,RETAIL_DAILY_GOODS_ZH_TW,
+  RETAIL_GAMES_ZH_TW,RETAIL_VEHICLES_ZH_TW,RETAIL_PETS_ZH_TW,RETAIL_BAIT_ZH_TW,
+  RETAIL_TOHOKU_SPECIALTIES_ZH_TW,RETAIL_KANSAI_SPECIALTIES_ZH_TW,
+  RETAIL_DEPARTMENT_ZH_TW,RETAIL_SUPERMARKET_ZH_TW,RETAIL_CRAFTING_ZH_TW,
+  RETAIL_GIFTS_ZH_TW,
+  RETAIL_SECRET_GOODS_ZH_TW,
+  RETAIL_CHANKO_ZH_TW,RETAIL_GOLD_BOX_ZH_TW,
+  RETAIL_DVD_ZH_TW,
+  RETAIL_BOOKS_ZH_TW,
+  RETAIL_ADULT_ZH_TW
 ];
 const app=readFileSync(new URL("../public/app.js",import.meta.url),"utf8");
 
-test("共用入口保留已合併的四批及美容電化產品全部原文名稱對照",()=>{
+test("共用入口保留所有已確認品項、花卉、日用品與遊戲名稱對照",()=>{
   const unique=new Map();
   for(const group of groups)for(const [original,chinese] of Object.entries(group)){
     if(unique.has(original))
@@ -24,15 +45,22 @@ test("共用入口保留已合併的四批及美容電化產品全部原文名�
     else unique.set(original,chinese);
     assert.equal(displayRetailItemName(original),chinese,original);
   }
-  assert.ok(unique.size>=162,"百貨翻譯不得遺失前四批或美容電化產品");
+  assert.ok(unique.size>=411,"百貨翻譯不得遺失已確認品項與成人用品 12 列");
   assert.equal(displayRetailItemName("未知物品"),"未知物品");
 });
 
-test("共用入口將前五批類別合成繁體中文且未知類別回退原文",()=>{
+test("共用入口將已確認分類、花卉、日用品及遊戲轉成繁體中文且未知類別回退原文",()=>{
   const expected={
     "食料品":"食品","デザート":"甜點","ファーストフード":"速食",
     "ドリンク":"飲料","アルコール":"酒類","スポーツ用品":"運動用品",
     "薬":"藥品","美容":"美容用品","電化製品":"電器用品",
+    "お花":"花卉","日用品":"日用品","ゲーム":"遊戲",
+    "乗り物":"交通工具","ペット":"寵物","餌":"餌料",
+    "東北名産店":"東北名產店","関西名産店":"關西名產店",
+    "デパート":"百貨公司","スーパー":"超級市場","合成":"合成",
+    "ギフト":"禮品","秘密の商品":"秘密商品",
+    "ちゃんこ":"相撲料理","金の箱":"金色寶箱",
+    "DVD":"DVD","書籍":"書籍","アダルト":"成人用品",
     "武器":"武器","御守":"護身符"
   };
   for(const [original,chinese] of Object.entries(expected))

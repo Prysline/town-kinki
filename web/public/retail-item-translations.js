@@ -6,6 +6,18 @@ import { displayDessertFastFoodName,displayDessertFastFoodCategory } from "./ret
 import { displayRetailDrinkAlcoholName,displayRetailDrinkAlcoholCategory } from "./retail-drink-alcohol-translations.js";
 import { displayRetailSportsMedicineName,displayRetailSportsMedicineCategory } from "./retail-sports-medicine-translations.js";
 import { displayRetailBeautyElectronicsName,displayRetailBeautyElectronicsCategory } from "./retail-beauty-electronics-translations.js";
+import { displayRetailFlowerName,displayRetailFlowerCategory } from "./retail-flower-translations.js";
+import { displayRetailDailyGoodsName,displayRetailDailyGoodsCategory } from "./retail-daily-goods-translations.js";
+import { displayRetailGameName,displayRetailGameCategory } from "./retail-game-translations.js";
+import { displayRetailTransportPetsBaitName,displayRetailTransportPetsBaitCategory } from "./retail-transport-pets-bait-translations.js";
+import { displayRetailRegionalName,displayRetailRegionalCategory } from "./retail-regional-specialties-translations.js";
+import { displayRetailDepartmentSupermarketCraftingName,displayRetailDepartmentSupermarketCraftingCategory } from "./retail-department-supermarket-crafting-translations.js";
+import { displayRetailGiftName,displayRetailGiftCategory } from "./retail-gift-translations.js";
+import { displayRetailSecretGoodsName,displayRetailSecretGoodsCategory } from "./retail-secret-goods-translations.js";
+import { displayRetailChankoGoldName,displayRetailChankoGoldCategory } from "./retail-chanko-gold-translations.js";
+import { displayRetailDvdName,displayRetailDvdCategory } from "./retail-dvd-translations.js";
+import { displayRetailBookName,displayRetailBookCategory } from "./retail-book-translations.js";
+import { displayRetailAdultName,displayRetailAdultCategory } from "./retail-adult-translations.js";
 
 const ITEM_NAME_TRANSLATORS=Object.freeze([
   displayKnownItemName,
@@ -13,7 +25,19 @@ const ITEM_NAME_TRANSLATORS=Object.freeze([
   displayDessertFastFoodName,
   displayRetailDrinkAlcoholName,
   displayRetailSportsMedicineName,
-  displayRetailBeautyElectronicsName
+  displayRetailBeautyElectronicsName,
+  displayRetailFlowerName,
+  displayRetailDailyGoodsName,
+  displayRetailGameName,
+  displayRetailTransportPetsBaitName,
+  displayRetailRegionalName,
+  displayRetailDepartmentSupermarketCraftingName,
+  displayRetailGiftName,
+  displayRetailSecretGoodsName,
+  displayRetailChankoGoldName,
+  displayRetailDvdName,
+  displayRetailBookName,
+  displayRetailAdultName
 ]);
 const ITEM_CATEGORY_TRANSLATORS=Object.freeze([
   displayKnownItemCategory,
@@ -21,7 +45,19 @@ const ITEM_CATEGORY_TRANSLATORS=Object.freeze([
   displayDessertFastFoodCategory,
   displayRetailDrinkAlcoholCategory,
   displayRetailSportsMedicineCategory,
-  displayRetailBeautyElectronicsCategory
+  displayRetailBeautyElectronicsCategory,
+  displayRetailFlowerCategory,
+  displayRetailDailyGoodsCategory,
+  displayRetailGameCategory,
+  displayRetailTransportPetsBaitCategory,
+  displayRetailRegionalCategory,
+  displayRetailDepartmentSupermarketCraftingCategory,
+  displayRetailGiftCategory,
+  displayRetailSecretGoodsCategory,
+  displayRetailChankoGoldCategory,
+  displayRetailDvdCategory,
+  displayRetailBookCategory,
+  displayRetailAdultCategory
 ]);
 
 export const displayRetailItemName=name=>
