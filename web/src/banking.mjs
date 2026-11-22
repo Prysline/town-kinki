@@ -5,6 +5,8 @@
 export const BANK_RATES = Object.freeze({ ordinary: 5, term: 10 }); // 每千分比
 export const TERM_UNIT = 1000000;
 export const BANK_LEDGER_LIMIT = 100;
+export const BANK_TAX_DAY = 1; // ISO weekday：星期一
+
 const MAX_BALANCE = BigInt(Number.MAX_SAFE_INTEGER);
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -27,6 +29,25 @@ export function calculateInterest(balance, perThousand) {
   const result = BigInt(balance) * BigInt(perThousand) / 1000n;
   if (result > MAX_BALANCE) throw new Error("利息金額超出安全範圍");
   return Number(result);
+}
+
+// town_maker.cgi::login_view：使用前次儲存的 k_sousisan，而非徵稅當下的餘額。
+// 原版折扣不是單調遞增：K 點 100/250/500 對應稅額的 1/2、1/3、1/4。
+export function calculateWeeklyTax(assessmentBase,kpoint=0) {
+  if (!Number.isSafeInteger(assessmentBase) || assessmentBase<0 ||
+      !Number.isSafeInteger(kpoint) || kpoint<0)
+    throw new Error("稅基或 K 點資料不正確");
+  const ratePercent=assessmentBase<=1000000?0:assessmentBase<=10000000?1:
+    assessmentBase<=100000000?3:assessmentBase<=1000000000?5:7;
+  const gross=Number(BigInt(assessmentBase)*BigInt(ratePercent)/100n);
+  let due=gross;
+  if(kpoint>=1000) due=0;
+  else if(kpoint>=500) due=Math.floor(gross/4);
+  else if(kpoint>=250) due=Math.floor(gross/3);
+  else if(kpoint>=100) due=Math.floor(gross/2);
+  else if(kpoint>=50) due=gross-Math.floor(gross/3);
+  else if(kpoint>=25) due=gross-Math.floor(gross/4);
+  return {ratePercent,gross,discount:gross-due,due};
 }
 
 export function initBankTables(db) {
@@ -69,6 +90,29 @@ export function initBankTables(db) {
     "UNIQUE(sender_user_id,request_key));",
     "CREATE INDEX IF NOT EXISTS bank_transfers_daily_idx ON bank_transfers(sender_user_id,recipient_user_id,transfer_day);"
   ].join("\n"));
+  // 新增資料表，不改動既有 bank_accounts、characters、ledger 的欄位或餘額。
+  // 初次使用時建立當日快照，不補課既有 Web SQLite 的過往星期一。
+  db.exec([
+    "CREATE TABLE IF NOT EXISTS bank_tax_state(",
+    "user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,",
+    "assessment_base INTEGER NOT NULL CHECK(assessment_base>=0),",
+    "snapshot_day TEXT NOT NULL);",
+    "CREATE TABLE IF NOT EXISTS bank_tax_assessments(",
+    "user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,",
+    "tax_day TEXT NOT NULL,",
+    "assessment_base INTEGER NOT NULL CHECK(assessment_base>=0),",
+    "kpoint INTEGER NOT NULL CHECK(kpoint>=0),",
+    "rate_percent INTEGER NOT NULL CHECK(rate_percent>=0),",
+    "gross INTEGER NOT NULL CHECK(gross>=0),",
+    "discount INTEGER NOT NULL CHECK(discount>=0),",
+    "due INTEGER NOT NULL CHECK(due>=0),",
+    "paid INTEGER NOT NULL CHECK(paid>=0),",
+    "unpaid INTEGER NOT NULL CHECK(unpaid>=0),",
+    "created_at INTEGER NOT NULL,",
+    "PRIMARY KEY(user_id,tax_day),",
+    "CHECK(due=paid+unpaid));",
+    "CREATE INDEX IF NOT EXISTS bank_tax_history_idx ON bank_tax_assessments(user_id,tax_day);"
+  ].join("\n"));
 }
 function assertDay(today) {
   if (typeof today !== "string" || !DATE.test(today))
@@ -81,6 +125,63 @@ function ensureAccount(db, userId, today) {
   db.prepare("INSERT INTO bank_accounts(user_id,term_balance,last_interest_day) VALUES(?,0,?)")
     .run(userId, today);
   return {user_id:userId,term_balance:0,last_interest_day:today};
+}
+function currentAssetBase(db,userId) {
+  const row=db.prepare(
+    "SELECT c.money,c.bank,a.term_balance,l.daily_payment,l.remaining_payments " +
+    "FROM characters c LEFT JOIN bank_accounts a ON a.user_id=c.user_id " +
+    "LEFT JOIN bank_loans l ON l.user_id=c.user_id WHERE c.user_id=?"
+  ).get(userId);
+  if(!row) throw new Error("稅務角色不存在");
+  const amounts=[row.money,row.bank,row.term_balance??0,row.daily_payment??0,row.remaining_payments??0];
+  if(amounts.some(n=>!Number.isSafeInteger(n)||n<0))
+    throw new Error("資產快照含有不正確的金額");
+  const [money,bank,term,payment,remaining]=amounts.map(BigInt);
+  const net=money+bank+term-payment*remaining;
+  if(net>MAX_BALANCE) throw new Error("稅基資產超出安全整數範圍");
+  return Number(net<0n?0n:net);
+}
+function ensureTaxState(db,userId,today) {
+  const existing=db.prepare("SELECT * FROM bank_tax_state WHERE user_id=?").get(userId);
+  if(existing) return existing;
+  // 首次升級或新建角色：今天只建基準，不徵收任何過往日期的稅。
+  const assessmentBase=currentAssetBase(db,userId);
+  db.prepare("INSERT INTO bank_tax_state(user_id,assessment_base,snapshot_day) VALUES(?,?,?)")
+    .run(userId,assessmentBase,today);
+  return {user_id:userId,assessment_base:assessmentBase,snapshot_day:today};
+}
+export function refreshBankTaxSnapshot(db,userId,today) {
+  assertDay(today);
+  const prior=ensureTaxState(db,userId,today);
+  if(prior.snapshot_day>today) return;
+  const base=currentAssetBase(db,userId);
+  db.prepare("UPDATE bank_tax_state SET assessment_base=?,snapshot_day=? WHERE user_id=?")
+    .run(base,today,userId);
+}
+function settleWeeklyTax(db,userId,today,now,prior) {
+  // 原版只有跨日登入恰逢星期一時才徵稅，缺席星期一不補課。
+  const day=new Date(today+"T12:00:00Z");
+  if(Number.isNaN(day.getTime()) || day.getUTCDay()!==BANK_TAX_DAY ||
+      prior.snapshot_day>=today) return null;
+  if(db.prepare("SELECT 1 FROM bank_tax_assessments WHERE user_id=? AND tax_day=?")
+    .get(userId,today)) return null;
+  const character=db.prepare("SELECT bank,kpoint FROM characters WHERE user_id=?").get(userId);
+  const kpoint=character.kpoint??0;
+  const tax=calculateWeeklyTax(prior.assessment_base,kpoint);
+  const paid=character.bank>=tax.due?tax.due:0;
+  const unpaid=tax.due-paid;
+  const balance=character.bank-paid;
+  // Web 安全差異：不足額整筆暫不扣款，保留未繳紀錄；不產生負存款、不自動追繳。
+  if(paid>0) {
+    db.prepare("UPDATE characters SET bank=? WHERE user_id=?").run(balance,userId);
+    recordBankEntry(db,userId,"ordinary","每週納稅"+(tax.discount?"（K 點折扣）":""),
+      paid,0,balance,now);
+  }
+  db.prepare(
+    "INSERT INTO bank_tax_assessments(user_id,tax_day,assessment_base,kpoint,rate_percent,gross,discount,due,paid,unpaid,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)"
+  ).run(userId,today,prior.assessment_base,kpoint,tax.ratePercent,tax.gross,tax.discount,
+    tax.due,paid,unpaid,now);
+  return {...tax,paid,unpaid,taxDay:today};
 }
 export function recordBankEntry(db, userId, accountType, action, debit, credit, balance, now = Date.now()) {
   if (!["ordinary","term"].includes(accountType) || typeof action !== "string" ||
@@ -100,6 +201,7 @@ function applyInterest(db, userId, today, now) {
   const character = db.prepare("SELECT bank FROM characters WHERE user_id=?").get(userId);
   if (!character) return null;
   const account = ensureAccount(db,userId,today);
+  const taxState=ensureTaxState(db,userId,today);
   if (account.last_interest_day >= today) return { ordinary:0, term:0, applied:false };
   const ordinaryInterest = calculateInterest(character.bank,BANK_RATES.ordinary);
   const termInterest = calculateInterest(account.term_balance,BANK_RATES.term);
@@ -111,8 +213,10 @@ function applyInterest(db, userId, today, now) {
   if (ordinaryInterest) recordBankEntry(db,userId,"ordinary","普通存款利息",0,ordinaryInterest,ordinaryBalance,now);
   if (termInterest) recordBankEntry(db,userId,"term","超級定期利息",0,termInterest,termBalance,now);
   const repayment = applyDailyLoanRepayment(db,userId,today,now);
+  const tax=settleWeeklyTax(db,userId,today,now,taxState);
+  refreshBankTaxSnapshot(db,userId,today);
   return { ordinary:ordinaryInterest, term:termInterest, applied:true,
-    ...(repayment ? { repayment } : {}) };
+    ...(repayment ? { repayment } : {}), ...(tax ? { tax } : {}) };
 }
 // 僅供外層已啟動 BEGIN IMMEDIATE 的跨玩家交易使用（例如六號樂透開獎）。
 // 不在此開新交易，讓當日利息、開獎、普通存款及銀行帳簿一起回滾。
@@ -378,6 +482,18 @@ export function payoffBankLoan(db,userId,today,now=Date.now()) {
   } catch(error) { db.exec("ROLLBACK"); throw error; }
 }
 
+export function bankTaxOverview(db,userId) {
+  const state=db.prepare("SELECT assessment_base,snapshot_day FROM bank_tax_state WHERE user_id=?")
+    .get(userId);
+  const last=db.prepare(
+    "SELECT tax_day,assessment_base,kpoint,rate_percent,gross,discount,due,paid,unpaid " +
+    "FROM bank_tax_assessments WHERE user_id=? ORDER BY tax_day DESC LIMIT 1"
+  ).get(userId);
+  return {assessmentBase:state?.assessment_base??null,snapshotDay:state?.snapshot_day??null,
+    lastAssessment:last?{day:last.tax_day,assessmentBase:last.assessment_base,kpoint:last.kpoint,
+      ratePercent:last.rate_percent,gross:last.gross,discount:last.discount,
+      due:last.due,paid:last.paid,unpaid:last.unpaid}:null};
+}
 export function bankOverview(db,userId) {
   const account = db.prepare("SELECT term_balance,last_interest_day FROM bank_accounts WHERE user_id=?").get(userId);
   return { termBalance:account?.term_balance ?? 0, lastInterestDay:account?.last_interest_day ?? null,

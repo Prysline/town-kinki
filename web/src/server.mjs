@@ -50,7 +50,7 @@ import {initPlayerStoreTables,viewPlayerStore,setPlayerStorePrice,
 import { listValidClassroomCreditCards, requireClassroomCreditCard } from "./legacy-credit.mjs";
 import { legacyPlayerIcon } from "./appearance.mjs";
 import { initLegacyItemUseTables, listLegacyItemActions, listLegacyItemUseHistory, useLegacyItem } from "./legacy-item-use.mjs";
-import { initBankTables, settleBankInterest, bankOperation, bankOverview, bankLedger, recordBankEntry, transferToPlayer, BANK_TRANSFER_LIMIT, NEW_MEMBER_DAYS, NEW_MEMBER_TRANSFER_LIMIT, bankLoanOverview, borrowBankLoan, payoffBankLoan } from "./banking.mjs";
+import { initBankTables, settleBankInterest, bankOperation, bankOverview, bankLedger, recordBankEntry, transferToPlayer, BANK_TRANSFER_LIMIT, NEW_MEMBER_DAYS, NEW_MEMBER_TRANSFER_LIMIT, bankLoanOverview, borrowBankLoan, payoffBankLoan, bankTaxOverview, refreshBankTaxSnapshot } from "./banking.mjs";
 import { initSoloClock, gameTimestamp, advanceSoloClock, soloOffset } from "./solo-clock.mjs";
 import { deleteSoloCharacter } from "./solo-character.mjs";
 
@@ -400,6 +400,8 @@ function snapshot(user) {
       cell.houseId = house.id;
     }
   }
+  // 最後才保存本次主畫面結束後的資產基準，讓下個徵稅日使用前次存檔值。
+  if(updated) refreshBankTaxSnapshot(db,user.id,today);
   const residents = updated
     ? db.prepare("SELECT name FROM characters WHERE town_id=? AND user_id<>? ORDER BY name LIMIT 50")
       .all(updated.townId, user.id).map(row => row.name)
@@ -413,6 +415,7 @@ function snapshot(user) {
     character: updated,
     legacyPlayerIcon: updated ? legacyPlayerIcon(db,user.id) : { status: "none" },
     bankAccount: updated ? bankOverview(db,user.id) : null,
+    bankTax: updated ? bankTaxOverview(db,user.id) : null,
     bankLoan: updated ? bankLoanOverview(db,user.id,currentJob) : null,
     bankLedger: updated ? bankLedger(db,user.id) : [],
     bankTransferRules: MODE === "multi" && updated ? {

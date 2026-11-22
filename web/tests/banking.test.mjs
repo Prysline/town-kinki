@@ -5,7 +5,7 @@ import {
   BANK_RATES,TERM_UNIT,BANK_LEDGER_LIMIT,
   initBankTables,calculateInterest,settleBankInterest,bankOperation,
   transferToPlayer,BANK_TRANSFER_LIMIT,NEW_MEMBER_DAYS,NEW_MEMBER_TRANSFER_LIMIT,
-  bankOverview,bankLedger,recordBankEntry
+  bankOverview,bankLedger,recordBankEntry,calculateWeeklyTax,bankTaxOverview,refreshBankTaxSnapshot
 } from "../src/banking.mjs";
 
 function createDb() {
@@ -13,7 +13,7 @@ function createDb() {
   db.exec([
     "PRAGMA foreign_keys=ON;",
     "CREATE TABLE users(id INTEGER PRIMARY KEY,username TEXT NOT NULL,created_at INTEGER NOT NULL DEFAULT 0);",
-    "CREATE TABLE characters(id INTEGER PRIMARY KEY,user_id INTEGER NOT NULL UNIQUE REFERENCES users(id),name TEXT UNIQUE NOT NULL,money INTEGER NOT NULL,bank INTEGER NOT NULL,created_at INTEGER NOT NULL DEFAULT 0);",
+    "CREATE TABLE characters(id INTEGER PRIMARY KEY,user_id INTEGER NOT NULL UNIQUE REFERENCES users(id),name TEXT UNIQUE NOT NULL,money INTEGER NOT NULL,bank INTEGER NOT NULL,kpoint INTEGER NOT NULL DEFAULT 0,created_at INTEGER NOT NULL DEFAULT 0);",
     "INSERT INTO users(id,username) VALUES(1,'alice'),(2,'bob');",
     "INSERT INTO characters(user_id,name,money,bank) VALUES(1,'甲',5000000,1000000),(2,'乙',100000,50000);"
   ].join("\n"));
@@ -279,4 +279,86 @@ test("收款人餘額溢位、自己轉帳、無效名稱或請求識別碼都�
     assert.equal(bankLedger(db,1).length,0);
     assert.equal(db.prepare("SELECT COUNT(*) n FROM bank_transfers").get().n,0);
   } finally {db.close();}
+});
+
+// BK-04：原版 town_maker.cgi 稅率級距與非單調 K 點折扣。
+test("星期一稅基門檻與 K 點六段折扣按原版整數規則",()=>{
+  assert.equal(calculateWeeklyTax(1000000,0).due,0);
+  assert.equal(calculateWeeklyTax(1000001,0).due,10000);
+  assert.equal(calculateWeeklyTax(10000000,0).due,100000);
+  assert.equal(calculateWeeklyTax(10000001,0).due,300000);
+  assert.equal(calculateWeeklyTax(100000000,0).due,3000000);
+  assert.equal(calculateWeeklyTax(100000001,0).due,5000000);
+  assert.equal(calculateWeeklyTax(1000000000,0).due,50000000);
+  assert.equal(calculateWeeklyTax(1000000001,0).due,70000000);
+  const expected=[[0,60000],[24,60000],[25,45000],[49,45000],[50,40000],
+    [99,40000],[100,30000],[249,30000],[250,20000],[499,20000],
+    [500,15000],[999,15000],[1000,0]];
+  for(const [points,due] of expected)
+    assert.equal(calculateWeeklyTax(6000000,points).due,due,"K 點 "+points);
+  assert.throws(()=>calculateWeeklyTax(Number.MAX_SAFE_INTEGER+1,0),/稅基/);
+  assert.throws(()=>calculateWeeklyTax(6000000,-1),/K 點/);
+});
+
+test("跨入星期一先計息與還款，再依上次快照徵稅，重讀不雙扣",()=>{
+  const db=createDb();
+  try{
+    settleBankInterest(db,1,"2026-11-22",1000);
+    assert.equal(bankTaxOverview(db,1).assessmentBase,6000000);
+    const monday=settleBankInterest(db,1,"2026-11-23",2000);
+    assert.equal(monday.ordinary,5000);
+    assert.equal(monday.tax.due,60000);
+    assert.equal(monday.tax.paid,60000);
+    assert.equal(db.prepare("SELECT bank FROM characters WHERE user_id=1").get().bank,945000);
+    assert.deepEqual(bankLedger(db,1).map(x=>x.action),["每週納稅","普通存款利息"]);
+    assert.equal(settleBankInterest(db,1,"2026-11-23",3000).applied,false);
+    assert.equal(db.prepare("SELECT COUNT(*) n FROM bank_tax_assessments").get().n,1);
+    assert.equal(bankTaxOverview(db,1).lastAssessment.assessmentBase,6000000);
+  } finally{db.close();}
+});
+
+test("星期一依前次存檔稅基，不使用臨時修改的資產，也不追溯新初始化資料",()=>{
+  const db=createDb();
+  try{
+    settleBankInterest(db,1,"2026-11-22",1000);
+    db.prepare("UPDATE characters SET money=0,kpoint=100 WHERE user_id=1").run();
+    const monday=settleBankInterest(db,1,"2026-11-23",2000);
+    assert.equal(monday.tax.due,30000);
+    assert.equal(monday.tax.ratePercent,1);
+    assert.equal(bankTaxOverview(db,1).lastAssessment.assessmentBase,6000000);
+    const first=settleBankInterest(db,2,"2026-11-23",2000);
+    assert.equal(first.applied,false,"既有資料當週一首次讀取只初始化");
+    assert.equal(bankTaxOverview(db,2).lastAssessment,null);
+  }finally{db.close();}
+});
+
+test("存款不足整筆暫不扣，保留欠稅而不動現金或定存",()=>{
+  const db=createDb();
+  try{
+    settleBankInterest(db,1,"2026-11-22",1000);
+    db.prepare("UPDATE characters SET bank=1000 WHERE user_id=1").run();
+    const result=settleBankInterest(db,1,"2026-11-23",2000);
+    assert.equal(result.tax.due,60000);
+    assert.equal(result.tax.paid,0);
+    assert.equal(result.tax.unpaid,60000);
+    assert.equal(db.prepare("SELECT money,bank FROM characters WHERE user_id=1").get().money,5000000);
+    assert.equal(db.prepare("SELECT bank FROM characters WHERE user_id=1").get().bank,1005);
+    assert.deepEqual(bankLedger(db,1).map(x=>x.action),["普通存款利息"]);
+    assert.equal(bankTaxOverview(db,1).lastAssessment.unpaid,60000);
+  } finally{db.close();}
+});
+
+test("日期錯誤、稅務寫入失敗時連同利息、帳簿、稅基一同回滾",()=>{
+  const db=createDb();
+  try{
+    settleBankInterest(db,1,"2026-11-22",1000);
+    assert.throws(()=>refreshBankTaxSnapshot(db,1,"not-a-day"),/日期/);
+    db.exec("CREATE TRIGGER block_weekly_tax BEFORE INSERT ON bank_tax_assessments BEGIN SELECT RAISE(ABORT,'tax blocked'); END;");
+    assert.throws(()=>settleBankInterest(db,1,"2026-11-23",2000),/tax blocked/);
+    assert.equal(db.prepare("SELECT bank FROM characters WHERE user_id=1").get().bank,1000000);
+    assert.equal(bankOverview(db,1).lastInterestDay,"2026-11-22");
+    assert.equal(bankTaxOverview(db,1).snapshotDay,"2026-11-22");
+    assert.equal(bankLedger(db,1).length,0);
+    assert.equal(db.prepare("SELECT COUNT(*) n FROM bank_tax_assessments").get().n,0);
+  }finally{db.close();}
 });
