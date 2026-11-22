@@ -224,6 +224,9 @@ test("Chrome：桌面→768px平板→375px手機，操作真實建角／工作�
     assert.equal(await evaluate(chrome,"document.querySelector('#facility-pane-shops')?.hidden"),false);
     await click(chrome,'#solo-play-guide button[data-facility="inventory-panel"]');
     assert.equal(await evaluate(chrome,"document.querySelector('#inventory-panel')?.hidden"),false);
+    // 切到背包會正確隱藏狀態頁的「更新狀態」；返回狀態頁後才能測原本按鈕。
+    await click(chrome,"#profile-tab-status");
+    assert.equal(await evaluate(chrome,"document.querySelector('#player-summary')?.hidden"),false);
     // 21 格實體試玩街區：真實點 D5 優惠券、D7 釣場、D8 合成、D9 遊樂中心。
     for(const [cell,panel,pane] of [
       ["D5","event-panel","events"],["D7","fishing-panel","shops"],
