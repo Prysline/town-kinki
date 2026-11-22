@@ -102,7 +102,7 @@ export function parseOriginalRoadTransport(iniSource,libSource,makerSource,treas
      retailVehicles.some(item=>
        VERIFIED_RETAIL_ROAD_LINES.get(item.name)!==item.originalLine||
        item.sku!=="legacy-"+item.originalLine||
-       ![...(item.originalLine>=390?["ギフト"]:["乗り物"])].includes(item.category)||
+       item.category!==(item.originalLine>=390?"ギフト":"乗り物")||
        item.effect!=="無"||
        item.durabilityUnit!=="回"||!Number.isSafeInteger(item.durability)||
        item.durability<1||item.rawFields?.length!==33||
