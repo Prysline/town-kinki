@@ -106,7 +106,7 @@ test("新增可實際使用的原版甜點、ステータス 道具、分類複�
   for(const [name,usage] of [
     ["無駄知識を覚える本","supported"],
     ["健康保険","automatic"],["クレジットカード","payment"],
-    ["ガチャピン","unsupported"],["防犯カメラ","unsupported"]
+    ["ガチャピン","supported"],["防犯カメラ","unsupported"]
   ]){
     const item=catalog.find(x=>x.name===name);
     assert.ok(item,"原版商品不存在："+name);

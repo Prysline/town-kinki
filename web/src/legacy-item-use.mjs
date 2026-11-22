@@ -22,9 +22,39 @@ const STATUS_ITEMS=new Set([
   "ゲーム\tキングダムハーツ2ファイナルミックス＋",
   "関西名産店\t阪神タイガースの公式チケット"
 ]);
-// 原版「日」制一般道具不限於一次，期限內按冷卻可再使用。
-// 健康保險、卡片、寵物、防犯攝影機等另有用途，不當作可反覆使用的消耗品。
+// 原版「日」制道具在期限內可依冷卻反覆使用，使用不扣有效天數。
+// 除既有書籍、遊戲、成人用品外，只增開商品表與 item_do 均有明證的五款。
+// 健康保險、防犯攝影機和其他未核對的日制權益仍不得當作一般道具使用。
 const DAY_USE_TYPES=new Set(["書籍","ゲーム","アダルト"]);
+const VERIFIED_DAY_USE_ITEMS=new Map([
+  ["ペット\tガチャピン",{
+    effect:"無",interval:"120",body:"10",brain:"0",
+    stats:[...Array(14).fill(0),15,15,15]
+  }],
+  ["日用品\tクレジットカード",{
+    effect:"クレジット",interval:"0",body:"0",brain:"0",
+    stats:Array(17).fill(0)
+  }],
+  ["日用品\tゴールドクレジットカード",{
+    effect:"クレジット",interval:"0",body:"0",brain:"0",
+    stats:Array(17).fill(0)
+  }],
+  ["日用品\tスペシャルクレジットカード",{
+    effect:"クレジット",interval:"15",body:"0",brain:"0",
+    stats:Array(17).fill(1)
+  }],
+  ["日用品\tブラタンメンバーズカード",{
+    effect:"クレジット",interval:"180",body:"0",brain:"0",
+    stats:[...Array(14).fill(2),0,0,0]
+  }]
+]);
+function isVerifiedDayUseItem(row,raw){
+  const item=VERIFIED_DAY_USE_ITEMS.get(row.category+"\t"+row.original_name);
+  return Boolean(item&&raw[9]===item.effect&&raw[22]==="日"&&
+    raw[23]===item.interval&&(raw[27]||"0")===item.body&&
+    (raw[28]||"0")===item.brain&&
+    STATS_INDEX.every((index,i)=>raw[index]===String(item.stats[i])));
+}
 const ENERGY_RECOVERY_ITEMS=new Map([
   ["ドリンク\t元気ミルク","-500,0"],
   ["ドリンク\t爽快ミルク","0,-500"],
@@ -96,7 +126,8 @@ function parseArchivedItem(row){
      NON_CONSUMABLE.has(row.category)||
      (row.original_name==="ランダム品"&&!verifiedRandom))
     return null;
-  if(unit==="日"&&!DAY_USE_TYPES.has(row.category))return null;
+  const verifiedDayUse=unit==="日"&&isVerifiedDayUseItem(row,raw);
+  if(unit==="日"&&!DAY_USE_TYPES.has(row.category)&&!verifiedDayUse)return null;
   const parts=raw[9].split(",");
   const compound=parts.length===3&&COMPOUND_SUFFIXES.has(parts[2]);
   if(parts.length>2&&!compound)return null;
@@ -116,13 +147,16 @@ function parseArchivedItem(row){
     recovered===raw[27]+","+raw[28];
   const originalStatus=effect==="ステータス"&&parts.length===1&&
     STATUS_ITEMS.has(itemKey);
-  if(!SPECIAL_TYPES.has(effect)&&!originalEnergyRecovery&&!originalStatus)
+  // 原版信用卡有兩條獨立途徑：商店銀行付款；背包 item_do 套用原始能力欄。
+  // 特殊卡 +1 全能力、會員卡 +2 前十四項；一般卡/金卡手動使用沒有能力增益。
+  const originalCardUse=verifiedDayUse&&effect==="クレジット"&&parts.length===1;
+  if(!SPECIAL_TYPES.has(effect)&&!originalEnergyRecovery&&!originalStatus&&!originalCardUse)
     return null;
-  if(effect!=="無"&&!originalEnergyRecovery&&!originalStatus&&!emptyMagnitude&&
+  if(effect!=="無"&&!originalEnergyRecovery&&!originalStatus&&!originalCardUse&&!emptyMagnitude&&
      (parts.length!==2&&!compound||!/^\d+$/.test(parts[1])))return null;
   if(["無","効果","ステータス"].includes(effect)&&parts.length!==1)
     return null;
-  const magnitude=effect==="無"||originalEnergyRecovery||originalStatus||emptyMagnitude?0:
+  const magnitude=effect==="無"||originalEnergyRecovery||originalStatus||originalCardUse||emptyMagnitude?0:
     nonnegative(parts[1],"特殊效果",100000);
   let purchasedAt=null,expiresAt=null;
   if(unit==="日"){
