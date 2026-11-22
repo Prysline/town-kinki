@@ -1522,10 +1522,21 @@ function itemInventoryEffects(info){
   if(!lines.length)lines.push("原版沒有非零能力增減");
   return lines;
 }
+// 角色與原版分類鍵綁定展開狀態，避免每次定時同步都重開已收合的分類。
+const collapsedInventoryCategories=new Set();
 function renderLegacyItems(){
   const target=el("legacy-inventory-list");
   target.replaceChildren();
   const items=state.legacyInventory??[];
+  const caps=state.inventoryCapacity;
+  for(const [id,key,limit] of [
+    ["inventory-general-usage","general",25],
+    ["inventory-purchased-gift-usage","purchasedGift",10],
+    ["inventory-received-gift-usage","receivedGift",10]
+  ]){
+    const count=caps?.[key]?.used;
+    text(id,(Number.isSafeInteger(count)?count:"—")+" / "+limit+" 格");
+  }
   const actions=new Map((state.legacyItemActions??[]).map(x=>[x.sourceLine,x]));
   const grouped=new Map(),gifts=[];
   for(const item of items){
@@ -1544,9 +1555,18 @@ function renderLegacyItems(){
     target.append(empty);
   }
   for(const category of [...grouped.keys()].sort((x,y)=>x.localeCompare(y,"ja"))){
-    const section=document.createElement("section");section.className="inventory-category";
-    const heading=document.createElement("h4");heading.className="inventory-category-heading";
-    heading.textContent="▼ "+displayRetailItemCategory(category);section.append(heading);
+    // 原版是分類標頭；Web 以原生 details/summary 支援滑鼠、鍵盤和觸控操作。
+    const section=document.createElement("details");section.className="inventory-category";
+    const categoryKey=(state.character?.name??"")+":"+category;
+    section.open=!collapsedInventoryCategories.has(categoryKey);
+    section.addEventListener("toggle",()=>{
+      if(section.open)collapsedInventoryCategories.delete(categoryKey);
+      else collapsedInventoryCategories.add(categoryKey);
+    });
+    const heading=document.createElement("summary");heading.className="inventory-category-heading";
+    heading.textContent=displayRetailItemCategory(category)+"（"+grouped.get(category).length+" 件）";
+    section.append(heading);
+    const categoryItems=document.createElement("div");categoryItems.className="inventory-category-items";
     for(const item of grouped.get(category)){
       const card=document.createElement("article");card.className="inventory-item";
       if(Number.isSafeInteger(item.removeAt)){
@@ -1614,8 +1634,9 @@ function renderLegacyItems(){
       for(const line of lines){
         const p=document.createElement("p");p.className="small";p.textContent=line;details.append(p);
       }
-      card.append(details);section.append(card);
+      card.append(details);categoryItems.append(card);
     }
+    section.append(categoryItems);
     target.append(section);
   }
   if(gifts.length){
