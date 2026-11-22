@@ -2818,12 +2818,12 @@ async function submitFishingAction(actionName,payload,description){
     render();
     if(result.replayed){notify("這筆釣魚交易已完成，沒有重複扣款、扣餌或領獎。");return;}
     notify(actionName==="bait/buy"?
-      "已購入「"+result.name+"」魚餌，支付 "+money(result.price)+"；商品已入本人背包。":
+      "已購入「"+displayRetailItemName(result.name)+"」魚餌，支付 "+money(result.price)+"；商品已入本人背包。":
       actionName==="cast"?
-        "已消耗「"+result.baitName+"」一回。"+
-        (result.caught?"釣到「"+result.catchName+"」，漁獲已入庫！":"這次沒有釣到魚。")+
+        "已消耗「"+displayRetailItemName(result.baitName)+"」一回。"+
+        (result.caught?"釣到「"+displayRetailItemName(result.catchName)+"」，漁獲已入庫！":"這次沒有釣到魚。")+
         "釣魚冷卻 100 秒。":
-        "已出售「"+result.name+"」一回，競價收入 "+money(result.paid)+"。");
+        "已出售「"+displayRetailItemName(result.name)+"」一回，競價收入 "+money(result.paid)+"。");
   }catch(error){notify(error.message,true);}
 }
 function renderFishing(){
@@ -2833,15 +2833,15 @@ function renderFishing(){
   const shop=info.baitShopAvailable===true;
   text("fishing-status",available?
     "釣場已開放。魚可重新作餌，也可於此出售；每次都消耗一回耐久。":
-    "目前城鎮尚無「釣り」釣場；可在單機地圖編輯器放置原版建築。");
+    "目前城鎮尚無「釣魚場」；可在單機地圖編輯器放置原版建築。");
   text("fishing-shop-status",shop?
     "原版餌料商店已開放：依原始標價，庫存每日依原版商品數據補充。":
-    "這座城鎮尚無「販売1」餌料商店；無法購買新的魚餌。");
+    "這座城鎮尚無「魚餌商店」；無法購買新的魚餌。");
   const goods=el("fishing-bait-goods");
   goods.replaceChildren();
   for(const bait of info.baitGoods??[]){
     const tile=document.createElement("div");tile.className="training-tile";
-    const name=document.createElement("strong");name.textContent=bait.name;
+    const name=document.createElement("strong");name.textContent=displayRetailItemName(bait.name);
     const details=document.createElement("p");details.className="small";
     details.textContent="售價："+money(bait.price)+"｜耐久 "+bait.durability+" 回｜尚餘 "+bait.stock+" 件";
     const buy=document.createElement("button");buy.type="button";
@@ -2850,7 +2850,7 @@ function renderFishing(){
     buy.disabled=!canBuy;
     buy.addEventListener("click",()=>submitFishingAction("bait/buy",{
       sku:bait.sku
-    },"確定依原版標價以現金 "+money(bait.price)+" 購買「"+bait.name+"」嗎？"));
+    },"確定依原版標價以現金 "+money(bait.price)+" 購買「"+displayRetailItemName(bait.name)+"」嗎？"));
     tile.append(name,details,buy);goods.append(tile);
   }
   function fillOptions(id,list){
@@ -2859,7 +2859,7 @@ function renderFishing(){
     for(const item of list){
       const option=document.createElement("option");
       option.value=String(item.sourceLine);
-      option.textContent=item.name+"（可用 "+item.remaining+" 回）";
+      option.textContent=displayRetailItemName(item.name)+"（可用 "+item.remaining+" 回）";
       select.append(option);
     }
     if(list.some(x=>String(x.sourceLine)===previous))select.value=previous;
@@ -2879,13 +2879,13 @@ function renderFishing(){
     const line=Number(el("fishing-bait-select").value);
     const bait=info.baitOptions?.find(x=>x.sourceLine===line);
     if(bait)submitFishingAction("cast",{sourceLine:line},
-      "使用「"+bait.name+"」釣魚一次？不論有沒有釣到魚，都會消耗一回耐久。");
+      "使用「"+displayRetailItemName(bait.name)+"」釣魚一次？不論有沒有釣到魚，都會消耗一回耐久。");
   };
   sell.onclick=()=>{
     const line=Number(el("fishing-sell-select").value);
     const catchItem=info.sellOptions?.find(x=>x.sourceLine===line);
     if(catchItem)submitFishingAction("sell",{sourceLine:line},
-      "確定在原版競價市場出售「"+catchItem.name+"」一回？成交價格依原版範圍隨機決定。");
+      "確定在原版競價市場出售「"+displayRetailItemName(catchItem.name)+"」一回？成交價格依原版範圍隨機決定。");
   };
   const history=el("fishing-history");history.replaceChildren();
   const items=info.history??[];
@@ -2897,10 +2897,10 @@ function renderFishing(){
     for(const item of items){
       const li=document.createElement("li");
       const label=item.action==="buy"?
-        "買餌："+item.name+"（"+money(item.price)+"）":
+        "買餌："+displayRetailItemName(item.name)+"（"+money(item.price)+"）":
         item.action==="cast"?
-          "釣魚："+item.baitName+" → "+(item.caught?"釣到 "+item.catchName:"未中魚"):
-          "賣魚："+item.name+"（收入 "+money(item.paid)+"）";
+          "釣魚："+displayRetailItemName(item.baitName)+" → "+(item.caught?"釣到 "+displayRetailItemName(item.catchName):"未中魚"):
+          "賣魚："+displayRetailItemName(item.name)+"（收入 "+money(item.paid)+"）";
       li.textContent=new Date(item.createdAt).toLocaleString("zh-TW")+"｜"+label;
       list.append(li);
     }
