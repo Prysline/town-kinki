@@ -595,7 +595,8 @@ test("原版七款單段食料品／ファ商品購買時轉類，照 item_do �
       const remaining=db.prepare("SELECT remaining FROM legacy_item_usage WHERE user_id=1 AND source_line=1").get().remaining;
       assert.equal(remaining,Number(fields[21])-1,name);
       assert.equal(use(db,1,"converted-food-use-01",NOW+1000).replayed,true,"相同 requestId 須防重");
-      assert.throws(()=>use(db,1,"converted-food-too-soon",NOW+59000),/60 分鐘/,name);
+      assert.throws(()=>use(db,1,"converted-food-too-soon",NOW+59000),
+        Number(fields[21])>1?/60 分鐘/:/耐久已用盡/,name);
       assert.equal(read(db).weight,expectedWeight,"冷卻失敗不可重複增重");
       assert.deepEqual(JSON.parse(db.prepare("SELECT raw_fields_json FROM legacy_inventory_items WHERE user_id=1").get().raw_fields_json),
         fields,"使用後不可修改原始 33 欄");
