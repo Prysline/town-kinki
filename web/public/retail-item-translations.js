@@ -15,6 +15,7 @@ import { displayRetailDepartmentSupermarketCraftingName,displayRetailDepartmentS
 import { displayRetailGiftName,displayRetailGiftCategory } from "./retail-gift-translations.js";
 import { displayRetailSecretGoodsName,displayRetailSecretGoodsCategory } from "./retail-secret-goods-translations.js";
 import { displayRetailChankoGoldName,displayRetailChankoGoldCategory } from "./retail-chanko-gold-translations.js";
+import { displayRetailDvdName,displayRetailDvdCategory } from "./retail-dvd-translations.js";
 
 const ITEM_NAME_TRANSLATORS=Object.freeze([
   displayKnownItemName,
@@ -31,7 +32,8 @@ const ITEM_NAME_TRANSLATORS=Object.freeze([
   displayRetailDepartmentSupermarketCraftingName,
   displayRetailGiftName,
   displayRetailSecretGoodsName,
-  displayRetailChankoGoldName
+  displayRetailChankoGoldName,
+  displayRetailDvdName
 ]);
 const ITEM_CATEGORY_TRANSLATORS=Object.freeze([
   displayKnownItemCategory,
@@ -48,7 +50,8 @@ const ITEM_CATEGORY_TRANSLATORS=Object.freeze([
   displayRetailDepartmentSupermarketCraftingCategory,
   displayRetailGiftCategory,
   displayRetailSecretGoodsCategory,
-  displayRetailChankoGoldCategory
+  displayRetailChankoGoldCategory,
+  displayRetailDvdCategory
 ]);
 
 export const displayRetailItemName=name=>
