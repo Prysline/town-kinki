@@ -66,10 +66,10 @@ test("咖啡跨類別沿用既有譯名，未知商品不翻譯",()=>{
 });
 
 // 定名校對：維持原版 CGI 的 key、分類與效果，僅翻譯顯示名稱。
-test("Tomcat 與魔物獵人 攜帶版 2nd G 使用人工確認譯名",()=>{
+test("Tomcat 與魔物獵人攜帶版2nd G 使用人工確認譯名",()=>{
   const reviewed={
     "トムキャット":"Tomcat",
-    "MHP2G":"魔物獵人 攜帶版 2nd G"
+    "MHP2G":"魔物獵人攜帶版2nd G"
   };
   for(const [original,localized] of Object.entries(reviewed)){
     assert.equal(RETAIL_SUPERMARKET_ZH_TW[original],localized);

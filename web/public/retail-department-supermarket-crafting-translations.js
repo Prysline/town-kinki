@@ -13,7 +13,7 @@ export const RETAIL_SUPERMARKET_ZH_TW=Object.freeze({
   "特製卵っち": "特製電子雞",
   "トムキャット": "Tomcat",
   "断食セット": "斷食套組",
-  "MHP2G": "魔物獵人 攜帶版 2nd G"
+  "MHP2G": "魔物獵人攜帶版2nd G"
 });
 export const RETAIL_CRAFTING_ZH_TW=Object.freeze({
   "冷蔵庫": "冰箱",
