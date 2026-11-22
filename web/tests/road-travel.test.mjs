@@ -583,7 +583,7 @@ test("第65階段來源：只接受5種百貨原版「乗り物」且非専門�
   assert.ok(rules.retailVehicles.every(x=>x.origin===RETAIL_ITEM_ORIGIN&&
     x.category==="乗り物"&&!x.rawFields[29].includes("専門店限定商品")));
   assert.throws(()=>parseOriginalRoadTransport(ini,lib,maker,treasure,
-    retailCatalog.filter(x=>x.name!=="自転車"))),/來源、分類或限制已變更/);
+    retailCatalog.filter(x=>x.name!=="自転車")),/來源、分類或限制已變更/);
   assert.throws(()=>parseOriginalRoadTransport(ini,lib,maker,treasure,
     retailCatalog.map(x=>x.name==="自転車"?{...x,originalLine:999}:x)),/來源、分類或限制已變更/);
   assert.throws(()=>parseOriginalRoadTransport(ini,lib,maker,treasure,
