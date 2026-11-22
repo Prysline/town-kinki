@@ -88,11 +88,11 @@
 | AC-02 | 單人刪角／繼續遊戲 | 指定範圍已實作 | `server.test.mjs`：單機角色刪除、重啟保存、跨日快轉 | 未驗（無真人實機證據） | Web 可繼續進度與單機時間；不等於全系統歷史持久化已逐一驗收 | `src/server.mjs`、`tests/server.test.mjs`、[第48階段](phase48-core-gameplay-restart.md) | 真人返回首頁／繼續、跨版本 SQLite 升級驗收 | P1 |
 | AC-03 | 公開部署／管理權限／速率限制 | 部分實作 | 既有盤點列有程式／測試線索；本輪未逐項重跑，需按風險核對 | 未驗（無真人實機證據） | 原版完整等價性待核實（不得以入口／測試數量代替） | [`migration-audit.md`](migration-audit.md) 原始 CGI 與 Web 來源列；src/server.mjs；README 安全限制 | 先查核：未有完整登入速率限制及公開部署審查；不宜公開直接部署 | 公開部署前門檻 |
 | AC-04 | 原版個人設定及備忘錄／朋友清單／死亡通知 | 部分實作 | 既有盤點列有程式／測試線索；本輪未逐項重跑，需按風險核對 | 未驗（無真人實機證據） | 原版完整等價性待核實（不得以入口／測試數量代替） | [`migration-audit.md`](migration-audit.md) 原始 CGI 與 Web 來源列；Web 有獨立 solo 刪角及帳號登入，沒有等價的完整原版設定資料模型 | 先查核：原版備忘錄可保存、好友清單和字體／音效設定可編輯；死亡通知含密碼及原始關聯檔處理，不能用 Web solo 刪角代稱完成 | P2 |
-| DB-04 | SQLite 遷移／還原 | 部分實作 |第48階段跨兩次 Node 重啟；第67階段 `solo-save.test.mjs`／HTTP 還原續玩、WAL、SHA-256、外鍵；PR #35 舊 Web schema 代表性資產版本升級測試新增（最終 CI 為準） | 未驗（無真人實機證據） | 不適用：新版 SQLite 保存與恢復，不以舊 CGI 匯入衡量 |[第67階段](phase67-solo-save-backup-restore.md)、`scripts/solo-save.mjs`、`tests/solo-save.test.mjs`、`tests/server.test.mjs`；[第68階段跨版測試](phase68-sqlite-pr35-upgrade-verification.md) |**CLI 備份／驗證／新目錄還原已完成**；待跨 Web 版本升級矩陣、跨設備演練、定期管理與真人操作；其他 Web 歷史版本、跨 OS／設備仍待驗收 | P1（驗收） |
+| DB-04 | SQLite 遷移／還原 | 部分實作 |第48階段跨兩次 Node 重啟；第67階段 `solo-save.test.mjs`／HTTP 還原續玩、WAL、SHA-256、外鍵；PR #35 真實歷史 schema 子集升級已由 PR #94 驗證（合併前／後 push 與 PR CI 均成功）；PR #53 寄禮信箱舊 FK→雙階段升級及寄件者刪帳保護由 PR #96 補測，須以最終 CI 結果判讀 | 未驗（無真人實機證據） | 不適用：新版 SQLite 保存與恢復，不以舊 CGI 匯入衡量 |[第67階段](phase67-solo-save-backup-restore.md)、`scripts/solo-save.mjs`、`tests/solo-save.test.mjs`、`tests/server.test.mjs`；[第68階段跨版測試](phase68-sqlite-pr35-upgrade-verification.md)、[第69階段舊信箱跨版測試](phase69-pr53-gift-mail-upgrade.md)、[PR #96](https://github.com/Prysline/town-kinki/pull/96) |**CLI 備份／驗證／新目錄還原已完成**；待跨 Web 版本升級矩陣、跨設備演練、定期管理與真人操作；其他 Web 歷史版本、跨 OS／設備仍待驗收，PR #96 不代表全面矩陣完成 | P1（驗收） |
 | DB-05 | Web 自建個人檔案與職業投稿 | 未實作 | 無已移植玩法驗證；原版來源需核對 | 未驗（無真人實機證據） | 原版已確認有程式或資料；可達條件仍依來源核定 | [`migration-audit.md`](migration-audit.md) 原始 CGI 與 Web 來源列；Web 尚缺完整建立／投稿功能 | 先查核：讓新玩家自行填寫，不匯入既有玩家資料 | 後續／P2 |
 | UI-01 | 三欄位狀態切換與原始資訊 | 部分實作 | 既有盤點列有程式／測試線索；本輪未逐項重跑，需按風險核對 | 未驗（無真人實機證據） | 原版完整等價性待核實（不得以入口／測試數量代替） | [`migration-audit.md`](migration-audit.md) 原始 CGI 與 Web 來源列；public/index.html L176-L202；public/app.js | 先查核：有 ARIA tab 與原版分頁；實機 375px/768px/桌機驗收缺少 | P1 |
 | UI-02 | 事件通知及 20 秒挑戰 | 部分實作 | 既有盤點列有程式／測試線索；本輪未逐項重跑，需按風險核對 | 未驗（無真人實機證據） | 原版完整等價性待核實（不得以入口／測試數量代替） | [`migration-audit.md`](migration-audit.md) 原始 CGI 與 Web 來源列；public/app.js；src/event-cockroach.mjs | 先查核：程式顯示與 API 存在；真實操作與動態尺寸未驗證 | P1 |
-| UI-03 | 地圖、餐點與手機 RWD | 部分實作 | `home-ui.test.mjs` 靜態 DOM/文字；`browser-viewport-smoke.test.mjs` 在真實 Chrome 引擎自動觸發建角、工作、銀行、百貨、背包與 1440/768/375px 交互（是否通過以同一 HEAD CI 為證） | 未驗（無真人實機證據） | UI 響應、可用性與原版介面不可混為單一等價判定 | `public/index.html`、`public/app.js`、`public/style.css`、`tests/home-ui.test.mjs`、[Chrome 自動化測試](../tests/browser-viewport-smoke.test.mjs)、[PR #95](https://github.com/Prysline/town-kinki/pull/95) | 真人桌面／手機／平板實機操作、食堂／住宅／事件、鍵盤／畫面全面驗收仍缺；自動化不得作真人證據 | P1（驗收） |
+| UI-03 | 地圖、餐點與手機 RWD | 部分實作 | `home-ui.test.mjs` 靜態 DOM/文字；`browser-viewport-smoke.test.mjs` 在真實 Chrome 引擎自動觸發建角、工作、銀行、百貨、背包與 1440/768/375px 交互（PR #95 最終 HEAD push／PR CI 及合併後回歸均成功，714/714） | 未驗（無真人實機證據） | UI 響應、可用性與原版介面不可混為單一等價判定 | `public/index.html`、`public/app.js`、`public/style.css`、`tests/home-ui.test.mjs`、[Chrome 自動化測試](../tests/browser-viewport-smoke.test.mjs)、[PR #95](https://github.com/Prysline/town-kinki/pull/95) | 真人桌面／手機／平板實機操作、食堂／住宅／事件、鍵盤／畫面全面驗收仍缺；自動化不得作真人證據 | P1（驗收） |
 | UI-04 | 部署／監控／備份 | 部分實作 | 第67階段 CLI／HTTP 備份後續玩測試已通過；正式部署測試無證據 | 未驗（無真人實機證據） | 不適用（部署與備份管理要求） | [第67階段](phase67-solo-save-backup-restore.md)、`scripts/solo-save.mjs` | 部署權限／HTTPS／速率限制、安全審查、定期備份輪替與還原演練 | P2 |
 | UI-05 | 地圖教室獨立入口 | 指定範圍已實作 | `home-ui.test.mjs` 與 `server.test.mjs`：教室地圖導航及 HTTP 交易 | 未驗（無真人實機證據） | 已核對地圖教室與獨立學校的差別 | [第30階段教室](phase30-jobs-training-profile-audit.md)、`public/town-home.js` | 只需真人入口操作，不重建導覽 | P1 |
 
@@ -136,7 +136,7 @@
 |---|---|---|
 | **真人桌面瀏覽器** | Node HTTP、DOM 與 SQLite 測試已涵蓋主要循環；無真人點擊錄影／截圖證據 | 真正用桌面 Chrome/Firefox 建角→工作與領薪→百貨購物→背包使用→食堂／住宅／事件→離開再繼續；檢查每步角色、金錢、道具、冷卻與錯誤提示 |
 | **375px 手機／768px 平板** | 有 CSS/RWD 與 DOM 測試，但不等於兩種視埠已人工驗收 | 實際瀏覽器在 375、768px 操作導航、地圖、彈窗、狀態／背包／冷卻、券、合成、釣魚、公路；紀錄水平溢出與點擊失敗 |
-| **新版 Web SQLite 升級矩陣** | 第48階段同資料夾兩次 Node 重啟；第67階段新資料夾備份／還原續玩已測 | 按確定舊 Web schema 版本建立資料樣本→備份→升級→重啟，逐一核對現金／銀行／背包／住宅／事件／冷卻／多種設施；失敗不得毀損來源 |
+| **新版 Web SQLite 升級矩陣** | 第48階段同資料夾重啟、第67階段備份／新目錄還原已通過；PR #94 完成 PR #35 真實 schema 子集跨版測試（兩次合併前／後 CI 成功）；PR #96 新增 PR #53 寄禮信箱歷史 FK 無損升級切片（是否通過依 PR 最終 CI 判定） | 按確定舊 Web schema 版本建立資料樣本→備份→升級→重啟，逐一核對現金／銀行／背包／住宅／事件／冷卻／多種設施；失敗不得毀損來源 |
 | **不同設備與環境還原** | 已有 CLI WAL 快照、SHA-256、驗證與不覆寫還原 | 在不同 OS／檔案系統／權限與實際部署路徑操作；驗證完整性與恢復續玩，不能把 CLI 完成寫成演練完成 |
 | **定期備份管理／正式部署** | 手動 `solo-save.mjs` 已可用；不代表有輪替排程、監控、金鑰或遠端保存 | 若要正式公開部署，實作／驗證排程、保留政策、告警、離線副本、HTTPS／Session／速率限制與資產權限；先經部署安全審查 |
 | **多人安全回歸** | 現有隔離、單筆交易、防重送與刪帳後資料持有權已有自動測試；第49階段私訊亦涵蓋 | 修改共享規則或 schema 時核對兩帳戶、資產所有權、併發、回滾；**不因此新增多人功能** |
@@ -144,7 +144,9 @@
 
 **已解除的 CI 時鐘測試阻塞（2026-11-22）**：`coupon-redemption.test.mjs` 原以固定 `2026-11-21T10:00:00Z` 兌換一日獎品、卻以真實時間查詢背包，造成 #109、#112 失敗。已由獨立 [PR #93](https://github.com/Prysline/town-kinki/pull/93) 僅修改測試檔，統一查詢時鐘，並補測到期前 1 毫秒可見、到期時不可見；該 PR 的 [push CI](https://github.com/Prysline/town-kinki/actions/runs/45014745689) 與 [pull_request CI](https://github.com/Prysline/town-kinki/actions/runs/45014761000) 均已成功，修復已合併 Web 長期分支。此問題不是兌換遊戲功能退化，文件 PR 仍僅修改 Markdown。
 
-**新增瀏覽器自動化（PR #95）與真人驗收分離**：`tests/browser-viewport-smoke.test.mjs` 使用真實 Chrome/Chromium 引擎在 1440px、768px、375px 視埠執行前端滑鼠點擊與頁面狀態，覆蓋建角、已預設日薪工作、單機試玩街區、銀行存款、百貨選品購買、背包、首頁離開／繼續。只有最終 HEAD CI 成功才可記為這些切片**已自動測試**；仍**沒有真人在桌面、平板或手機現場操作的證據**，不涵蓋全部遊戲設施及不同 OS 實機。
+**已完成 Chrome 自動化（PR #95，合併後 Web SHA `2ab61554ab94f9db0c71a6f4d791c1a72cc39d19`）與真人驗收分離**：`tests/browser-viewport-smoke.test.mjs` 使用真實 Chrome/Chromium 引擎在 1440px、768px、375px 視埠執行前端滑鼠點擊與頁面狀態，覆蓋建角、已預設日薪工作、單機試玩街區、銀行存款、百貨選品購買、背包、首頁離開／繼續。[最終 HEAD push CI](https://github.com/Prysline/town-kinki/actions/runs/45022217905)、[PR CI](https://github.com/Prysline/town-kinki/actions/runs/45022224039) 與[合併後 push CI](https://github.com/Prysline/town-kinki/actions/runs/45022371805)、[PR #1 回歸 CI](https://github.com/Prysline/town-kinki/actions/runs/45022376153) 已成功；這些切片**已自動測試**；仍**沒有真人在桌面、平板或手機現場操作的證據**，不涵蓋全部遊戲設施及不同 OS 實機。
+
+**跨版本矩陣驗收（PR #94／#96）**：PR #94 以 PR #35 當時百貨收據 schema 子集做無損備份→升級→資產延續，合併後 [Web push](https://github.com/Prysline/town-kinki/actions/runs/45021154461) 與 [PR #1 回歸](https://github.com/Prysline/town-kinki/actions/runs/45021159489) 成功。PR #96 另選 PR #53 的寄禮信件 `event_id` 舊外鍵（刪交易會連刪收件者信），測試兩段 v2／v3 升級以及刪寄件者後的收信與收禮保護；**只有最終 CI 成功才能判定這筆新切片通過**。兩者都不是完整歷史 Web 版本矩陣，更不是不同 OS／設備的真人還原。詳見[第69階段](phase69-pr53-gift-mail-upgrade.md)。
 
 **已測不等於已人工驗收；待真人驗收不等於 API 未實作。** 只有真實驗收紀錄、具體裝置／版本／步驟／結果才允許把「未驗」更新為「已驗收」。
 
@@ -171,7 +173,7 @@
 
 - [README 操作及部署限制](../README.md)／[早期 README 完整歷史紀錄](README-HISTORICAL-NOTES.md)。
 - [原版 CGI／Web 詳細差異、原始功能 ID](migration-audit.md)；[第30階段歷史待辦](phase30-open-audit-backlog.md)；[原版43互動入口歷史清冊](phase30-entrypoint-coverage.md)。
-- [單機優先與試玩街區](phase50-solo-first-play-audit.md)；[第48階段跨重啟實測](phase48-core-gameplay-restart.md)；[第66階段18車來源](phase66-road-retail-source-audit.md)；[第67階段備份還原](phase67-solo-save-backup-restore.md)。
+- [單機優先與試玩街區](phase50-solo-first-play-audit.md)；[第48階段跨重啟實測](phase48-core-gameplay-restart.md)；[第66階段18車來源](phase66-road-retail-source-audit.md)；[第67階段備份還原](phase67-solo-save-backup-restore.md)；[第68階段百貨舊收據](phase68-sqlite-pr35-upgrade-verification.md)；[第69階段寄禮信箱](phase69-pr53-gift-mail-upgrade.md)。
 - [原版舊玩家匯入排除政策](project-scope-no-legacy-player-import.md)；[最新合併 PR](https://github.com/Prysline/town-kinki/pulls?q=is%3Apr+is%3Amerged)；[CI](https://github.com/Prysline/town-kinki/actions)。
 
 此檔不修改原始 CGI、Web API、遊戲規則或 SQLite schema；只為下次開發提供可回查的現行判讀與排序。
