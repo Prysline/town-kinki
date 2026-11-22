@@ -92,7 +92,7 @@
 | DB-05 | Web 自建個人檔案與職業投稿 | 未實作 | 無已移植玩法驗證；原版來源需核對 | 未驗（無真人實機證據） | 原版已確認有程式或資料；可達條件仍依來源核定 | [`migration-audit.md`](migration-audit.md) 原始 CGI 與 Web 來源列；Web 尚缺完整建立／投稿功能 | 先查核：讓新玩家自行填寫，不匯入既有玩家資料 | 後續／P2 |
 | UI-01 | 三欄位狀態切換與原始資訊 | 部分實作 | 既有盤點列有程式／測試線索；本輪未逐項重跑，需按風險核對 | 未驗（無真人實機證據） | 原版完整等價性待核實（不得以入口／測試數量代替） | [`migration-audit.md`](migration-audit.md) 原始 CGI 與 Web 來源列；public/index.html L176-L202；public/app.js | 先查核：有 ARIA tab 與原版分頁；實機 375px/768px/桌機驗收缺少 | P1 |
 | UI-02 | 事件通知及 20 秒挑戰 | 部分實作 | 既有盤點列有程式／測試線索；本輪未逐項重跑，需按風險核對 | 未驗（無真人實機證據） | 原版完整等價性待核實（不得以入口／測試數量代替） | [`migration-audit.md`](migration-audit.md) 原始 CGI 與 Web 來源列；public/app.js；src/event-cockroach.mjs | 先查核：程式顯示與 API 存在；真實操作與動態尺寸未驗證 | P1 |
-| UI-03 | 地圖、餐點與手機 RWD | 部分實作 | `home-ui.test.mjs`等 DOM/文字結構測試；**非**瀏覽器寬度人工證據 | 未驗（無真人實機證據） | UI 響應、可用性與原版介面不可混為單一等價判定 | `public/index.html`、`public/app.js`、`public/style.css`、`tests/home-ui.test.mjs` | 375px、768px、桌面實機操作及鍵盤／畫面檢查 | P1（驗收） |
+| UI-03 | 地圖、餐點與手機 RWD | 部分實作 | `home-ui.test.mjs` 靜態 DOM/文字；`browser-viewport-smoke.test.mjs` 在真實 Chrome 引擎自動觸發建角、工作、銀行、百貨、背包與 1440/768/375px 交互（是否通過以同一 HEAD CI 為證） | 未驗（無真人實機證據） | UI 響應、可用性與原版介面不可混為單一等價判定 | `public/index.html`、`public/app.js`、`public/style.css`、`tests/home-ui.test.mjs`、[Chrome 自動化測試](../tests/browser-viewport-smoke.test.mjs)、[PR #95](https://github.com/Prysline/town-kinki/pull/95) | 真人桌面／手機／平板實機操作、食堂／住宅／事件、鍵盤／畫面全面驗收仍缺；自動化不得作真人證據 | P1（驗收） |
 | UI-04 | 部署／監控／備份 | 部分實作 | 第67階段 CLI／HTTP 備份後續玩測試已通過；正式部署測試無證據 | 未驗（無真人實機證據） | 不適用（部署與備份管理要求） | [第67階段](phase67-solo-save-backup-restore.md)、`scripts/solo-save.mjs` | 部署權限／HTTPS／速率限制、安全審查、定期備份輪替與還原演練 | P2 |
 | UI-05 | 地圖教室獨立入口 | 指定範圍已實作 | `home-ui.test.mjs` 與 `server.test.mjs`：教室地圖導航及 HTTP 交易 | 未驗（無真人實機證據） | 已核對地圖教室與獨立學校的差別 | [第30階段教室](phase30-jobs-training-profile-audit.md)、`public/town-home.js` | 只需真人入口操作，不重建導覽 | P1 |
 
@@ -143,6 +143,8 @@
 | **原版局部差異驗收** | 工作條件、魚餌庫存刷新、交通手動選車／巴士安全限制等有明確紀錄 | 只對影響玩家且有來源的差異開修復；來源不足者不宣稱完整等價，也不作必修計畫 |
 
 **已解除的 CI 時鐘測試阻塞（2026-11-22）**：`coupon-redemption.test.mjs` 原以固定 `2026-11-21T10:00:00Z` 兌換一日獎品、卻以真實時間查詢背包，造成 #109、#112 失敗。已由獨立 [PR #93](https://github.com/Prysline/town-kinki/pull/93) 僅修改測試檔，統一查詢時鐘，並補測到期前 1 毫秒可見、到期時不可見；該 PR 的 [push CI](https://github.com/Prysline/town-kinki/actions/runs/45014745689) 與 [pull_request CI](https://github.com/Prysline/town-kinki/actions/runs/45014761000) 均已成功，修復已合併 Web 長期分支。此問題不是兌換遊戲功能退化，文件 PR 仍僅修改 Markdown。
+
+**新增瀏覽器自動化（PR #95）與真人驗收分離**：`tests/browser-viewport-smoke.test.mjs` 使用真實 Chrome/Chromium 引擎在 1440px、768px、375px 視埠執行前端滑鼠點擊與頁面狀態，覆蓋建角、已預設日薪工作、單機試玩街區、銀行存款、百貨選品購買、背包、首頁離開／繼續。只有最終 HEAD CI 成功才可記為這些切片**已自動測試**；仍**沒有真人在桌面、平板或手機現場操作的證據**，不涵蓋全部遊戲設施及不同 OS 實機。
 
 **已測不等於已人工驗收；待真人驗收不等於 API 未實作。** 只有真實驗收紀錄、具體裝置／版本／步驟／結果才允許把「未驗」更新為「已驗收」。
 
