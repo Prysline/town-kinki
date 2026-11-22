@@ -183,7 +183,19 @@ test("Chrome：桌面→768px平板→375px手機，操作真實建角／工作�
     await fill(chrome,'#create-form [name="name"]',"Chrome測試居民");
     await click(chrome,"#create-submit");
     await until(chrome,"!document.querySelector('#game')?.hidden","建角後遊戲主畫面");
-    await until(chrome,"document.querySelector('#jobs .job button:not(:disabled)')!==null","可應徵工作");
+    try{
+      await until(chrome,"document.querySelector('#jobs .job button:not(:disabled)')!==null","可應徵工作");
+    }catch(error){
+      const diagnosis=await evaluate(chrome,"(async()=>{const s=await(await fetch('/api/state')).json();"+
+        "return {gameVisible:!document.querySelector('#game')?.hidden,"+
+        "jobsDom:document.querySelector('#jobs')?.children.length,"+
+        "filter:document.querySelector('#job-filter')?.value,"+
+        "jobsFromApi:s.jobs?.length,eligible:s.jobs?.filter(j=>!j.reason).slice(0,4),"+
+        "text:document.querySelector('#jobs')?.textContent?.slice(0,500),"+
+        "dialog:document.querySelector('#result-dialog')?.open,"+
+        "dialogMessage:document.querySelector('#result-dialog-message')?.textContent};})()");
+      throw new Error(error.message+"；實際 Chrome / API 診斷："+JSON.stringify(diagnosis));
+    }
     await click(chrome,"#jobs .job button:not(:disabled)");
     await until(chrome,"document.querySelector('#current-job')?.textContent?.length>0&&"+
       "!document.querySelector('#current-job')?.textContent?.includes('未任職')","職業已更新");
