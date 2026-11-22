@@ -9,6 +9,8 @@ import {
   beginRoadTrip,arriveRoadTrip,ROAD_WALKING_NAME,ROAD_HISTORY_LIMIT
 } from "../src/road-travel.mjs";
 import {heldInventoryRows,inventoryLife} from "../src/inventory-life.mjs";
+import {parseLegacyRetailCatalog,initRetailTables,ensureRetailDay,buyRetailItem,RETAIL_ITEM_ORIGIN}
+  from "../src/retail.mjs";
 
 function original(path){
   return decodeLegacyText(readFileSync(new URL("../../"+path,import.meta.url)));
@@ -17,7 +19,8 @@ const ini=original("town_ini.cgi"),lib=original("town_lib.pl"),
   maker=original("town_maker.cgi");
 const treasure=parseOriginalTreasure(original("gamerand.cgi"),original("otakara.cgi"),
   original("dat_dir/otakara.cgi"),ini);
-const rules=parseOriginalRoadTransport(ini,lib,maker,treasure);
+const retailCatalog=parseLegacyRetailCatalog(original("dat_dir/syouhin.cgi"));
+const rules=parseOriginalRoadTransport(ini,lib,maker,treasure,retailCatalog);
 const NOW=Date.parse("2026-11-22T12:00:00Z");
 const stats=()=>Object.fromEntries(STAT_KEYS.map(k=>[k,20]));
 function setup(){
@@ -35,6 +38,24 @@ function setup(){
   initTreasureTables(db);
   initRoadTravelTables(db);
   return db;
+}
+function setupRetailRoad(){
+  const db=setup();
+  db.exec("ALTER TABLE characters ADD COLUMN bank INTEGER NOT NULL DEFAULT 0");
+  initRetailTables(db);
+  return db;
+}
+function buyRetailVehicle(db,name,{userId=1,now=NOW,quantity=1}={}){
+  const item=retailCatalog.find(row=>row.name===name&&row.category==="乗り物");
+  assert.ok(item,"原版百貨存在此交通商品："+name);
+  const day="2026-11-22";
+  const selected=retailCatalog.filter(row=>rules.retailVehicles.some(v=>v.sku===row.sku));
+  ensureRetailDay(db,selected,day,()=>0);
+  return buyRetailItem(db,userId,selected,{
+    shop:"depart1",sku:item.sku,
+    requestId:"phase65_buy_"+item.sku+"_"+userId+"_"+quantity,
+    now,day,quantity,hasBuilding:()=>true
+  });
 }
 function giveVehicle(db,name,{userId=1,sourceLine=3000001,remaining=null,origin=TREASURE_ORIGIN,
   mutateFields}={}){
@@ -89,13 +110,13 @@ test("原版町移動：徒步10秒、20個Hash載具、1/10事故與寶箱可�
   assert.equal(rules.vehicles.find(x=>x.name==="ミグ25").seconds,0);
   assert.equal(rules.vehicles.find(x=>x.name==="ローラースルーゴーゴー").seconds,20);
   assert.throws(()=>parseOriginalRoadTransport(ini.replace("$matiidou_time = '10';","$matiidou_time = '11';"),
-    lib,maker,treasure),/已變更/);
+    lib,maker,treasure,retailCatalog),/已變更/);
   assert.throws(()=>parseOriginalRoadTransport(ini.replace("'ポルシェ','3'","'ポルシェ','4'"),
-    lib,maker,treasure),/已變更/);
+    lib,maker,treasure,retailCatalog),/已變更/);
   assert.throws(()=>parseOriginalRoadTransport(ini.replace("$ziko_kakuritu = '10';","$ziko_kakuritu = '11';"),
-    lib,maker,treasure),/已變更/);
+    lib,maker,treasure,retailCatalog),/已變更/);
   assert.throws(()=>parseOriginalRoadTransport(ini,lib,maker.replace("$syo_taikyuu -- ;","$syo_taikyuu -= 2 ;"),
-    treasure),/已變更/);
+    treasure,retailCatalog),/已變更/);
 });
 
 test("徒步公路移動是持久的兩階段：步行可鍛鍊5項、未到10秒不能抵達",()=>{
@@ -268,13 +289,13 @@ test("20筆畫面紀錄上限與全量存檔，刪除角色後交易與物品外
 test("第63階段來源：四號城出發不迷路；其他城持有ローラースルーゴーゴー必迷路，否則1/5",()=>{
   assert.throws(()=>parseOriginalRoadTransport(ini,
     lib.replace("if ($in{'maemati'} != 3){","if ($in{'maemati'} != 2){"),
-    maker,treasure),/已變更/);
+    maker,treasure,retailCatalog),/已變更/);
   assert.throws(()=>parseOriginalRoadTransport(ini,
     lib.replace("if (int(rand(5)+1) == 1){","if (int(rand(3)+1) == 1){"),
-    maker,treasure),/已變更/);
+    maker,treasure,retailCatalog),/已變更/);
   assert.throws(()=>parseOriginalRoadTransport(ini,lib,
     maker.replace("$in{'town_no'} = $no_rand;","$in{'town_no'} = 1;"),
-    treasure),/已變更/);
+    treasure,retailCatalog),/已變更/);
 });
 
 test("第63階段單純迷路無事故：原版只顯示迷路，不會真正使用 rand(4) 改寫目的地",()=>{
@@ -444,7 +465,7 @@ test("第64階段來源防改：原版巴士500元、5秒、取消迷路及事�
      "if ($ziko_idousyudan eq 'バス'){$ziko_flag  = \"on\";}"]
   ]){
     assert.ok(lib.includes(change[0]),"原始來源確有待防改分支："+change[0]);
-    assert.throws(()=>parseOriginalRoadTransport(ini,lib.replace(...change),maker,treasure),
+    assert.throws(()=>parseOriginalRoadTransport(ini,lib.replace(...change),maker,treasure,retailCatalog),
       /已變更/);
   }
 });
@@ -549,5 +570,134 @@ test("第64階段多人巴士交易與本人抵達隔離、相同請求碼可分
     assert.equal(roadOverview(db,2,rules,NOW+5000).pending.id,b.id);
     assert.equal(arriveRoadTrip(db,2,{tripId:b.id,now:NOW+5000}).toTownId,1);
     assert.equal(trips(db),2);
+  }finally{db.close();}
+});
+
+test("第65階段來源：只接受5種百貨原版「乗り物」且非専門店限定、保留20種移動速度",()=>{
+  assert.equal(rules.vehicles.length,19,"原寶箱獎池存在19種20名公路載具");
+  assert.deepEqual(rules.retailVehicles.map(x=>[x.name,x.seconds,x.sku]).sort((a,b)=>a[2].localeCompare(b[2])),[
+    ["ナナハン",7,"legacy-332"],["ドゥカティ",7,"legacy-333"],
+    ["自転車",15,"legacy-334"],["スーパーカブ",10,"legacy-337"],
+    ["ローラースルーゴーゴー",20,"legacy-338"]
+  ]);
+  assert.ok(rules.retailVehicles.every(x=>x.origin===RETAIL_ITEM_ORIGIN&&
+    x.category==="乗り物"&&!x.rawFields[29].includes("専門店限定商品")));
+  assert.throws(()=>parseOriginalRoadTransport(ini,lib,maker,treasure,
+    retailCatalog.filter(x=>x.name!=="自転車")),/來源、分類或限制已變更/);
+  assert.throws(()=>parseOriginalRoadTransport(ini,lib,maker,treasure,
+    retailCatalog.map(x=>x.name==="自転車"?{...x,originalLine:999}:x)),/來源、分類或限制已變更/);
+  assert.throws(()=>parseOriginalRoadTransport(ini,lib,maker,treasure,
+    retailCatalog.map(x=>x.name==="自転車"?{
+      ...x,rawFields:x.rawFields.map((v,i)=>i===29?"専門店限定商品":v)
+    }:x)),/來源、分類或限制已變更/);
+});
+
+test("第65階段五輛原版百貨車實際交易入庫後可公路出發，腳踏車鍛鍊與事故耐久維持原版",()=>{
+  const db=setupRetailRoad();
+  try{
+    db.prepare("UPDATE characters SET money=100000000 WHERE user_id=1").run();
+    const receipts=new Map();
+    for(const vehicle of rules.retailVehicles){
+      const bought=buyRetailVehicle(db,vehicle.name);
+      assert.equal(bought.replayed,false);
+      receipts.set(vehicle.name,bought);
+      const original=db.prepare("SELECT original_id,category,original_name,durability FROM legacy_inventory_items WHERE user_id=1 AND source_line=?").get(bought.sourceLine);
+      assert.equal(original.original_id,RETAIL_ITEM_ORIGIN);
+      assert.equal(original.category,"乗り物");
+      assert.equal(original.original_name,vehicle.name);
+      assert.ok(original.durability>0);
+    }
+    const choices=roadOverview(db,1,rules,NOW).choices;
+    assert.equal(choices.length,5);
+    assert.ok(choices.every(x=>x.origin==="retail"));
+    assert.deepEqual(choices.map(x=>x.name).sort(),rules.retailVehicles.map(x=>x.name).sort());
+    const bicycle=receipts.get("自転車");
+    const before=db.prepare("SELECT money FROM characters WHERE user_id=1").get().money;
+    const trip=start(db,{vehicleSourceLine:bicycle.sourceLine,requestId:"phase65_retail_bike_1",
+      rolls:[0,2,4,2,3,0],lostRoll:4,rerouteTown:2});
+    assert.equal(trip.seconds,15);
+    assert.equal(trip.vehicleName,"自転車");
+    assert.equal(trip.pending,true);
+    assert.equal(trip.lost,undefined);
+    assert.equal(db.prepare("SELECT money FROM characters WHERE user_id=1").get().money,before,
+      "搭本人已購百貨車不需重付車資");
+    assert.deepEqual(trip.exercise,{tairyoku:1,kenkou:3,speed:5,wanryoku:3});
+    const remaining=db.prepare("SELECT remaining FROM legacy_item_usage WHERE user_id=1 AND source_line=?").get(bicycle.sourceLine);
+    assert.equal(remaining.remaining,3);
+    const done=arrive(db,{tripId:trip.id,now:NOW+15000});
+    assert.equal(done.accident,true);
+    assert.equal(done.lost,true,"持有百貨輪滑車，即使用百貨腳踏車出發也必迷路");
+    assert.equal(done.rerouted,true);
+    assert.equal(done.toTownId,2);
+    assert.equal(town(db),2);
+    assert.equal(arrive(db,{tripId:trip.id,now:NOW+15000}).replayed,true);
+    assert.equal(db.prepare("SELECT remaining FROM legacy_item_usage WHERE user_id=1 AND source_line=?").get(bicycle.sourceLine).remaining,3,
+      "重播不能再次扣百貨車耐久");
+  }finally{db.close();}
+});
+
+test("第65階段來源保護：無真實本人百貨購買流水、偽造33欄、錯誤帳號及専門店限定車都不能上路",()=>{
+  const db=setupRetailRoad();
+  try{
+    const bicycle=retailCatalog.find(x=>x.name==="自転車"&&x.category==="乗り物");
+    const fake=[...bicycle.rawFields];
+    fake[30]=String(Math.floor(NOW/1000));
+    fake[31]="15000";
+    db.prepare([
+      "INSERT INTO legacy_inventory_items(user_id,original_id,source_line,",
+      "category,original_name,effect,durability,durability_unit,",
+      "purchased_at,last_used_at,raw_fields_json) VALUES(?,?,?,?,?,?,?,?,?,?,?)"
+    ].join(" ")).run(1,RETAIL_ITEM_ORIGIN,1888888,"乗り物","自転車","無",
+      bicycle.durability,"回",Math.floor(NOW/1000),0,JSON.stringify(fake));
+    assert.equal(roadOverview(db,1,rules,NOW).choices.length,0,
+      "僅造出同名百貨道具但沒有購物流水不能騎車");
+    assert.throws(()=>start(db,{vehicleSourceLine:1888888,
+      requestId:"phase65_no_purchase"}),/合法持有/);
+    db.prepare("DELETE FROM legacy_inventory_items WHERE source_line=1888888").run();
+    const bought=buyRetailVehicle(db,"ローラースルーゴーゴー",{userId:2});
+    assert.equal(roadOverview(db,1,rules,NOW).choices.length,0);
+    assert.equal(roadOverview(db,2,rules,NOW).choices[0].sourceLine,bought.sourceLine);
+    assert.throws(()=>start(db,{vehicleSourceLine:bought.sourceLine,
+      requestId:"phase65_cross_user"}),/合法持有/);
+    db.prepare("UPDATE characters SET money=100000000 WHERE user_id=1").run();
+    const specialist=retailCatalog.find(x=>x.name==="アルファロメオ"&&x.category==="乗り物");
+    assert.match(specialist.rawFields[29],/専門店限定商品/);
+    db.exec("DELETE FROM retail_stock;DELETE FROM retail_day;");
+    ensureRetailDay(db,[specialist],"2026-11-22",()=>0);
+    const specialBuy=buyRetailItem(db,1,[specialist],{
+      shop:"depart1",sku:specialist.sku,requestId:"phase65_specialist_regression",
+      day:"2026-11-22",now:NOW,hasBuilding:()=>true
+    });
+    assert.ok(specialBuy.sourceLine);
+    assert.equal(roadOverview(db,1,rules,NOW).choices.length,0,
+      "即使現有百貨目錄允許交易專門店商品，也不在本次啟用其公路效果");
+  }finally{db.close();}
+});
+
+test("第65階段百貨車需要相符購物流水與完整33欄，使用次數歸零即從交通選單移除",()=>{
+  const db=setupRetailRoad();
+  try{
+    db.prepare("UPDATE characters SET money=100000000 WHERE user_id=1").run();
+    const bought=buyRetailVehicle(db,"自転車",{quantity:2});
+    assert.equal(roadOverview(db,1,rules,NOW).choices[0].remaining,8);
+    const row=db.prepare("SELECT * FROM legacy_inventory_items WHERE user_id=1 AND source_line=?").get(bought.sourceLine);
+    assert.equal(row.durability,8);
+    assert.equal(JSON.parse(row.raw_fields_json)[21],"8");
+    db.prepare("UPDATE retail_purchases SET sku='legacy-999' WHERE source_line=?").run(bought.sourceLine);
+    assert.equal(roadOverview(db,1,rules,NOW).choices.length,0,
+      "錯誤的原始商品SKU不得用同名來通過驗證");
+    db.prepare("UPDATE retail_purchases SET sku='legacy-334' WHERE source_line=?").run(bought.sourceLine);
+    assert.equal(roadOverview(db,1,rules,NOW).choices.length,1);
+    const raw=JSON.parse(row.raw_fields_json);
+    raw[29]="使用其他文字偽造車輛";
+    db.prepare("UPDATE legacy_inventory_items SET raw_fields_json=? WHERE user_id=1 AND source_line=?")
+      .run(JSON.stringify(raw),bought.sourceLine);
+    assert.equal(roadOverview(db,1,rules,NOW).choices.length,0,
+      "非法修改不可變原始欄位不得通過驗證");
+    db.prepare("UPDATE legacy_inventory_items SET raw_fields_json=? WHERE user_id=1 AND source_line=?")
+      .run(row.raw_fields_json,bought.sourceLine);
+    db.prepare("INSERT INTO legacy_item_usage(user_id,source_line,remaining,last_used_at_ms) VALUES(?,?,0,0)")
+      .run(1,bought.sourceLine);
+    assert.equal(roadOverview(db,1,rules,NOW).choices.length,0,"車輛耐久耗盡不可上路");
   }finally{db.close();}
 });

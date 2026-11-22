@@ -1,5 +1,5 @@
 // 第62階段：原版 town_lib.pl 公路移動、town_ini.cgi 20種載具秒數、town_maker.cgi 事故耐久。
-// 僅驗證來自原版寶箱的33欄載具；步行不需要任何道具。
+// 第65階段擴充已實際由 Web 百貨購買的5種原版「乗り物」；其他特殊來源仍不信任。
 // 原版隨機迷路：未事故時原碼抽號卻未覆寫目的地；事故+迷路才覆寫四城目的地。
 // Perl hash 的無序選車仍保留明確選車的Web差異。
 // 原版在前端倒數後發出抵達請求；Web 持久化旅程、按遊戲時間到期後才可完成。
@@ -7,6 +7,7 @@ import {randomInt} from "node:crypto";
 import {STAT_KEYS} from "./engine.mjs";
 import {heldInventoryRows,inventoryLife} from "./inventory-life.mjs";
 import {TREASURE_ORIGIN} from "./arcade-treasure.mjs";
+import {RETAIL_ITEM_ORIGIN} from "./retail.mjs";
 
 export const ROAD_HISTORY_LIMIT=20;
 export const ROAD_WALKING_NAME="徒歩";
@@ -16,14 +17,19 @@ const TOWNS=4;
 const TRAINING_KEYS=Object.freeze(["tairyoku","kenkou","speed","wanryoku","kyakuryoku"]);
 const CHANGEABLE_FIELDS=new Set([21,26,30,31]);
 const LOST_ITEM_NAME="ローラースルーゴーゴー";
+// 只開放無「専門店限定商品」註記、並可由目前 Web 百貨實際入庫的原版5種車。
+const VERIFIED_RETAIL_ROAD_LINES=Object.freeze(new Map([
+  ["ナナハン",332],["ドゥカティ",333],["自転車",334],
+  ["スーパーカブ",337],["ローラースルーゴーゴー",338]
+]));
 function digits(value,label){
   if(typeof value!=="string"||!/^\d+$/.test(value)||!Number.isSafeInteger(Number(value)))
     throw new Error("原版公路移動"+label+"設定不正確");
   return Number(value);
 }
-export function parseOriginalRoadTransport(iniSource,libSource,makerSource,treasureCatalog){
+export function parseOriginalRoadTransport(iniSource,libSource,makerSource,treasureCatalog,retailCatalog){
   if([iniSource,libSource,makerSource].some(x=>typeof x!=="string")||
-     !treasureCatalog?.pools?.special)
+     !treasureCatalog?.pools?.special||!Array.isArray(retailCatalog))
     throw new Error("原版道路交通或寶箱來源缺失");
   const walking=Number(/\$matiidou_time\s*=\s*'(\d+)'\s*;/.exec(iniSource)?.[1]);
   const accidentRate=Number(/\$ziko_kakuritu\s*=\s*'(\d+)'\s*;/.exec(iniSource)?.[1]);
@@ -85,12 +91,30 @@ export function parseOriginalRoadTransport(iniSource,libSource,makerSource,treas
     throw new Error("原版公路移動載具秒數、鍛鍊、事故或迷路分支已變更");
   const items=treasureCatalog.pools.special.filter(item=>speeds.has(item.name));
   if(items.length<15)throw new Error("原版寶箱載具與道路移動來源未能對應");
+  const retailVehicles=retailCatalog.filter(item=>VERIFIED_RETAIL_ROAD_LINES.has(item.name));
+  if(retailVehicles.length!==VERIFIED_RETAIL_ROAD_LINES.size||
+     retailVehicles.some(item=>
+       VERIFIED_RETAIL_ROAD_LINES.get(item.name)!==item.originalLine||
+       item.sku!=="legacy-"+item.originalLine||
+       item.category!=="乗り物"||item.effect!=="無"||
+       item.durabilityUnit!=="回"||!Number.isSafeInteger(item.durability)||
+       item.durability<1||item.rawFields?.length!==33||
+       item.rawFields[29]?.includes("専門店限定商品")||
+       !item.rawFields[29]?.includes("※移動手段です。")||
+       !speeds.has(item.name)))
+    throw new Error("原版百貨公路載具來源、分類或限制已變更");
   return Object.freeze({
     walkingSeconds:walking,accidentDenominator:accidentRate,
     busSeconds,busFare,
     vehicles:Object.freeze(items.map(item=>Object.freeze({
       name:item.name,seconds:speeds.get(item.name),
-      category:item.category,rawFields:item.rawFields
+      category:item.category,rawFields:item.rawFields,
+      origin:TREASURE_ORIGIN
+    }))),
+    retailVehicles:Object.freeze(retailVehicles.map(item=>Object.freeze({
+      name:item.name,seconds:speeds.get(item.name),
+      category:item.category,rawFields:item.rawFields,
+      origin:RETAIL_ITEM_ORIGIN,sku:item.sku
     })))
   });
 }
@@ -142,17 +166,29 @@ function rawMatch(row,vehicle){
      fields[22]!==row.durability_unit||
      row.category!==vehicle.category||
      row.original_name!==vehicle.name||
-     row.original_id!==TREASURE_ORIGIN||
+     row.original_id!==vehicle.origin||
      row.durability_unit!=="回")return false;
   return vehicle.rawFields.every((v,i)=>CHANGEABLE_FIELDS.has(i)||v===fields[i]);
 }
 function availableVehicles(db,userId,source,now){
+  // 百貨車必須有與來源行、姓名、真正的本人購物流水對應的紀錄。
+  // 只有自行寫入同名文字、偽造來源ID或33欄不足以通過這項條件。
+  const hasRetailReceipts=db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='retail_purchases'").get();
+  const retailReceipt=hasRetailReceipts?db.prepare([
+    "SELECT 1 FROM retail_purchases WHERE user_id=? AND source_line=?",
+    "AND sku=? AND name=? AND shop IN ('depart1','depart2') LIMIT 1"
+  ].join(" ")):null;
   return heldInventoryRows(db,userId,now).flatMap(row=>{
-    const v=source.vehicles.find(x=>x.name===row.original_name&&x.category===row.category);
+    const pool=row.original_id===TREASURE_ORIGIN?source.vehicles:
+      row.original_id===RETAIL_ITEM_ORIGIN?source.retailVehicles:[];
+    const v=pool.find(x=>x.name===row.original_name&&x.category===row.category);
     if(!v||!rawMatch(row,v))return [];
+    if(v.origin===RETAIL_ITEM_ORIGIN&&!retailReceipt?.get(userId,row.source_line,v.sku,v.name))
+      return [];
     const remaining=inventoryLife(row,now).remaining;
     if(!Number.isSafeInteger(remaining)||remaining<=0)return [];
-    return [{sourceLine:row.source_line,name:v.name,seconds:v.seconds,remaining}];
+    return [{sourceLine:row.source_line,name:v.name,seconds:v.seconds,remaining,
+      origin:v.origin===RETAIL_ITEM_ORIGIN?"retail":"treasure"}];
   });
 }
 function tripPublic(row){
@@ -273,7 +309,7 @@ export function beginRoadTrip(db,userId,source,{toTownId,vehicleSourceLine=null,
     const vehicle=byBus||vehicleSourceLine===null?null:
       availableVehicles(db,userId,source,now).find(x=>x.sourceLine===vehicleSourceLine);
     if(vehicleSourceLine!==null&&!vehicle)
-      throw new Error("沒有本人合法持有且剩餘耐久大於0的原版寶箱載具");
+      throw new Error("沒有本人合法持有且剩餘耐久大於0的原版寶箱／百貨載具");
     // 巴士按原版出發前付款；Web 拒絕餘額不足（原 CGI 未防負現金）。
     // 扣款與行程寫入共用立即交易，任何失敗都不能留下單獨車資。
     if(byBus){

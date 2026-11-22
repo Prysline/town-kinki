@@ -931,6 +931,16 @@ test("第64階段：原版500元巴士納入既有公路選單、現金檢查與
   assert.ok(!script.includes("innerHTML=trip.farePaid"));
 });
 
+test("第65階段：真實百貨車輛顯示來源與耐久，仍使用原安全DOM",()=>{
+  assert.ok(html.includes("第65階段經核對的5種原版百貨"));
+  assert.ok(html.includes("本人購物流水與33欄原始資料相符"));
+  assert.ok(html.includes("専門店限定商品"));
+  assert.ok(script.includes('(item.origin==="retail"?"百貨":"寶箱")'));
+  assert.ok(script.includes("可用寶箱／百貨載具"));
+  assert.ok(script.includes("history.replaceChildren()"));
+  assert.ok(!script.includes("innerHTML=item.origin"));
+});
+
 test("第53階段：原版釣場與餌料商店實際有入庫交易 UI 且拒絕虛構漁獲",()=>{
   for(const key of ["釣り","販売1"])
     assert.deepEqual(townCellAction(describeTile(key)),{
