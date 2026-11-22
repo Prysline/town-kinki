@@ -66,7 +66,7 @@ async function openChrome(browserDataDir){
     "--remote-allow-origins=*","--remote-debugging-address=127.0.0.1",
     "--remote-debugging-port="+port,
     "--user-data-dir="+browserDataDir,"about:blank"
-  ],{stdio:"ignore"});
+  ],{stdio:"ignore",detached:process.platform!=="win32"});
   let socketUrl=null;
   for(let i=0;i<120;i++){
     if(child.exitCode!==null)break;
@@ -108,9 +108,13 @@ async function openChrome(browserDataDir){
     ws.close();
     if(child.exitCode===null){
       const done=new Promise(ok=>child.once("exit",ok));
-      child.kill();
-      await Promise.race([done,pause(2500)]);
+      // Chromium 啟動多個寫入 profile 的子程序，必須結束獨立 process group。
+      if(process.platform!=="win32"){
+        try{process.kill(-child.pid,"SIGTERM");}catch{child.kill();}
+      }else child.kill();
+      await Promise.race([done,pause(5000)]);
     }
+    await pause(500);
   }};
 }
 async function evaluate(cdp,expression){
@@ -247,6 +251,6 @@ test("Chrome：桌面→768px平板→375px手機，操作真實建角／工作�
   }finally{
     await chrome?.stop();
     await web?.stop();
-    rmSync(workspace,{force:true,recursive:true,maxRetries:10,retryDelay:200});
+    rmSync(workspace,{force:true,recursive:true,maxRetries:50,retryDelay:200});
   }
 });
