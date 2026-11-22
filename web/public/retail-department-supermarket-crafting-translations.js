@@ -1,6 +1,6 @@
 // TOWN 原版 dat_dir/syouhin.cgi：デパート 3、スーパー 6、合成 4；共 13 列。
 // 僅前端顯示層翻譯；不修改原始鍵、SKU、交易、效果、耐久與備註。
-// 特製卵っち、トムキャット等特殊名稱可再依玩家校對；保留 MHP2G 原始縮寫。
+// 特製卵っち 等特殊名稱可再依玩家校對；Tomcat 保留英文原名，MHP2G 採用臺灣慣用完整作品名。
 // 合成商品「コーヒー」與既有裝備／販賣機翻譯共用同一繁中名稱，避免撞鍵。
 export const RETAIL_DEPARTMENT_ZH_TW=Object.freeze({
   "お歳暮": "歲末贈禮",
@@ -11,9 +11,9 @@ export const RETAIL_SUPERMARKET_ZH_TW=Object.freeze({
   "激安健康器具": "超低價健身器材",
   "激安パズル": "超低價拼圖",
   "特製卵っち": "特製電子雞",
-  "トムキャット": "Tomcat（雄貓）",
+  "トムキャット": "Tomcat",
   "断食セット": "斷食套組",
-  "MHP2G": "MHP2G"
+  "MHP2G": "魔物獵人 攜帶版 2nd G"
 });
 export const RETAIL_CRAFTING_ZH_TW=Object.freeze({
   "冷蔵庫": "冰箱",

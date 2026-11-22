@@ -64,3 +64,25 @@ test("咖啡跨類別沿用既有譯名，未知商品不翻譯",()=>{
   assert.equal(displayRetailItemName("未知商品"),"未知商品");
   assert.equal(displayRetailItemCategory("未知類別"),"未知類別");
 });
+
+// 定名校對：維持原版 CGI 的 key、分類與效果，僅翻譯顯示名稱。
+test("Tomcat 與魔物獵人 攜帶版 2nd G 使用人工確認譯名",()=>{
+  const reviewed={
+    "トムキャット":"Tomcat",
+    "MHP2G":"魔物獵人 攜帶版 2nd G"
+  };
+  for(const [original,localized] of Object.entries(reviewed)){
+    assert.equal(RETAIL_SUPERMARKET_ZH_TW[original],localized);
+    assert.equal(displayRetailDepartmentSupermarketCraftingName(original),localized);
+    assert.equal(displayRetailItemName(original),localized);
+    const row=allRows.find(x=>x.fields[0]==="スーパー"&&x.fields[1]===original);
+    assert.ok(row,original);
+    assert.equal(row.fields[0],"スーパー");
+  }
+  const tomcat=allRows.find(x=>x.fields[1]==="トムキャット").fields;
+  const mhp2g=allRows.find(x=>x.fields[1]==="MHP2G").fields;
+  assert.equal(tomcat[9],"無");
+  assert.match(tomcat[29],/秘伝商品/);
+  assert.equal(mhp2g[9],"ギフト");
+  assert.equal(mhp2g[29],"待望の続編");
+});
