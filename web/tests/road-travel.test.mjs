@@ -417,8 +417,8 @@ test("第63階段從第62階段舊SQLite無損升級：既有待抵達行程和�
     initRoadTravelTables(db);
     initRoadTravelTables(db);
     assert.equal(db.prepare("SELECT COUNT(*) n FROM arcade_road_trips").get().n,2);
-    assert.deepEqual({...db.prepare("SELECT requested_to_town,lost,rerouted FROM arcade_road_trips WHERE user_id=1").get()},
-      {requested_to_town:1,lost:0,rerouted:0});
+    assert.deepEqual({...db.prepare("SELECT requested_to_town,lost,rerouted,by_bus,fare_paid FROM arcade_road_trips WHERE user_id=1").get()},
+      {requested_to_town:1,lost:0,rerouted:0,by_bus:0,fare_paid:0});
     const old=roadOverview(db,1,rules,NOW);
     assert.equal(old.pending.id,1);
     assert.equal(old.pending.toTownId,1);
@@ -430,5 +430,124 @@ test("第63階段從第62階段舊SQLite無損升級：既有待抵達行程和�
     assert.equal(arrive(db,{tripId:1,now:NOW+10000}).lost,false);
     assert.equal(town(db),1);
     assert.equal(start(db,{toTownId:1,requestId:"phase62_old_pending"}).replayed,true);
+  }finally{db.close();}
+});
+
+test("第64階段來源防改：原版巴士500元、5秒、取消迷路及事故全數核對",()=>{
+  assert.equal(rules.busFare,500);
+  assert.equal(rules.busSeconds,5);
+  for(const change of [
+    ["$money -= 500;","$money -= 600;"],
+    ["$matiidou_time2 = 5;","$matiidou_time2 = 6;"],
+    ["$maigo = 'no';","$maigo = 'yes';"],
+    ["if ($ziko_idousyudan eq 'バス'){$ziko_flag  = \"off\";}",
+     "if ($ziko_idousyudan eq 'バス'){$ziko_flag  = \"on\";}"]
+  ]){
+    assert.ok(lib.includes(change[0]),"原始來源確有待防改分支："+change[0]);
+    assert.throws(()=>parseOriginalRoadTransport(ini,lib.replace(...change),maker,treasure),
+      /已變更/);
+  }
+});
+
+test("第64階段巴士：持有輪滑車也不迷路／事故／鍛鍊，出發原子扣500元、5秒後才可到站",()=>{
+  const db=setup();
+  try{
+    const roller=giveVehicle(db,"ローラースルーゴーゴー");
+    const before=scores(db);
+    const started=beginRoadTrip(db,1,rules,{
+      toTownId:2,byBus:true,requestId:"phase64_bus_with_roller",now:NOW,
+      randomIndex:()=>{throw new Error("巴士不應抽事故或鍛鍊");},
+      lostRandomIndex:()=>{throw new Error("巴士應取消迷路");},
+      rerouteRandomIndex:()=>{throw new Error("巴士不應重抽目的地");}
+    });
+    assert.equal(started.vehicleName,"バス");
+    assert.equal(started.byBus,true);
+    assert.equal(started.farePaid,500);
+    assert.equal(started.seconds,5);
+    assert.equal(started.arrivalAt,NOW+5000);
+    assert.equal(started.pending,true);
+    assert.equal(started.lost,undefined,"未到站仍不提前曝光迷路旗標");
+    assert.equal(started.accident,undefined,"未到站仍不提前曝光事故旗標");
+    assert.deepEqual(started.exercise,{});
+    assert.deepEqual(scores(db),before,"巴士不可當徒步鍛鍊");
+    assert.equal(db.prepare("SELECT money FROM characters WHERE user_id=1").get().money,99500);
+    assert.equal(db.prepare("SELECT COUNT(*) n FROM legacy_item_usage WHERE user_id=1").get().n,0,
+      "巴士不損耗輪滑車");
+    const raw=db.prepare("SELECT by_bus,fare_paid,accident,lost,rerouted,exercise_json FROM arcade_road_trips WHERE id=?").get(started.id);
+    assert.deepEqual({...raw},{by_bus:1,fare_paid:500,accident:0,lost:0,rerouted:0,exercise_json:"{}"});
+    assert.equal(roadOverview(db,1,rules,NOW).busFare,500);
+    assert.equal(roadOverview(db,1,rules,NOW).pending.toTownId,2);
+    assert.throws(()=>arrive(db,{tripId:started.id,now:NOW+4999}),/不能提前抵達/);
+    const done=arrive(db,{tripId:started.id,now:NOW+5000});
+    assert.equal(done.toTownId,2);
+    assert.equal(done.lost,false);assert.equal(done.rerouted,false);
+    assert.equal(done.accident,false);assert.equal(done.byBus,true);
+    assert.equal(done.farePaid,500);
+    assert.equal(town(db),2);
+    assert.equal(items(db).some(x=>x.source_line===roller),true);
+    assert.equal(arrive(db,{tripId:started.id,now:NOW+5000}).replayed,true);
+    assert.equal(db.prepare("SELECT money FROM characters WHERE user_id=1").get().money,99500);
+  }finally{db.close();}
+});
+
+test("第64階段巴士重送只扣一次；不可把同一請求碼改成徒步／換目的地，旅程中互斥",()=>{
+  const db=setup();
+  try{
+    const options={toTownId:1,byBus:true,requestId:"phase64_bus_idempotent",now:NOW};
+    const first=beginRoadTrip(db,1,rules,options);
+    assert.equal(beginRoadTrip(db,1,rules,options).replayed,true);
+    assert.equal(trips(db),1);
+    assert.equal(db.prepare("SELECT money FROM characters WHERE user_id=1").get().money,99500);
+    assert.throws(()=>beginRoadTrip(db,1,rules,{...options,byBus:false}),/相同公路移動請求碼/);
+    assert.throws(()=>beginRoadTrip(db,1,rules,{...options,toTownId:2}),/相同公路移動請求碼/);
+    assert.throws(()=>beginRoadTrip(db,1,rules,{...options,requestId:"phase64_bus_overlap"}),/尚未抵達/);
+    assert.throws(()=>beginRoadTrip(db,1,rules,{...options,byBus:true,
+      vehicleSourceLine:3000001,requestId:"phase64_bus_mixed"}),/格式不正確/);
+    assert.throws(()=>beginRoadTrip(db,1,rules,{...options,byBus:1,
+      requestId:"phase64_bus_invalid"}),/格式不正確/);
+    assert.equal(arrive(db,{tripId:first.id,now:NOW+5000}).farePaid,500);
+    assert.equal(db.prepare("SELECT money FROM characters WHERE user_id=1").get().money,99500);
+  }finally{db.close();}
+});
+
+test("第64階段巴士扣款不足或SQLite寫入失敗應完全回滾，不能留下幽靈票款",()=>{
+  const db=setup();
+  try{
+    db.prepare("UPDATE characters SET money=499 WHERE user_id=1").run();
+    assert.throws(()=>beginRoadTrip(db,1,rules,{
+      toTownId:1,byBus:true,requestId:"phase64_bus_poor",now:NOW
+    }),/現金不足/);
+    assert.equal(trips(db),0);
+    assert.equal(db.prepare("SELECT money FROM characters WHERE user_id=1").get().money,499);
+    db.prepare("UPDATE characters SET money=500 WHERE user_id=1").run();
+    db.exec("CREATE TRIGGER reject_phase64_bus BEFORE INSERT ON arcade_road_trips BEGIN SELECT RAISE(ABORT,'forced bus rollback'); END");
+    assert.throws(()=>beginRoadTrip(db,1,rules,{
+      toTownId:1,byBus:true,requestId:"phase64_bus_rollback",now:NOW
+    }),/forced bus rollback/);
+    assert.equal(db.prepare("SELECT money FROM characters WHERE user_id=1").get().money,500);
+    assert.equal(trips(db),0);
+    db.exec("DROP TRIGGER reject_phase64_bus");
+    const trip=beginRoadTrip(db,1,rules,{
+      toTownId:1,byBus:true,requestId:"phase64_bus_exact500",now:NOW
+    });
+    assert.equal(trip.farePaid,500);
+    assert.equal(db.prepare("SELECT money FROM characters WHERE user_id=1").get().money,0);
+  }finally{db.close();}
+});
+
+test("第64階段多人巴士交易與本人抵達隔離、相同請求碼可分別用於不同玩家",()=>{
+  const db=setup();
+  try{
+    const input={toTownId:1,byBus:true,requestId:"phase64_two_people",now:NOW};
+    const a=beginRoadTrip(db,1,rules,input),b=beginRoadTrip(db,2,rules,input);
+    assert.notEqual(a.id,b.id);
+    assert.equal(db.prepare("SELECT money FROM characters WHERE user_id=1").get().money,99500);
+    assert.equal(db.prepare("SELECT money FROM characters WHERE user_id=2").get().money,99500);
+    assert.throws(()=>arriveRoadTrip(db,2,{tripId:a.id,now:NOW+5000}),/找不到本人的/);
+    assert.equal(town(db,2),0);
+    assert.equal(arriveRoadTrip(db,1,{tripId:a.id,now:NOW+5000}).toTownId,1);
+    assert.equal(roadOverview(db,2,rules,NOW+5000).pending.id,b.id);
+    assert.equal(arriveRoadTrip(db,2,{tripId:b.id,now:NOW+5000}).toTownId,1);
+    assert.equal(trips(db),2);
   }finally{db.close();}
 });

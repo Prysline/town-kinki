@@ -1091,31 +1091,36 @@ let roadTravelBusy=false;
 let pendingRoadStart=null;
 async function startRoadJourney(destination,vehicleValue){
   if(roadTravelBusy||state?.roadTravel?.pending)return;
-  const sourceLine=vehicleValue==="walk"?null:Number(vehicleValue);
+  const byBus=vehicleValue==="bus";
+  const sourceLine=byBus||vehicleValue==="walk"?null:Number(vehicleValue);
   const opt=state.roadTravel.choices.find(x=>x.sourceLine===sourceLine);
-  const seconds=sourceLine===null?state.roadTravel.walkingSeconds:opt?.seconds;
+  const seconds=byBus?state.roadTravel.busSeconds:
+    sourceLine===null?state.roadTravel.walkingSeconds:opt?.seconds;
   if(!Number.isSafeInteger(seconds))return;
   const destinationName=state.towns.find(x=>x.id===destination)?.name??"目的地";
-  const vehicleName=sourceLine===null?"徒步":displayRetailItemName(opt.name);
+  const vehicleName=byBus?"巴士":
+    sourceLine===null?"徒步":displayRetailItemName(opt.name);
   if(!window.confirm("確定使用「"+vehicleName+"」前往"+destinationName+
     "？原版路程 "+seconds+" 秒，旅行時間未滿時不可抵達；"+
-    (sourceLine===null?"步行可能增加身體能力。":
-      "有 1/10 機率發生事故，事故會扣所選載具1點耐久。")+
-    "原版會判定迷路：從和歌山以外出發，持有ローラースルーゴーゴー必迷路，否則有1/5機率；事故與迷路同時發生時可能改道至其他城鎮，實際結果到站時才會公布。"))return;
-  const key=String(destination)+":"+String(sourceLine);
+    (byBus?"巴士車資500元從現金扣款，不會迷路、事故或鍛鍊。":
+      (sourceLine===null?"步行可能增加身體能力。":
+        "有 1/10 機率發生事故，事故會扣所選載具1點耐久。")+
+      "原版會判定迷路：從和歌山以外出發，持有ローラースルーゴーゴー必迷路，否則有1/5機率；事故與迷路同時發生時可能改道至其他城鎮，實際結果到站時才會公布。")))return;
+  const key=String(destination)+":"+vehicleValue;
   if(!pendingRoadStart||pendingRoadStart.key!==key)
     pendingRoadStart={key,requestId:crypto.randomUUID()};
   roadTravelBusy=true;el("road-travel-start").disabled=true;
   try{
     state=await api("road/start",{
       toTownId:destination,vehicleSourceLine:sourceLine,
-      requestId:pendingRoadStart.requestId
+      byBus,requestId:pendingRoadStart.requestId
     });
     const trip=state.roadStartResult;
     pendingRoadStart=null;render();
     notify(trip.replayed?"此公路旅程先前已經出發，未重複扣載具耐久。":
       "已從目前城鎮出發，使用"+vehicleName+
       "，原版路程 "+trip.seconds+" 秒。"+
+      (trip.byBus?"已付現金"+trip.farePaid+"元。":"")+
       "抵達時間到達後，按「完成抵達」才會更新所在地。");
   }catch(error){notify(error.message,true);}
   finally{roadTravelBusy=false;if(state?.character)updateRoadCountdown();}
@@ -1137,8 +1142,9 @@ async function finishRoadJourney(tripId){
       trip.lost?"原版觸發迷路提示，但沒有事故；程式沒有覆寫目的地，照原計畫抵達。":
       "沒有觸發迷路。";
     notify((trip.replayed?"此旅程先前已完成，未重複處理事故。":"已抵達")+place+
-      "；使用 "+displayRetailItemName(trip.vehicleName)+
-      "。"+(trip.accident?"原版交通事故：載具耐久−1，剩餘 "+
+      "；使用 "+(trip.byBus?"巴士":displayRetailItemName(trip.vehicleName))+
+      "。"+(trip.byBus?"巴士車資"+trip.farePaid+"元，無事故、迷路或鍛鍊。":
+      trip.accident?"原版交通事故：載具耐久−1，剩餘 "+
         trip.durabilityAfter+"。":"沒有發生需要扣耐久的事故。")+
       lostDescription+
       (exercise.length?"出發時獲得鍛鍊："+exercise.join("、")+"。":""));
@@ -1163,6 +1169,10 @@ function renderRoadTravel(){
   vehicle.replaceChildren();
   const foot=document.createElement("option");
   foot.value="walk";foot.textContent="徒步（原版10秒，可鍛鍊）";vehicle.append(foot);
+  const bus=document.createElement("option");
+  bus.value="bus";
+  bus.textContent="巴士（原版"+info.busFare+"元、"+info.busSeconds+"秒、不會事故或迷路）";
+  vehicle.append(bus);
   for(const item of info.choices??[]){
     const option=document.createElement("option");
     option.value=String(item.sourceLine);
@@ -1195,7 +1205,8 @@ function renderRoadTravel(){
       li.textContent=new Date(trip.completedAt).toLocaleString("zh-TW")+
         "｜"+(state.towns.find(x=>x.id===trip.fromTownId)?.name??trip.fromTownId)+
         " → "+(state.towns.find(x=>x.id===trip.toTownId)?.name??trip.toTownId)+
-        "｜"+displayRetailItemName(trip.vehicleName)+" "+trip.seconds+"秒"+
+        "｜"+(trip.byBus?"巴士":displayRetailItemName(trip.vehicleName))+
+        " "+trip.seconds+"秒"+(trip.byBus?"｜車資"+trip.farePaid+"元":"")+
         (trip.accident?"｜事故耐久−1":"")+
         (trip.rerouted?"｜事故加迷路，四城重新抽選"+
           (trip.toTownId===trip.requestedToTownId?"（剛好原地）":"（實際改道）"):
@@ -1212,36 +1223,42 @@ function updateRoadCountdown(){
   const dest=Number(el("road-travel-to").value),
     choice=el("road-travel-vehicle").value;
   const found=(info.choices??[]).find(x=>String(x.sourceLine)===choice);
-  const seconds=choice==="walk"?info.walkingSeconds:found?.seconds;
+  const byBus=choice==="bus";
+  const seconds=byBus?info.busSeconds:
+    choice==="walk"?info.walkingSeconds:found?.seconds;
+  const affordable=!byBus||state.character.money>=info.busFare;
   const valid=Number.isInteger(dest)&&dest>=0&&dest<4&&
-    dest!==state.character.townId&&Number.isSafeInteger(seconds);
+    dest!==state.character.townId&&Number.isSafeInteger(seconds)&&affordable;
   const left=pending?Math.max(0,pending.arrivalAt-browserGameNow()):0;
   text("road-travel-status",pending?
     "公路旅程進行中：從"+
       (state.towns.find(t=>t.id===pending.fromTownId)?.name??"出發地")+
       "前往"+(state.towns.find(t=>t.id===pending.toTownId)?.name??"目的地")+
-      "，搭乘 "+displayRetailItemName(pending.vehicleName)+
+      "，搭乘 "+(pending.byBus?"巴士":displayRetailItemName(pending.vehicleName))+
       (left>0?"；距離抵達還有 "+Math.ceil(left/1000)+" 秒。":
         "；現在可完成抵達。"):
-    "目前尚未出發。可徒步或選擇本人從原版寶箱取得的載具；出發不收車資。");
+    "目前尚未出發。可徒步、搭乘500元巴士，或選擇本人從原版寶箱取得的載具；只有巴士收取現金車資。");
   text("road-travel-quote",pending?
     "已儲存行程 ID "+pending.id+"｜原版路程 "+pending.seconds+
     " 秒｜在完成抵達之前，禁止再搭電車或開啟另一段公路旅程。":
-    "預計路程："+(valid?seconds+" 秒":"請選擇有效目的地與載具")+
-    "｜可用寶箱載具 "+(info.choices??[]).length+
-    " 件｜有載具時事故機率 1/"+(info.accidentDenominator??10)+
-    "，事故扣1耐久；徒步不扣載具。"+
-    (state.character.townId===3?"｜從和歌山出發不會迷路。":
-      (info.choices??[]).some(item=>item.name==="ローラースルーゴーゴー")?
-        "｜持有輪滑車，原版必觸發迷路；若又發生事故，改從四城抽實際目的地。":
-        "｜原版另有1/5迷路機率；只有同時發生事故才會重抽目的地。"));
+    "預計路程："+(valid?seconds+" 秒":byBus&&!affordable?
+      "巴士車資500元，現金不足":"請選擇有效目的地與載具")+
+    (byBus?"｜巴士車資"+info.busFare+"元，原版5秒、不會迷路或事故，也不會鍛鍊。":
+      "｜可用寶箱載具 "+(info.choices??[]).length+
+      " 件｜有載具時事故機率 1/"+(info.accidentDenominator??10)+
+      "，事故扣1耐久；徒步不扣載具。"+
+      (state.character.townId===3?"｜從和歌山出發不會迷路。":
+        (info.choices??[]).some(item=>item.name==="ローラースルーゴーゴー")?
+          "｜持有輪滑車，原版必觸發迷路；若又發生事故，改從四城抽實際目的地。":
+          "｜原版另有1/5迷路機率；只有同時發生事故才會重抽目的地。")));
   el("road-travel-start").disabled=roadTravelBusy||Boolean(pending)||!valid;
   el("road-travel-arrive").disabled=roadTravelBusy||!pending||left>0;
   text("road-travel-result",pending?
     "完成抵達後才會刷新所在地；迷路、事故及可能改道的結果都會在抵達時公布。":
     (info.history?.length?
       "最近一次已完成："+(state.towns.find(t=>t.id===info.history[0].toTownId)?.name??"目的地")+
-      (info.history[0].accident?"；當次事故扣載具1點耐久。":"；當次沒有事故扣耐久。")+
+      (info.history[0].byBus?"；巴士已付車資"+info.history[0].farePaid+"元，無事故或迷路。":
+        info.history[0].accident?"；當次事故扣載具1點耐久。":"；當次沒有事故扣耐久。")+
       (info.history[0].rerouted?"原版事故且迷路：目的地重新抽選。":
         info.history[0].lost?"當次迷路提示沒有改道。":""):
       "尚無已完成行程。"));

@@ -10,6 +10,7 @@ import {TREASURE_ORIGIN} from "./arcade-treasure.mjs";
 
 export const ROAD_HISTORY_LIMIT=20;
 export const ROAD_WALKING_NAME="徒歩";
+export const ROAD_BUS_NAME="バス";
 const REQUEST_ID=/^[A-Za-z0-9_-]{8,80}$/;
 const TOWNS=4;
 const TRAINING_KEYS=Object.freeze(["tairyoku","kenkou","speed","wanryoku","kyakuryoku"]);
@@ -38,6 +39,20 @@ export function parseOriginalRoadTransport(iniSource,libSource,makerSource,treas
     branches[2].includes("$no_rand=int(rand(4));")&&
     !branches[2].split("&event_happen;")[0].includes("$in{'town_no'} = $no_rand;");
   const messageBody=libSource.split("sub message {")[1]?.split("sub message_only {")[0];
+  // 第64階段：巴士必須取消迷路、5秒、現金500元，且事故旗標強制關閉。
+  const busBranch=libSource.split("#+++++++++バスで移動++++++++++")[1]
+    ?.split("#+++++++++自転車、徒歩で移動++++++++++")[0];
+  const busSeconds=Number(/\$matiidou_time2\s*=\s*(\d+);/.exec(busBranch??"")?.[1]);
+  const busFare=Number(/\$money\s*-=\s*(\d+);/.exec(busBranch??"")?.[1]);
+  const busChecks=[
+    busBranch?.includes('if ($in{\'command\'} eq "mati_idou2"){'),
+    busBranch?.includes("$maigo = 'no';"),
+    busBranch?.includes('$idousyudan = "バスで500円で";'),
+    busBranch?.includes('$ziko_idousyudan = "バス";'),
+    busBranch?.includes("&temp_routin;"),
+    busBranch?.includes("&log_kousin($my_log_file,$k_temp);"),
+    libSource.includes("if ($ziko_idousyudan eq 'バス'){$ziko_flag  = \"off\";}")
+  ];
   const checks=[
     libSource.includes('if ($in{\'command\'} eq "mati_idou" || $in{\'command\'} eq "mati_idou2")'),
     libSource.includes('&motimono_kensa("$_")'),
@@ -66,12 +81,13 @@ export function parseOriginalRoadTransport(iniSource,libSource,makerSource,treas
      speeds.get("ローラースルーゴーゴー")!==20||
      [...speeds.values()].some(v=>!Number.isSafeInteger(v)||v<0||v>3600)||
      !safeNonAccident||!messageBody?.includes("exit;")||
-     checks.some(x=>!x))
+     busSeconds!==5||busFare!==500||busChecks.some(x=>!x)||checks.some(x=>!x))
     throw new Error("原版公路移動載具秒數、鍛鍊、事故或迷路分支已變更");
   const items=treasureCatalog.pools.special.filter(item=>speeds.has(item.name));
   if(items.length<15)throw new Error("原版寶箱載具與道路移動來源未能對應");
   return Object.freeze({
     walkingSeconds:walking,accidentDenominator:accidentRate,
+    busSeconds,busFare,
     vehicles:Object.freeze(items.map(item=>Object.freeze({
       name:item.name,seconds:speeds.get(item.name),
       category:item.category,rawFields:item.rawFields
@@ -86,6 +102,8 @@ export function initRoadTravelTables(db){
     "request_id TEXT NOT NULL,from_town INTEGER NOT NULL CHECK(from_town BETWEEN 0 AND 3),",
     "to_town INTEGER NOT NULL CHECK(to_town BETWEEN 0 AND 3),",
     "vehicle_source_line INTEGER,vehicle_name TEXT NOT NULL,",
+    "by_bus INTEGER NOT NULL DEFAULT 0 CHECK(by_bus IN(0,1)),",
+    "fare_paid INTEGER NOT NULL DEFAULT 0 CHECK(fare_paid>=0),",
     "travel_seconds INTEGER NOT NULL CHECK(travel_seconds>=0),",
     "started_at INTEGER NOT NULL,arrival_at INTEGER NOT NULL,",
     "accident INTEGER NOT NULL CHECK(accident IN(0,1)),",
@@ -102,6 +120,10 @@ export function initRoadTravelTables(db){
   ].join(" "));
   // 由第62階段資料庫升級，既有旅程原本不曾有迷路結果；不重新抽取歷史。
   const columns=new Set(db.prepare("PRAGMA table_info(arcade_road_trips)").all().map(row=>row.name));
+  if(!columns.has("by_bus"))
+    db.exec("ALTER TABLE arcade_road_trips ADD COLUMN by_bus INTEGER NOT NULL DEFAULT 0");
+  if(!columns.has("fare_paid"))
+    db.exec("ALTER TABLE arcade_road_trips ADD COLUMN fare_paid INTEGER NOT NULL DEFAULT 0");
   if(!columns.has("requested_to_town"))
     db.exec("ALTER TABLE arcade_road_trips ADD COLUMN requested_to_town INTEGER");
   if(!columns.has("lost"))
@@ -140,6 +162,7 @@ function tripPublic(row){
     toTownId:pending?row.requested_to_town:row.to_town,
     requestedToTownId:row.requested_to_town,
     vehicleSourceLine:row.vehicle_source_line,vehicleName:row.vehicle_name,
+    byBus:Boolean(row.by_bus),farePaid:row.fare_paid,
     seconds:row.travel_seconds,startedAt:row.started_at,
     arrivalAt:row.arrival_at,completedAt:row.completed_at,
     pending:row.completed_at===null,
@@ -150,7 +173,7 @@ function tripPublic(row){
     })};
 }
 const SELECT_TRIP=[
-  "SELECT id,from_town,to_town,vehicle_source_line,vehicle_name,travel_seconds,",
+  "SELECT id,from_town,to_town,vehicle_source_line,vehicle_name,by_bus,fare_paid,travel_seconds,",
   "started_at,arrival_at,accident,durability_after,exercise_json,completed_at,",
   "requested_to_town,lost,rerouted",
   "FROM arcade_road_trips"
@@ -162,6 +185,7 @@ export function roadOverview(db,userId,source,now){
   const history=db.prepare(SELECT_TRIP+" WHERE user_id=? AND completed_at IS NOT NULL ORDER BY id DESC LIMIT ?")
     .all(userId,ROAD_HISTORY_LIMIT).map(tripPublic);
   return {walkingSeconds:source.walkingSeconds,
+    busSeconds:source.busSeconds,busFare:source.busFare,
     accidentDenominator:source.accidentDenominator,
     choices:character?availableVehicles(db,userId,source,now):[],
     pending:open?tripPublic(open):null,history};
@@ -218,11 +242,12 @@ function debitAccident(db,userId,vehicle,now){
   return after;
 }
 export function beginRoadTrip(db,userId,source,{toTownId,vehicleSourceLine=null,
-  requestId,now,randomIndex=randomInt,lostRandomIndex=randomInt,
+  requestId,now,byBus=false,randomIndex=randomInt,lostRandomIndex=randomInt,
   rerouteRandomIndex=randomInt}={}){
   if(!Number.isSafeInteger(userId)||userId<=0||
      !Number.isInteger(toTownId)||toTownId<0||toTownId>=TOWNS||
      (vehicleSourceLine!==null&&(!Number.isSafeInteger(vehicleSourceLine)||vehicleSourceLine<=0))||
+     typeof byBus!=="boolean"||(byBus&&vehicleSourceLine!==null)||
      typeof requestId!=="string"||!REQUEST_ID.test(requestId)||
      !Number.isSafeInteger(now)||now<=0||typeof randomIndex!=="function"||
      typeof lostRandomIndex!=="function"||typeof rerouteRandomIndex!=="function")
@@ -231,11 +256,12 @@ export function beginRoadTrip(db,userId,source,{toTownId,vehicleSourceLine=null,
   try{
     const prior=db.prepare(SELECT_TRIP+" WHERE user_id=? AND request_id=?").get(userId,requestId);
     if(prior){
-      if(prior.requested_to_town!==toTownId||(prior.vehicle_source_line??null)!==vehicleSourceLine)
+      if(prior.requested_to_town!==toTownId||(prior.vehicle_source_line??null)!==vehicleSourceLine||
+         Boolean(prior.by_bus)!==byBus)
         throw new Error("相同公路移動請求碼不可更換目的地或載具");
       db.exec("COMMIT");return {...tripPublic(prior),replayed:true};
     }
-    const char=db.prepare("SELECT user_id,town_id,stats_json FROM characters WHERE user_id=?")
+    const char=db.prepare("SELECT user_id,town_id,stats_json,money FROM characters WHERE user_id=?")
       .get(userId);
     if(!char)throw new Error("請先建立角色");
     if(char.town_id===toTownId)throw new Error("已在這座城鎮");
@@ -244,28 +270,37 @@ export function beginRoadTrip(db,userId,source,{toTownId,vehicleSourceLine=null,
     const active=db.prepare("SELECT id FROM arcade_road_trips WHERE user_id=? AND completed_at IS NULL")
       .get(userId);
     if(active)throw new Error("上次公路移動尚未抵達，不能重複出發");
-    const vehicle=vehicleSourceLine===null?null:
+    const vehicle=byBus||vehicleSourceLine===null?null:
       availableVehicles(db,userId,source,now).find(x=>x.sourceLine===vehicleSourceLine);
     if(vehicleSourceLine!==null&&!vehicle)
       throw new Error("沒有本人合法持有且剩餘耐久大於0的原版寶箱載具");
+    // 巴士按原版出發前付款；Web 拒絕餘額不足（原 CGI 未防負現金）。
+    // 扣款與行程寫入共用立即交易，任何失敗都不能留下單獨車資。
+    if(byBus){
+      if(!Number.isSafeInteger(char.money)||char.money<source.busFare)
+        throw new Error("巴士車資500元：現金不足");
+      const debit=db.prepare("UPDATE characters SET money=money-? WHERE user_id=? AND money>=?")
+        .run(source.busFare,userId,source.busFare);
+      if(debit.changes!==1)throw new Error("巴士車資扣款失敗");
+    }
     // 原版先按出發城市判斷迷路：編號3不迷路；其餘若持有「ローラースルーゴーゴー」必定迷路，
     // 否則獨立1/5機率迷路。檢查「持有」而非只檢查這次選擇的車輛。
-    const roller=char.town_id!==3&&availableVehicles(db,userId,source,now)
+    const roller=!byBus&&char.town_id!==3&&availableVehicles(db,userId,source,now)
       .some(entry=>entry.name===LOST_ITEM_NAME);
-    const lostRoll=char.town_id===3||roller?null:lostRandomIndex(5);
+    const lostRoll=byBus||char.town_id===3||roller?null:lostRandomIndex(5);
     if(lostRoll!==null&&(!Number.isInteger(lostRoll)||lostRoll<0||lostRoll>=5))
       throw new Error("伺服器公路迷路亂數超出原版範圍");
-    const lost=char.town_id!==3&&(roller||lostRoll===0);
-    const seconds=vehicle?.seconds??source.walkingSeconds;
+    const lost=!byBus&&char.town_id!==3&&(roller||lostRoll===0);
+    const seconds=byBus?source.busSeconds:(vehicle?.seconds??source.walkingSeconds);
     const arrivalAt=now+seconds*1000;
     if(!Number.isSafeInteger(arrivalAt))
       throw new Error("公路移動時間超出安全範圍");
-    const exercise=exerciseWalk(db,char,vehicle,randomIndex);
-    const crashRoll=vehicle===null?null:randomIndex(source.accidentDenominator);
+    const exercise=byBus?{}:exerciseWalk(db,char,vehicle,randomIndex);
+    const crashRoll=byBus||vehicle===null?null:randomIndex(source.accidentDenominator);
     if(vehicle!==null&&(!Number.isInteger(crashRoll)||crashRoll<0||
        crashRoll>=source.accidentDenominator))
       throw new Error("伺服器公路事故亂數超出原版範圍");
-    const accident=vehicle!==null&&crashRoll===0;
+    const accident=!byBus&&vehicle!==null&&crashRoll===0;
     // 原版只有「迷路且事故」才真正把 town_no 改成 int(rand(4))；
     // 單純迷路的 random(4) 存於未使用的 no_rand，最終仍走原目的地。
     const rerouted=lost&&accident;
@@ -276,11 +311,12 @@ export function beginRoadTrip(db,userId,source,{toTownId,vehicleSourceLine=null,
     const durabilityAfter=accident?debitAccident(db,userId,vehicle,now):null;
     const added=db.prepare([
       "INSERT INTO arcade_road_trips(user_id,request_id,from_town,to_town,",
-      "vehicle_source_line,vehicle_name,travel_seconds,started_at,arrival_at,",
+      "vehicle_source_line,vehicle_name,by_bus,fare_paid,travel_seconds,started_at,arrival_at,",
       "accident,durability_after,exercise_json,requested_to_town,lost,rerouted)",
-      "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+      "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
     ].join(" ")).run(userId,requestId,char.town_id,newTown,
-      vehicleSourceLine,vehicle?.name??ROAD_WALKING_NAME,seconds,
+      vehicleSourceLine,byBus?ROAD_BUS_NAME:(vehicle?.name??ROAD_WALKING_NAME),
+      byBus?1:0,byBus?source.busFare:0,seconds,
       now,arrivalAt,accident?1:0,durabilityAfter,JSON.stringify(exercise),
       toTownId,lost?1:0,rerouted?1:0);
     const created=db.prepare(SELECT_TRIP+" WHERE id=?").get(Number(added.lastInsertRowid));

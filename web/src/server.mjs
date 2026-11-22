@@ -924,7 +924,7 @@ async function handle(req, res) {
       try{
         roadStartResult=beginRoadTrip(db,user.id,roadSource,{
           toTownId:data.toTownId,vehicleSourceLine:data.vehicleSourceLine??null,
-          requestId:data.requestId,now:gameNow()
+          byBus:data.byBus??false,requestId:data.requestId,now:gameNow()
         });
       }catch(error){throw new HttpError(400,error.message);}
       return sendJson(res,200,{...snapshot(user),roadStartResult});
