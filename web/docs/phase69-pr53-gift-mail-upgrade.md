@@ -20,6 +20,6 @@
 
 ## 證據與未完成
 
-- [本次 PR #96](https://github.com/Prysline/town-kinki/pull/96)：只有最終 HEAD 的 **push + pull_request CI 成功**，才可將本組「PR #53 歷史寄禮外鍵子集→現行 Web」寫為已通過；合併後應再核對 Web push 與長期 PR #1 回歸成功。
+- [本次 PR #96](https://github.com/Prysline/town-kinki/pull/96)：已觀察到[測試提交 push CI](https://github.com/Prysline/town-kinki/actions/runs/45024428062)、[測試提交 PR CI](https://github.com/Prysline/town-kinki/actions/runs/45024449683) 均成功；文件補充後**仍必須以最終 HEAD push + pull_request CI 雙成功為合併門檻**，合併後應再核對 Web push 與長期 PR #1 回歸。
 - 原有 [PR #94](https://github.com/Prysline/town-kinki/pull/94) 驗的是 **PR #35 百貨舊收據** 與角色銀行／住宅等資產，並沒有重複本次舊信箱外鍵風險。
 - 尚待：其他真實 Web schema 時期（後期釣魚／合成／交通／郵件擴充）、完整歷史 DB 鏡像、多 OS／設備現場還原、真人瀏覽器操作，以及正式環境備份輪替演練。**測試通過不等於已完成整個 DB-04 項目。**
