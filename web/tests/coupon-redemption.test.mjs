@@ -13,7 +13,8 @@ import {getCouponBalance} from "../src/events.mjs";
 
 const catalog=parseLegacyCouponCatalog(decodeLegacyText(
   readFileSync(new URL("../../dat_dir/coupon.cgi",import.meta.url))));
-const now=Date.parse("2026-11-21T10:00:00Z");
+// 使用執行當下時間，避免「日」耐久獎品跨日後被當成過期物品。
+const now=Date.now();
 function fixture({balance=4,building=true}={}){
   const db=new DatabaseSync(":memory:");
   db.exec([

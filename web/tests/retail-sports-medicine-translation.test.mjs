@@ -73,7 +73,7 @@ test("品牌、特殊商品與日常用品譯名都與原版效果相容",()=>{
 });
 
 test("Web 顯示與搜尋使用中文，購買、使用與裝備操作仍傳原始名稱及 SKU",()=>{
-  assert.match(app,/from "\.\/retail-sports-medicine-translations\.js"/);
+  assert.match(app,/from "\.\/retail-item-translations\.js"/);
   assert.match(app,/const displayProductName=shopName==="自動販賣機"\?displayVendingName:displayRetailItemName/);
   assert.match(app,/document\.createTextNode\(displayProductName\(item\.name\)\)/);
   assert.match(app,/name\.textContent=displayRetailItemName\(item\.name\)/);
