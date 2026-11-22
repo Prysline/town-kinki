@@ -1,5 +1,6 @@
 // 第62階段：原版 town_lib.pl 公路移動、town_ini.cgi 20種載具秒數、town_maker.cgi 事故耐久。
-// 第65階段擴充已實際由 Web 百貨購買的5種原版「乗り物」；其他特殊來源仍不信任。
+// 第65階段接入百貨車；第66階段依原版來源核對18種「乗り物／ギフト」可從兩間百貨取得。
+// 專門店備註在原 CGI 只對「スーパー」進貨有限制，並非百貨上架禁令。
 // 原版隨機迷路：未事故時原碼抽號卻未覆寫目的地；事故+迷路才覆寫四城目的地。
 // Perl hash 的無序選車仍保留明確選車的Web差異。
 // 原版在前端倒數後發出抵達請求；Web 持久化旅程、按遊戲時間到期後才可完成。
@@ -17,10 +18,15 @@ const TOWNS=4;
 const TRAINING_KEYS=Object.freeze(["tairyoku","kenkou","speed","wanryoku","kyakuryoku"]);
 const CHANGEABLE_FIELDS=new Set([21,26,30,31]);
 const LOST_ITEM_NAME="ローラースルーゴーゴー";
-// 只開放無「専門店限定商品」註記、並可由目前 Web 百貨實際入庫的原版5種車。
+// 原版 dat_dir/syouhin.cgi 有18種符合 town_ini.cgi 交通名單的商品。
+// 核對固定原始行號＋分類及33欄，防止把同名其他來源或舊資料當成已證實來源。
 const VERIFIED_RETAIL_ROAD_LINES=Object.freeze(new Map([
-  ["ナナハン",332],["ドゥカティ",333],["自転車",334],
-  ["スーパーカブ",337],["ローラースルーゴーゴー",338]
+  ["アルファロメオ",328],["ボルボ",329],["ロールスロイス",330],
+  ["カローラ",331],["ナナハン",332],["ドゥカティ",333],
+  ["自転車",334],["スカイラインGTR",335],["ベンツ",336],
+  ["スーパーカブ",337],["ローラースルーゴーゴー",338],
+  ["ポルシェ",390],["ジャガー",391],["キャデラック",392],
+  ["ミグ25",393],["BMW",394],["フェアレディZ",395],["ベスパ",396]
 ]));
 function digits(value,label){
   if(typeof value!=="string"||!/^\d+$/.test(value)||!Number.isSafeInteger(Number(value)))
@@ -96,13 +102,17 @@ export function parseOriginalRoadTransport(iniSource,libSource,makerSource,treas
      retailVehicles.some(item=>
        VERIFIED_RETAIL_ROAD_LINES.get(item.name)!==item.originalLine||
        item.sku!=="legacy-"+item.originalLine||
-       item.category!=="乗り物"||item.effect!=="無"||
+       ![...(item.originalLine>=390?["ギフト"]:["乗り物"])].includes(item.category)||
+       item.effect!=="無"||
        item.durabilityUnit!=="回"||!Number.isSafeInteger(item.durability)||
        item.durability<1||item.rawFields?.length!==33||
-       item.rawFields[29]?.includes("専門店限定商品")||
        !item.rawFields[29]?.includes("※移動手段です。")||
+       (item.originalLine>=390?item.rawFields[29].includes("専門店限定商品"):
+         (item.originalLine<=331||item.originalLine===335||item.originalLine===336)?
+         !item.rawFields[29].includes("専門店限定商品"):
+         item.rawFields[29].includes("専門店限定商品"))||
        !speeds.has(item.name)))
-    throw new Error("原版百貨公路載具來源、分類或限制已變更");
+    throw new Error("原版百貨公路載具來源、分類或備註已變更");
   return Object.freeze({
     walkingSeconds:walking,accidentDenominator:accidentRate,
     busSeconds,busFare,
