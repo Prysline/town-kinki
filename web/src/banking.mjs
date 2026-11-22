@@ -138,7 +138,7 @@ function currentAssetBase(db,userId) {
     throw new Error("資產快照含有不正確的金額");
   const [money,bank,term,payment,remaining]=amounts.map(BigInt);
   const net=money+bank+term-payment*remaining;
-  if(net>MAX_BALANCE) throw new Error("稅基資產超出安全整數範圍");
+  if(net>MAX_BALANCE) throw new Error("稅基資產超出安全範圍");
   return Number(net<0n?0n:net);
 }
 function ensureTaxState(db,userId,today) {
@@ -165,7 +165,7 @@ function settleWeeklyTax(db,userId,today,now,prior) {
       prior.snapshot_day>=today) return null;
   if(db.prepare("SELECT 1 FROM bank_tax_assessments WHERE user_id=? AND tax_day=?")
     .get(userId,today)) return null;
-  const character=db.prepare("SELECT bank,kpoint FROM characters WHERE user_id=?").get(userId);
+  const character=db.prepare("SELECT * FROM characters WHERE user_id=?").get(userId);
   const kpoint=character.kpoint??0;
   const tax=calculateWeeklyTax(prior.assessment_base,kpoint);
   const paid=character.bank>=tax.due?tax.due:0;

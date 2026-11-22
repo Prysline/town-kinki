@@ -1150,12 +1150,15 @@ test("BK-04 單機星期一真實 HTTP：快轉徵稅、重送、SQLite 重啟�
     const sunParts=Object.fromEntries(format.formatToParts(new Date(now+offset))
       .filter(p=>p.type!=="literal").map(p=>[p.type,p.value]));
     const sunday=sunParts.year+"-"+sunParts.month+"-"+sunParts.day;
+    const monday=new Date(Date.parse(sunday+"T12:00:00Z")+86400000)
+      .toISOString().slice(0,10);
     assert.equal(sunParts.weekday,"Sun");
     const sqlitePath=join(srv.directory,"solo.sqlite");
     const db=new DatabaseSync(sqlitePath);
     try{
       db.prepare("UPDATE solo_clock SET offset_ms=? WHERE id=1").run(offset);
-      db.prepare("UPDATE characters SET money=0,bank=2000000,kpoint=0 WHERE name='每週稅務居民'").run();
+      // 略過與稅務無關的原版隨機每日事件，避免先在主畫面獲得現金獎勵。
+      db.prepare("UPDATE characters SET money=0,bank=2000000,kpoint=0,last_event_day=? WHERE name='每週稅務居民'").run(monday);
       db.prepare("UPDATE bank_accounts SET last_interest_day=?").run(sunday);
     }finally{db.close();}
     const before=await api(srv.url,"state");
