@@ -106,13 +106,18 @@ function seedPR35(dir){
     );
     const book=catalog.find(x=>x.category==="書籍"&&x.name==="無駄知識を覚える本");
     assert.ok(book,"必須用真實原版33欄商品");
+    const purchasedAt=Math.floor(now/1000);
+    const fields=[...book.rawFields];
+    fields[21]=String(book.durability);
+    fields[30]=String(purchasedAt);
+    fields[31]=String(Math.trunc(book.unitPrice/book.durability));
     insert(db,"legacy_inventory_items",{user_id:1,original_id:"__web_retail__",
       source_line:1000001,category:book.category,original_name:book.name,
       effect:book.effect,durability:book.durability,durability_unit:book.durabilityUnit,
-      purchased_at:now,last_used_at:null,raw_fields_json:JSON.stringify(book.rawFields)});
+      purchased_at:purchasedAt,last_used_at:0,raw_fields_json:JSON.stringify(fields)});
     insert(db,"retail_purchases",{user_id:1,shop:"depart1",sku:book.sku,name:book.name,
       paid:book.unitPrice,source_line:1000001,request_id:"pr35_purchase_once",created_at:now});
-    return {name:book.name,price:book.unitPrice,now};
+    return {name:book.name,price:book.unitPrice,now,purchasedAt};
   }finally{db.close();}
 }
 test("PR #35 Web SQLite：備份→跨版本升級→銀行交易→重啟，舊角色及收據／住宅／背包不毀損",async()=>{
@@ -159,7 +164,7 @@ test("PR #35 Web SQLite：備份→跨版本升級→銀行交易→重啟，舊
       assert.equal(purchase.paid,seed.price);
       const item=db.prepare("SELECT * FROM legacy_inventory_items WHERE user_id=1 AND source_line=1000001").get();
       assert.equal(item.original_name,seed.name);
-      assert.equal(item.purchased_at,seed.now);
+      assert.equal(item.purchased_at,seed.purchasedAt);
       assert.equal(JSON.parse(item.raw_fields_json).length,33);
       assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(),[]);
       assert.equal(db.prepare("PRAGMA integrity_check").get().integrity_check,"ok");
