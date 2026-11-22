@@ -1,6 +1,6 @@
 # TOWN Web｜現行功能狀態與下一步計畫
 
-> **現行狀態唯一入口**：本文件統一維護 Web 長期分支的功能完成度、證據界線、驗收與下一步優先序。校正基準：2026-11-22、`feature/web-dual-mode-phase1` 的 `e7cb0eb04af3152e15266136de42923cbcf66661`（PR #91／第67階段合併後）。**下一次使用時必須先確認最新 HEAD；本文 SHA 是稽核時間點，不是永久最新版。**
+> **現行狀態唯一入口**：本文件統一維護 Web 長期分支的功能完成度、證據界線、驗收與下一步優先序。校正基準：2026-11-22、重新查得 `feature/web-dual-mode-phase1` 的 `78cb041da5865e856c81bb2a2951165f2f28a203`（PR #96 合併後、本次文件修正前）；[Web push CI](https://github.com/Prysline/town-kinki/actions/runs/45024849335) 與 [長期 PR #1 回歸 CI](https://github.com/Prysline/town-kinki/actions/runs/45024853651) 均 success（715/715）。**下一次使用時必須先確認最新 HEAD；本文 SHA 是稽核時間點，不是永久最新版。**
 >
 > 產品範圍與禁止事項以 [已確認的專案政策](project-scope-no-legacy-player-import.md) 為準；本文件只統一**現行狀態與排序**，不可推翻使用者確認的範圍。原始 CGI 決定可核對的原版行為；實際 Web 程式及測試決定已實作與自動驗證的事實；[技術差異矩陣](migration-audit.md) 保留原始功能 ID／CGI 來源；各 `phaseXX-*.md` 是當時技術證據與決策，**不是目前待辦**。文件與程式矛盾時，必須回到實際程式、測試、PR、CI 與必要的 CGI 查證，不得只挑較新的文字。
 
@@ -88,7 +88,7 @@
 | AC-02 | 單人刪角／繼續遊戲 | 指定範圍已實作 | `server.test.mjs`：單機角色刪除、重啟保存、跨日快轉 | 未驗（無真人實機證據） | Web 可繼續進度與單機時間；不等於全系統歷史持久化已逐一驗收 | `src/server.mjs`、`tests/server.test.mjs`、[第48階段](phase48-core-gameplay-restart.md) | 真人返回首頁／繼續、跨版本 SQLite 升級驗收 | P1 |
 | AC-03 | 公開部署／管理權限／速率限制 | 部分實作 | 既有盤點列有程式／測試線索；本輪未逐項重跑，需按風險核對 | 未驗（無真人實機證據） | 原版完整等價性待核實（不得以入口／測試數量代替） | [`migration-audit.md`](migration-audit.md) 原始 CGI 與 Web 來源列；src/server.mjs；README 安全限制 | 先查核：未有完整登入速率限制及公開部署審查；不宜公開直接部署 | 公開部署前門檻 |
 | AC-04 | 原版個人設定及備忘錄／朋友清單／死亡通知 | 部分實作 | 既有盤點列有程式／測試線索；本輪未逐項重跑，需按風險核對 | 未驗（無真人實機證據） | 原版完整等價性待核實（不得以入口／測試數量代替） | [`migration-audit.md`](migration-audit.md) 原始 CGI 與 Web 來源列；Web 有獨立 solo 刪角及帳號登入，沒有等價的完整原版設定資料模型 | 先查核：原版備忘錄可保存、好友清單和字體／音效設定可編輯；死亡通知含密碼及原始關聯檔處理，不能用 Web solo 刪角代稱完成 | P2 |
-| DB-04 | SQLite 遷移／還原 | 部分實作 |第48階段跨兩次 Node 重啟；第67階段 `solo-save.test.mjs`／HTTP 還原續玩、WAL、SHA-256、外鍵；PR #35 真實歷史 schema 子集升級已由 PR #94 驗證（合併前／後 push 與 PR CI 均成功）；PR #53 寄禮信箱舊 FK→雙階段升級及寄件者刪帳保護由 PR #96 補測，測試提交 push／PR CI 已成功（最終 HEAD 仍須重驗） | 未驗（無真人實機證據） | 不適用：新版 SQLite 保存與恢復，不以舊 CGI 匯入衡量 |[第67階段](phase67-solo-save-backup-restore.md)、`scripts/solo-save.mjs`、`tests/solo-save.test.mjs`、`tests/server.test.mjs`；[第68階段跨版測試](phase68-sqlite-pr35-upgrade-verification.md)、[第69階段舊信箱跨版測試](phase69-pr53-gift-mail-upgrade.md)、[PR #96](https://github.com/Prysline/town-kinki/pull/96) |**CLI 備份／驗證／新目錄還原已完成**；待跨 Web 版本升級矩陣、跨設備演練、定期管理與真人操作；其他 Web 歷史版本、跨 OS／設備仍待驗收，PR #96 不代表全面矩陣完成 | P1（驗收） |
+| DB-04 | SQLite 遷移／還原 | 部分實作 |第48階段跨兩次 Node 重啟；第67階段 `solo-save.test.mjs`／HTTP 還原續玩、WAL、SHA-256、外鍵；PR #35 真實歷史 schema 子集升級已由 PR #94 驗證（合併前／後 push 與 PR CI 均成功）；PR #53 寄禮信箱舊 FK→雙階段升級及寄件者刪帳保護由已合併 PR #96 補測；最終 PR HEAD push／PR CI、合併後 Web push／長期 PR #1 CI 均 success（合併後 715/715） | 未驗（無真人實機證據） | 不適用：新版 SQLite 保存與恢復，不以舊 CGI 匯入衡量 |[第67階段](phase67-solo-save-backup-restore.md)、`scripts/solo-save.mjs`、`tests/solo-save.test.mjs`、`tests/server.test.mjs`；[第68階段跨版測試](phase68-sqlite-pr35-upgrade-verification.md)、[第69階段舊信箱跨版測試](phase69-pr53-gift-mail-upgrade.md)、[PR #96](https://github.com/Prysline/town-kinki/pull/96) |**CLI 備份／驗證／新目錄還原已完成**；待跨 Web 版本升級矩陣、跨設備演練、定期管理與真人操作；其他 Web 歷史版本、跨 OS／設備仍待驗收，PR #96 不代表全面矩陣完成 | P1（驗收） |
 | DB-05 | Web 自建個人檔案與職業投稿 | 未實作 | 無已移植玩法驗證；原版來源需核對 | 未驗（無真人實機證據） | 原版已確認有程式或資料；可達條件仍依來源核定 | [`migration-audit.md`](migration-audit.md) 原始 CGI 與 Web 來源列；Web 尚缺完整建立／投稿功能 | 先查核：讓新玩家自行填寫，不匯入既有玩家資料 | 後續／P2 |
 | UI-01 | 三欄位狀態切換與原始資訊 | 部分實作 | 既有盤點列有程式／測試線索；本輪未逐項重跑，需按風險核對 | 未驗（無真人實機證據） | 原版完整等價性待核實（不得以入口／測試數量代替） | [`migration-audit.md`](migration-audit.md) 原始 CGI 與 Web 來源列；public/index.html L176-L202；public/app.js | 先查核：有 ARIA tab 與原版分頁；實機 375px/768px/桌機驗收缺少 | P1 |
 | UI-02 | 事件通知及 20 秒挑戰 | 部分實作 | 既有盤點列有程式／測試線索；本輪未逐項重跑，需按風險核對 | 未驗（無真人實機證據） | 原版完整等價性待核實（不得以入口／測試數量代替） | [`migration-audit.md`](migration-audit.md) 原始 CGI 與 Web 來源列；public/app.js；src/event-cockroach.mjs | 先查核：程式顯示與 API 存在；真實操作與動態尺寸未驗證 | P1 |
@@ -128,6 +128,17 @@
 | **GM-02／競馬（非當前 P1）** | `basic.cgi::keiba` | 原版有實際投注、限制、結果結算；Web 尚無同等投注／結算 API | 依原版可執行功能，但真實街區資料為空；必須確認 Web 單機可達配置與獎金安全 | **P2**：明確單人可達性、下注上限與結算，避免無來源「只有圖示就加賽馬」 |
 | **HS-03／住宅商店特殊用途（分段後再排序）** | 住宅／商業 CGI 的相應可執行分支，見 [差異矩陣](migration-audit.md) | 建屋、出售、改裝、留言已存在；室內進階商業及特殊互動仍缺 | 有可建屋基礎但與所有權、對外交易及多人安全耦合 | **P2**：先確認單機真有可操作的原版功能與建置成本，不能把已有住宅重做 |
 
+### 2026-11-22 IT-02／BK-04 來源對照（靜態查核；不是新功能或真人驗收）
+
+本輪重新讀取 **原版 master** 的 `basic.cgi`、`dat_dir/syouhin.cgi`、`town_ini.cgi`、`town_lib.pl`、`town_maker.cgi`；其中四個 CGI／商品檔與 Web 長期分支同路徑的 Git blob SHA 相同，原版保持唯讀。以下只針對已查到的**具體執行路徑**，不推論全部 SKU 或跨日完整等價。
+
+| ID／工作性質 | 原版與 Web、既有測試的可核對事實 | 單機可達性與尚未確認事項 | 可能改動的 Web 檔案、資產風險與驗收門檻 |
+|---|---|---|---|
+| **IT-02／原版行為差異確認，尚未選定功能修復** | 原版 `dat_dir/syouhin.cgi` 的 **`ペット／ガチャピン`** 是 `無` 效果、`3日`、`120分` 間隔、身體能量消耗 `10`；`basic.cgi::item_do` 的一般使用分支排除 `ギフト`，未排除此寵物類別。Web `src/legacy-item-use.mjs` 的 `DAY_USE_TYPES` 只放行 `書籍／ゲーム／アダルト`，`tests/legacy-item-use.test.mjs`「原版特殊權益的日制商品…」**明確斷言 `ガチャピン` 不可一般使用**，不是沒有測試；因此存在有來源的使用行為差異，但「寵物特殊權益應如何運作」未證實，不能直接把此差異當 P1。反例：`琵琶湖の水`、`無駄知識を覚える本`、四種 `効果` 回能品、`ランダム品` 已有獨立使用測試，禁止重開同功能；`金の箱／ランドマスター` 備註有移動用途但既有測試刻意拒絕，不能單憑備註判斷可用載具效果。 | `src/retail.mjs` 可解析原版非「食」且合法的商品，`src/solo-starter-town.mjs` 含 `デパ／デパ2`；單機建角與自行初始化試玩街區後**有購物路徑**，但百貨每日隨機上架，並未證明此 SKU 在任何指定日必出現或玩家會選擇使用。寵物正向玩法／特殊資產意義、其他商品效果與設施入口仍待逐項核對。 | 若後續確認值得支援，先鎖定 SKU、原版實際操作與可見結果，再限定修改 `src/legacy-item-use.mjs`、需要時的 `src/retail.mjs`／`src/server.mjs`，測試 `tests/legacy-item-use.test.mjs`、`tests/server.test.mjs`。驗收須從**新 Web 玩家取得實物**→本人可用性／效果／間隔→跨 Node 重啟→同 requestId 防重；不得改原版封存 33 欄、任意開放全部「日」制特殊權益、雙扣耐久或重複套用能力。當前**不建立物品功能 PR**。 |
+| **BK-04／確定未接入的原版跨日徵稅路徑，安全規則待定** | 原版 `town_ini.cgi` 設 `$zeikin_shitei='Mon'`；`town_maker.cgi::login_view` 在 `access_time` 跨日後以伺服器本地星期一觸發。對**已存檔的** `k_sousisan`（`town_lib.pl` 讀取，`login_view` L332 才重算）以總資產 `≤100萬` 免稅，其他依 `≤1000萬／≤1億／≤10億／更高` 分別 `1%／3%／5%／7%`，按 `kpoint` 的 `25／50／100／250／500／1000` 門檻折減，直接從普通銀行扣款並記通帳。Web `src/server.mjs::snapshot` 呼叫 `settleBankInterest`，`src/banking.mjs` 只涵蓋跨日利息及貸款還款，尚無徵稅扣款與記帳；`tests/banking.test.mjs` 對利息／貸款有測試，但未驗稅務。 | Web 單機 `/api/solo/time/advance` 支援 `1d`，`src/solo-starter-town.mjs` 已有銀行；**單一新 Web 玩家可以走到日期跨越／銀行查看流程**，不需要舊 CGI 玩家匯入。但 Web 現行 `kpoint` 預設為 0，沒有原版歷史 `k_sousisan` 快照；原版使用「前次保存總資產」而非當次重新即時計算，且可把銀行扣成負值。故稅基時點、缺錢時政策及 K 點來源，需明確決策，不能把原版公式直接貼到 Web。 | 預計涉及 `src/banking.mjs`、`src/server.mjs`、資料表／遷移初始化（須先界定），以及 `tests/banking.test.mjs`、`tests/server.test.mjs`；`src/solo-clock.mjs` 只作時間入口核對，不預設需修改。驗收：週一首次跨日登入/查看才徵稅，非徵稅日不扣；資產門檻與 K 點折扣按核定規則逐級測；相同日期重送/重啟不雙扣；利息、貸款、稅和帳簿的先後順序可觀察且原子回滾；稅額超過普通存款、升級舊 Web SQLite、溢位或寫入失敗時不得製造負帳、遺失資產或破壞來源存檔。**需先確定安全政策與可重現測試再開獨立功能 PR**。 |
+
+**本輪盤點結論**：IT-02 有明確「受控拒絕」的原版差異，但尚未證明值得單獨開放的正向單人特殊效果；BK-04 有明確的 Web 未接入流程及單機日期入口，但實作前必須決定存檔稅基及不足額的安全語義。兩者均未在本輪視作已完成驗收，也未新增遊戲功能；PR #96 的**舊 Web SQLite 版本切片**已成功，不可因本段重開相同升級測試。
+
 **待核實、不得自動升格為新功能**：學校／健身房在此 fork 缺少原版可執行 CGI；只有課程資料和使用說明；原始城鎮街區檔為空；原版已過期福引是否可再開啟沒有新政策；遊樂中心的各種圖示、寶箱獎品與不存在的「專門店」不能單憑名稱推演全套玩法。其他多人、社交、股票、拍賣、公開個資／投稿與企業依原版及安全需求分開核查，**暫非單機優先**。
 
 ## 六、尚待驗收（與新增功能分離）
@@ -136,7 +147,7 @@
 |---|---|---|
 | **真人桌面瀏覽器** | Node HTTP、DOM 與 SQLite 測試已涵蓋主要循環；無真人點擊錄影／截圖證據 | 真正用桌面 Chrome/Firefox 建角→工作與領薪→百貨購物→背包使用→食堂／住宅／事件→離開再繼續；檢查每步角色、金錢、道具、冷卻與錯誤提示 |
 | **375px 手機／768px 平板** | 有 CSS/RWD 與 DOM 測試，但不等於兩種視埠已人工驗收 | 實際瀏覽器在 375、768px 操作導航、地圖、彈窗、狀態／背包／冷卻、券、合成、釣魚、公路；紀錄水平溢出與點擊失敗 |
-| **新版 Web SQLite 升級矩陣** | 第48階段同資料夾重啟、第67階段備份／新目錄還原已通過；PR #94 完成 PR #35 真實 schema 子集跨版測試（兩次合併前／後 CI 成功）；PR #96 新增 PR #53 寄禮信箱歷史 FK 無損升級切片（測試提交 push／PR CI 已成功，最終 HEAD 合併前仍須同樣成功） | 按確定舊 Web schema 版本建立資料樣本→備份→升級→重啟，逐一核對現金／銀行／背包／住宅／事件／冷卻／多種設施；失敗不得毀損來源 |
+| **新版 Web SQLite 升級矩陣** | 第48階段同資料夾重啟、第67階段備份／新目錄還原已通過；PR #94 完成 PR #35 真實 schema 子集跨版測試（兩次合併前／後 CI 成功）；已合併 PR #96 新增 PR #53 寄禮信箱歷史 FK 無損升級切片；最終 PR HEAD push／PR CI 與合併後 Web push／長期 PR #1 回歸 CI 全部成功（715/715） | 按確定舊 Web schema 版本建立資料樣本→備份→升級→重啟，逐一核對現金／銀行／背包／住宅／事件／冷卻／多種設施；失敗不得毀損來源 |
 | **不同設備與環境還原** | 已有 CLI WAL 快照、SHA-256、驗證與不覆寫還原 | 在不同 OS／檔案系統／權限與實際部署路徑操作；驗證完整性與恢復續玩，不能把 CLI 完成寫成演練完成 |
 | **定期備份管理／正式部署** | 手動 `solo-save.mjs` 已可用；不代表有輪替排程、監控、金鑰或遠端保存 | 若要正式公開部署，實作／驗證排程、保留政策、告警、離線副本、HTTPS／Session／速率限制與資產權限；先經部署安全審查 |
 | **多人安全回歸** | 現有隔離、單筆交易、防重送與刪帳後資料持有權已有自動測試；第49階段私訊亦涵蓋 | 修改共享規則或 schema 時核對兩帳戶、資產所有權、併發、回滾；**不因此新增多人功能** |
@@ -146,7 +157,7 @@
 
 **已完成 Chrome 自動化（PR #95，合併後 Web SHA `2ab61554ab94f9db0c71a6f4d791c1a72cc39d19`）與真人驗收分離**：`tests/browser-viewport-smoke.test.mjs` 使用真實 Chrome/Chromium 引擎在 1440px、768px、375px 視埠執行前端滑鼠點擊與頁面狀態，覆蓋建角、已預設日薪工作、單機試玩街區、銀行存款、百貨選品購買、背包、首頁離開／繼續。[最終 HEAD push CI](https://github.com/Prysline/town-kinki/actions/runs/45022217905)、[PR CI](https://github.com/Prysline/town-kinki/actions/runs/45022224039) 與[合併後 push CI](https://github.com/Prysline/town-kinki/actions/runs/45022371805)、[PR #1 回歸 CI](https://github.com/Prysline/town-kinki/actions/runs/45022376153) 已成功；這些切片**已自動測試**；仍**沒有真人在桌面、平板或手機現場操作的證據**，不涵蓋全部遊戲設施及不同 OS 實機。
 
-**跨版本矩陣驗收（PR #94／#96）**：PR #94 以 PR #35 當時百貨收據 schema 子集做無損備份→升級→資產延續，合併後 [Web push](https://github.com/Prysline/town-kinki/actions/runs/45021154461) 與 [PR #1 回歸](https://github.com/Prysline/town-kinki/actions/runs/45021159489) 成功。PR #96 另選 PR #53 的寄禮信件 `event_id` 舊外鍵（刪交易會連刪收件者信），測試兩段 v2／v3 升級以及刪寄件者後的收信與收禮保護；PR #96 的[測試提交 push CI](https://github.com/Prysline/town-kinki/actions/runs/45024428062) 與 [PR CI](https://github.com/Prysline/town-kinki/actions/runs/45024449683) 成功；**最終 HEAD 仍須 push／PR CI 雙成功才合併**。兩者都不是完整歷史 Web 版本矩陣，更不是不同 OS／設備的真人還原。詳見[第69階段](phase69-pr53-gift-mail-upgrade.md)。
+**跨版本矩陣驗收（PR #94／#96）**：PR #94 以 PR #35 當時百貨收據 schema 子集做無損備份→升級→資產延續，合併後 [Web push](https://github.com/Prysline/town-kinki/actions/runs/45021154461) 與 [PR #1 回歸](https://github.com/Prysline/town-kinki/actions/runs/45021159489) 成功。PR #96 另選 PR #53 的寄禮信件 `event_id` 舊外鍵（刪交易會連刪收件者信），測試兩段 v2／v3 升級以及刪寄件者後的收信與收禮保護；PR #96 的[測試提交 push CI](https://github.com/Prysline/town-kinki/actions/runs/45024428062) 與 [PR CI](https://github.com/Prysline/town-kinki/actions/runs/45024449683) 成功；最終 HEAD `6702c51df6856051f738cf143d7164d8fbc48d05` 的[push CI](https://github.com/Prysline/town-kinki/actions/runs/45024696577) 與 [PR CI](https://github.com/Prysline/town-kinki/actions/runs/45024701156) 亦 success。**已在 2026-11-22 合併**至 Web 長期分支 `78cb041da5865e856c81bb2a2951165f2f28a203`，合併後 [Web push CI](https://github.com/Prysline/town-kinki/actions/runs/45024849335) 與 [長期 PR #1 回歸 CI](https://github.com/Prysline/town-kinki/actions/runs/45024853651) 均 success（715/715）。`master` 仍是 `f74e077780ed96f9b271f66e5afe63037c7c7403`，PR #1 保持草稿。兩者都不是完整歷史 Web 版本矩陣，更不是不同 OS／設備的真人還原。詳見[第69階段](phase69-pr53-gift-mail-upgrade.md)。
 
 **已測不等於已人工驗收；待真人驗收不等於 API 未實作。** 只有真實驗收紀錄、具體裝置／版本／步驟／結果才允許把「未驗」更新為「已驗收」。
 
