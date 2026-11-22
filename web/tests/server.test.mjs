@@ -10,7 +10,7 @@ import { DatabaseSync } from "node:sqlite";
 import { LEGACY_CHARACTER_FIELDS } from "../src/legacy-character.mjs";
 import { initLegacyInventoryTables } from "../src/legacy-inventory.mjs";
 import { decodeLegacyText } from "../src/engine.mjs";
-import { parseLegacyRetailCatalog, buyRetailItem } from "../src/retail.mjs";
+import { parseLegacyRetailCatalog, ensureRetailDay, buyRetailItem } from "../src/retail.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const delay = ms => new Promise(done => setTimeout(done, ms));
@@ -6067,6 +6067,11 @@ test("第65階段多人HTTP：兩位真實百貨購買者各自搭自己的輪�
     let aLine,bLine;
     try{
       const currentDay=new Date(Date.now()+8*3600000).toISOString().slice(0,10);
+      db.exec("BEGIN IMMEDIATE");
+      try{
+        ensureRetailDay(db,catalog,currentDay,()=>0);
+        db.exec("COMMIT");
+      }catch(error){db.exec("ROLLBACK");throw error;}
       const existing=db.prepare("SELECT position FROM retail_stock WHERE shop='depart1' AND sku=?").get(vehicle.sku);
       if(!existing){
         const replace=db.prepare("SELECT position FROM retail_stock WHERE shop='depart1' ORDER BY position LIMIT 1").get();
