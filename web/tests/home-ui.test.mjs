@@ -713,6 +713,20 @@ test("第50階段：單機首次遊玩可自願建立非原版試玩街區，已
 });
 
 
+test("單機 Web 試玩街區提供可操作的新手路線，不誤用在原版或自訂地圖",()=>{
+  assert.match(html,/id="solo-play-guide"/);
+  assert.match(html,/第一次在試玩街區遊玩/);
+  assert.match(html,/不會自動扣款或贈送物品/);
+  assert.match(script,/el\("solo-play-guide"\)\.hidden=!\(state\.mode==="solo"&&map\.source==="web-solo-starter"\)/);
+  assert.match(script,/el\("solo-play-guide"\)\.addEventListener\("click"/);
+  for(const id of ["jobs-panel","retail-panel","inventory-panel",
+    "fishing-panel","crafting-panel","arcade-dice-panel"]){
+    assert.match(html,new RegExp('id="'+id+'"'));
+    assert.match(html,new RegExp('id="solo-play-guide"[\\s\\S]*?data-facility="'+id+'"'));
+  }
+  assert.match(css,/\.starter-guide-actions\{display:flex;/);
+});
+
 test("第51階段：原版優惠券兌換所地圖入口、30獎品、本人事件券與原子入庫 UI",()=>{
   assert.deepEqual(townCellAction(describeTile("クーポン")),
     {kind:"facility",panelId:"event-panel"});
