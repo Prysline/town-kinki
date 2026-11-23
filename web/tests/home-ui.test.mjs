@@ -1002,6 +1002,20 @@ test("第53階段：原版釣場與餌料商店實際有入庫交易 UI 且拒�
   assert.doesNotMatch(script,/innerHTML\s*=\s*item\.name/);
 });
 
+test("IT-02 本人優惠券與一般類別合法載具在背包可進入公路，其他物品不冒充載具",()=>{
+  assert.match(script,/function goToVerifiedInventoryVehicle\(vehicle\)/);
+  assert.match(script,/const roadVehicles=new Map\(\(state\.roadTravel\?\.choices\?\?\[\]\)/);
+  assert.match(script,/const verifiedVehicle=roadVehicles\.get\(item\.sourceLine\)/);
+  assert.match(script,/card\.dataset\.sourceLine=String\(item\.sourceLine\)/);
+  assert.match(script,/status\.textContent=verifiedVehicle\?/);
+  assert.match(script,/不是背包直接使用道具/);
+  assert.match(script,/if\(verifiedVehicle\)\{/);
+  assert.match(script,/inventory-road-link/);
+  assert.match(script,/goToVerifiedInventoryVehicle\(verifiedVehicle\)/);
+  assert.match(script,/goToVerifiedInventoryVehicle\(vehicle\)/);
+  assert.match(script,/公路面板操作，事故可能扣耐久/);
+});
+
 test("第66階段：公路選單說明不再錯稱專門店備註禁止百貨購入",()=>{
   assert.match(html,/18種原版百貨/);
   assert.match(html,/6種標有「専門店限定商品」/);

@@ -316,6 +316,105 @@ test("Chrome：桌面→768px平板→375px手機，操作真實建角／工作�
 
 
 
+
+test("Chrome：原版優惠券獎車實際兌換→手機背包可辨識→公路選車出發",{
+  timeout:180000
+},async()=>{
+  const workspace=mkdtempSync(join(tmpdir(),"town-chrome-coupon-road-"));
+  const dataDir=join(workspace,"sqlite");
+  let web=null,chrome=null;
+  try{
+    web=await startWeb(dataDir);
+    chrome=await openChrome(join(workspace,"chrome-profile"));
+    await chrome.send("Page.enable");
+    await chrome.send("Runtime.enable");
+    await viewport(chrome,1440,900);
+    await chrome.send("Page.navigate",{url:web.url});
+    await until(chrome,"!document.querySelector('#create')?.hidden","新角色建立畫面");
+    await evaluate(chrome,"window.confirm=()=>true");
+    await fill(chrome,'#create-form [name="name"]',"Chrome券獎交通居民");
+    await click(chrome,"#create-submit");
+    await until(chrome,"!document.querySelector('#game')?.hidden","角色已建立");
+    await click(chrome,"#solo-starter-create");
+    await until(chrome,"document.querySelector('#solo-starter-town')?.hidden===true",
+      "原版優惠券兌換所所在的 Web 試玩街區已建立");
+    const db=new DatabaseSync(join(dataDir,"solo.sqlite"));
+    try{
+      const id=db.prepare("SELECT user_id FROM characters WHERE name=?")
+        .get("Chrome券獎交通居民").user_id;
+      // 臨時 SQLite 給 26 點測試用事件券：1點普通獎＋25點車，不改正式取得方式。
+      db.prepare([
+        "INSERT INTO character_coupons(user_id,quantity) VALUES(?,26)",
+        "ON CONFLICT(user_id) DO UPDATE SET quantity=excluded.quantity"
+      ].join(" ")).run(id);
+    }finally{db.close();}
+    await click(chrome,"#refresh");
+    await click(chrome,"#facility-tab-events");
+    await until(chrome,"document.querySelectorAll('#coupon-rewards .training-tile').length===30",
+      "真正 30 款原版優惠券兌換選項");
+    // 原始鍵仍經 API 驗證，僅 UI 比對改為已確認的繁中顯示。
+    const prizes=[
+      ["福引券","抽獎券",1],["ポルシェ","保時捷",9]
+    ];
+    for(const [name,displayName,nth] of prizes){
+      const selector="#coupon-rewards .training-tile:nth-child("+nth+")";
+      assert.match(await evaluate(chrome,
+        "document.querySelector("+JSON.stringify(selector)+")?.textContent"),new RegExp(displayName));
+      await click(chrome,selector+" button");
+      await until(chrome,"document.querySelector('#result-dialog')?.open && "+
+        "document.querySelector('#result-dialog-message')?.textContent?.includes('已扣除')",
+        "真正點擊 UI 完成兌換 "+name);
+    }
+    const before=await evaluate(chrome,"(async()=>{const s=await(await fetch('/api/state')).json();"+
+      "return {money:s.character.money,bank:s.character.bank,coupons:s.couponBalance,"+
+      "vehicle:s.roadTravel.choices.find(x=>x.name==='ポルシェ'),"+
+      "other:s.legacyInventory.find(x=>x.name==='福引券')}})()");
+    assert.equal(before.coupons,0);
+    assert.equal(before.vehicle.origin,"coupon");
+    assert.equal(before.vehicle.seconds,3);
+    assert.ok(before.other);
+    const line=before.vehicle.sourceLine;
+    await viewport(chrome,375,812);
+    await click(chrome,"#profile-tab-inventory");
+    const vehicleSelector='#legacy-inventory-list .inventory-item[data-source-line="'+line+'"]';
+    await until(chrome,"document.querySelector("+JSON.stringify(vehicleSelector)+")!==null",
+      "375px 真實背包顯示本人的券獎保時捷");
+    const vehicleText=await evaluate(chrome,
+      "document.querySelector("+JSON.stringify(vehicleSelector)+")?.textContent");
+    assert.match(vehicleText,/保時捷/);
+    assert.match(vehicleText,/可用於公路旅行/);
+    const otherSelector='#legacy-inventory-list .inventory-item[data-source-line="'+before.other.sourceLine+'"]';
+    assert.match(await evaluate(chrome,
+      "document.querySelector("+JSON.stringify(otherSelector)+")?.textContent"),/抽獎券/);
+    assert.equal(await evaluate(chrome,
+      "document.querySelector("+JSON.stringify(otherSelector+" .inventory-road-link")+")===null"),
+      true,"非載具福引券不可誤顯示公路捷徑");
+    await click(chrome,vehicleSelector+" .inventory-road-link");
+    assert.equal(await evaluate(chrome,"document.activeElement?.id"),"road-travel-panel");
+    assert.equal(await evaluate(chrome,"document.querySelector('#road-travel-vehicle')?.value"),String(line));
+    assert.equal(await evaluate(chrome,"document.querySelector('#road-travel-start')?.disabled"),false);
+    const preview=await evaluate(chrome,"(async()=>{const s=await(await fetch('/api/state')).json();"+
+      "return {money:s.character.money,bank:s.character.bank,coupons:s.couponBalance,"+
+      "remaining:s.roadTravel.choices.find(x=>x.sourceLine==="+line+")?.remaining,"+
+      "pending:s.roadTravel.pending}})()");
+    assert.deepEqual(preview,{money:before.money,bank:before.bank,coupons:0,
+      remaining:before.vehicle.remaining,pending:null},
+      "背包選車只帶路，不再扣券、現金或車輛耐久");
+    await click(chrome,"#road-travel-start");
+    await until(chrome,"document.querySelector('#road-travel-status')?.textContent?.includes('公路旅程進行中')",
+      "原版優惠券獎車經真正公路出發按鈕開始旅程");
+    const trip=await evaluate(chrome,"(async()=>{const s=await(await fetch('/api/state')).json();"+
+      "return {pending:s.roadTravel.pending,money:s.character.money,coupons:s.couponBalance}})()");
+    assert.equal(trip.pending.vehicleSourceLine,line);
+    assert.equal(trip.money,before.money);
+    assert.equal(trip.coupons,0);
+  }finally{
+    await chrome?.stop();
+    await web?.stop();
+    rmSync(workspace,{force:true,recursive:true,maxRetries:50,retryDelay:200});
+  }
+});
+
 test("Chrome：單機百貨ギフト類ベスパ→背包辨識公路用途→選車出發",{
   timeout:180000
 },async()=>{
