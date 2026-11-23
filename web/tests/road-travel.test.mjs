@@ -11,6 +11,10 @@ import {
 import {heldInventoryRows,inventoryLife} from "../src/inventory-life.mjs";
 import {parseLegacyRetailCatalog,initRetailTables,ensureRetailDay,buyRetailItem,RETAIL_ITEM_ORIGIN}
   from "../src/retail.mjs";
+import {parseLegacyCouponCatalog} from "../src/coupon-catalog.mjs";
+import {initCouponRedemptionTables,redeemEventCoupon,COUPON_ITEM_ORIGIN}
+  from "../src/coupon-redemption.mjs";
+import {initTownMapTable,storeTownMap} from "../src/town-storage.mjs";
 
 function original(path){
   return decodeLegacyText(readFileSync(new URL("../../"+path,import.meta.url)));
@@ -20,7 +24,8 @@ const ini=original("town_ini.cgi"),lib=original("town_lib.pl"),
 const treasure=parseOriginalTreasure(original("gamerand.cgi"),original("otakara.cgi"),
   original("dat_dir/otakara.cgi"),ini);
 const retailCatalog=parseLegacyRetailCatalog(original("dat_dir/syouhin.cgi"));
-const rules=parseOriginalRoadTransport(ini,lib,maker,treasure,retailCatalog);
+const couponCatalog=parseLegacyCouponCatalog(original("dat_dir/coupon.cgi"));
+const rules=parseOriginalRoadTransport(ini,lib,maker,treasure,retailCatalog,couponCatalog);
 const NOW=Date.parse("2026-11-22T12:00:00Z");
 const stats=()=>Object.fromEntries(STAT_KEYS.map(k=>[k,20]));
 function setup(){
@@ -43,6 +48,19 @@ function setupRetailRoad(){
   const db=setup();
   db.exec("ALTER TABLE characters ADD COLUMN bank INTEGER NOT NULL DEFAULT 0");
   initRetailTables(db);
+  return db;
+}
+function setupCouponRoad(){
+  const db=setup();
+  initCouponRedemptionTables(db);
+  initTownMapTable(db);
+  const tiles=Array(192).fill("");tiles[0]="クーポン";
+  storeTownMap(db,0,{tiles},"web-solo-starter");
+  db.exec([
+    "CREATE TABLE character_coupons(user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,",
+    "quantity INTEGER NOT NULL CHECK(quantity>=0));",
+    "INSERT INTO character_coupons(user_id,quantity) VALUES(1,125),(2,25);"
+  ].join(" "));
   return db;
 }
 function buyRetailVehicle(db,name,{userId=1,now=NOW,quantity=1}={}){
@@ -572,6 +590,106 @@ test("第64階段多人巴士交易與本人抵達隔離、相同請求碼可分
     assert.equal(arriveRoadTrip(db,2,{tripId:b.id,now:NOW+5000}).toTownId,1);
     assert.equal(trips(db),2);
   }finally{db.close();}
+});
+
+
+test("IT-02 優惠券五種真實獎車：正式扣券入庫後可公路旅行並按原版車速／事故耐久結算",()=>{
+  assert.deepEqual(rules.couponVehicles.map(x=>[x.name,x.sourceIndex,x.seconds,x.couponCost]),[
+    ["ポルシェ",8,3,25],["フェラーリ",9,2,25],["ジャガー",10,4,25],
+    ["キャデラック",11,6,25],["ロータスヨーロッパ",12,4,25]
+  ]);
+  assert.ok(rules.couponVehicles.every(x=>
+    x.origin===COUPON_ITEM_ORIGIN&&x.category==="クーポン交換品:25"));
+  const db=setupCouponRoad();
+  try{
+    assert.deepEqual(roadOverview(db,1,rules,NOW).choices,[]);
+    const beforeMoney=db.prepare("SELECT money FROM characters WHERE user_id=1").get().money;
+    const redeemed=new Map();
+    for(const source of rules.couponVehicles){
+      const voucher=redeemEventCoupon(db,1,couponCatalog,{
+        sourceIndex:source.sourceIndex,originalName:source.name,
+        requestId:"coupon_vehicle_"+source.sourceIndex,now:NOW
+      });
+      assert.equal(voucher.replayed,false);
+      redeemed.set(source.name,voucher.sourceLine);
+      const replay=redeemEventCoupon(db,1,couponCatalog,{
+        sourceIndex:source.sourceIndex,originalName:source.name,
+        requestId:"coupon_vehicle_"+source.sourceIndex,now:NOW
+      });
+      assert.equal(replay.replayed,true);
+      assert.equal(replay.sourceLine,voucher.sourceLine);
+    }
+    assert.equal(db.prepare("SELECT quantity FROM character_coupons WHERE user_id=1").get().quantity,0);
+    const choices=roadOverview(db,1,rules,NOW).choices;
+    assert.equal(choices.length,5);
+    assert.deepEqual(choices.map(x=>[x.name,x.seconds,x.origin]),
+      rules.couponVehicles.map(x=>[x.name,x.seconds,"coupon"]));
+    assert.equal(db.prepare("SELECT money FROM characters WHERE user_id=1").get().money,beforeMoney);
+    const startLine=redeemed.get("ポルシェ");
+    const trip=start(db,{vehicleSourceLine:startLine,requestId:"coupon_road_start_01",
+      rolls:[0],lostRoll:4});
+    assert.equal(trip.seconds,3);
+    assert.equal(trip.vehicleName,"ポルシェ");
+    assert.equal(trip.accident,undefined,"未抵達前不提前公告事故結果");
+    assert.equal(db.prepare("SELECT remaining FROM legacy_item_usage WHERE user_id=1 AND source_line=?")
+      .get(startLine).remaining,6,"事故只消耗已兌換券獎車的一次耐久");
+    assert.equal(start(db,{vehicleSourceLine:startLine,requestId:"coupon_road_start_01"}).replayed,true);
+    const completed=arrive(db,{tripId:trip.id,now:NOW+3000});
+    assert.equal(completed.accident,true);
+    assert.equal(completed.durabilityAfter,6);
+    assert.equal(arrive(db,{tripId:trip.id,now:NOW+3000}).replayed,true);
+    assert.equal(db.prepare("SELECT COUNT(*) n FROM coupon_redemptions WHERE user_id=1").get().n,5);
+    assert.equal(db.prepare("SELECT money FROM characters WHERE user_id=1").get().money,beforeMoney);
+  }finally{db.close();}
+});
+
+test("IT-02 優惠券交通來源保護：偽造同名／錯誤33欄／缺流水與其他帳戶不能選車",()=>{
+  const db=setupCouponRoad();
+  try{
+    const item=rules.couponVehicles[0],fake=[...item.rawFields];
+    fake[30]=String(Math.floor(NOW/1000));
+    db.prepare([
+      "INSERT INTO legacy_inventory_items(user_id,original_id,source_line,category,",
+      "original_name,effect,durability,durability_unit,purchased_at,last_used_at,raw_fields_json)",
+      "VALUES(?,?,?,?,?,?,?,?,?,?,?)"
+    ].join(" ")).run(1,COUPON_ITEM_ORIGIN,6600000,item.category,item.name,"無",
+      7,"回",Math.floor(NOW/1000),0,JSON.stringify(fake));
+    assert.equal(roadOverview(db,1,rules,NOW).choices.length,0,"只有自報券來源而無兌換流水不可上路");
+    assert.throws(()=>start(db,{vehicleSourceLine:6600000,requestId:"coupon_fake_vehicle"}),/合法持有/);
+    const own=redeemEventCoupon(db,1,couponCatalog,{
+      sourceIndex:8,originalName:"ポルシェ",requestId:"coupon_verified_0001",now:NOW
+    });
+    const other=redeemEventCoupon(db,2,couponCatalog,{
+      sourceIndex:9,originalName:"フェラーリ",requestId:"coupon_other_user_01",now:NOW
+    });
+    assert.deepEqual(roadOverview(db,1,rules,NOW).choices.map(x=>x.sourceLine),[own.sourceLine]);
+    assert.deepEqual(roadOverview(db,2,rules,NOW).choices.map(x=>x.sourceLine),[other.sourceLine]);
+    assert.throws(()=>start(db,{vehicleSourceLine:other.sourceLine,
+      requestId:"coupon_cross_owner"}),/合法持有/);
+    const stored=db.prepare("SELECT raw_fields_json FROM legacy_inventory_items WHERE user_id=1 AND source_line=?")
+      .get(own.sourceLine);
+    const raw=JSON.parse(stored.raw_fields_json);
+    raw[12]="9999";
+    db.prepare("UPDATE legacy_inventory_items SET raw_fields_json=? WHERE user_id=1 AND source_line=?")
+      .run(JSON.stringify(raw),own.sourceLine);
+    assert.equal(roadOverview(db,1,rules,NOW).choices.length,0,"即使兌換流水存在，竄改能力欄也不得上路");
+    db.prepare("UPDATE legacy_inventory_items SET raw_fields_json=? WHERE user_id=1 AND source_line=?")
+      .run(stored.raw_fields_json,own.sourceLine);
+    db.prepare("DELETE FROM coupon_redemptions WHERE user_id=1 AND source_line=?").run(own.sourceLine);
+    assert.equal(roadOverview(db,1,rules,NOW).choices.length,0,"失去本人兌換流水時不得只靠品名上路");
+    assert.equal(roadOverview(db,2,rules,NOW).choices[0].name,"フェラーリ");
+    assert.equal(trips(db),0);
+  }finally{db.close();}
+});
+
+test("IT-02 優惠券道路獎車來源一旦被改名／欄位污染，原始載具解析直接拒絕",()=>{
+  const changed=couponCatalog.map(x=>x.sourceIndex===8?
+    {...x,rawFields:x.rawFields.map((v,i)=>i===29?"未證實交通備註":v)}:x);
+  assert.throws(()=>parseOriginalRoadTransport(ini,lib,maker,treasure,retailCatalog,changed),
+    /優惠券道路載具來源/);
+  const removed=couponCatalog.filter(x=>x.originalName!=="フェラーリ");
+  assert.throws(()=>parseOriginalRoadTransport(ini,lib,maker,treasure,retailCatalog,removed),
+    /優惠券道路載具來源/);
 });
 
 test("第65階段既有五種普通百貨載具保持原速度，並兼容第66階段新增來源",()=>{

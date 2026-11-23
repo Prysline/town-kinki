@@ -168,6 +168,20 @@ test("百貨店實體地圖入口、商品與現金操作需連上真正交易�
   assert.match(script,/renderRetail\(\)/);
   assert.match(script,/item\.readOnly\?"歷史來源封存":item\.origin==="fishing"/);
 });
+
+test("IT-02／MP-06：只將後端核實的ギフト類公路載具顯示為可用，並正確標示優惠券來源",()=>{
+  assert.match(script,/const roadVehicles=new Map\(\(state\.roadTravel\?\.choices\?\?\[\]\)/);
+  assert.match(script,/giftVehicleCount=gifts\.filter\(gift=>roadVehicles\.has\(gift\.sourceLine\)\)/);
+  assert.match(script,/vehicle=roadVehicles\.get\(gift\.sourceLine\)/);
+  assert.match(script,/button\.textContent="前往公路旅行"/);
+  assert.match(script,/goToFacility\("road-travel-panel"\)/);
+  assert.match(script,/select\.value=String\(vehicle\.sourceLine\)/);
+  assert.match(script,/select\.dispatchEvent\(new Event\("change",\{bubbles:true\}\)\)/);
+  assert.match(script,/item\.origin==="coupon"\?"優惠券":"寶箱"/);
+  assert.match(css,/\.inventory-gift-row\{display:flex;/);
+  assert.match(html,/id="road-travel-panel"/);
+});
+
 test("原版特殊代碼已可依來源區分實際使用與尚未支援",()=>{
   assert.match(script,/code==="ステータス"/);
   assert.match(script,/code==="効果"/);
@@ -956,7 +970,8 @@ test("第65階段：真實百貨車輛顯示來源與耐久，仍使用原安全
   assert.ok(html.includes("第66階段重新核對的18種原版百貨"));
   assert.ok(html.includes("購買流水與33欄原始資料相符"));
   assert.ok(html.includes("専門店限定商品"));
-  assert.ok(script.includes('(item.origin==="retail"?(item.category==="ギフト"?"百貨禮品":"百貨"):"寶箱")'));
+  assert.ok(script.includes('item.origin==="retail"?(item.category==="ギフト"?"百貨禮品":"百貨")'));
+  assert.ok(script.includes('item.origin==="coupon"?"優惠券":"寶箱"'));
   assert.ok(script.includes("可用寶箱／百貨載具"));
   assert.ok(script.includes("history.replaceChildren()"));
   assert.ok(!script.includes("innerHTML=item.origin"));

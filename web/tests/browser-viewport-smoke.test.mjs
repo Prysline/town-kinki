@@ -232,11 +232,19 @@ test("Chrome：桌面→768px平板→375px手機，操作真實建角／工作�
       ["D5","event-panel","events"],["D7","fishing-panel","shops"],
       ["D8","crafting-panel","shops"],["D9","arcade-dice-panel","games"]
     ]){
-      await click(chrome,'#town-map button[aria-label^='+JSON.stringify(cell+"：")+']');
-      assert.equal(await evaluate(chrome,"document.activeElement?.id"),panel,
+      const selector='#town-map button[aria-label^='+JSON.stringify(cell+"：")+']';
+      // 狀態輪詢可能在取到地圖格座標與送出真實滑鼠事件之間重建 192 格 DOM。
+      // 遇到瞬時失焦，最多重新用實際 Chrome 滑鼠點兩次；不可用 DOM.click() 假造驗收。
+      let result=null;
+      for(let attempt=0;attempt<3;attempt++){
+        await click(chrome,selector);
+        result=await evaluate(chrome,"({focus:document.activeElement?.id||'',"+
+          "paneOpen:document.querySelector('#facility-pane-"+pane+"')?.hidden===false})");
+        if(result.focus===panel&&result.paneOpen)break;
+      }
+      assert.equal(result?.focus,panel,
         cell+" 真正地圖點擊應聚焦可操作的設施");
-      assert.equal(await evaluate(chrome,
-        "document.querySelector('#facility-pane-"+pane+"')?.hidden"),false,
+      assert.equal(result?.paneOpen,true,
         cell+" 的所屬設施分頁應開啟");
     }
     await click(chrome,"#facility-tab-bank");
@@ -306,6 +314,94 @@ test("Chrome：桌面→768px平板→375px手機，操作真實建角／工作�
   }
 });
 
+
+
+test("Chrome：單機百貨ギフト類ベスパ→背包辨識公路用途→選車出發",{
+  timeout:180000
+},async()=>{
+  const workspace=mkdtempSync(join(tmpdir(),"town-chrome-gift-road-"));
+  const dataDir=join(workspace,"sqlite");
+  let web=null,chrome=null;
+  try{
+    web=await startWeb(dataDir);
+    chrome=await openChrome(join(workspace,"chrome-profile"));
+    await chrome.send("Page.enable");
+    await chrome.send("Runtime.enable");
+    await viewport(chrome,1440,900);
+    await chrome.send("Page.navigate",{url:web.url});
+    await until(chrome,"!document.querySelector('#create')?.hidden","開始單機建角");
+    await evaluate(chrome,"window.confirm=()=>true");
+    await fill(chrome,'#create-form [name="name"]',"Chrome禮品載具居民");
+    await click(chrome,"#create-submit");
+    await until(chrome,"!document.querySelector('#game')?.hidden","單機角色建立完成");
+    await click(chrome,"#solo-starter-create");
+    await until(chrome,"document.querySelector('#solo-starter-town')?.hidden===true","Web 試玩街區已建立");
+    const catalog=parseLegacyRetailCatalog(decodeLegacyText(
+      readFileSync(new URL("../../dat_dir/syouhin.cgi",import.meta.url))));
+    const vespa=catalog.find(x=>x.originalLine===396);
+    assert.ok(vespa);
+    assert.equal(vespa.name,"ベスパ");
+    assert.equal(vespa.category,"ギフト");
+    assert.equal(vespa.effect,"無");
+    const db=new DatabaseSync(join(dataDir,"solo.sqlite"));
+    try{
+      // 僅在 Chrome 臨時資料庫固定合法來源商品上架，不改正式隨機貨架。
+      const listed=db.prepare("SELECT sku,position FROM retail_stock WHERE shop='depart1' ORDER BY position").all();
+      assert.equal(listed.length,110);
+      if(!listed.some(x=>x.sku===vespa.sku)){
+        const slot=listed.find(x=>x.sku!==vespa.sku);assert.ok(slot);
+        db.prepare("UPDATE retail_stock SET sku=?,remaining=5 WHERE shop='depart1' AND position=?")
+          .run(vespa.sku,slot.position);
+      }else db.prepare("UPDATE retail_stock SET remaining=5 WHERE shop='depart1' AND sku=?")
+        .run(vespa.sku);
+      db.prepare("UPDATE characters SET money=5000000 WHERE name='Chrome禮品載具居民'").run();
+    }finally{db.close();}
+    await click(chrome,"#refresh");
+    await click(chrome,"#facility-tab-shops");
+    await until(chrome,"document.querySelector('#retail-items input[value="+JSON.stringify(vespa.sku)+"]')!==null",
+      "真正百貨上架原版禮品類ベスパ");
+    await click(chrome,'#retail-items input[type="radio"][value='+JSON.stringify(vespa.sku)+']');
+    await click(chrome,"#retail-items .shop-checkout button");
+    await until(chrome,"document.querySelector('#result-dialog')?.open && document.querySelector('#result-dialog-message')?.textContent?.includes('已購入')",
+      "玩家使用百貨畫面購入ベスパ");
+    const before=await evaluate(chrome,"(async()=>{const s=await(await fetch('/api/state')).json();"+
+      "return {money:s.character.money,bank:s.character.bank,lines:s.roadTravel.choices.filter(x=>x.name==='ベスパ'),pending:s.roadTravel.pending}})()");
+    assert.equal(before.lines.length,1);
+    assert.equal(before.lines[0].origin,"retail");
+    assert.equal(before.lines[0].category,"ギフト");
+    assert.equal(before.pending,null);
+    const line=before.lines[0].sourceLine;
+    await viewport(chrome,375,812);
+    await click(chrome,"#profile-tab-inventory");
+    await until(chrome,"document.querySelector('#legacy-inventory-list details.inventory-secondary')!==null",
+      "可展開的禮品與公路載具分類");
+    await click(chrome,"#legacy-inventory-list details.inventory-secondary > summary");
+    const selector='#legacy-inventory-list .inventory-gift-row[data-source-line="'+line+'"]';
+    assert.match(await evaluate(chrome,
+      "document.querySelector("+JSON.stringify(selector)+")?.textContent"),/可用於公路旅行/);
+    const goto=selector+" button";
+    await click(chrome,goto);
+    assert.equal(await evaluate(chrome,"document.activeElement?.id"),"road-travel-panel");
+    assert.equal(await evaluate(chrome,"document.querySelector('#road-travel-vehicle')?.value"),String(line));
+    assert.equal(await evaluate(chrome,"document.querySelector('#road-travel-start')?.disabled"),false);
+    const still=await evaluate(chrome,"(async()=>{const s=await(await fetch('/api/state')).json();"+
+      "return {money:s.character.money,bank:s.character.bank,remaining:s.roadTravel.choices.find(x=>x.sourceLine==="+line+")?.remaining,pending:s.roadTravel.pending}})()");
+    assert.deepEqual(still,{money:before.money,bank:before.bank,
+      remaining:before.lines[0].remaining,pending:null},
+      "背包跳轉與選車不可以直接扣現金或載具耐久");
+    await click(chrome,"#road-travel-start");
+    await until(chrome,"document.querySelector('#road-travel-status')?.textContent?.includes('公路旅程進行中')",
+      "玩家從背包選擇的禮品類載具已成功出發");
+    const after=await evaluate(chrome,"(async()=>{const s=await(await fetch('/api/state')).json();"+
+      "return {pending:s.roadTravel.pending,money:s.character.money}})()");
+    assert.equal(after.pending.vehicleSourceLine,line);
+    assert.equal(after.money,before.money,"使用自己持有的原版載具不額外扣現金");
+  }finally{
+    await chrome?.stop();
+    await web?.stop();
+    rmSync(workspace,{force:true,recursive:true,maxRetries:50,retryDelay:200});
+  }
+});
 
 test("Chrome：健身房減重→真實百貨寵物／信用卡→背包使用／分類收合→信用付款→跨重啟與手機視埠",{
   timeout:240000

@@ -196,7 +196,7 @@ const roadSource=parseOriginalRoadTransport(
   decodeLegacyText(readFileSync(resolve(REPO_ROOT,"town_ini.cgi"))),
   decodeLegacyText(readFileSync(resolve(REPO_ROOT,"town_lib.pl"))),
   decodeLegacyText(readFileSync(resolve(REPO_ROOT,"town_maker.cgi"))),
-  treasureSource,retailCatalog
+  treasureSource,retailCatalog,couponCatalog
 );
 const wholesaleCatalog=parseWholesaleCatalog(decodeLegacyText(readFileSync(resolve(REPO_ROOT,"dat_dir","syouhin.cgi"))));
 const vendingCatalog=parseLegacyVendingCatalog(decodeLegacyText(readFileSync(resolve(REPO_ROOT,"dat_dir","jihanki.cgi"))));

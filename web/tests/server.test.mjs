@@ -4382,6 +4382,63 @@ test("第50階段單機試玩街區：原版匯入地圖不能覆蓋，多人模
 });
 
 
+
+test("IT-02 真實單機 HTTP：25點券兌換保時捷→公路選車→跨 Node 重啟→抵達",async()=>{
+  let srv=await start("solo");
+  const dir=srv.directory;
+  try{
+    const created=await api(srv.url,"character",{
+      name:"優惠券公路玩家",gender:"other",stats:defaultStats()
+    });
+    assert.equal(created.status,200);
+    assert.equal((await api(srv.url,"solo/map/starter",{})).status,200);
+    const db=new DatabaseSync(join(dir,"solo.sqlite"));
+    try{
+      const owner=db.prepare("SELECT user_id FROM characters WHERE name=?")
+        .get("優惠券公路玩家").user_id;
+      // 測試只在臨時 SQLite 存入事件券點數；正式玩家仍需真實事件取得。
+      db.prepare("INSERT INTO character_coupons(user_id,quantity) VALUES(?,25)").run(owner);
+    }finally{db.close();}
+    const redeem=await api(srv.url,"coupon/redeem",{
+      sourceIndex:8,originalName:"ポルシェ",requestId:"coupon_to_road_0001"
+    });
+    assert.equal(redeem.status,200);
+    assert.equal(redeem.result.couponBalance,0);
+    const line=redeem.result.couponResult.sourceLine;
+    const choice=redeem.result.roadTravel.choices.find(x=>x.sourceLine===line);
+    assert.ok(choice,"實際兌換得到的券獎車應出現在公路交通選項");
+    assert.equal(choice.name,"ポルシェ");
+    assert.equal(choice.origin,"coupon");
+    assert.equal(choice.seconds,3);
+    const trip=await api(srv.url,"road/start",{
+      vehicleSourceLine:line,toTownId:1,requestId:"coupon_road_http_start"
+    });
+    assert.equal(trip.status,200);
+    assert.equal(trip.result.roadStartResult.seconds,3);
+    const id=trip.result.roadStartResult.id;
+    await srv.stop({preserveData:true});
+    srv=await start("solo",undefined,dir);
+    const restarted=(await api(srv.url,"state")).result;
+    assert.equal(restarted.roadTravel.pending.id,id);
+    assert.equal(restarted.couponRedemptions.length,1);
+    assert.equal(restarted.couponBalance,0);
+    assert.equal((await api(srv.url,"solo/time/advance",{preset:"5m"})).status,200);
+    const done=await api(srv.url,"road/arrive",{tripId:id});
+    assert.equal(done.status,200);
+    assert.equal(done.result.roadArrivalResult.replayed,false);
+    assert.equal(done.result.roadArrivalResult.vehicleName,"ポルシェ");
+    assert.equal(done.result.roadTravel.pending,null);
+    assert.equal((await api(srv.url,"road/arrive",{tripId:id}))
+      .result.roadArrivalResult.replayed,true);
+    const saved=new DatabaseSync(join(dir,"solo.sqlite"));
+    try{
+      assert.equal(saved.prepare("SELECT COUNT(*) n FROM coupon_redemptions").get().n,1);
+      assert.equal(saved.prepare("SELECT COUNT(*) n FROM arcade_road_trips").get().n,1);
+      assert.equal(saved.prepare("SELECT quantity FROM character_coupons").get().quantity,0);
+    }finally{saved.close();}
+  }finally{await srv.stop();}
+});
+
 test("第51階段單機事件券實際兌換：原版兌換所→扣點→33欄獎品入庫→重新啟動",async()=>{
   let srv=await start("solo");
   const directory=srv.directory;

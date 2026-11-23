@@ -1174,7 +1174,8 @@ function renderRoadTravel(){
     const option=document.createElement("option");
     option.value=String(item.sourceLine);
     option.textContent=displayRetailItemName(item.name)+"（"+
-      (item.origin==="retail"?(item.category==="ギフト"?"百貨禮品":"百貨"):"寶箱")+"、"+
+      (item.origin==="retail"?(item.category==="ギフト"?"百貨禮品":"百貨"):
+        item.origin==="coupon"?"優惠券":"寶箱")+"、"+
       item.seconds+"秒、耐久 "+item.remaining+"）";
     vehicle.append(option);
   }
@@ -1535,6 +1536,10 @@ function renderLegacyItems(){
     text(id,(Number.isSafeInteger(count)?count:"—")+" / "+limit+" 格");
   }
   const actions=new Map((state.legacyItemActions??[]).map(x=>[x.sourceLine,x]));
+  // 只相信後端用原版來源、購買收據及本人耐久核實過的可搭乘載具。
+  // 「ギフト」類別也可能是百貨實際購入的七款公路交通商品。
+  const roadVehicles=new Map((state.roadTravel?.choices??[])
+    .map(choice=>[choice.sourceLine,choice]));
   const grouped=new Map(),gifts=[];
   for(const item of items){
     // 原版一般道具清單排除寄送用「ギフト」，但不刪除：另置收合區。
@@ -1542,9 +1547,11 @@ function renderLegacyItems(){
     if(!grouped.has(item.category))grouped.set(item.category,[]);
     grouped.get(item.category).push(item);
   }
+  const giftVehicleCount=gifts.filter(gift=>roadVehicles.has(gift.sourceLine)).length;
   text("inventory-summary",items.length?
     "顯示 "+items.length+" 筆持有物資料｜"+grouped.size+" 類"+
-    (gifts.length?"｜另有 "+gifts.length+" 筆寄送用禮品":""):
+    (gifts.length?"｜另有 "+gifts.length+" 筆禮品"+
+      (giftVehicleCount?"（其中 "+giftVehicleCount+" 筆可用於公路旅行）":""):""):
     "目前沒有持有物。");
   if(!items.length){
     const empty=document.createElement("p");empty.className="small";
@@ -1639,14 +1646,37 @@ function renderLegacyItems(){
   if(gifts.length){
     const details=document.createElement("details");details.className="inventory-secondary";
     const summary=document.createElement("summary");
-    summary.textContent="寄送用禮品（"+gifts.length+" 筆）";details.append(summary);
+    summary.textContent=(giftVehicleCount?"寄送用禮品與公路載具":"寄送用禮品")+
+      "（"+gifts.length+" 筆）";details.append(summary);
     const note=document.createElement("p");note.className="small";
-    note.textContent="原版一般物品清單不顯示自購禮品；這些項目仍留在資料庫，請於禮品店／郵件中操作。";
+    note.textContent=giftVehicleCount?
+      "原版ギフト類別也包含交通商品。只有後端核實為本人可搭乘的項目才會顯示公路入口；其他禮品仍請於禮品店／郵件操作。公路事故可能消耗載具耐久。":
+      "原版一般物品清單不顯示自購禮品；這些項目仍留在資料庫，請於禮品店／郵件中操作。";
     details.append(note);
     for(const gift of gifts){
+      const vehicle=roadVehicles.get(gift.sourceLine);
+      const row=document.createElement("div");
+      row.className="inventory-gift-row";
+      row.dataset.sourceLine=String(gift.sourceLine);
       const p=document.createElement("p");p.className="small";
-      p.textContent=displayRetailItemName(gift.name)+"｜剩餘 "+gift.durability+(gift.unit??"");
-      details.append(p);
+      p.textContent=displayRetailItemName(gift.name)+"｜剩餘 "+
+        itemRemainingDurability(gift,actions.get(gift.sourceLine),browserGameNow())+
+        (gift.unit??"")+(vehicle?"｜可用於公路旅行（"+vehicle.seconds+" 秒）":"");
+      row.append(p);
+      if(vehicle){
+        const button=document.createElement("button");
+        button.className="secondary";
+        button.type="button";
+        button.textContent="前往公路旅行";
+        button.addEventListener("click",()=>{
+          goToFacility("road-travel-panel");
+          const select=el("road-travel-vehicle");
+          select.value=String(vehicle.sourceLine);
+          select.dispatchEvent(new Event("change",{bubbles:true}));
+        });
+        row.append(button);
+      }
+      details.append(row);
     }
     target.append(details);
   }
