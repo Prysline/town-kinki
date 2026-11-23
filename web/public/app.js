@@ -1630,6 +1630,12 @@ function renderLegacyItems(){
         controls.append(status);
       }
       if(verifiedVehicle){
+        // 原版券獎車可以同時有一般 item_do 使用與公路搭乘兩種合法途徑；
+        // 保留既有「使用」按鈕，另外說明公路用途，不混淆也不自動扣耐久。
+        const roadHint=document.createElement("span");
+        roadHint.className="small inventory-item-status";
+        roadHint.textContent="可用於公路旅行（"+verifiedVehicle.seconds+" 秒）";
+        controls.append(roadHint);
         const roadButton=document.createElement("button");
         roadButton.type="button";
         roadButton.className="secondary inventory-road-link";
