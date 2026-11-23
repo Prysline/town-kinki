@@ -232,11 +232,19 @@ test("Chrome：桌面→768px平板→375px手機，操作真實建角／工作�
       ["D5","event-panel","events"],["D7","fishing-panel","shops"],
       ["D8","crafting-panel","shops"],["D9","arcade-dice-panel","games"]
     ]){
-      await click(chrome,'#town-map button[aria-label^='+JSON.stringify(cell+"：")+']');
-      assert.equal(await evaluate(chrome,"document.activeElement?.id"),panel,
+      const selector='#town-map button[aria-label^='+JSON.stringify(cell+"：")+']';
+      // 狀態輪詢可能在取到地圖格座標與送出真實滑鼠事件之間重建 192 格 DOM。
+      // 遇到瞬時失焦，最多重新用實際 Chrome 滑鼠點兩次；不可用 DOM.click() 假造驗收。
+      let result=null;
+      for(let attempt=0;attempt<3;attempt++){
+        await click(chrome,selector);
+        result=await evaluate(chrome,"({focus:document.activeElement?.id||'',"+
+          "paneOpen:document.querySelector('#facility-pane-"+pane+"')?.hidden===false})");
+        if(result.focus===panel&&result.paneOpen)break;
+      }
+      assert.equal(result?.focus,panel,
         cell+" 真正地圖點擊應聚焦可操作的設施");
-      assert.equal(await evaluate(chrome,
-        "document.querySelector('#facility-pane-"+pane+"')?.hidden"),false,
+      assert.equal(result?.paneOpen,true,
         cell+" 的所屬設施分頁應開啟");
     }
     await click(chrome,"#facility-tab-bank");
