@@ -1708,7 +1708,7 @@ let pendingCouponRedemption=null;
 async function submitCouponRedemption(reward){
   if(!reward.canRedeem)return;
   if(!window.confirm("確定使用 "+reward.requiredCoupons+" 點 Web 事件優惠券，兌換「"+
-    reward.originalName+"」嗎？此獎品會以原版 33 欄入庫；部分獎品效果仍未支援。"))return;
+    displayRetailItemName(reward.originalName)+"」嗎？此獎品會以原版 33 欄入庫；部分獎品效果仍未支援。"))return;
   if(!pendingCouponRedemption||
      pendingCouponRedemption.sourceIndex!==reward.sourceIndex||
      pendingCouponRedemption.originalName!==reward.originalName)
@@ -1724,21 +1724,21 @@ async function submitCouponRedemption(reward){
     notify(result.replayed?
       "這筆優惠券兌換已處理過，沒有再次扣券或發獎。":
       "已扣除 "+result.couponCost+" 點 Web 事件券，兌換「"+
-      result.originalName+"」，獎品已加入本人背包。");
+      displayRetailItemName(result.originalName)+"」，獎品已加入本人背包。");
   }catch(error){notify(error.message,true);}
 }
 function renderCouponShop(){
   const available=state.couponShopAvailable===true;
   text("coupon-shop-status",available?
     "目前城鎮有原版優惠券兌換所；使用 Web 事件取得的點數兌換獎品。":
-    "目前城鎮沒有「クーポン」兌換所。可在單機地圖編輯器放置該原版建築，或前往已有兌換所的城鎮。");
+    "目前城鎮沒有「優惠券兌換所」。可在單機地圖編輯器放置該原版建築，或前往已有兌換所的城鎮。");
   const target=el("coupon-rewards");
   target.replaceChildren();
   for(const reward of state.couponRewards??[]){
     const tile=document.createElement("div");
     tile.className="training-tile";
     const heading=document.createElement("strong");
-    heading.textContent=reward.originalName;
+    heading.textContent=displayRetailItemName(reward.originalName);
     const info=document.createElement("p");info.className="small";
     info.textContent="需要 "+reward.requiredCoupons+" 點｜獎品耐久 "+
       reward.rewardDurability+" "+reward.rewardDurabilityUnit+
@@ -1767,7 +1767,7 @@ function renderCouponShop(){
   for(const entry of entries){
     const li=document.createElement("li");
     li.textContent=new Date(entry.createdAt).toLocaleString("zh-TW")+"｜"+
-      entry.originalName+"（扣 "+entry.couponCost+" 點；持有物行號 "+
+      displayRetailItemName(entry.originalName)+"（扣 "+entry.couponCost+" 點；持有物行號 "+
       entry.sourceLine+"）";
     list.append(li);
   }

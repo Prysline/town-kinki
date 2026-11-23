@@ -11,6 +11,7 @@ import { displayRetailDailyGoodsName,displayRetailDailyGoodsCategory } from "./r
 import { displayRetailGameName,displayRetailGameCategory } from "./retail-game-translations.js";
 import { displayRetailTransportPetsBaitName,displayRetailTransportPetsBaitCategory } from "./retail-transport-pets-bait-translations.js";
 import { displayFishingCatchName,displayFishingCatchCategory } from "./fishing-translations.js";
+import { displayCouponRewardName,displayCouponRewardCategory } from "./coupon-translations.js";
 import { displayRetailRegionalName,displayRetailRegionalCategory } from "./retail-regional-specialties-translations.js";
 import { displayRetailDepartmentSupermarketCraftingName,displayRetailDepartmentSupermarketCraftingCategory } from "./retail-department-supermarket-crafting-translations.js";
 import { displayRetailGiftName,displayRetailGiftCategory } from "./retail-gift-translations.js";
@@ -32,6 +33,7 @@ const ITEM_NAME_TRANSLATORS=Object.freeze([
   displayRetailGameName,
   displayRetailTransportPetsBaitName,
   displayFishingCatchName,
+  displayCouponRewardName,
   displayRetailRegionalName,
   displayRetailDepartmentSupermarketCraftingName,
   displayRetailGiftName,
@@ -53,6 +55,7 @@ const ITEM_CATEGORY_TRANSLATORS=Object.freeze([
   displayRetailGameCategory,
   displayRetailTransportPetsBaitCategory,
   displayFishingCatchCategory,
+  displayCouponRewardCategory,
   displayRetailRegionalCategory,
   displayRetailDepartmentSupermarketCraftingCategory,
   displayRetailGiftCategory,
