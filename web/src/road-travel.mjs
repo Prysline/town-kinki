@@ -1,5 +1,5 @@
 // 第62階段：原版 town_lib.pl 公路移動、town_ini.cgi 20種載具秒數、town_maker.cgi 事故耐久。
-// 第65階段接入百貨車；第66階段依原版來源核對18種「乗り物／ギフト」可從兩間百貨取得。
+// 第65～66階段核實百貨18種原版載具；IT-02 再核實五款25點原版優惠券獎車。
 // 專門店備註在原 CGI 只對「スーパー」進貨有限制，並非百貨上架禁令。
 // 原版隨機迷路：未事故時原碼抽號卻未覆寫目的地；事故+迷路才覆寫四城目的地。
 // Perl hash 的無序選車仍保留明確選車的Web差異。
@@ -9,6 +9,7 @@ import {STAT_KEYS} from "./engine.mjs";
 import {heldInventoryRows,inventoryLife} from "./inventory-life.mjs";
 import {TREASURE_ORIGIN} from "./arcade-treasure.mjs";
 import {RETAIL_ITEM_ORIGIN} from "./retail.mjs";
+import {COUPON_ITEM_ORIGIN} from "./coupon-redemption.mjs";
 
 export const ROAD_HISTORY_LIMIT=20;
 export const ROAD_WALKING_NAME="徒歩";
@@ -20,6 +21,10 @@ const CHANGEABLE_FIELDS=new Set([21,26,30,31]);
 const LOST_ITEM_NAME="ローラースルーゴーゴー";
 // 原版 dat_dir/syouhin.cgi 有18種符合 town_ini.cgi 交通名單的商品。
 // 核對固定原始行號＋分類及33欄，防止把同名其他來源或舊資料當成已證實來源。
+const VERIFIED_COUPON_ROAD_INDICES=Object.freeze(new Map([
+  ["ポルシェ",8],["フェラーリ",9],["ジャガー",10],
+  ["キャデラック",11],["ロータスヨーロッパ",12]
+]));
 const VERIFIED_RETAIL_ROAD_LINES=Object.freeze(new Map([
   ["アルファロメオ",328],["ボルボ",329],["ロールスロイス",330],
   ["カローラ",331],["ナナハン",332],["ドゥカティ",333],
@@ -33,9 +38,10 @@ function digits(value,label){
     throw new Error("原版公路移動"+label+"設定不正確");
   return Number(value);
 }
-export function parseOriginalRoadTransport(iniSource,libSource,makerSource,treasureCatalog,retailCatalog){
+export function parseOriginalRoadTransport(iniSource,libSource,makerSource,treasureCatalog,retailCatalog,couponCatalog=[]){
   if([iniSource,libSource,makerSource].some(x=>typeof x!=="string")||
-     !treasureCatalog?.pools?.special||!Array.isArray(retailCatalog))
+     !treasureCatalog?.pools?.special||!Array.isArray(retailCatalog)||
+     !Array.isArray(couponCatalog))
     throw new Error("原版道路交通或寶箱來源缺失");
   const walking=Number(/\$matiidou_time\s*=\s*'(\d+)'\s*;/.exec(iniSource)?.[1]);
   const accidentRate=Number(/\$ziko_kakuritu\s*=\s*'(\d+)'\s*;/.exec(iniSource)?.[1]);
@@ -113,6 +119,23 @@ export function parseOriginalRoadTransport(iniSource,libSource,makerSource,treas
          item.rawFields[29].includes("専門店限定商品"))||
        !speeds.has(item.name)))
     throw new Error("原版百貨公路載具來源、分類或備註已變更");
+  // dat_dir/coupon.cgi 的五款25點獎品就是原版 idou_syudan 交通名單中載具。
+  // 此商品來源類別為「クーポン交換品:25」，不是百貨的「乗り物／ギフト」；
+  // 僅讀原版真實獎品表，不能把同名任意道具當成可上路的交通工具。
+  const couponVehicles=couponCatalog.filter(x=>VERIFIED_COUPON_ROAD_INDICES.has(x.originalName));
+  if(couponCatalog.length&&(
+      couponVehicles.length!==VERIFIED_COUPON_ROAD_INDICES.size||
+      couponVehicles.some(item=>{
+        const raw=item.rawFields;
+        return VERIFIED_COUPON_ROAD_INDICES.get(item.originalName)!==item.sourceIndex||
+          item.requiredCoupons!==25||item.rewardCategory!=="クーポン交換品:25"||
+          raw?.length!==33||raw[0]!==item.rewardCategory||raw[1]!==item.originalName||
+          raw[9]!=="無"||raw[22]!=="回"||
+          !Number.isSafeInteger(item.rewardDurability)||item.rewardDurability<1||
+          raw[21]!==String(item.rewardDurability)||
+          raw[29]!=="※移動手段です。当たり"||!speeds.has(item.originalName);
+      })
+    ))throw new Error("原版優惠券道路載具來源、分類或獎品欄位已變更");
   return Object.freeze({
     walkingSeconds:walking,accidentDenominator:accidentRate,
     busSeconds,busFare,
@@ -125,6 +148,12 @@ export function parseOriginalRoadTransport(iniSource,libSource,makerSource,treas
       name:item.name,seconds:speeds.get(item.name),
       category:item.category,rawFields:item.rawFields,
       origin:RETAIL_ITEM_ORIGIN,sku:item.sku
+    }))),
+    couponVehicles:Object.freeze(couponVehicles.map(item=>Object.freeze({
+      name:item.originalName,seconds:speeds.get(item.originalName),
+      category:item.rewardCategory,rawFields:item.rawFields,
+      origin:COUPON_ITEM_ORIGIN,sourceIndex:item.sourceIndex,
+      couponCost:item.requiredCoupons
     })))
   });
 }
@@ -188,17 +217,30 @@ function availableVehicles(db,userId,source,now){
     "SELECT 1 FROM retail_purchases WHERE user_id=? AND source_line=?",
     "AND sku=? AND name=? AND shop IN ('depart1','depart2') LIMIT 1"
   ].join(" ")):null;
+  // 只有真實 Web 事件券兌換流水與本人背包 33 欄同時相符才允許上路。
+  // 類別名、origin 或車名可被偽造，不能單獨作為載具身分證據。
+  const hasCouponReceipts=db.prepare(
+    "SELECT 1 FROM sqlite_master WHERE type='table' AND name='coupon_redemptions'"
+  ).get();
+  const couponReceipt=hasCouponReceipts?db.prepare([
+    "SELECT 1 FROM coupon_redemptions WHERE user_id=? AND source_line=?",
+    "AND source_index=? AND original_name=? AND coupon_cost=? LIMIT 1"
+  ].join(" ")):null;
   return heldInventoryRows(db,userId,now).flatMap(row=>{
     const pool=row.original_id===TREASURE_ORIGIN?source.vehicles:
-      row.original_id===RETAIL_ITEM_ORIGIN?source.retailVehicles:[];
+      row.original_id===RETAIL_ITEM_ORIGIN?source.retailVehicles:
+      row.original_id===COUPON_ITEM_ORIGIN?(source.couponVehicles??[]):[];
     const v=pool.find(x=>x.name===row.original_name&&x.category===row.category);
     if(!v||!rawMatch(row,v))return [];
     if(v.origin===RETAIL_ITEM_ORIGIN&&!retailReceipt?.get(userId,row.source_line,v.sku,v.name))
       return [];
+    if(v.origin===COUPON_ITEM_ORIGIN&&!couponReceipt?.get(
+      userId,row.source_line,v.sourceIndex,v.name,v.couponCost))return [];
     const remaining=inventoryLife(row,now).remaining;
     if(!Number.isSafeInteger(remaining)||remaining<=0)return [];
     return [{sourceLine:row.source_line,name:v.name,seconds:v.seconds,remaining,
-      category:v.category,origin:v.origin===RETAIL_ITEM_ORIGIN?"retail":"treasure"}];
+      category:v.category,origin:v.origin===RETAIL_ITEM_ORIGIN?"retail":
+        v.origin===COUPON_ITEM_ORIGIN?"coupon":"treasure"}];
   });
 }
 function tripPublic(row){
@@ -319,7 +361,7 @@ export function beginRoadTrip(db,userId,source,{toTownId,vehicleSourceLine=null,
     const vehicle=byBus||vehicleSourceLine===null?null:
       availableVehicles(db,userId,source,now).find(x=>x.sourceLine===vehicleSourceLine);
     if(vehicleSourceLine!==null&&!vehicle)
-      throw new Error("沒有本人合法持有且剩餘耐久大於0的原版寶箱／百貨載具");
+      throw new Error("沒有本人合法持有且剩餘耐久大於0的原版寶箱／百貨／優惠券載具");
     // 巴士按原版出發前付款；Web 拒絕餘額不足（原 CGI 未防負現金）。
     // 扣款與行程寫入共用立即交易，任何失敗都不能留下單獨車資。
     if(byBus){
