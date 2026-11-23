@@ -19,22 +19,24 @@ const originalCatchNames=[
   "でかい魚","ウツボ","ミズダコ",
   "サメ","海がめ","マグロ"
 ];
-const pendingReview=["ホタルイカ","スルメイカ","ウツボ","ミズダコ"];
+const reviewedNames=Object.freeze({"ホタルイカ":"螢烏賊","スルメイカ":"日本魷魚","ウツボ":"錢鰻","ミズダコ":"水章魚"});
 
-test("從 sea.cgi 核對十二種實際魚獲，譯名字典與待校對名單合計不得漏列",()=>{
+test("從 sea.cgi 核對十二種實際魚獲，全部具備已校對繁中顯示名稱",()=>{
   assert.equal(source.catches.length,4);
   assert.deepEqual(source.catches.flatMap(group=>group.map(fields=>fields[1])),originalCatchNames);
   assert.equal(source.catches.every(group=>group.length===3),true);
-  assert.equal(Object.keys(FISHING_CATCHES_ZH_TW).length,8);
-  const accountedFor=new Set([...Object.keys(FISHING_CATCHES_ZH_TW),...pendingReview]);
-  assert.equal(accountedFor.size,12);
-  assert.deepEqual([...accountedFor].sort(),[...originalCatchNames].sort());
-  for(const name of originalCatchNames){
-    assert.equal(typeof displayRetailItemName(name),"string");
-    assert.ok(displayRetailItemName(name).trim());
+  assert.equal(Object.keys(FISHING_CATCHES_ZH_TW).length,12);
+  assert.deepEqual(Object.keys(FISHING_CATCHES_ZH_TW).sort(),[...originalCatchNames].sort());
+  for(const fields of source.catches.flat()){
+    const name=fields[1];
+    const translated=FISHING_CATCHES_ZH_TW[name];
+    assert.equal(displayRetailItemName(name),translated,"魚名顯示翻譯與字典不符："+name);
+    assert.ok(translated.trim());
+    assert.equal(fields[1],name,"來源欄位仍須為原始名稱");
   }
-  for(const name of pendingReview){
-    assert.equal(displayRetailItemName(name),name,"歧義魚名未核准前不能冒用譯名："+name);
+  for(const [original,translated] of Object.entries(reviewedNames)){
+    assert.equal(FISHING_CATCHES_ZH_TW[original],translated,"使用者指定譯名不可改寫："+original);
+    assert.equal(displayRetailItemName(original),translated);
   }
 });
 
