@@ -970,7 +970,8 @@ test("第65階段：真實百貨車輛顯示來源與耐久，仍使用原安全
   assert.ok(html.includes("第66階段重新核對的18種原版百貨"));
   assert.ok(html.includes("購買流水與33欄原始資料相符"));
   assert.ok(html.includes("専門店限定商品"));
-  assert.ok(script.includes('(item.origin==="retail"?(item.category==="ギフト"?"百貨禮品":"百貨"):"寶箱")'));
+  assert.ok(script.includes('item.origin==="retail"?(item.category==="ギフト"?"百貨禮品":"百貨")'));
+  assert.ok(script.includes('item.origin==="coupon"?"優惠券":"寶箱"'));
   assert.ok(script.includes("可用寶箱／百貨載具"));
   assert.ok(script.includes("history.replaceChildren()"));
   assert.ok(!script.includes("innerHTML=item.origin"));
