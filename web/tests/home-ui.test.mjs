@@ -755,7 +755,7 @@ test("第51階段：原版優惠券兌換所地圖入口、30獎品、本人事�
   assert.match(script,/state\.couponRedemptions/);
   assert.match(script,/state\.couponShopAvailable===true/);
   assert.match(script,/button\.disabled=!reward\.canRedeem/);
-  assert.match(script,/heading\.textContent=reward\.originalName/);
+  assert.match(script,/heading\.textContent=displayRetailItemName\(reward\.originalName\)/);
   assert.match(script,/reason\.textContent=reward\.reason/);
   assert.match(script,/const result=state\.couponResult/);
   assert.match(script,/await api\("coupon\/redeem",pendingCouponRedemption\)/);
