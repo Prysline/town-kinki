@@ -1522,6 +1522,13 @@ function itemInventoryEffects(info){
 }
 // 角色與原版分類鍵綁定展開狀態，避免每次定時同步都重開已收合的分類。
 const collapsedInventoryCategories=new Set();
+// 交通資格由伺服器的本人來源／流水／剩餘耐久驗證決定；背包捷徑不作交易。
+function goToVerifiedInventoryVehicle(vehicle){
+  goToFacility("road-travel-panel");
+  const select=el("road-travel-vehicle");
+  select.value=String(vehicle.sourceLine);
+  select.dispatchEvent(new Event("change",{bubbles:true}));
+}
 function renderLegacyItems(){
   const target=el("legacy-inventory-list");
   target.replaceChildren();
@@ -1573,12 +1580,13 @@ function renderLegacyItems(){
     const categoryItems=document.createElement("div");categoryItems.className="inventory-category-items";
     for(const item of grouped.get(category)){
       const card=document.createElement("article");card.className="inventory-item";
+      card.dataset.sourceLine=String(item.sourceLine);
       if(Number.isSafeInteger(item.removeAt)){
         card.dataset.removeAt=String(item.removeAt);
-        card.dataset.sourceLine=String(item.sourceLine);
       }
       const info=item.details??null;
       const actionInfo=actions.get(item.sourceLine);
+      const verifiedVehicle=roadVehicles.get(item.sourceLine);
       const head=document.createElement("div");head.className="inventory-item-heading";
       const name=document.createElement("strong");name.textContent=displayRetailItemName(item.name);
       const durability=document.createElement("span");durability.className="inventory-item-remaining";
@@ -1615,9 +1623,19 @@ function renderLegacyItems(){
         controls.append(status,button);
       }else{
         const status=document.createElement("span");status.className="small inventory-item-status";
-        status.textContent=item.name==="健康保険"&&state.insurance?.active?
+        status.textContent=verifiedVehicle?
+          "可用於公路旅行（"+verifiedVehicle.seconds+" 秒）；不是背包直接使用道具":
+          item.name==="健康保険"&&state.insurance?.active?
           "醫院自動生效，不需手動使用":"目前尚未支援直接使用";
         controls.append(status);
+      }
+      if(verifiedVehicle){
+        const roadButton=document.createElement("button");
+        roadButton.type="button";
+        roadButton.className="secondary inventory-road-link";
+        roadButton.textContent="前往公路旅行";
+        roadButton.addEventListener("click",()=>goToVerifiedInventoryVehicle(verifiedVehicle));
+        controls.append(roadButton);
       }
       card.append(controls);
       const details=document.createElement("details");details.className="inventory-item-details";
@@ -1629,7 +1647,8 @@ function renderLegacyItems(){
         "原版備註："+(info?.comment?.trim()||"沒有提供文字備註"),
         "來源："+(item.readOnly?"歷史來源封存":item.origin==="fishing"?"Web 釣魚／餌料店":item.origin==="crafting"?"Web 合成屋":"Web 購入或轉換")+
           "（記錄位置 "+item.sourceLine+"；原始內容不在此頁修改）",
-        "Web 使用狀態："+(actionInfo?"已核對可使用規則，受冷卻與角色條件限制":
+        "Web 使用狀態："+(verifiedVehicle?"已核對為本人可用公路載具，出發須於公路面板操作，事故可能扣耐久":
+          actionInfo?"已核對可使用規則，受冷卻與角色條件限制":
           info?.usage==="automatic"?"自動處理":
           info?.usage==="payment"?"支援有效信用卡付款；亦可在背包依原版規則使用":
           info?.usage==="gift"?"禮品，請於寄送介面操作":
@@ -1668,12 +1687,7 @@ function renderLegacyItems(){
         button.className="secondary";
         button.type="button";
         button.textContent="前往公路旅行";
-        button.addEventListener("click",()=>{
-          goToFacility("road-travel-panel");
-          const select=el("road-travel-vehicle");
-          select.value=String(vehicle.sourceLine);
-          select.dispatchEvent(new Event("change",{bubbles:true}));
-        });
+        button.addEventListener("click",()=>goToVerifiedInventoryVehicle(vehicle));
         row.append(button);
       }
       details.append(row);
