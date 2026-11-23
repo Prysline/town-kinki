@@ -6808,6 +6808,10 @@ test("IT-02 單機 HTTP：百貨原版食物轉類購入→真正使用→60 分
       }
     }finally{sqlite.close();}
     const initial=(await api(srv.url,"state")).result;
+    // 角色在跨日回傳時可能合法觸發原版日常事件（如暴食 +5kg）；
+    // 這裡驗證食物本身 +1.5kg，不假定事件之後仍固定是60kg。
+    const expectedFirstWeight=Math.round((initial.character.weight+1.5)*100)/100;
+    const expectedSecondWeight=Math.round((expectedFirstWeight+1.5)*100)/100;
     for(const item of chosen){
       const listed=initial.retailGoods.find(x=>x.sku===item.sku&&x.shop==="depart1");
       assert.ok(listed&&listed.stock>0);
@@ -6833,7 +6837,7 @@ test("IT-02 單機 HTTP：百貨原版食物轉類購入→真正使用→60 分
     assert.equal(consumed.result.itemUseResult.changes.food,true);
     assert.equal(consumed.result.itemUseResult.changes.weight,1.5);
     assert.equal(consumed.result.itemUseResult.changes.stats.kokugo,2);
-    assert.equal(consumed.result.character.weight,61.5);
+    assert.equal(consumed.result.character.weight,expectedFirstWeight);
     assert.equal(consumed.result.character.stats.kokugo,initial.character.stats.kokugo+2);
     assert.equal(consumed.result.legacyItemActions.find(x=>x.sourceLine===receipts[0]).remaining,
       chosen[0].durability-1);
@@ -6842,11 +6846,11 @@ test("IT-02 單機 HTTP：百貨原版食物轉類購入→真正使用→60 分
       sourceLine:receipts[1],requestId:"it02_food_marker_blocked"
     });
     assert.equal(noRepeat.status,400);
-    assert.equal((await api(srv.url,"state")).result.character.weight,61.5);
+    assert.equal((await api(srv.url,"state")).result.character.weight,expectedFirstWeight);
     await srv.stop({preserveData:true});
     resumed=await start("solo",null,srv.directory);
     const saved=(await api(resumed.url,"state")).result;
-    assert.equal(saved.character.weight,61.5);
+    assert.equal(saved.character.weight,expectedFirstWeight);
     assert.equal(saved.legacyItemActions.find(x=>x.sourceLine===receipts[0]).remaining,
       chosen[0].durability-1);
     const replay=await api(resumed.url,"inventory/legacy/use",{
@@ -6854,14 +6858,14 @@ test("IT-02 單機 HTTP：百貨原版食物轉類購入→真正使用→60 分
     });
     assert.equal(replay.status,200);
     assert.equal(replay.result.itemUseResult.replayed,true);
-    assert.equal(replay.result.character.weight,61.5);
+    assert.equal(replay.result.character.weight,expectedFirstWeight);
     assert.equal((await api(resumed.url,"solo/time/advance",{preset:"1h"})).status,200);
     const second=await api(resumed.url,"inventory/legacy/use",{
       sourceLine:receipts[1],requestId:"it02_food_marker_use_second"
     });
     assert.equal(second.status,200);
     assert.equal(second.result.itemUseResult.changes.food,true);
-    assert.equal(second.result.character.weight,63);
+    assert.equal(second.result.character.weight,expectedSecondWeight);
     assert.equal(second.result.character.stats.kokugo,initial.character.stats.kokugo+4);
     assert.equal(second.result.character.money,initial.character.money-
       chosen[0].unitPrice-chosen[1].unitPrice);
