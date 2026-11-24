@@ -37,6 +37,8 @@ import { listLegacyInventoryItems } from "./legacy-inventory.mjs";
 import { inventorySlotUsage } from "./inventory-life.mjs";
 import {parseLegacyRetailCatalog,initRetailTables,ensureRetailDay,listRetailStock,listRetailPurchases,buyRetailItem,retailItemDetails,RETAIL_SHOPS} from "./retail.mjs";
 import {parseLegacyVendingCatalog,initVendingTables,ensureVendingRotation,listVendingStock,vendingPeriodKey,VENDING_SYMBOL,VENDING_SHOP} from "./vending.mjs";
+import {parseArenaCatalog} from "./b-league-core.mjs";
+import {parseArenaDrops,initArenaTables,arenaOverview,playArena,ARENA_SYMBOL} from "./b-league.mjs";
 import {parseLegacyEquipmentCatalog,initEquipmentTables,listEquipmentItems,listEquipmentTransactions,buyEquipment,equipEquipment,sellEquipment,forgeEquipment,EQUIPMENT_SYMBOL} from "./equipment.mjs";
 import {initGiftTables,GIFT_SHOP_SYMBOL,listGiftSources,listGiftEvents,listGiftMail,convertToGift,sendGift} from "./gift-shop.mjs";
 import {initPrivateMailTables,sendPrivateMail,listMailbox,deletePrivateMailboxEntry} from "./private-mail.mjs";
@@ -123,6 +125,7 @@ initLegacyItemUseTables(db);
 initRetailTables(db);
 initVendingTables(db);
 initEquipmentTables(db);
+initArenaTables(db);
 initGiftTables(db);
 initPrivateMailTables(db);
 initRecycleTables(db);
@@ -200,6 +203,8 @@ const roadSource=parseOriginalRoadTransport(
 );
 const wholesaleCatalog=parseWholesaleCatalog(decodeLegacyText(readFileSync(resolve(REPO_ROOT,"dat_dir","syouhin.cgi"))));
 const vendingCatalog=parseLegacyVendingCatalog(decodeLegacyText(readFileSync(resolve(REPO_ROOT,"dat_dir","jihanki.cgi"))));
+const arenaCatalog=parseArenaCatalog(decodeLegacyText(readFileSync(resolve(REPO_ROOT,"dat_dir","battle.cgi"))));
+const arenaDrops=parseArenaDrops(decodeLegacyText(readFileSync(resolve(REPO_ROOT,"battle.cgi"))));
 const equipmentCatalog=parseLegacyEquipmentCatalog(decodeLegacyText(readFileSync(resolve(REPO_ROOT,"dat_dir","soubi.cgi"))));
 
 const sessionHash = token => createHash("sha256").update(token).digest("hex");
@@ -457,6 +462,7 @@ function snapshot(user) {
     retailPurchases:updated?listRetailPurchases(db,user.id):[],
     vendingAvailable,vendingGoods,
     vendingPeriod:vendingAvailable?vendingPeriodKey(now,GAME_TIMEZONE):null,
+    bLeague:updated?arenaOverview(db,user.id,now,retailMap?.configured&&retailMap.cells.some(cell=>cell.key===ARENA_SYMBOL)):null,
     equipmentAvailable,equipmentGoods:equipmentAvailable?equipmentCatalog:[],
     equipmentItems:updated?listEquipmentItems(db,user.id):[],
     equipmentTransactions:updated?listEquipmentTransactions(db,user.id):[],
@@ -968,6 +974,22 @@ async function handle(req, res) {
         });
       }catch(error){throw new HttpError(400,error.message);}
       return sendJson(res,200,{...snapshot(user),retailResult:bought});
+    }
+    if(path === "/api/b-league/play"){
+      let result;
+      try{
+        if(!data||typeof data!=="object"||Array.isArray(data)||Object.keys(data).some(k=>!["rank","requestId"].includes(k)))
+          throw new Error("鬥技場只接受難度與請求編號");
+        const now=gameNow();
+        if(roadOverview(db,user.id,roadSource,now).pending)
+          throw new Error("公路旅程尚未抵達");
+        result=playArena(db,user.id,arenaCatalog,arenaDrops,{rank:data.rank,requestId:data.requestId,now,
+          hasBuilding:(symbol,townId)=>{
+            const map=publicTownMap(db,townId,false);
+            return map.configured&&map.cells.some(cell=>cell.key===symbol);
+          }});
+      }catch(error){throw new HttpError(400,error.message);}
+      return sendJson(res,200,{...snapshot(user),bLeagueResult:result});
     }
     if (path === "/api/equipment/buy"||path === "/api/equipment/equip"||
         path === "/api/equipment/sell"||path === "/api/equipment/forge") {
