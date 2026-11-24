@@ -42,7 +42,7 @@ export function parseOsakaRules(source){
     });
   if(rows.length!==8)throw new Error("大阪原版獎品陣列數量改變");
   return Object.freeze({
-    attackIndices:ATTACK_INDICES,attackLimit:50,dropChoices:3,
+    attackIndices:ATTACK_INDICES,attackLimit:50,originalDropChoices:3,
     week:Object.freeze({base:300,prizes:Object.freeze(rows.slice(0,4))}),
     strong:Object.freeze({base:1000,prizes:Object.freeze(rows.slice(4,8))})
   });
@@ -112,7 +112,10 @@ export function simulateOsaka({rules,mode,player,npc,rng=randomInt}){
     playerTurn=!playerTurn;
   }
   const base=rounds.length*rules[mode].base;
-  const prizeIndex=outcome==="win"?draw(rng,rules.dropChoices):null;
+  // 相容性修正（使用者確認）：obatyan.cgi 兩處 rand(3) 與各四筆獎品及
+  // 「準備して有る数」註解不一致。保留原版範圍作來源紀錄，Web 依陣列長度均勻抽選。
+  const prizes=rules[mode].prizes;
+  const prizeIndex=outcome==="win"?draw(rng,prizes.length):null;
   const originalCashDelta=outcome==="win"?base*5:outcome==="loss"?-base:0;
   // 原版直接扣現金；Web 沿用 B 聯賽非負現金安全界線，另保存原始差額。
   const money=Math.max(0,player.money+originalCashDelta);
@@ -120,7 +123,7 @@ export function simulateOsaka({rules,mode,player,npc,rng=randomInt}){
   p.bodyEnergy=Math.max(0,p.bodyEnergy);p.brainEnergy=Math.max(0,p.brainEnergy);
   return {mode,npc:{...npc},initial,rounds,outcome,defeatedEnergy,player:{...p,money},
     originalCashDelta,moneyDelta:money-player.money,prizeIndex,
-    prize:prizeIndex===null?null:rules[mode].prizes[prizeIndex]};
+    prize:prizeIndex===null?null:prizes[prizeIndex]};
 }
 export function rollOsaka({rules,mode,player,catalog,rng=randomInt}){
   if(!OSAKA_MODES.includes(mode)||!catalog.available)throw new Error("大阪原版 NPC 資料尚未完整");
