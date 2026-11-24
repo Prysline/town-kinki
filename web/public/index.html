@@ -214,6 +214,37 @@
             <button type="button" data-facility="school-panel"><img src="/legacy-assets/school.gif" alt="">學校</button>
             <button type="button" data-facility="gym-panel"><img src="/legacy-assets/gym.gif" alt="">健身房</button>
           </nav>
+          <section id="street-fight-panel" class="map-starter" aria-labelledby="street-fight-title">
+            <h3 id="street-fight-title">街頭格鬥 Street Fight</h3>
+            <p class="small">原版隨機與居民交戰，使用 16 種攻擊，最多 50 次。保留原版抽選：名單最後一列不參與，抽到本人則沒有對手。勝負只改本人存檔；對手不會被扣款。</p>
+            <p class="small">參戰須持有至少 15,000 元現金（銀行存款不計）；敗北按每次攻擊 300 元結算，最多損失 15,000 元，不是固定入場費。可能損失能量及 K 點。</p>
+            <p id="street-fight-status" class="small" role="status"></p>
+            <button type="button" id="street-fight-play" disabled>出發尋找對手</button>
+            <div id="street-fight-history"></div>
+          </section>
+          <section class="map-starter" id="c-league-panel">
+            <h3>C 聯賽・角色培育</h3>
+            <p class="small">14 天一季，每季 100 場，間隔 1 分鐘。培育每點扣本人能力 1 點及 10,000 元；原版模仿者允許單機比賽。</p>
+            <p class="small">保留原版抽選：排除本人後，兩名以上候選對手的最後一列不參與；另有三分之一機率遇到模仿者，無對手時也使用模仿者。零能量可參賽；雙方能量皆零時，第一次攻擊後判本人勝利，收入為零時補發 100 元。</p>
+            <p id="c-league-status" role="status"></p>
+            <button id="c-league-open" type="button">進入／更新 C 聯賽</button>
+            <details id="c-league-training">
+              <summary>培育角色／設定攻擊台詞</summary>
+              <label>名稱 <input id="c-league-name" maxlength="30"></label>
+              <label>圖片網址（可空白） <input id="c-league-image" type="url" maxlength="2048"></label>
+              <div id="c-league-fields"></div>
+              <label>付款 <select id="c-league-payment"></select></label>
+              <p class="small">信用付款須持有本人有效信用卡，只扣普通存款；餘額不足拒絕，不挪用現金或定存。</p>
+              <p id="c-league-cost" role="status"></p>
+              <button id="c-league-train" type="button">確認培育／儲存</button>
+            </details>
+            <p id="c-league-fighter"></p>
+            <a id="c-league-image-preview" hidden target="_blank" rel="noopener noreferrer">開啟角色圖片（外部網站）</a>
+            <button id="c-league-play" type="button" disabled>進行 C 聯賽</button>
+            <p id="c-league-result" role="status"></p>
+            <details><summary>本季排名／前季／累積積分／最近賽事</summary><div id="c-league-rankings"></div></details>
+            <details><summary>本人最近 20 場戰報</summary><div id="c-league-history"></div></details>
+          </section>
           <div class="map-editor" id="map-editor" hidden>
             <label class="map-editor-switch">
               <input type="checkbox" id="map-edit-toggle"> 開啟單機街區編輯模式
@@ -520,10 +551,20 @@
           <h3>近期自販機購物紀錄</h3>
           <div id="vending-purchases"></div>
         </section>
+        <section class="card" id="b-league-panel">
+          <div class="heading"><div><div class="eyebrow">原版怪物戰鬥</div><h2>B 聯賽怪物鬥技場</h2></div><span class="muted">S／A／B／C／D</span></div>
+          <p class="small">依原版難度抽選怪物，雙方交替攻擊最多 50 次。身體或頭腦能量歸零即分勝負；失敗可能損失現金，裝備也可能耗盡。</p>
+          <p id="b-league-status" class="small" role="status"></p>
+          <div id="b-league-ranks" class="training-grid"></div>
+          <h3>最近戰鬥與逐次攻擊紀錄</h3>
+          <div id="b-league-result"></div>
+          <h3>近期戰鬥歷史</h3>
+          <div id="b-league-history"></div>
+        </section>
         <section class="card" id="equipment-panel">
           <div class="heading"><div><div class="eyebrow">原版獨立建築</div><h2>裝備屋</h2></div><span class="muted">武器／防具／魔法／御守</span></div>
           <details class="explain"><summary>原版裝備交易與目前界線</summary>
-            <p class="small">只有所在城鎮地圖設有「装備屋」才能交易。使用原始 dat_dir/soubi.cgi 六個主要欄位，而非百貨 33 欄；原價現金單件購買，現金必須高於售價，已持有或已裝備的同名物不可重複購入。購買後進入獨立倉庫，可裝備與同種類換裝，舊裝備退回倉庫；僅倉庫內未穿戴物品可出售，回收金額依原版售價／10 × 裝備等級計算，Web 整數金額捨去小數。裝備屋的鍛造已依原版選項支援威力及使用次數各增加 1／3／5／10／15／25／50，每點分別收取 10,000／1,000 元；可強化倉庫或已穿戴裝備。裝備等級成長、實際戰鬥效果仍未移植，穿戴不等於可在 Web 參戰。</p>
+            <p class="small">只有所在城鎮地圖設有「装備屋」才能交易。使用原始 dat_dir/soubi.cgi 六個主要欄位，而非百貨 33 欄；原價現金單件購買，現金必須高於售價，已持有或已裝備的同名物不可重複購入。購買後進入獨立倉庫，可裝備與同種類換裝，舊裝備退回倉庫；僅倉庫內未穿戴物品可出售，回收金額依原版售價／10 × 裝備等級計算，Web 整數金額捨去小數。裝備屋的鍛造已依原版選項支援威力及使用次數各增加 1／3／5／10／15／25／50，每點分別收取 10,000／1,000 元；可強化倉庫或已穿戴裝備。裝備可在 B 聯賽怪物鬥技場實際參戰，依原版判定命中／閃避、消耗使用次數與成長。</p>
           </details>
           <p class="small" id="equipment-status"></p>
           <h3>原版裝備商品</h3>
@@ -592,6 +633,20 @@
         </section>
       </div>
       <div id="facility-pane-games" class="facility-pane" role="tabpanel" aria-labelledby="facility-tab-games" tabindex="0" hidden>
+        <section class="card" id="osaka-panel">
+          <div class="heading">
+            <div><div class="eyebrow">大阪挑戰 · 原版規則／來源標示</div><h2>大阪おばちゃん挑戰</h2></div>
+            <span class="muted">obatyan.cgi／gamerand.cgi</span>
+          </div>
+          <p id="osaka-status" class="small" role="status"></p>
+          <details class="explain"><summary>原版規則及 Web 相容差異</summary>
+            <p class="small">弱／強各從五名同來源 NPC 中等機率抽一名，速度較高先攻（同速由對手先攻），最多 50 次交替攻擊。16 種攻擊以雙方對應能力差計算傷害，不消耗裝備。勝利每次攻擊獲弱 1,500／強 5,000 元；敗北扣弱 300／強 1,000 元，Web 現金最低零；平手無金錢。四款原始獎品各 25%（已確認修正原版 rand(3) 疑似疏漏）。先檢查 25 格再合併，兩款「おばちゃんの力」已依原始欄位及使用者確認修正，可正常使用。Web 共用五秒大阪行動間隔，伺服器原子結算；原版十筆 NPC 資料完整時優先使用；缺檔時預設使用經確認的 Web 重建版（非原版），不混用兩套資料。管理者可限定原版；資料格式異常時停用挑戰。每局保留實際來源與版本。</p>
+          </details>
+          <div id="osaka-modes" class="filters"></div>
+          <div id="osaka-result" aria-live="polite"></div>
+          <h3>本人最近 20 局</h3>
+          <div id="osaka-history"></div>
+        </section>
         <section class="card" id="arcade-dice-panel">
           <div class="heading">
             <div><div class="eyebrow">單機優先 · 原版遊樂中心</div><h2>雙骰猜奇偶</h2></div>

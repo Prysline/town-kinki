@@ -207,3 +207,13 @@ test("無活動挑戰、非法使用者或無效亂數皆拒絕且不修改狀�
     assert.equal(getCockroachChallenge(db,1,START+1000).status,"active");
   }finally{db.close();}
 });
+
+test("街頭格鬥負 K 點仍可正常取得蟑螂獎勵",()=>{
+  const db=setup();
+  try{
+    initialize(db);spawn(db);
+    db.prepare("UPDATE characters SET kpoint=-6 WHERE user_id=1").run();
+    assert.equal(claimCockroach(db,1,START+1,numbers(0)).status,"caught");
+    assert.equal(row(db).kpoint,-3);
+  }finally{db.close();}
+});

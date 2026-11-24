@@ -93,7 +93,8 @@ export function claimCockroach(db,userId,now=Date.now(),random=Math.random){
       .get(userId);
     if(!character)throw new Error("請先建立角色");
     const money=safeNonnegative(character.money,"現金");
-    const kpoint=safeNonnegative(character.kpoint,"K 點數");
+    const kpoint=character.kpoint;
+    if(!Number.isSafeInteger(kpoint))throw new Error("角色K 點數資料不正確");
     const stats=JSON.parse(character.stats_json);
     if(!stats||typeof stats!=="object"||Array.isArray(stats))
       throw new Error("角色能力資料不正確");

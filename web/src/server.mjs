@@ -37,6 +37,8 @@ import { listLegacyInventoryItems } from "./legacy-inventory.mjs";
 import { inventorySlotUsage } from "./inventory-life.mjs";
 import {parseLegacyRetailCatalog,initRetailTables,ensureRetailDay,listRetailStock,listRetailPurchases,buyRetailItem,retailItemDetails,RETAIL_SHOPS} from "./retail.mjs";
 import {parseLegacyVendingCatalog,initVendingTables,ensureVendingRotation,listVendingStock,vendingPeriodKey,VENDING_SYMBOL,VENDING_SHOP} from "./vending.mjs";
+import {parseArenaCatalog} from "./b-league-core.mjs";
+import {parseArenaDrops,initArenaTables,arenaOverview,playArena,ARENA_SYMBOL} from "./b-league.mjs";
 import {parseLegacyEquipmentCatalog,initEquipmentTables,listEquipmentItems,listEquipmentTransactions,buyEquipment,equipEquipment,sellEquipment,forgeEquipment,EQUIPMENT_SYMBOL} from "./equipment.mjs";
 import {initGiftTables,GIFT_SHOP_SYMBOL,listGiftSources,listGiftEvents,listGiftMail,convertToGift,sendGift} from "./gift-shop.mjs";
 import {initPrivateMailTables,sendPrivateMail,listMailbox,deletePrivateMailboxEntry} from "./private-mail.mjs";
@@ -53,6 +55,11 @@ import { initLegacyItemUseTables, listLegacyItemActions, listLegacyItemUseHistor
 import { initBankTables, settleBankInterest, bankOperation, bankOverview, bankLedger, recordBankEntry, transferToPlayer, BANK_TRANSFER_LIMIT, NEW_MEMBER_DAYS, NEW_MEMBER_TRANSFER_LIMIT, bankLoanOverview, borrowBankLoan, payoffBankLoan, bankTaxOverview, refreshBankTaxSnapshot } from "./banking.mjs";
 import { initSoloClock, gameTimestamp, advanceSoloClock, soloOffset } from "./solo-clock.mjs";
 import { deleteSoloCharacter } from "./solo-character.mjs";
+import {parseOsakaRules} from "./osaka-challenge-core.mjs";
+import {resolveOsakaNpcCatalog} from "./osaka-npc-catalog.mjs";
+import {initOsakaTables,osakaOverview,playOsaka,migrateOsakaPowerPrizes} from "./osaka-challenge.mjs";
+import { initStreetFightTables,streetFightOverview,playStreetFight } from "./street-fight.mjs";
+import {initCLeagueTables,cLeagueOverview,trainCLeague,playCLeague} from "./c-league.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const REPO_ROOT = resolve(ROOT, "..");
@@ -105,11 +112,13 @@ initTownMapTable(db);
 initHousingTables(db);
 initRoomsTables(db);
 initBankTables(db);
+initCLeagueTables(db);
 initCharacterEvents(db);
 initCouponRedemptionTables(db);
 initFishingTables(db);
 initCraftingTables(db);
 initArcadeDiceTables(db);
+initStreetFightTables(db);
 initArcadeHighLowTables(db);
 initArcadeDonutTables(db);
 initInstantLotoTables(db);
@@ -123,11 +132,18 @@ initLegacyItemUseTables(db);
 initRetailTables(db);
 initVendingTables(db);
 initEquipmentTables(db);
+initArenaTables(db);
+initOsakaTables(db);
 initGiftTables(db);
 initPrivateMailTables(db);
 initRecycleTables(db);
 initWholesaleTables(db);
 initPlayerStoreTables(db);
+// Administrator may supply the original dedicated NPC directory tree separately from player saves.
+const osakaRules=parseOsakaRules(decodeLegacyText(readFileSync(resolve(REPO_ROOT,"obatyan.cgi"))));
+const osakaUpgrade=migrateOsakaPowerPrizes(db,osakaRules);
+if(osakaUpgrade.skipped)console.warn("大阪舊版待核對獎品："+osakaUpgrade.skipped+" 筆無足夠收據或存在衝突，未修改");
+const osakaCatalog=resolveOsakaNpcCatalog(resolve(process.env.OSAKA_NPC_ROOT||REPO_ROOT),process.env.OSAKA_NPC_POLICY||"auto");
 const houseCatalog = parseHouseCatalog(
   decodeLegacyText(readFileSync(resolve(REPO_ROOT, "town_ini.cgi"))),
   decodeLegacyText(readFileSync(resolve(REPO_ROOT, "command.pl")))
@@ -200,6 +216,8 @@ const roadSource=parseOriginalRoadTransport(
 );
 const wholesaleCatalog=parseWholesaleCatalog(decodeLegacyText(readFileSync(resolve(REPO_ROOT,"dat_dir","syouhin.cgi"))));
 const vendingCatalog=parseLegacyVendingCatalog(decodeLegacyText(readFileSync(resolve(REPO_ROOT,"dat_dir","jihanki.cgi"))));
+const arenaCatalog=parseArenaCatalog(decodeLegacyText(readFileSync(resolve(REPO_ROOT,"dat_dir","battle.cgi"))));
+const arenaDrops=parseArenaDrops(decodeLegacyText(readFileSync(resolve(REPO_ROOT,"battle.cgi"))));
 const equipmentCatalog=parseLegacyEquipmentCatalog(decodeLegacyText(readFileSync(resolve(REPO_ROOT,"dat_dir","soubi.cgi"))));
 
 const sessionHash = token => createHash("sha256").update(token).digest("hex");
@@ -439,6 +457,9 @@ function snapshot(user) {
     couponRedemptions:updated?listCouponRedemptions(db,user.id):[],
     fishing:updated?fishingOverview(db,user.id,fishingCatalog,now,today):null,
     crafting:updated?craftingOverview(db,user.id,craftingCatalog,now):null,
+    osaka:updated?osakaOverview(db,user.id,osakaCatalog):null,
+    streetFight:updated?streetFightOverview(db,user.id,MODE):null,
+    cLeague:updated?cLeagueOverview(db,user.id,now,{activate:false}):null,
     arcadeDice:updated?arcadeDiceOverview(db,user.id,arcadeDiceSource,now):null,
     arcadeHighLow:updated?arcadeHighLowOverview(db,user.id,arcadeHighLowSource,now):null,
     arcadeDonuts:updated?arcadeDonutsOverview(db,user.id,arcadeDonutsSource,now):null,
@@ -457,6 +478,7 @@ function snapshot(user) {
     retailPurchases:updated?listRetailPurchases(db,user.id):[],
     vendingAvailable,vendingGoods,
     vendingPeriod:vendingAvailable?vendingPeriodKey(now,GAME_TIMEZONE):null,
+    bLeague:updated?arenaOverview(db,user.id,now,retailMap?.configured&&retailMap.cells.some(cell=>cell.key===ARENA_SYMBOL)):null,
     equipmentAvailable,equipmentGoods:equipmentAvailable?equipmentCatalog:[],
     equipmentItems:updated?listEquipmentItems(db,user.id):[],
     equipmentTransactions:updated?listEquipmentTransactions(db,user.id):[],
@@ -839,6 +861,40 @@ async function handle(req, res) {
       return sendJson(res,200,{...snapshot(user),craftingResult});
     }
 
+    if(path==="/api/osaka/play"){
+      if(!data||typeof data!=="object"||Array.isArray(data)||Object.keys(data).some(k=>!["mode","requestId"].includes(k)))
+        throw new HttpError(400,"大阪挑戰只接受難度及請求識別碼");
+      let osakaResult;
+      try{osakaResult=playOsaka(db,user.id,osakaRules,osakaCatalog,{mode:data.mode,requestId:data.requestId,now:gameNow()});}
+      catch(error){throw new HttpError(400,error.message);}
+      return sendJson(res,200,{...snapshot(user),osakaResult});
+    }
+
+    if(path==="/api/street-fight/play"){
+      if(!data||Object.keys(data).some(key=>key!=="requestId"))throw new HttpError(400,"街頭格鬥僅接受請求碼");
+      let streetFightResult;
+      try{
+        const now=gameNow();
+        streetFightResult=playStreetFight(db,user.id,{mode:MODE,requestId:data.requestId,now,today:calendarDay(now,GAME_TIMEZONE)});
+      }catch(error){throw new HttpError(400,error.message);}
+      return sendJson(res,200,{...snapshot(user),streetFightResult});
+    }
+
+    if(path==="/api/c-league/open"){
+      if(!getCharacter(user.id))throw new HttpError(409,"請先建立居民");
+      if(!data||Object.keys(data).some(k=>k!=="requestId")||typeof data.requestId!=="string"||!/^[A-Za-z0-9_-]{1,100}$/.test(data.requestId))
+        throw new HttpError(400,"C 聯賽請求格式錯誤");
+      const opened=cLeagueOverview(db,user.id,gameNow());
+      return sendJson(res,200,{...snapshot(user),cLeagueResult:{season:opened.season}});
+    }
+    if(path==="/api/c-league/train"||path==="/api/c-league/play"){
+      const now=gameNow(),today=calendarDay(now,GAME_TIMEZONE);
+      let cLeagueResult;
+      try{cLeagueResult=path.endsWith("/train")?trainCLeague(db,user.id,data,now,today):playCLeague(db,user.id,data,now,today);}
+      catch(error){throw new HttpError(400,error.message);}
+      return sendJson(res,200,{...snapshot(user),cLeagueResult});
+    }
+
     if(path==="/api/arcade/dice/play"){
       let arcadeDiceResult;
       try{
@@ -968,6 +1024,21 @@ async function handle(req, res) {
         });
       }catch(error){throw new HttpError(400,error.message);}
       return sendJson(res,200,{...snapshot(user),retailResult:bought});
+    }
+    if(path === "/api/b-league/play"){
+      let result;
+      try{
+        if(!data||typeof data!=="object"||Array.isArray(data)||Object.keys(data).some(k=>!["rank","requestId"].includes(k)))
+          throw new Error("鬥技場只接受難度與請求編號");
+        const now=gameNow();
+        result=playArena(db,user.id,arenaCatalog,arenaDrops,{rank:data.rank,requestId:data.requestId,now,
+          hasBuilding:(symbol,townId)=>{
+            if(roadOverview(db,user.id,roadSource,now).pending)throw new Error("公路旅程尚未抵達");
+            const map=publicTownMap(db,townId,false);
+            return map.configured&&map.cells.some(cell=>cell.key===symbol);
+          }});
+      }catch(error){throw new HttpError(400,error.message);}
+      return sendJson(res,200,{...snapshot(user),bLeagueResult:result});
     }
     if (path === "/api/equipment/buy"||path === "/api/equipment/equip"||
         path === "/api/equipment/sell"||path === "/api/equipment/forge") {
