@@ -1037,3 +1037,13 @@ test("大阪挑戰：原版兩種地圖入口與遊樂中心共用伺服器戰�
   assert.match(script,/!game\?\.catalogReady/);
   assert.match(script,/item\.blocked\?/);
 });
+
+test("大阪 NPC 來源與版本：開始確認、狀態、當局、歷史各自標示，舊紀錄不可冒稱原版",()=>{
+  assert.ok(html.includes("Web 重建版（非原版）"));
+  assert.ok(script.includes("Web 重建版 NPC（非原版，"));
+  assert.ok(script.includes("NPC 來源未記錄"));
+  assert.ok(script.includes("osakaSourceLabel(state.osaka?.npcSource,state.osaka?.npcSourceVersion)"));
+  assert.ok(script.includes("osakaSourceLabel(game.npcSource,game.npcSourceVersion)"));
+  assert.ok(script.includes("osakaSourceLabel(battle.npcSource,battle.npcSourceVersion)"));
+  assert.ok(script.includes("osakaSourceLabel(b.npcSource,b.npcSourceVersion)"));
+});
