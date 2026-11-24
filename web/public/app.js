@@ -2801,7 +2801,7 @@ async function submitOsaka(mode){
   if(osakaBusy)return;
   if(osakaPending&&osakaPending.mode!==mode){notify("請先重試上一筆大阪挑戰",true);return;}
   if(!osakaPending){
-    if(!window.confirm("開始"+(mode==="week"?"弱":"強")+"大阪挑戰？失敗可能損失現金。"))return;
+    if(!window.confirm("開始"+(mode==="week"?"弱":"強")+"大阪挑戰（"+osakaSourceLabel(state.osaka?.npcSource,state.osaka?.npcSourceVersion)+"）？失敗可能損失現金。"))return;
     osakaPending={mode,requestId:crypto.randomUUID()};
   }
   osakaBusy=true;renderOsaka();
@@ -2812,6 +2812,11 @@ async function submitOsaka(mode){
     notify(error.message,true);
   }finally{osakaBusy=false;renderOsaka();}
 }
+function osakaSourceLabel(source,version){
+  if(source==="reconstructed")return "Web 重建版 NPC（非原版，"+(version??"版本未記錄")+"）";
+  if(source==="original-file")return "原版檔案 NPC";
+  return "NPC 來源未記錄";
+}
 function renderOsaka(){
   if(!state?.character)return;
   const owner=JSON.stringify([state.user?.username,state.character.name]);
@@ -2821,7 +2826,7 @@ function renderOsaka(){
   const names={win:"勝利",loss:"敗北",draw:"平手"};
   text("osaka-status",!game?.catalogReady?
     (game?.sourceInvalid?"原版 NPC 資料格式無效，挑戰未開放。":"原版 NPC 資料尚未齊備（缺 "+(game?.missingCount??10)+" 筆），挑戰未開放。"):
-    Object.values(game.locations).some(Boolean)?"所在城鎮可挑戰。":"所在城鎮沒有大阪挑戰或遊樂中心入口。");
+    osakaSourceLabel(game.npcSource,game.npcSourceVersion)+"。"+(game.npcSource==="reconstructed"?"原版缺 "+game.missingCount+" 筆，未混入部分原版資料。":"")+(Object.values(game.locations).some(Boolean)?"所在城鎮可挑戰。":"所在城鎮沒有大阪挑戰或遊樂中心入口。"));
   const modes=el("osaka-modes");modes.replaceChildren();
   for(const mode of ["week","strong"]){
     const button=document.createElement("button");button.type="button";
@@ -2839,6 +2844,7 @@ function renderOsaka(){
   const battle=state.osakaResult??game?.latest;
   if(battle){
     append(result,"h4",label[battle.mode]+"｜"+battle.npc.name+"｜"+names[battle.outcome]);
+    append(result,"p",osakaSourceLabel(battle.npcSource,battle.npcSourceVersion));
     append(result,"p","攻擊 "+battle.rounds.length+" 次｜現金變化 "+money(battle.moneyDelta));
     append(result,"p","初始玩家 頭腦 "+battle.initial.player.brainEnergy+"／身體 "+battle.initial.player.bodyEnergy+
       "｜對手 頭腦 "+battle.initial.npc.brainEnergy+"／身體 "+battle.initial.npc.bodyEnergy);
@@ -2854,7 +2860,7 @@ function renderOsaka(){
       "｜對手 "+Math.max(0,r.npc.brainEnergy)+"/"+Math.max(0,r.npc.bodyEnergy));
     details.append(list);result.append(details);
   }else append(result,"p","尚無挑戰紀錄。");
-  for(const b of game?.history??[])append(history,"p",label[b.mode]+"｜"+b.name+"｜"+names[b.outcome]+"｜"+money(b.moneyDelta));
+  for(const b of game?.history??[])append(history,"p",label[b.mode]+"｜"+b.name+"｜"+names[b.outcome]+"｜"+money(b.moneyDelta)+"｜"+osakaSourceLabel(b.npcSource,b.npcSourceVersion));
 }
 setInterval(()=>{
   if(!state?.character||osakaBusy||osakaPending)return;
