@@ -1594,7 +1594,7 @@ function renderLegacyItems(){
       durability.textContent=item.blocked?"待核對獎品 "+amount+" 筆（不可使用）":"剩餘 "+amount+(item.unit??"");
       head.append(name,durability);card.append(head);
       const preview=document.createElement("div");preview.className="inventory-effects";
-      for(const effect of itemInventoryEffects(info)){
+      for(const effect of (item.blocked?["原始效果尚未核對，不套用推測能力"]:itemInventoryEffects(info))){
         const line=document.createElement("p");line.className="small";line.textContent=effect;
         preview.append(line);
       }
@@ -2825,7 +2825,11 @@ function renderOsaka(){
   for(const mode of ["week","strong"]){
     const button=document.createElement("button");button.type="button";
     button.textContent=(osakaPending?.mode===mode?"重試 ":"挑戰 ")+label[mode]+"大阪阿姨";
-    button.disabled=!game?.catalogReady||!game?.locations?.[mode]||osakaBusy||Boolean(osakaPending&&osakaPending.mode!==mode);
+    const cooling=game?.readyAt>browserGameNow();
+    button.disabled=osakaBusy||Boolean(osakaPending&&osakaPending.mode!==mode)||(!osakaPending&&(!game?.catalogReady||!game?.locations?.[mode]||cooling));
+    button.dataset.osakaReadyAt=String(game?.readyAt??0);
+    button.dataset.osakaMode=mode;
+    if(cooling&&!osakaPending)button.title="大阪挑戰間隔尚未結束";
     button.addEventListener("click",()=>submitOsaka(mode));modes.append(button);
   }
   const result=el("osaka-result");result.replaceChildren();
@@ -2843,7 +2847,7 @@ function renderOsaka(){
     const details=document.createElement("details");details.open=true;
     append(details,"summary","逐次攻擊紀錄");
     const list=document.createElement("ol");
-    for(const r of battle.rounds)append(list,"li",(r.actor==="player"?"玩家":battle.npc.name)+"："+(r.stat)+
+    for(const r of battle.rounds)append(list,"li",(r.actor==="player"?"玩家":battle.npc.name)+"："+(labels[r.stat]??r.stat)+
       "｜"+(r.energy==="brainEnergy"?"頭腦":"身體")+"傷害 "+r.damage+
       "｜玩家 "+Math.max(0,r.player.brainEnergy)+"/"+Math.max(0,r.player.bodyEnergy)+
       "｜對手 "+Math.max(0,r.npc.brainEnergy)+"/"+Math.max(0,r.npc.bodyEnergy));
@@ -2851,6 +2855,15 @@ function renderOsaka(){
   }else append(result,"p","尚無挑戰紀錄。");
   for(const b of game?.history??[])append(history,"p",label[b.mode]+"｜"+b.name+"｜"+names[b.outcome]+"｜"+money(b.moneyDelta));
 }
+setInterval(()=>{
+  if(!state?.character||osakaBusy||osakaPending)return;
+  const game=state.osaka;
+  for(const button of el("osaka-modes")?.querySelectorAll("button")??[]){
+    const cooling=(game?.readyAt??0)>browserGameNow();
+    button.disabled=!game?.catalogReady||!game?.locations?.[button.dataset.osakaMode]||cooling;
+    button.title=cooling?"大阪挑戰間隔尚未結束":"";
+  }
+},250);
 function renderArcadeDice(){
   if(!state?.character)return;
   const info=state.arcadeDice??{};
