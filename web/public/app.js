@@ -469,6 +469,7 @@ function renderTownMap() {
             if(cell.key==="デパ"||cell.key==="デパ2")renderRetail();
             if(cell.key==="自販機")renderVending();
             if(cell.key==="装備屋")renderEquipment();
+            if(cell.key==="Ｂリーグ")renderBLeague();
             if(cell.key==="ギフト屋")renderGiftShop();
             if(cell.key==="リサイ")renderRecycle();
             if(cell.key==="問屋")renderWholesale();
@@ -3181,12 +3182,68 @@ async function submitEquipmentAction(action,{sku,itemId,name,amount,powerUp=0,us
         action==="sell"?"現金增加 "+money(result.amount):"同類原裝備已退回倉庫。"));
   }catch(error){notify(error.message,true);}
 }
+let pendingBLeague=null,bLeagueBusy=false;
+async function submitBLeague(rank){
+  if(bLeagueBusy)return;
+  if(pendingBLeague&&pendingBLeague.rank!==rank){
+    notify("請先重試前一筆戰鬥請求，避免重複結算。",true);return;
+  }
+  if(!pendingBLeague){
+    if(!window.confirm("開始 "+rank.toUpperCase()+" 級怪物戰鬥？失敗可能損失現金與裝備。"))return;
+    pendingBLeague={rank,requestId:crypto.randomUUID()};
+  }
+  bLeagueBusy=true;renderBLeague();
+  try{
+    state=await api("b-league/play",pendingBLeague);
+    pendingBLeague=null;
+    render();
+  }catch(error){notify(error.message,true);}
+  finally{bLeagueBusy=false;renderBLeague();}
+}
+function renderBLeague(){
+  if(!state?.character)return;
+  const arena=state.bLeague;
+  const available=arena?.available===true;
+  text("b-league-status",available?"所在城鎮有 B 聯賽鬥技場。":"所在城鎮沒有「Ｂリーグ」建築；單機可自行配置地圖。");
+  const ranks=el("b-league-ranks");ranks.replaceChildren();
+  for(const rank of arena?.ranks??[]){
+    const button=document.createElement("button");button.type="button";
+    button.textContent=rank.toUpperCase()+" 級挑戰";
+    button.disabled=!available||bLeagueBusy||Boolean(pendingBLeague&&pendingBLeague.rank!==rank);
+    button.addEventListener("click",()=>submitBLeague(rank));ranks.append(button);
+  }
+  const result=el("b-league-result");result.replaceChildren();
+  const history=el("b-league-history");history.replaceChildren();
+  const battle=state.bLeagueResult??arena?.latest;
+  const names={win:"勝利",loss:"失敗",draw:"未分勝負"};
+  const energy={brainEnergy:"頭腦",bodyEnergy:"身體"};
+  const append=(parent,tag,value)=>{const node=document.createElement(tag);node.textContent=value;parent.append(node);return node;};
+  if(battle){
+    append(result,"h4",battle.monster.rank.toUpperCase()+" 級｜"+battle.monster.name+"｜"+names[battle.outcome]);
+    append(result,"p","初始能量：玩家 頭腦 "+battle.initial.player.brainEnergy+"／身體 "+battle.initial.player.bodyEnergy+
+      "；怪物 頭腦 "+battle.initial.monster.brainEnergy+"／身體 "+battle.initial.monster.bodyEnergy);
+    append(result,"p","現金變化 "+money(battle.moneyDelta)+"；K 點 "+(battle.kpointDelta>=0?"+":"")+battle.kpointDelta+
+      "；玩家剩餘頭腦 "+battle.player.brainEnergy+"／身體 "+battle.player.bodyEnergy);
+    if(battle.reward)append(result,"p",battle.reward.granted?"取得 "+battle.reward.name:"背包已滿，未取得 "+battle.reward.name);
+    const details=document.createElement("details");details.open=true;
+    append(details,"summary","逐次攻擊（"+battle.rounds.length+" 次）");
+    const list=document.createElement("ol");
+    for(const r of battle.rounds){
+      append(list,"li",(r.actor==="player"?"玩家":"怪物")+"："+energy[r.energy]+"攻擊，"+r.gear+
+        "，傷害 "+r.damage+(r.leveled?"，裝備升級":"")+(r.broken?"，裝備損壞退回倉庫":"")+
+        "｜玩家 頭腦 "+Math.max(0,r.player.brainEnergy)+"／身體 "+Math.max(0,r.player.bodyEnergy)+
+        "｜怪物 頭腦 "+Math.max(0,r.monster.brainEnergy)+"／身體 "+Math.max(0,r.monster.bodyEnergy));
+    }
+    details.append(list);result.append(details);
+  }else append(result,"p","尚無戰鬥紀錄。");
+  for(const item of arena?.history??[])append(history,"p",item.rank.toUpperCase()+" 級｜"+item.name+"｜"+names[item.outcome]+"｜"+money(item.moneyDelta)+"｜K 點 +"+item.kpointDelta);
+}
 function renderEquipment(){
   if(!state?.character)return;
   const available=state.equipmentAvailable===true;
   text("equipment-status",available?
     "目前城鎮裝備屋營業中｜獨立原價商品 "+(state.equipmentGoods??[]).length+
-    " 種；可購買、換裝、出售及按原版費用鍛造，暫不提供戰鬥效果。" :
+    " 種；可購買、換裝、出售及按原版費用鍛造，B 聯賽中可實際參戰。" :
     "目前城鎮沒有原版「装備屋」。請在地圖中找到該建築，單機模式可先配置。");
   const goodsTarget=el("equipment-goods");
   goodsTarget.replaceChildren();
@@ -4144,6 +4201,7 @@ function render() {
   renderLoto6();
   renderMultiCard();
   renderTreasure();
+  renderBLeague();
   renderEquipment();
   renderGiftShop();
   renderMailbox();
