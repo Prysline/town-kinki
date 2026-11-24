@@ -28,6 +28,8 @@ const BASE = [
   ["温泉", "溫泉", "onsen.gif", "facility"],
   ["教室", "教室", "kyositu.gif", "facility"],
   ["ゲーセン", "遊樂中心", "game.gif", "facility"],
+  ["おばちゃん", "大阪阿姨（弱）", "obatyan.gif", "facility"],
+  ["おばちゃん強", "大阪阿姨（強）", "obatyan2.gif", "facility"],
   ["自販機", "自動販賣機", "jihanki.gif", "facility"],
   ["装備屋", "裝備商店", "kaziya.gif", "facility"],
   ["ギフト屋", "禮品店", "gift.gif", "facility"],
