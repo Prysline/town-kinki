@@ -3,7 +3,7 @@
 // 原 CGI 在進入主畫面時抽取，Web 版改為每個遊戲日最多抽取一次。
 import { resolveNonItemEvent } from "./event-effects.mjs";
 import { initCockroachChallenges,openCockroachChallenge } from "./event-cockroach.mjs";
-import { recordBankEntry } from "./banking.mjs";
+import { recordBankEntry,refreshBankTaxSnapshot } from "./banking.mjs";
 import { grantSantaFightItem } from "./event-santa-fight.mjs";
 import { EVENT_BONUS_ITEMS,EVENT_REQUIRED_SETS,findEventBonusItem,consumeEventBonusItem } from "./event-item-bonus.mjs";
 
@@ -167,6 +167,9 @@ export function settleDailyIllnessEvent(db,userId,day,now=Date.now(),random=Math
         if(!Number.isSafeInteger(loss)||loss<0)throw new Error("事件銀行扣款不正確");
         if(loss>0)recordBankEntry(db,userId,"ordinary","空屋竊盜",loss,0,effect.changes.bank,now);
       }
+      // #34/#38 現金分支與稅基同筆寫入；早期獨立事件測試未初始化銀行表時維持原契約。
+      if([34,38].includes(result.originalId)&&effect.changes.money!==undefined&&db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='bank_tax_state'").get())
+        refreshBankTaxSnapshot(db,userId,day);
       const history=db.prepare(
         "INSERT INTO character_events(user_id,day,event_key,original_id,old_health_index,new_health_index,created_at,description,effects_json) VALUES(?,?,?,?,?,?,?,?,?)"
       ).run(userId,day,effect.event.key,result.originalId,

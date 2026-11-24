@@ -7417,3 +7417,32 @@ test("A～E 單機角色刪除：B、大阪、C聯賽及事件戰報／獎品外
     dbAction(db=>{for(const t of [...tables,"street_fights"])assert.equal(db.prepare("SELECT COUNT(*) n FROM "+t).get().n,0,t);assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(),[]);});
   }finally{await srv.stop();}
 });
+
+test("戰鬥整合：B聯賽、大阪及#38現金獎勵稅基溢位全交易回滾；相同請求可重試",async()=>{
+  const srv=await start("solo",null,null,{OSAKA_NPC_POLICY:"auto"});try{
+    const made=await api(srv.url,"character",{name:"聯驗稅基",gender:"other",stats:defaultStats()});assert.equal(made.status,200);
+    for(const [column,symbol] of [[0,"Ｂリーグ"],[1,"おばちゃん"]])assert.equal((await api(srv.url,"map/tile",{row:0,column,symbol})).status,200);
+    const dbAction=fn=>{const db=new DatabaseSync(join(srv.directory,"solo.sqlite"));try{db.exec("PRAGMA foreign_keys=ON");return fn(db);}finally{db.close();}};
+    dbAction(db=>{
+      const row=db.prepare("SELECT user_id FROM characters").get();
+      const stats=Object.fromEntries(Object.keys(defaultStats()).map(k=>[k,5000]));
+      db.prepare("UPDATE characters SET stats_json=?,body_energy=1000,brain_energy=1000,recovered_at=?,money=?,bank=1000000").run(JSON.stringify(stats),made.result.gameTimeMs,Number.MAX_SAFE_INTEGER-1000000);
+      const equip=db.prepare("INSERT INTO equipment_items(user_id,sku,type,name,power,accuracy,uses,status,created_at) VALUES(?,?,?,?,1000,101,10,'equipped',?)");
+      for(const type of ["武器","魔法"])equip.run(row.user_id,"tax-"+type,type,"tax-"+type,made.result.gameTimeMs);
+    });
+    const state=()=>dbAction(db=>Object.fromEntries(["characters","equipment_items","bank_accounts","bank_tax_state","bank_ledger","b_league_battles","b_league_default_gear","osaka_battles","character_events","legacy_inventory_items"].map(table=>[table,db.prepare("SELECT * FROM "+table).all()])));
+    for(const [route,payload] of [["b-league/play",{rank:"d",requestId:"tax-b"}],["osaka/play",{mode:"week",requestId:"tax-o"}]]){
+      const before=state(),result=await api(srv.url,route,payload);
+      assert.equal(result.status,400,JSON.stringify(result.result.error));assert.match(result.result.error,/稅基資產超出安全範圍/);assert.deepEqual(state(),before);
+    }
+    dbAction(db=>db.prepare("UPDATE characters SET last_event_day='2000-01-01'").run());
+    const beforeEvent=state();
+    dbAction(db=>{const id=db.prepare("SELECT user_id FROM characters").get().user_id,rolls=[0,(38-.5)/44,.9];
+      assert.throws(()=>settleDailyIllnessEvent(db,id,made.result.character.lastEventDay,made.result.gameTimeMs,()=>rolls.shift()),/稅基資產超出安全範圍/);});
+    assert.deepEqual(state(),beforeEvent);
+    dbAction(db=>db.prepare("UPDATE characters SET money=1000000,last_event_day=?").run(made.result.character.lastEventDay));
+    const won=await api(srv.url,"b-league/play",{rank:"d",requestId:"tax-b"});assert.equal(won.status,200,JSON.stringify(won.result.error));
+    const osaka=await api(srv.url,"osaka/play",{mode:"week",requestId:"tax-o"});assert.equal(osaka.status,200,JSON.stringify(osaka.result.error));
+    assert.equal(won.result.bLeagueResult.replayed,false);assert.equal(osaka.result.osakaResult.replayed,false);
+  }finally{await srv.stop();}
+});

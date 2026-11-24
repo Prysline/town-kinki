@@ -865,7 +865,7 @@ async function handle(req, res) {
       if(!data||typeof data!=="object"||Array.isArray(data)||Object.keys(data).some(k=>!["mode","requestId"].includes(k)))
         throw new HttpError(400,"大阪挑戰只接受難度及請求識別碼");
       let osakaResult;
-      try{osakaResult=playOsaka(db,user.id,osakaRules,osakaCatalog,{mode:data.mode,requestId:data.requestId,now:gameNow()});}
+      try{const now=gameNow();osakaResult=playOsaka(db,user.id,osakaRules,osakaCatalog,{mode:data.mode,requestId:data.requestId,now,today:calendarDay(now,GAME_TIMEZONE)});}
       catch(error){throw new HttpError(400,error.message);}
       return sendJson(res,200,{...snapshot(user),osakaResult});
     }
@@ -1031,7 +1031,7 @@ async function handle(req, res) {
         if(!data||typeof data!=="object"||Array.isArray(data)||Object.keys(data).some(k=>!["rank","requestId"].includes(k)))
           throw new Error("鬥技場只接受難度與請求編號");
         const now=gameNow();
-        result=playArena(db,user.id,arenaCatalog,arenaDrops,{rank:data.rank,requestId:data.requestId,now,
+        result=playArena(db,user.id,arenaCatalog,arenaDrops,{rank:data.rank,requestId:data.requestId,now,today:calendarDay(now,GAME_TIMEZONE),
           hasBuilding:(symbol,townId)=>{
             if(roadOverview(db,user.id,roadSource,now).pending)throw new Error("公路旅程尚未抵達");
             const map=publicTownMap(db,townId,false);

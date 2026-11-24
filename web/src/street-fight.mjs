@@ -1,7 +1,7 @@
 import { randomInt } from "node:crypto";
 import { STAT_KEYS, recoverEnergy } from "./engine.mjs";
 import { getCouponBalance } from "./events.mjs";
-import { refreshBankTaxSnapshot } from "./banking.mjs";
+import { refreshBankTaxSnapshot,settleBankInterestInTransaction } from "./banking.mjs";
 
 export const STREET_COOLDOWN_MS = 5000;
 export const STREET_MAX_ATTACKS = 50;
@@ -104,6 +104,8 @@ export function playStreetFight(db,userId,{mode,requestId,now,today,randomIndex=
   try{
     const old=db.prepare("SELECT result_json FROM street_fights WHERE user_id=? AND request_id=?").get(userId,requestId);
     if(old){db.exec("COMMIT");return {...JSON.parse(old.result_json),replayed:true};}
+    // 先完成當日計息／週稅，再刷新稅基，避免先更新日期而跳過應繳週稅。
+    settleBankInterestInTransaction(db,userId,today,now);
     const actor=db.prepare("SELECT user_id,name,money,kpoint,stats_json,body_energy,brain_energy,recovered_at FROM characters WHERE user_id=?").get(userId);
     if(!actor)throw new Error("請先建立角色");
     if(now<readyAt(db,userId))throw new Error("街頭格鬥尚在 5 秒行動間隔");

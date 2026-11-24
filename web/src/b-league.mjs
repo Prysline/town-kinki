@@ -1,6 +1,7 @@
 // B league server-side atomic settlement, using the existing character, equipment and 33-field inventory tables.
 import {randomInt} from "node:crypto";
 import {recoverEnergy} from "./engine.mjs";
+import {settleBankInterestInTransaction,refreshBankTaxSnapshot} from "./banking.mjs";
 import {heldInventoryRows} from "./inventory-life.mjs";
 import {initLegacyItemUseTables} from "./legacy-item-use.mjs";
 import {initEquipmentTables} from "./equipment.mjs";
@@ -79,7 +80,7 @@ function grantDrop(db,userId,fields,now){
     .run(userId,ARENA_ORIGIN,line,raw[0],raw[1],raw[9],1,raw[22],Number(raw[30]),0,JSON.stringify(raw));
   return {name:fields[1],granted:true,merged:false,sourceLine:line};
 }
-export function playArena(db,userId,catalog,drops,{rank,requestId,now,hasBuilding,rng=randomInt}={}){
+export function playArena(db,userId,catalog,drops,{rank,requestId,now,today,hasBuilding,rng=randomInt}={}){
   if(!Number.isSafeInteger(userId)||userId<1||!ARENA_RANKS.includes(rank)||typeof requestId!=="string"||!REQUEST.test(requestId)||
     !Number.isSafeInteger(now)||now<=0||typeof hasBuilding!=="function")throw new Error("鬥技場請求格式不正確");
   db.exec("BEGIN IMMEDIATE");
@@ -90,6 +91,8 @@ export function playArena(db,userId,catalog,drops,{rank,requestId,now,hasBuildin
       const result=JSON.parse(prev.result_json);
       db.exec("COMMIT");return {...result,replayed:true};
     }
+    // 正式 HTTP 提供遊戲日期；銀行計息與資產檢查和戰鬥同一交易。獨立核心測試可不帶日期。
+    if(today!==undefined)settleBankInterestInTransaction(db,userId,today,now);
     const row=db.prepare("SELECT * FROM characters WHERE user_id=?").get(userId);
     if(!row)throw new Error("請先建立角色");
     if(!hasBuilding(ARENA_SYMBOL,row.town_id))throw new Error("目前城鎮沒有 B 聯賽鬥技場");
@@ -116,6 +119,7 @@ export function playArena(db,userId,catalog,drops,{rank,requestId,now,hasBuildin
     const p=result.player;
     db.prepare("UPDATE characters SET body_energy=?,brain_energy=?,money=?,kpoint=?,recovered_at=? WHERE user_id=?")
       .run(p.bodyEnergy,p.brainEnergy,p.money,p.kpoint,now,userId);
+    if(today!==undefined)refreshBankTaxSnapshot(db,userId,today);
     const receipt={...result,reward,createdAt:now};
     db.prepare("INSERT INTO b_league_battles(user_id,request_id,rank,created_at,result_json) VALUES(?,?,?,?,?)")
       .run(userId,requestId,rank,now,JSON.stringify(receipt));

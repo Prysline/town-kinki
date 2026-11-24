@@ -1,6 +1,7 @@
 // Osaka NPC challenge: server-owned combat and atomic SQLite settlement.
 import {randomInt} from "node:crypto";
 import {recoverEnergy} from "./engine.mjs";
+import {settleBankInterestInTransaction,refreshBankTaxSnapshot} from "./banking.mjs";
 import {readTownMap} from "./town-storage.mjs";
 import {describeTile} from "./town-map.mjs";
 import {heldInventoryRows} from "./inventory-life.mjs";
@@ -98,7 +99,7 @@ function grantPrize(db,userId,rules,prize,now){
     .run(userId,ORIGIN,sourceLine,fields[0],fields[1],fields[9],Number(fields[21]),fields[22],Math.floor(now/1000),0,JSON.stringify(fields));
   return {name:prize.name,granted:true,blocked:false,merged:false,sourceLine};
 }
-export function playOsaka(db,userId,rules,catalog,{mode,requestId,now,rng=randomInt}={}){
+export function playOsaka(db,userId,rules,catalog,{mode,requestId,now,today,rng=randomInt}={}){
   if(!Number.isSafeInteger(userId)||userId<1||!OSAKA_MODES.includes(mode)||typeof requestId!=="string"||!REQUEST.test(requestId)||
      !Number.isSafeInteger(now)||now<=0||typeof rng!=="function")throw new Error("大阪挑戰請求格式不正確");
   db.exec("BEGIN IMMEDIATE");
@@ -109,6 +110,8 @@ export function playOsaka(db,userId,rules,catalog,{mode,requestId,now,rng=random
       db.exec("COMMIT");
       return {...JSON.parse(prior.result_json),replayed:true};
     }
+    // 正式 HTTP 提供遊戲日期；銀行計息與資產檢查和戰鬥同一交易。獨立核心測試可不帶日期。
+    if(today!==undefined)settleBankInterestInTransaction(db,userId,today,now);
     const char=db.prepare("SELECT * FROM characters WHERE user_id=?").get(userId);
     if(!char)throw new Error("請先建立角色");
     if(!catalog.available)throw new Error("大阪原版 NPC 資料尚未完整");
@@ -121,6 +124,7 @@ export function playOsaka(db,userId,rules,catalog,{mode,requestId,now,rng=random
     const reward=battle.prize?grantPrize(db,userId,rules,battle.prize,now):null;
     db.prepare("UPDATE characters SET body_energy=?,brain_energy=?,money=?,recovered_at=? WHERE user_id=?")
       .run(battle.player.bodyEnergy,battle.player.brainEnergy,battle.player.money,now,userId);
+    if(today!==undefined)refreshBankTaxSnapshot(db,userId,today);
     const receipt={...battle,reward,playedAt:now,npcSource:battle.npc.source??"unknown",npcSourceVersion:battle.npc.sourceVersion??null};
     db.prepare("INSERT INTO osaka_battles(user_id,request_id,mode,played_at,result_json) VALUES(?,?,?,?,?)")
       .run(userId,requestId,mode,now,JSON.stringify(receipt));
