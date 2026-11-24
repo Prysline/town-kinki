@@ -85,3 +85,21 @@ test("C 聯賽戰鬥寫入失敗及現金溢位整筆回滾",()=>{
     assert.equal(cLeagueOverview(db,1,now).record,null);
   }finally{db.close();}
 });
+
+test("C 聯賽被動查詢不啟動賽季、明確進入才結算，前五積分與同勝場順序",()=>{
+  const db=setup();try{
+    assert.equal(cLeagueOverview(db,1,now,{activate:false}).started,false);
+    create(db,1,2);assert.equal(cLeagueOverview(db,1,now,{activate:false}).started,false);
+    const start=cLeagueOverview(db,1,now);assert.equal(start.endsAt,now+C_SEASON_MS);
+    for(let id=2;id<=6;id++){
+      if(id>3){db.prepare("INSERT INTO users VALUES(?)").run(id);db.prepare("INSERT INTO characters VALUES(?,?,?,?,?,?,?,?)").run(id,"居民"+id,1000000,100000,0,JSON.stringify(stats(100)),100,100);}
+      create(db,id,2);
+    }
+    for(let id=1;id<=6;id++)db.prepare("INSERT INTO c_league_entries(user_id,wins,sort_order) VALUES(?,?,?)").run(id,id<=2?10:10-id,7-id);
+    const before=cLeagueOverview(db,1,now+C_SEASON_MS,{activate:false});assert.equal(before.season,1);assert.equal(before.record.wins,10);
+    const after=cLeagueOverview(db,1,now+C_SEASON_MS);
+    assert.equal(after.season,2);assert.deepEqual(after.overall.map(x=>[x.name,x.points]),[["角色2",10],["角色1",5],["角色3",3],["角色4",2],["角色5",1]]);
+    assert.equal(after.previous.length,5);assert.equal(after.rankings.length,6);assert.equal(after.record.previousWins,10);
+    assert.equal(cLeagueOverview(db,1,now+C_SEASON_MS*4).season,3); // 原版多季未進入，只結算一次
+  }finally{db.close();}
+});

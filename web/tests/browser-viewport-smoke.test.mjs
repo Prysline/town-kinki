@@ -678,6 +678,7 @@ test("Chrome C 聯賽：實際培育、模仿者比賽、戰報與手機視窗",
     await chrome.send("Page.navigate",{url:web.url});await until(chrome,"!document.querySelector('#create')?.hidden","建角入口");
     await evaluate(chrome,"window.confirm=()=>true");await fill(chrome,'#create-form [name="name"]',"聯賽測試居民");await click(chrome,"#create-submit");
     await until(chrome,"!document.querySelector('#game')?.hidden","主畫面");
+    await click(chrome,"#c-league-open");await until(chrome,"document.querySelector('#c-league-result')?.textContent?.includes('已進入第 1 季')","明確進入聯賽");
     await click(chrome,"#c-league-training summary");await fill(chrome,"#c-league-name","模仿測試");await fill(chrome,'#c-league-fields input[data-stat="kenkou"]',1);
     await click(chrome,"#c-league-train");await until(chrome,"document.querySelector('#c-league-result')?.textContent?.includes('培育已儲存')","實際培育完成");
     await until(chrome,"document.querySelector('#c-league-play')?.disabled===false","比賽可用");await click(chrome,"#c-league-play");

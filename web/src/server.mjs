@@ -441,7 +441,7 @@ function snapshot(user) {
     couponRedemptions:updated?listCouponRedemptions(db,user.id):[],
     fishing:updated?fishingOverview(db,user.id,fishingCatalog,now,today):null,
     crafting:updated?craftingOverview(db,user.id,craftingCatalog,now):null,
-    cLeague:updated?cLeagueOverview(db,user.id,now):null,
+    cLeague:updated?cLeagueOverview(db,user.id,now,{activate:false}):null,
     arcadeDice:updated?arcadeDiceOverview(db,user.id,arcadeDiceSource,now):null,
     arcadeHighLow:updated?arcadeHighLowOverview(db,user.id,arcadeHighLowSource,now):null,
     arcadeDonuts:updated?arcadeDonutsOverview(db,user.id,arcadeDonutsSource,now):null,
@@ -842,6 +842,13 @@ async function handle(req, res) {
       return sendJson(res,200,{...snapshot(user),craftingResult});
     }
 
+    if(path==="/api/c-league/open"){
+      if(!getCharacter(user.id))throw new HttpError(409,"請先建立居民");
+      if(!data||Object.keys(data).some(k=>k!=="requestId")||typeof data.requestId!=="string"||!/^[A-Za-z0-9_-]{1,100}$/.test(data.requestId))
+        throw new HttpError(400,"C 聯賽請求格式錯誤");
+      const opened=cLeagueOverview(db,user.id,gameNow());
+      return sendJson(res,200,{...snapshot(user),cLeagueResult:{season:opened.season}});
+    }
     if(path==="/api/c-league/train"||path==="/api/c-league/play"){
       const now=gameNow(),today=calendarDay(now,GAME_TIMEZONE);
       let cLeagueResult;

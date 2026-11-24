@@ -6883,7 +6883,10 @@ test("C 聯賽 HTTP 單機培育、模仿者、重送、拒絕篡改與重啟",a
   let srv=await start("solo");
   try{
     const made=await api(srv.url,"character",{name:"聯賽居民",gender:"male",stats:defaultStats()});assert.equal(made.status,200);
+    assert.equal(made.result.cLeague.started,false);
     const created=await api(srv.url,"c-league/train",{requestId:"train",name:"聯賽角色",transfers:{kenkou:1}});assert.equal(created.status,200);
+    assert.equal(created.result.cLeague.started,false);
+    const opened=await api(srv.url,"c-league/open",{requestId:"open"});assert.equal(opened.status,200);assert.equal(opened.result.cLeague.started,true);
     assert.equal(created.result.character.money,made.result.character.money-10000);assert.equal(created.result.character.stats.kenkou,made.result.character.stats.kenkou-1);
     assert.equal(created.result.cLeague.character.stats.kenkou,1);
     assert.equal((await api(srv.url,"c-league/play",{requestId:"x",opponentId:2})).status,400);
@@ -6892,5 +6895,28 @@ test("C 聯賽 HTTP 單機培育、模仿者、重送、拒絕篡改與重啟",a
     const replay=await api(srv.url,"c-league/play",{requestId:"match"});assert.equal(replay.result.cLeagueResult.replayed,true);assert.equal(replay.result.character.money,played.result.character.money);
     const directory=srv.directory;await srv.stop({preserveData:true});srv=await start("solo",null,directory);
     const restored=(await api(srv.url,"state")).result;assert.equal(restored.cLeague.character.name,"聯賽角色");assert.equal(restored.cLeague.history.length,1);assert.equal(restored.character.money,played.result.character.money);
+  }finally{await srv.stop();}
+});
+
+test("C 聯賽 HTTP 多人角色與戰績隔離、同請求碼並發只結算一次",async()=>{
+  const srv=await start("multi");try{
+    const a=await api(srv.url,"register",{username:"cleague_a",password:"cleague-pass-a"});
+    const b=await api(srv.url,"register",{username:"cleague_b",password:"cleague-pass-b"});
+    for(const [cookie,name] of [[a.cookie,"聯賽甲"],[b.cookie,"聯賽乙"]]){
+      assert.equal((await api(srv.url,"character",{name,gender:"male",stats:defaultStats()},cookie)).status,200);
+      assert.equal((await api(srv.url,"c-league/train",{requestId:"train",name:name+"角色",transfers:{kenkou:1}},cookie)).status,200);
+    }
+    assert.equal((await api(srv.url,"c-league/play",{requestId:"noauth"})).status,401);
+    assert.equal((await api(srv.url,"c-league/play",{requestId:"a"},a.cookie)).status,200);
+    const before=(await api(srv.url,"state",undefined,a.cookie)).result;
+    const otherBefore=(await api(srv.url,"state",undefined,b.cookie)).result;
+    const replies=await Promise.all([1,2].map(()=>api(srv.url,"c-league/play",{requestId:"a"},b.cookie)));
+    assert.ok(replies.every(r=>r.status===200));assert.equal(replies.filter(r=>r.result.cLeagueResult.replayed).length,1);
+    assert.equal(replies[0].result.character.money,otherBefore.character.money+replies[0].result.cLeagueResult.reward);
+    const after=(await api(srv.url,"state",undefined,a.cookie)).result;
+    assert.equal(after.character.money,before.character.money);assert.deepEqual(after.cLeague.record,before.cLeague.record);
+    assert.equal(after.cLeague.history.length,1);assert.equal(replies[0].result.cLeague.history.length,1);
+    assert.equal(replies[0].result.cLeague.rankings.length,2);
+    assert.equal((await api(srv.url,"c-league/train",{requestId:"new",transfers:{kenkou:-1}},b.cookie)).status,400);
   }finally{await srv.stop();}
 });

@@ -114,15 +114,16 @@ export function trainCLeague(db,id,data,now,today){
   });
 }
 function standing(e){return {name:e.name,owner:e.owner,imageUrl:e.image_url,wins:e.wins,losses:e.losses,draws:e.draws,champions:e.champions,points:e.points,previousWins:e.prev_wins,previousLosses:e.prev_losses,previousDraws:e.prev_draws};}
-export function cLeagueOverview(db,id,now){
-  return tx(db,()=>{const s=season(db,now),rows=entries(db),mine=rows.find(e=>e.user_id===id);
+export function cLeagueOverview(db,id,now,{activate=true}={}){
+  return tx(db,()=>{const s=activate?season(db,now):db.prepare("SELECT * FROM c_league_season WHERE id=1").get(),rows=entries(db),mine=rows.find(e=>e.user_id===id);
+    const number=s?.number??1,endsAt=s?s.start_at+C_SEASON_MS:null;
     const history=db.prepare("SELECT result_json FROM c_league_requests WHERE user_id=? AND kind='play' ORDER BY id DESC LIMIT 20").all(id).map(e=>JSON.parse(e.result_json));
-    return {season:s.number,day:Math.max(1,Math.floor((now-s.start_at)/86400000)+1),endsAt:s.start_at+C_SEASON_MS,
+    return {season:number,started:!!s,day:s?Math.min(14,Math.max(1,Math.floor((now-s.start_at)/86400000)+1)):1,endsAt,
       matchLimit:C_MATCH_LIMIT,intervalMs:C_INTERVAL_MS,unitCost:C_UNIT_COST,character:own(db,id),record:mine?standing(mine):null,
       readyAt:mine?.last_at?mine.last_at+C_INTERVAL_MS:0,
       rankings:[...rows].sort((a,b)=>b.wins-a.wins).slice(0,10).map(standing),
-      previous:s.number>1?[...rows].sort((a,b)=>b.prev_wins-a.prev_wins).slice(0,5).map(standing):[],
-      overall:s.number>1?[...rows].sort((a,b)=>b.points-a.points).filter(e=>e.points>0).slice(0,10).map(standing):[],
+      previous:number>1?[...rows].sort((a,b)=>b.prev_wins-a.prev_wins).slice(0,5).map(standing):[],
+      overall:number>1?[...rows].sort((a,b)=>b.points-a.points).filter(e=>e.points>0).slice(0,10).map(standing):[],
       recent:rows.slice(0,5).flatMap(e=>e.last_result_json?[JSON.parse(e.last_result_json)]:[]),history};
   });
 }
