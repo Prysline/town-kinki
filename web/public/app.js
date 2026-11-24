@@ -63,7 +63,7 @@ async function api(path, data) {
     credentials: "same-origin"
   });
   const result = await response.json();
-  if (!response.ok) throw new Error(result.error || "操作失敗");
+  if (!response.ok) throw Object.assign(new Error(result.error || "操作失敗"),{status:response.status});
   return result;
 }
 
@@ -1652,7 +1652,7 @@ function renderLegacyItems(){
         "熱量："+(info?.calories??"未確認")+" kcal｜使用間隔："+(info?.intervalMinutes??"未確認")+" 分鐘",
         "身體能量消耗："+(info?.bodyCost??"未確認")+"｜頭腦能量消耗："+(info?.brainCost??"未確認"),
         "原版備註："+(info?.comment?.trim()||"沒有提供文字備註"),
-        "來源："+(item.readOnly?"歷史來源封存":item.origin==="fishing"?"Web 釣魚／餌料店":item.origin==="crafting"?"Web 合成屋":"Web 購入或轉換")+
+        "來源："+(item.readOnly?"歷史來源封存":item.origin==="fishing"?"Web 釣魚／餌料店":item.origin==="crafting"?"Web 合成屋":item.origin==="bLeague"?"B 聯賽掉落":"Web 購入或轉換")+
           "（記錄位置 "+item.sourceLine+"；原始內容不在此頁修改）",
         "Web 使用狀態："+(verifiedVehicle?"已核對為本人可用公路載具，出發須於公路面板操作，事故可能扣耐久":
           actionInfo?"已核對可使用規則，受冷卻與角色條件限制":
@@ -3182,7 +3182,7 @@ async function submitEquipmentAction(action,{sku,itemId,name,amount,powerUp=0,us
         action==="sell"?"現金增加 "+money(result.amount):"同類原裝備已退回倉庫。"));
   }catch(error){notify(error.message,true);}
 }
-let pendingBLeague=null,bLeagueBusy=false;
+let pendingBLeague=null,bLeagueBusy=false,bLeagueOwner=null;
 async function submitBLeague(rank){
   if(bLeagueBusy)return;
   if(pendingBLeague&&pendingBLeague.rank!==rank){
@@ -3197,11 +3197,13 @@ async function submitBLeague(rank){
     state=await api("b-league/play",pendingBLeague);
     pendingBLeague=null;
     render();
-  }catch(error){notify(error.message,true);}
+  }catch(error){if(error.status===400||error.status===401)pendingBLeague=null;notify(error.message,true);}
   finally{bLeagueBusy=false;renderBLeague();}
 }
 function renderBLeague(){
   if(!state?.character)return;
+  const owner=JSON.stringify([state.user?.username,state.character.name]);
+  if(bLeagueOwner!==owner){pendingBLeague=null;bLeagueOwner=owner;}
   const arena=state.bLeague;
   const available=arena?.available===true;
   text("b-league-status",available?"所在城鎮有 B 聯賽鬥技場。":"所在城鎮沒有「Ｂリーグ」建築；單機可自行配置地圖。");
