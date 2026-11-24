@@ -58,6 +58,8 @@ test("來源備註保留原文、數字與專賣店限制；玩家 UI 才翻譯"
   assert.equal(displayOriginalItemComment("※移動手段です。"),
     "※可作為移動工具。");
   assert.equal(displayOriginalItemComment("未知のコメント"),"未知のコメント");
+  assert.equal(displayOriginalItemComment("constructor"),"constructor");
+  assert.equal(displayOriginalItemComment("toString"),"toString");
   assert.equal(displayOriginalItemComment(null),"");
   assert.equal(displayOriginalItemComment(""),"");
   assert.equal(displayOriginalItemComment(" ※専門店限定商品。 "),"※專賣店限定商品。");

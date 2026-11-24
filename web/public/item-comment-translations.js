@@ -51,7 +51,7 @@ export const ORIGINAL_ITEM_COMMENTS_ZH_TW=Object.freeze({
   "餌つき":"附帶飼料。",
   "ペットです。":"是寵物。",
   "※専門店限定商品。ダイエット":"※專賣店限定商品。減重用途。",
-  "オレポテの由来、オレンジポテトです。":"「橘薯」名稱的由來，就是橘子馬鈴薯。",
+  "オレポテの由来、オレンジポテトです。":"「橘薯」這個名稱源自「橘子馬鈴薯」。",
   "※秘伝商品。自家用に改造。白猫のマークの入ったオリジナル。":"※秘傳商品。改裝為自用版本，印有白貓標誌的原創商品。",
   "太りすぎの方へ":"獻給體重過重的人。",
   "待望の続編":"期待已久的續作",
@@ -111,5 +111,6 @@ export const ORIGINAL_ITEM_COMMENTS_ZH_TW=Object.freeze({
 });
 export const displayOriginalItemComment=comment=>{
   const original=typeof comment==="string"?comment.trim():"";
-  return ORIGINAL_ITEM_COMMENTS_ZH_TW[original]??original;
+  return Object.hasOwn(ORIGINAL_ITEM_COMMENTS_ZH_TW,original)?
+    ORIGINAL_ITEM_COMMENTS_ZH_TW[original]:original;
 };
