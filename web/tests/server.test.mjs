@@ -6958,3 +6958,63 @@ test("Osaka HTTP multiplayer: arcade entrance, concurrent idempotency, authentic
     const other=await api(srv.url,"osaka/play",payload,b.cookie);assert.equal(other.status,200);assert.equal(other.result.osakaResult.replayed,false);
   }finally{await srv.stop();}
 });
+
+test("Osaka HTTP auto: rebuilt source in solo, original-file priority after restart, old receipt source unchanged",async()=>{
+  const dir=mkdtempSync(join(tmpdir(),"town-osaka-reconstruction-"));
+  const env={OSAKA_NPC_ROOT:dir,OSAKA_NPC_POLICY:"auto"};
+  let srv=await start("solo",null,dir,env);
+  try{
+    assert.equal((await api(srv.url,"character",{name:"大阪重建測試",gender:"other",stats:defaultStats()})).status,200);
+    anchorSoloTestAtNoon(srv);
+    const map=await api(srv.url,"map/tile",{row:0,column:0,symbol:"おばちゃん"});
+    assert.equal(map.status,200);assert.equal(map.result.osaka.catalogReady,true);
+    assert.equal(map.result.osaka.npcSource,"reconstructed");
+    assert.equal(map.result.osaka.npcSourceVersion,"web-osaka-npc-v1");
+    assert.equal(map.result.osaka.missingCount,10);
+    powerOsakaPlayer(srv,"solo");
+    const payload={mode:"week",requestId:"osaka-rebuild-001"};
+    assert.equal((await api(srv.url,"osaka/play",{...payload,npcSource:"original-file"})).status,400);
+    const played=await api(srv.url,"osaka/play",payload);
+    assert.equal(played.status,200,JSON.stringify(played.result));
+    const receipt=played.result.osakaResult;
+    assert.equal(receipt.npcSource,"reconstructed");assert.equal(receipt.npcSourceVersion,"web-osaka-npc-v1");
+    assert.equal(receipt.npc.source,"reconstructed");assert.equal(receipt.outcome,"win");
+    assert.equal(played.result.osaka.history[0].npcSource,"reconstructed");
+    await srv.stop({preserveData:true});seedOsakaNpcs(dir);srv=await start("solo",null,dir,env);
+    const switched=await api(srv.url,"state");
+    assert.equal(switched.result.osaka.npcSource,"original-file");
+    assert.equal(switched.result.osaka.missingCount,0);
+    assert.equal(switched.result.osaka.latest.npcSource,"reconstructed");
+    assert.equal(switched.result.osaka.history[0].npcSourceVersion,"web-osaka-npc-v1");
+    const repeat=await api(srv.url,"osaka/play",payload);
+    assert.equal(repeat.status,200);assert.deepEqual(repeat.result.osakaResult,{...receipt,replayed:true});
+    assert.equal(repeat.result.osaka.history.length,1);
+  }finally{await srv.stop();}
+});
+test("Osaka HTTP auto multiplayer: rebuilt NPC transactions and receipts are account-isolated",async()=>{
+  const dir=mkdtempSync(join(tmpdir(),"town-osaka-rebuilt-multi-"));seedOsakaMap(dir);
+  const srv=await start("multi",null,dir,{OSAKA_NPC_ROOT:dir,OSAKA_NPC_POLICY:"auto"});
+  try{
+    const a=await api(srv.url,"register",{username:"osaka_rebuilt_a",password:"osaka-rebuilt-password-a"});
+    const b=await api(srv.url,"register",{username:"osaka_rebuilt_b",password:"osaka-rebuilt-password-b"});
+    assert.equal(a.status,200);assert.equal(b.status,200);
+    for(const [account,name] of [[a,"重建甲"],[b,"重建乙"]]){
+      const created=await api(srv.url,"character",{name,gender:"other",stats:defaultStats()},account.cookie);
+      assert.equal(created.status,200);assert.equal(created.result.osaka.npcSource,"reconstructed");
+    }
+    powerOsakaPlayer(srv,"multi");
+    const before=(await api(srv.url,"state",undefined,b.cookie)).result;
+    const payload={mode:"strong",requestId:"osaka-rebuilt-multi-001"};
+    const pair=await Promise.all([api(srv.url,"osaka/play",payload,a.cookie),api(srv.url,"osaka/play",payload,a.cookie)]);
+    assert.ok(pair.every(x=>x.status===200),JSON.stringify(pair.map(x=>x.result.error)));
+    assert.deepEqual(pair.map(x=>x.result.osakaResult.replayed).sort(),[false,true]);
+    assert.ok(pair.every(x=>x.result.osakaResult.npcSourceVersion==="web-osaka-npc-v1"));
+    assert.equal(pair[0].result.osakaResult.outcome,"win");
+    const after=(await api(srv.url,"state",undefined,b.cookie)).result;
+    assert.equal(after.character.money,before.character.money);assert.deepEqual(after.osaka.history,[]);
+    assert.deepEqual(after.legacyInventory,before.legacyInventory);
+    const other=await api(srv.url,"osaka/play",payload,b.cookie);
+    assert.equal(other.status,200);assert.equal(other.result.osakaResult.replayed,false);
+    assert.equal(other.result.osaka.history[0].npcSource,"reconstructed");
+  }finally{await srv.stop();}
+});
