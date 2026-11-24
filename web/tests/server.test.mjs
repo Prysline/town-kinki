@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { createServer } from "node:net";
-import { mkdtempSync, rmSync, writeFileSync,readFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync,readFileSync,mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -24,12 +24,12 @@ async function freePort() {
     });
   });
 }
-async function start(mode, seed, existingDirectory = null) {
+async function start(mode, seed, existingDirectory = null, extraEnv = {}) {
   const port = await freePort();
   const directory = existingDirectory ?? mkdtempSync(join(tmpdir(), "town-web-"));
   if (seed) seed(directory);
   const child = spawn(process.execPath, ["src/server.mjs"], {
-    cwd: root, env: { ...process.env, HOST: "127.0.0.1", PORT: String(port), GAME_MODE: mode, DATA_DIR: directory }
+    cwd: root, env: { ...process.env, HOST: "127.0.0.1", PORT: String(port), GAME_MODE: mode, DATA_DIR: directory, ...extraEnv }
   });
   let log = "";
   child.stdout.on("data", data => { log += data; });
@@ -6877,4 +6877,84 @@ test("IT-02 單機 HTTP：百貨原版食物轉類購入→真正使用→60 分
     if(resumed)await resumed.stop();
     else await srv.stop();
   }
+});
+
+function seedOsakaNpcs(directory){
+  // Explicitly test-only NPC source tree, never written to repository or production data.
+  const folder=join(directory,"member","osaka");
+  mkdirSync(folder,{recursive:true});
+  for(const prefix of ["w","s"])for(let i=1;i<=5;i++){
+    const name=prefix+i+"log.cgi",f=Array(68).fill("");
+    f[1]="TEST "+name;f[2]="TEST_PRIVATE_NOT_RETURNED";
+    for(let j=6;j<=22;j++)f[j]="24";
+    writeFileSync(join(folder,name),f.join("<>"));
+  }
+}
+function seedOsakaMap(directory){
+  const db=new DatabaseSync(join(directory,"multi.sqlite"));
+  try{
+    db.exec("CREATE TABLE town_maps(town_id INTEGER PRIMARY KEY,original_name TEXT NOT NULL DEFAULT '',original_record TEXT NOT NULL DEFAULT '',source TEXT NOT NULL,tiles_json TEXT NOT NULL,updated_at INTEGER NOT NULL)");
+    const tiles=Array(192).fill("");tiles[0]="ゲーセン";
+    db.prepare("INSERT INTO town_maps(town_id,source,tiles_json,updated_at) VALUES(0,'test',?,?)").run(JSON.stringify(tiles),Date.now());
+  }finally{db.close();}
+}
+function powerOsakaPlayer(srv,mode){
+  const db=new DatabaseSync(join(srv.directory,mode+".sqlite"));
+  try{db.prepare("UPDATE characters SET stats_json=?,body_energy=200,brain_energy=200").run(JSON.stringify(Object.fromEntries(Object.keys(defaultStats()).map(k=>[k,500]))));}
+  finally{db.close();}
+}
+test("Osaka HTTP solo: missing NPC fails closed; valid dedicated test source enables both map paths, replay and restart",async()=>{
+  const dir=mkdtempSync(join(tmpdir(),"town-osaka-http-"));
+  const env={OSAKA_NPC_ROOT:dir};
+  let srv=await start("solo",null,dir,env);
+  try{
+    assert.equal((await api(srv.url,"character",{name:"大阪單機",gender:"other",stats:defaultStats()})).status,200);
+    anchorSoloTestAtNoon(srv);
+    let x=await api(srv.url,"map/tile",{row:0,column:0,symbol:"おばちゃん"});
+    assert.equal(x.status,200);assert.equal(x.result.osaka.catalogReady,false);assert.equal(x.result.osaka.missingCount,10);
+    assert.equal((await api(srv.url,"osaka/play",{mode:"week",requestId:"osaka-http-001"})).status,400);
+    await srv.stop({preserveData:true});seedOsakaNpcs(dir);srv=await start("solo",null,dir,env);
+    powerOsakaPlayer(srv,"solo");
+    x=await api(srv.url,"state");assert.equal(x.result.osaka.catalogReady,true);
+    const strong=await api(srv.url,"map/tile",{row:0,column:1,symbol:"おばちゃん強"});assert.equal(strong.status,200);
+    assert.deepEqual(strong.result.osaka.locations,{week:true,strong:true});
+    const payload={mode:"week",requestId:"osaka-http-001"};
+    const bad=await api(srv.url,"osaka/play",{...payload,prizeIndex:3});assert.equal(bad.status,400);
+    const played=await api(srv.url,"osaka/play",payload);assert.equal(played.status,200,JSON.stringify(played.result));
+    const b=played.result.osakaResult;assert.equal(b.outcome,"win");assert.equal(b.moneyDelta,1500);assert.equal(b.reward.granted,true);
+    assert.ok(!JSON.stringify(played.result).includes("TEST_PRIVATE_NOT_RETURNED"));
+    assert.equal(played.result.osaka.history.length,1);
+    const repeat=await api(srv.url,"osaka/play",payload);assert.equal(repeat.status,200);assert.deepEqual(repeat.result.osakaResult,{...b,replayed:true});
+    assert.equal((await api(srv.url,"osaka/play",{...payload,mode:"strong"})).status,400);
+    const money=played.result.character.money;
+    await srv.stop({preserveData:true});srv=await start("solo",null,dir,env);
+    const after=await api(srv.url,"state");assert.equal(after.result.character.money,money);assert.equal(after.result.osaka.history.length,1);
+    assert.equal(after.result.legacyInventory.find(i=>i.sourceLine===b.reward.sourceLine).name,b.reward.name);
+  }finally{await srv.stop();}
+});
+test("Osaka HTTP multiplayer: arcade entrance, concurrent idempotency, authenticated identity and separate history",async()=>{
+  const dir=mkdtempSync(join(tmpdir(),"town-osaka-multi-"));seedOsakaNpcs(dir);seedOsakaMap(dir);
+  const env={OSAKA_NPC_ROOT:dir};const srv=await start("multi",null,dir,env);
+  try{
+    const a=await api(srv.url,"register",{username:"osaka_test_a",password:"osaka-password-a"});
+    const b=await api(srv.url,"register",{username:"osaka_test_b",password:"osaka-password-b"});
+    assert.equal(a.status,200);assert.equal(b.status,200);
+    assert.equal((await api(srv.url,"character",{name:"大阪玩家甲",gender:"other",stats:defaultStats()},a.cookie)).status,200);
+    assert.equal((await api(srv.url,"character",{name:"大阪玩家乙",gender:"other",stats:defaultStats()},b.cookie)).status,200);
+    powerOsakaPlayer(srv,"multi");
+    const before=(await api(srv.url,"state",undefined,b.cookie)).result;
+    assert.deepEqual(before.osaka.locations,{week:true,strong:true});
+    const payload={mode:"strong",requestId:"osaka-multi-001"};
+    assert.equal((await api(srv.url,"osaka/play",payload)).status,401);
+    assert.equal((await api(srv.url,"osaka/play",{...payload,userId:2},a.cookie)).status,400);
+    const pair=await Promise.all([api(srv.url,"osaka/play",payload,a.cookie),api(srv.url,"osaka/play",payload,a.cookie)]);
+    assert.ok(pair.every(x=>x.status===200),JSON.stringify(pair.map(x=>x.result.error)));
+    assert.deepEqual(pair.map(x=>x.result.osakaResult.replayed).sort(),[false,true]);
+    assert.equal(pair[0].result.osakaResult.outcome,"win");assert.equal(pair[0].result.osakaResult.moneyDelta,5000);
+    const after=(await api(srv.url,"state",undefined,b.cookie)).result;
+    assert.equal(after.character.money,before.character.money);assert.equal(after.osaka.latest,null);
+    assert.deepEqual(after.legacyInventory,before.legacyInventory);
+    assert.equal((await api(srv.url,"state",undefined,a.cookie)).result.osaka.history.length,1);
+    const other=await api(srv.url,"osaka/play",payload,b.cookie);assert.equal(other.status,200);assert.equal(other.result.osakaResult.replayed,false);
+  }finally{await srv.stop();}
 });
