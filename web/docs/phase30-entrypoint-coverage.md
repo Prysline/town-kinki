@@ -44,8 +44,8 @@
 | [`特典`](../../unit.pl#L81) | `tokuten.cgi` | `tokuten` | 無 | Web 地圖代碼未收錄 |
 | [`アンケ`](../../unit.pl#L83) | `enq.cgi` | `top` | 有 | Web 有圖示、點選不可進入 |
 | [`駅`](../../unit.pl#L85) | `station.cgi` | `map` | 有 | **PR #26 已修復** → 點車站可查看六組原版票價並實際跨城扣現金；另有第62階段[原版公路寶箱載具與事故](phase62-road-travel.md)、第63階段[迷路與事故後改道](phase63-road-lost.md)；其他交通券未核實 |
-| [`おばちゃん`](../../unit.pl#L116) | `obatyan.cgi` | `week` | 有 | 已接入大阪弱／強挑戰面板及原子交易；正式 NPC 來源缺漏時停用，見 [大阪挑戰](osaka-challenge-source.md) |
-| [`おばちゃん強`](../../unit.pl#L118) | `obatyan.cgi` | `strong` | 有 | 同大阪挑戰面板；依原版強難度資料與地圖權限結算，NPC 來源缺漏時停用 |
+| [`おばちゃん`](../../unit.pl#L116) | `obatyan.cgi` | `week` | 有 | 已接入大阪弱／強挑戰面板及原子交易；原版 NPC 缺檔時預設採獨立標註的重建池，原版限定模式停用，見 [大阪挑戰](osaka-challenge-source.md) |
+| [`おばちゃん強`](../../unit.pl#L118) | `obatyan.cgi` | `strong` | 有 | 同大阪挑戰面板；依原版強難度資料與地圖權限結算，NPC 缺檔時預設採獨立標註的重建池，原版限定模式停用 |
 | [`ゲーセン`](../../unit.pl#L120) | `gamerand.cgi` | `—` | 有 | **第55階段完成 `saikoro.cgi` 雙骰猜奇偶**；**第56階段補 `donut.cgi::donus4` High／Low**，累積牌桌張數×10,000下注、同點數勝利雙倍、共用牌桌及本人10分鐘冷卻；**第57階段追加 `donus`／`donus2`／`donus3` 三種原版卡牌**：兩種不同點數中獎及一種相同點數中獎，各自共用獨立牌桌；**第58階段加入 `loto.cgi` 六位數即時樂透**，七組獎金倍率、依上一玩家判斷3分鐘限制；**第59階段新增 `loto6.cgi` 六號樂透**：1～36選6個不同號碼、當地06:00或滿200注時由玩家操作開獎，最多每人20注，獎金匯普通銀行；**第60階段新增 `cardw2.cgi` 多卡**：五個下注課程、成功加倍率／失敗歸1、原版實際成功率79～19%；**第61階段完成 `otakara.cgi` 四寶箱開箱／獎池與立即能力或33欄道具入庫**；道具的後續特殊使用仍待逐項移植，福引原活動已過期；**第62階段已接寶箱載具的原版公路移動，第63階段另接迷路與事故後改道**（部分物品其他用途未移植）。詳 [第55階段](phase55-arcade-dice.md)、[第56階段](phase56-arcade-highlow.md)、[第57階段](phase57-arcade-donut-trio.md)、[第58階段](phase58-instant-loto.md)、[第59階段](phase59-loto6-draw.md)、[第60階段](phase60-multi-card.md)、[第61階段](phase61-treasure-chests.md)、[第62階段](phase62-road-travel.md)、[第63階段](phase63-road-lost.md) |
 | [`アイテム`](../../unit.pl#L122) | `item.cgi` | `item_make` | 無 | Web 地圖代碼未收錄 |
 | [`役場`](../../unit.pl#L124) | `yakuba.cgi` | `yakuba` | 有 | Web 有圖示、點選不可進入 |
