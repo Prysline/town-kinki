@@ -20,7 +20,7 @@
 直接從原版 `unit.pl` 的 `%unit` 定義重新取出 **73 個地圖代碼**：**43 個**定義互動 `<form>`（包含跨行的「温泉」）；另 **30 個**是地景／道路／裝飾等非表單條目。
 
 針對 43 個互動入口，Web 目前：
-- **30 個**有明確的 [`MAP_SYMBOLS`](../src/town-map.mjs) 地圖代碼；**13 個**原版互動入口沒有被加入 Web 地圖代碼清單（如未來製作這些原版建築，須以 `unit.pl` 及來源函式核對，不能亂畫入口）。
+- **32 個**有明確的 [`MAP_SYMBOLS`](../src/town-map.mjs) 地圖代碼；**11 個**原版互動入口沒有被加入 Web 地圖代碼清單（如未來製作這些原版建築，須以 `unit.pl` 及來源函式核對，不能亂畫入口）。
 - **20 個**有操作入口：**19 個**由 [`FACILITY_PANELS`](../public/town-home.js#L2) 導向 Web 面板（含 PR #23 的獨立教室，PR #27 的已匯入有效信用卡付款），另 **1 個「駅」**由 [`townCellAction`](../public/town-home.js#L12) 導向車站票價與乘車選項（PR #26）。這只是入口覆蓋，不代表設施全部規則已移植。
 - **12 個**已有 Web 地圖代碼，但既未映射 `FACILITY_PANELS`，也不是車站特例；[`townCellAction`](../public/town-home.js#L12) 會回傳 `unavailable`，按圖示只會提示尚未移植。
 - 百貨兩入口、自販機與裝備屋已有各自實際購物交易，**仍不等於原版全部商店功能**。詳 [百貨店](phase31-department-checkout.md)、[自販機](phase33-vending-shopping.md) 與 [裝備屋](phase35-equipment-shop.md)。
@@ -44,8 +44,8 @@
 | [`特典`](../../unit.pl#L81) | `tokuten.cgi` | `tokuten` | 無 | Web 地圖代碼未收錄 |
 | [`アンケ`](../../unit.pl#L83) | `enq.cgi` | `top` | 有 | Web 有圖示、點選不可進入 |
 | [`駅`](../../unit.pl#L85) | `station.cgi` | `map` | 有 | **PR #26 已修復** → 點車站可查看六組原版票價並實際跨城扣現金；另有第62階段[原版公路寶箱載具與事故](phase62-road-travel.md)、第63階段[迷路與事故後改道](phase63-road-lost.md)；其他交通券未核實 |
-| [`おばちゃん`](../../unit.pl#L116) | `obatyan.cgi` | `week` | 無 | Web 地圖代碼未收錄 |
-| [`おばちゃん強`](../../unit.pl#L118) | `obatyan.cgi` | `strong` | 無 | Web 地圖代碼未收錄 |
+| [`おばちゃん`](../../unit.pl#L116) | `obatyan.cgi` | `week` | 有 | 已接入大阪弱／強挑戰面板及原子交易；正式 NPC 來源缺漏時停用，見 [大阪挑戰](osaka-challenge-source.md) |
+| [`おばちゃん強`](../../unit.pl#L118) | `obatyan.cgi` | `strong` | 有 | 同大阪挑戰面板；依原版強難度資料與地圖權限結算，NPC 來源缺漏時停用 |
 | [`ゲーセン`](../../unit.pl#L120) | `gamerand.cgi` | `—` | 有 | **第55階段完成 `saikoro.cgi` 雙骰猜奇偶**；**第56階段補 `donut.cgi::donus4` High／Low**，累積牌桌張數×10,000下注、同點數勝利雙倍、共用牌桌及本人10分鐘冷卻；**第57階段追加 `donus`／`donus2`／`donus3` 三種原版卡牌**：兩種不同點數中獎及一種相同點數中獎，各自共用獨立牌桌；**第58階段加入 `loto.cgi` 六位數即時樂透**，七組獎金倍率、依上一玩家判斷3分鐘限制；**第59階段新增 `loto6.cgi` 六號樂透**：1～36選6個不同號碼、當地06:00或滿200注時由玩家操作開獎，最多每人20注，獎金匯普通銀行；**第60階段新增 `cardw2.cgi` 多卡**：五個下注課程、成功加倍率／失敗歸1、原版實際成功率79～19%；**第61階段完成 `otakara.cgi` 四寶箱開箱／獎池與立即能力或33欄道具入庫**；道具的後續特殊使用仍待逐項移植，福引原活動已過期；**第62階段已接寶箱載具的原版公路移動，第63階段另接迷路與事故後改道**（部分物品其他用途未移植）。詳 [第55階段](phase55-arcade-dice.md)、[第56階段](phase56-arcade-highlow.md)、[第57階段](phase57-arcade-donut-trio.md)、[第58階段](phase58-instant-loto.md)、[第59階段](phase59-loto6-draw.md)、[第60階段](phase60-multi-card.md)、[第61階段](phase61-treasure-chests.md)、[第62階段](phase62-road-travel.md)、[第63階段](phase63-road-lost.md) |
 | [`アイテム`](../../unit.pl#L122) | `item.cgi` | `item_make` | 無 | Web 地圖代碼未收錄 |
 | [`役場`](../../unit.pl#L124) | `yakuba.cgi` | `yakuba` | 有 | Web 有圖示、點選不可進入 |
