@@ -8,7 +8,7 @@ import {displayRetailItemName,displayRetailItemCategory}
   from "../public/retail-item-translations.js";
 
 const read=path=>readFileSync(new URL(path,import.meta.url),"utf8");
-const legacy=path=>decodeLegacyText(read(path));
+const legacy=path=>decodeLegacyText(readFileSync(new URL(path,import.meta.url)));
 const retailSource=legacy("../../dat_dir/syouhin.cgi");
 const retailSourceRows=retailSource.split(/\r?\n/).filter(Boolean).slice(1)
   .map(line=>line.split("<>"));
