@@ -232,9 +232,11 @@ test("DB-04：第62階段公路 SQLite 實體 WAL 備份→升級→未完成旅
     assert.equal(resumed.character.stats.tairyoku,23);
     assert.equal(resumed.bankAccount.termBalance,2500);
     assert.equal(resumed.roadTravel.pending,null);
-    assert.deepEqual(resumed.roadTravel.history.map(x=>x.id),[41,42]);
+    assert.deepEqual(resumed.roadTravel.history.map(x=>x.id),[42,41],
+      "最近20筆歷史依資料列 id DESC 排序，不以舊結算日期重排");
     assert.equal(resumed.roadTravel.history[0].lost,false);
-    assert.equal(resumed.roadTravel.history[1].completedAt,seed.now-10000);
+    assert.equal(resumed.roadTravel.history[0].completedAt,seed.now-10000);
+    assert.equal(resumed.roadTravel.history[1].lost,false);
     const migratedAgain=new DatabaseSync(join(newDir,"solo.sqlite"));
     try{
       assert.equal(migratedAgain.prepare("SELECT COUNT(*) n FROM arcade_road_trips").get().n,2);
