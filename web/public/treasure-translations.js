@@ -1,6 +1,6 @@
 // 只處理原版 dat_dir/otakara.cgi 的 110 筆寶箱獎品之 Web 顯示。
 // 五組 17 項能力縮寫逐一核對原始 33 欄；不更動獎池、機率、金額或道具效果。
-// 原文 冷えピタクール 暫待使用者確認商品式名稱，未知值保持原文。
+// 冷えピタクール 的顯示名稱「冰涼退熱貼」已獲使用者核准，原版效果仍依原始欄位。
 const STAT_SUFFIXES=Object.freeze({
   "国":"國語",
   "数":"數學",
@@ -33,7 +33,8 @@ const SERIES_NAMES=Object.fromEntries(SERIES.flatMap(({original,display})=>
 export const TREASURE_REWARD_NAMES_ZH_TW=Object.freeze({
   ...SERIES_NAMES,
   "豪華クルージング":"豪華遊輪之旅",
-  "究極の純プラチナカー":"究極純鉑金車"
+  "究極の純プラチナカー":"究極純鉑金車",
+  "冷えピタクール":"冰涼退熱貼"
 });
 const TREASURE_CATEGORIES=Object.freeze({
   "銅の箱":"銅箱",

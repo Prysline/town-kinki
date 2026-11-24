@@ -33,13 +33,13 @@ const series=[
   ["金箔","金箔",20,"金の箱"]
 ];
 
-test("來源110筆逐筆不遺漏：新譯名87、沿用21、原文即繁中1、待校對1",()=>{
+test("來源110筆逐筆不遺漏：新譯名88、沿用21、原文即繁中1、待校對0",()=>{
   assert.equal(pool.length,110);
   assert.equal(new Set(pool.map(x=>x.name)).size,110);
-  assert.equal(Object.keys(TREASURE_REWARD_NAMES_ZH_TW).length,87);
+  assert.equal(Object.keys(TREASURE_REWARD_NAMES_ZH_TW).length,88);
   assert.equal(Object.keys(reused).length,21);
   const names=new Set([...Object.keys(TREASURE_REWARD_NAMES_ZH_TW),
-    ...Object.keys(reused),"金塊","冷えピタクール"]);
+    ...Object.keys(reused),"金塊"]);
   assert.equal(names.size,110);
   assert.deepEqual([...names].sort(),pool.map(x=>x.name).sort());
   for(const item of pool){
@@ -51,8 +51,11 @@ test("來源110筆逐筆不遺漏：新譯名87、沿用21、原文即繁中1、
     assert.ok(displayRetailItemName(item.name).trim());
   }
   assert.equal(displayRetailItemName("金塊"),"金塊");
-  assert.equal(displayRetailItemName("冷えピタクール"),"冷えピタクール",
-    "待確認的商品式名稱不得擅自定稿");
+  assert.equal(displayRetailItemName("冷えピタクール"),"冰涼退熱貼",
+    "核准顯示譯名不得影響原版效果欄位");
+  const cooling=pool.find(x=>x.name==="冷えピタクール");
+  assert.equal(cooling.effect,"風邪,7");
+  assert.equal(cooling.rawFields[1],"冷えピタクール");
   assert.equal(TREASURE_REWARD_NAMES_ZH_TW["豪華クルージング"],"豪華遊輪之旅");
   assert.equal(TREASURE_REWARD_NAMES_ZH_TW["究極の純プラチナカー"],"究極純鉑金車");
 });
