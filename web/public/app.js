@@ -4104,7 +4104,7 @@ function renderCLeague(){
     el("c-league-name").value=info.character?.name??"";el("c-league-image").value=info.character?.imageUrl??"";
     fields.replaceChildren();
     for(const [key,label] of Object.entries(labels)){
-      const row=document.createElement("div");row.className="small";
+      const row=document.createElement("div");row.className="small";row.style.display="flex";row.style.flexWrap="wrap";row.style.gap="4px";
       const title=document.createElement("label");title.textContent=label+" 移轉 ";
       const input=document.createElement("input");input.type="number";input.min="0";input.step="1";input.value="0";input.dataset.stat=key;input.style.width="6em";title.append(input);
       const comment=document.createElement("label");comment.textContent=" 台詞 ";
@@ -4120,6 +4120,7 @@ function renderCLeague(){
   if([...payment.options].some(o=>o.value===oldPayment))payment.value=oldPayment;
   const f=info.character;
   text("c-league-fighter",f?f.name+"｜"+Object.entries(labels).map(([k,v])=>v+" "+f.stats[k]).join("・"):"尚未建立培育角色");
+  const image=el("c-league-image-preview");image.hidden=!f?.imageUrl;image.removeAttribute("href");if(f?.imageUrl)image.href=f.imageUrl;
   const root=el("c-league-rankings");root.replaceChildren();
   for(const [heading,rows,previous,overall] of [["本季前十名",info.rankings,false,false],["前季前五名",info.previous,true,false],["累積前十名",info.overall,false,true]]){
     const h=document.createElement("h4");h.textContent=heading;root.append(h);
@@ -4175,6 +4176,7 @@ function render() {
   el("logout").textContent=solo?"離開遊戲":"登出";
   renderLegacyIcon();
   if (!state.character || lobby) {
+    if(!state.character){cLeagueOwner=null;cLeaguePending=null;el("c-league-fields").replaceChildren();}
     if(!publicPreview&&!previewLoading)loadPublicPreview();
     updateCompactVisibility();
     el("event-popup").hidden=true;

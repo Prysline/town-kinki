@@ -136,6 +136,7 @@ export function playCLeague(db,id,data,now,today,rng=randomInt){
     if(mine&&now-mine.last_at<C_INTERVAL_MS)throw Error("尚在 1 分鐘比賽間隔");
     if(mine&&mine.wins+mine.losses+mine.draws>=C_MATCH_LIMIT)throw Error("本季 100 場賽程已完成");
     const {opponent,mimic}=chooseCLeagueOpponent(rows.filter(e=>e.user_id!==id).map(fighter),player,rng);
+    if(!validInt(a.money))throw Error("居民現金資料無效");
     const fight=simulateCLeague(player,opponent,rng),cash=safe(BigInt(a.money)+BigInt(fight.reward));
     const result={...fight,season:s.number,playedAt:now,playerName:player.name,opponentName:opponent.name,mimic};
     db.prepare("INSERT OR IGNORE INTO c_league_entries(user_id) VALUES(?)").run(id);

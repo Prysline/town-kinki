@@ -669,3 +669,23 @@ test("Chrome：健身房減重→真實百貨寵物／信用卡→背包使用�
     rmSync(workspace,{force:true,recursive:true,maxRetries:50,retryDelay:200});
   }
 });
+
+test("Chrome C 聯賽：實際培育、模仿者比賽、戰報與手機視窗",{timeout:90000},async()=>{
+  const workspace=mkdtempSync(join(tmpdir(),"town-chrome-c-league-"));let web=null,chrome=null;
+  try{
+    web=await startWeb(join(workspace,"sqlite"));chrome=await openChrome(join(workspace,"chrome"));
+    await chrome.send("Page.enable");await chrome.send("Runtime.enable");await viewport(chrome,1440,900);
+    await chrome.send("Page.navigate",{url:web.url});await until(chrome,"!document.querySelector('#create')?.hidden","建角入口");
+    await evaluate(chrome,"window.confirm=()=>true");await fill(chrome,'#create-form [name="name"]',"聯賽測試居民");await click(chrome,"#create-submit");
+    await until(chrome,"!document.querySelector('#game')?.hidden","主畫面");
+    await click(chrome,"#c-league-training summary");await fill(chrome,"#c-league-name","模仿測試");await fill(chrome,'#c-league-fields input[data-stat="kenkou"]',1);
+    await click(chrome,"#c-league-train");await until(chrome,"document.querySelector('#c-league-result')?.textContent?.includes('培育已儲存')","實際培育完成");
+    await until(chrome,"document.querySelector('#c-league-play')?.disabled===false","比賽可用");await click(chrome,"#c-league-play");
+    await until(chrome,"document.querySelector('#c-league-history summary')?.textContent?.includes('模仿者')","模仿者戰報");
+    assert.equal(await evaluate(chrome,"document.querySelector('#c-league-play').disabled"),true);
+    const saved=await evaluate(chrome,"(async()=>{const s=await(await fetch('/api/state')).json();return {n:s.cLeague.history.length,kenkou:s.cLeague.character.stats.kenkou,mimic:s.cLeague.history[0].mimic}})()");
+    assert.deepEqual(saved,{n:1,kenkou:1,mimic:true});
+    await viewport(chrome,375,812);
+    assert.ok(await evaluate(chrome,"document.querySelector('#c-league-status').textContent.includes('1 / 100')"));
+  }finally{await chrome?.stop();await web?.stop();rmSync(workspace,{force:true,recursive:true,maxRetries:50,retryDelay:200});}
+});

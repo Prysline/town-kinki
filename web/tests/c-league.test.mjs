@@ -32,7 +32,7 @@ test("培育原子扣能力與現金，重送、負值、超額、偽造欄位�
   assert.deepEqual(db.prepare("SELECT * FROM characters WHERE user_id=1").get(),before);assert.equal(cLeagueOverview(db,1,now).character.stats.kenkou,1);
 }finally{db.close();}});
 test("C 聯賽單機模仿者、本人獎金、對手隔離、冷卻、100場上限與賽季積分",()=>{const db=setup();try{
-  create(db,1,1);create(db,2,1);const before=db.prepare("SELECT * FROM characters WHERE user_id=2").get();
+  create(db,1,2);create(db,2,2);const before=db.prepare("SELECT * FROM characters WHERE user_id=2").get();
   const a=playCLeague(db,1,{requestId:"a"},now,today,()=>2);assert.equal(a.mimic,true);assert.equal(a.outcome,"draw");
   assert.equal(playCLeague(db,1,{requestId:"a"},now,today,()=>{throw Error("redraw")}).replayed,true);
   assert.throws(()=>playCLeague(db,1,{requestId:"b"},now+59999,today),/間隔/);
@@ -43,3 +43,45 @@ test("C 聯賽單機模仿者、本人獎金、對手隔離、冷卻、100場上
   const next=cLeagueOverview(db,1,now+C_SEASON_MS);assert.equal(next.season,2);assert.equal(next.record.wins,0);assert.equal(next.record.previousWins,100);assert.equal(next.record.points,10);assert.equal(next.record.champions,1);assert.equal(next.overall[1].points,5);assert.equal(cLeagueOverview(db,1,now+C_SEASON_MS).record.points,10);
 }finally{db.close();}});
 test("CGI 來源契約 C 聯賽",()=>{const s=readFileSync(new URL("../../game.cgi",import.meta.url),"utf8"),ini=readFileSync(new URL("../../town_ini.cgi",import.meta.url),"utf8");for(const x of ["foreach (1..25)","int(rand(17))+1","int(rand($#taisen_list))","$c_mouke = $dameegitame * 2","int($dameegitame * 1.5)","$ch_yobi2 += 10","$ch_yobi2 += 5"])assert.ok(s.includes(x),x);for(const x of ["$c_nissuu = '14'","$c_siaisuu = \"100\"","$c_siai_kankaku = '1'"])assert.ok(ini.includes(x),x);});
+
+test("C 聯賽原版零能量判定、非零敗北與平手獎金",()=>{
+  assert.equal(simulateCLeague(f(0),f(0),()=>2).outcome,"win");
+  const a=f(10),b=f(10);a.stats.speed=11;
+  const first=[0,1,0];const draw=simulateCLeague(a,b,()=>first.length?first.shift():2);
+  assert.equal(draw.outcome,"draw");assert.equal(draw.damageDealt,6);assert.equal(draw.reward,9);
+  b.stats.kenkou=100;const rolls=[0,1,0,9,2,2];
+  const loss=simulateCLeague(a,b,()=>rolls.shift());
+  assert.equal(loss.outcome,"loss");assert.equal(loss.damageDealt,6);assert.equal(loss.reward,6);
+});
+test("C 聯賽信用付款須有效本人卡、餘額足夠，銀行帳簿同交易",()=>{
+  const db=setup();try{
+    db.exec("CREATE TABLE legacy_inventory_items(user_id INTEGER,source_line INTEGER,category TEXT,original_name TEXT,effect TEXT,durability INTEGER,durability_unit TEXT,purchased_at INTEGER,raw_fields_json TEXT)");
+    const fields=Array(33).fill("");fields[0]="日用品";fields[1]="信用卡";fields[9]="クレジット";fields[21]="3";fields[22]="日";fields[30]="900";
+    db.prepare("INSERT INTO legacy_inventory_items VALUES(?,?,?,?,?,?,?,?,?)").run(2,1,fields[0],fields[1],fields[9],3,"日",900,JSON.stringify(fields));
+    const request={requestId:"credit",name:"信用培育",transfers:{kenkou:1},payment:"credit",cardSourceLine:1};
+    assert.throws(()=>trainCLeague(db,1,request,now,today),/本人/);
+    assert.equal(cLeagueOverview(db,1,now).character,null);
+    assert.throws(()=>trainCLeague(db,2,{...request,transfers:{kenkou:11}},now,today),/餘額/);
+    assert.equal(cLeagueOverview(db,2,now).character,null);
+    const paid=trainCLeague(db,2,request,now,today);assert.equal(paid.cost,10000);
+    const row=db.prepare("SELECT money,bank FROM characters WHERE user_id=2").get();assert.equal(row.money,1000000);assert.equal(row.bank,90000);
+    const ledger=db.prepare("SELECT action,debit,balance FROM bank_ledger WHERE user_id=2").get();assert.equal(ledger.action,"C 聯賽信用付款");assert.equal(ledger.debit,10000);assert.equal(ledger.balance,90000);
+    assert.equal(trainCLeague(db,2,request,now,today).replayed,true);
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM bank_ledger WHERE user_id=2").get().n,1);
+  }finally{db.close();}
+});
+test("C 聯賽戰鬥寫入失敗及現金溢位整筆回滾",()=>{
+  const db=setup();try{
+    create(db,1,2);
+    const before=db.prepare("SELECT * FROM characters WHERE user_id=1").get();
+    db.exec("CREATE TRIGGER fail_c_play BEFORE INSERT ON c_league_requests BEGIN SELECT RAISE(ABORT,'forced'); END;");
+    assert.throws(()=>playCLeague(db,1,{requestId:"play"},now,today,()=>2),/forced/);
+    assert.deepEqual(db.prepare("SELECT * FROM characters WHERE user_id=1").get(),before);
+    assert.equal(cLeagueOverview(db,1,now).record,null);
+    db.exec("DROP TRIGGER fail_c_play");
+    db.prepare("UPDATE characters SET money=?,bank=0 WHERE user_id=1").run(Number.MAX_SAFE_INTEGER);
+    assert.throws(()=>playCLeague(db,1,{requestId:"play"},now,today,()=>2),/安全範圍/);
+    assert.equal(cLeagueOverview(db,1,now).history.length,0);
+    assert.equal(cLeagueOverview(db,1,now).record,null);
+  }finally{db.close();}
+});
