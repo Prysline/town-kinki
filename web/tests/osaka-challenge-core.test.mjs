@@ -28,13 +28,16 @@ test("Osaka original source: 16 attacks, separate base money, four declared priz
  assert.deepEqual(rules.strong.prizes.map(x=>x.name),["おばちゃんの力","関西弁翻訳機","おばちゃんの知恵薬（スーパー）","おばちゃんの知恵袋（スーパー）"]);
  for(const mode of ["week","strong"]){
    assert.ok(rules[mode].prizes.every(x=>x.rawFields.length===33));
-   assert.equal(rules[mode].prizes[0].usableShape,false);
+   assert.equal(rules[mode].prizes[0].usableShape,true);
    assert.equal(rules[mode].prizes[1].usableShape,true);
    assert.equal(rules[mode].prizes[2].usableShape,true);
    assert.equal(rules[mode].prizes[3].usableShape,true);
  }
- assert.equal(rules.week.prizes[0].rawFields[9],"無3");
- assert.equal(rules.strong.prizes[0].rawFields[21],"回");
+ assert.equal(rules.week.prizes[0].originalRawFields[9],"無3");
+ assert.equal(rules.strong.prizes[0].originalRawFields[21],"回");
+ for(const [mode,amount,uses] of [["week","3","3"],["strong","10","5"]]){
+  const p=rules[mode].prizes[0];assert.ok(p.correction);assert.equal(p.rawFields[9],"無");assert.equal(p.rawFields[21],uses);assert.equal(p.rawFields[22],"回");assert.equal(p.rawFields[23],"30");assert.equal(p.rawFields[28],"10");assert.deepEqual(p.rawFields.slice(2,9),Array(7).fill("0"));assert.deepEqual(p.rawFields.slice(10,21),[...Array(7).fill(amount),"0",...Array(3).fill(amount)]);
+ }
 });
 test("Osaka NPC loader: only designated ten files, safe projected fields, missing catalog fails closed",()=>{
  const root=mkdtempSync(join(tmpdir(),"osaka-source-"));
