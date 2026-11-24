@@ -63,7 +63,7 @@ async function api(path, data) {
     credentials: "same-origin"
   });
   const result = await response.json();
-  if (!response.ok) throw new Error(result.error || "操作失敗");
+  if (!response.ok) {const error=new Error(result.error || "操作失敗");error.status=response.status;throw error;}
   return result;
 }
 
@@ -1591,7 +1591,7 @@ function renderLegacyItems(){
       const name=document.createElement("strong");name.textContent=displayRetailItemName(item.name);
       const durability=document.createElement("span");durability.className="inventory-item-remaining";
       const amount=itemRemainingDurability(item,actionInfo,browserGameNow());
-      durability.textContent="剩餘 "+amount+(item.unit??"");
+      durability.textContent=item.blocked?"待核對獎品 "+amount+" 筆（不可使用）":"剩餘 "+amount+(item.unit??"");
       head.append(name,durability);card.append(head);
       const preview=document.createElement("div");preview.className="inventory-effects";
       for(const effect of itemInventoryEffects(info)){
@@ -1623,7 +1623,7 @@ function renderLegacyItems(){
         controls.append(status,button);
       }else{
         const status=document.createElement("span");status.className="small inventory-item-status";
-        status.textContent=verifiedVehicle?
+        status.textContent=item.blocked?"原始欄位異常，已保留獎品，不可使用":verifiedVehicle?
           "可用於公路旅行（"+verifiedVehicle.seconds+" 秒）；不是背包直接使用道具":
           item.name==="健康保険"&&state.insurance?.active?
           "醫院自動生效，不需手動使用":"目前尚未支援直接使用";
@@ -1651,7 +1651,7 @@ function renderLegacyItems(){
         "熱量："+(info?.calories??"未確認")+" kcal｜使用間隔："+(info?.intervalMinutes??"未確認")+" 分鐘",
         "身體能量消耗："+(info?.bodyCost??"未確認")+"｜頭腦能量消耗："+(info?.brainCost??"未確認"),
         "原版備註："+(info?.comment?.trim()||"沒有提供文字備註"),
-        "來源："+(item.readOnly?"歷史來源封存":item.origin==="fishing"?"Web 釣魚／餌料店":item.origin==="crafting"?"Web 合成屋":"Web 購入或轉換")+
+        "來源："+(item.origin==="osakaQuarantine"?"大阪挑戰待核對獎品":item.origin==="osaka"?"大阪挑戰掉落":item.readOnly?"歷史來源封存":item.origin==="fishing"?"Web 釣魚／餌料店":item.origin==="crafting"?"Web 合成屋":"Web 購入或轉換")+
           "（記錄位置 "+item.sourceLine+"；原始內容不在此頁修改）",
         "Web 使用狀態："+(verifiedVehicle?"已核對為本人可用公路載具，出發須於公路面板操作，事故可能扣耐久":
           actionInfo?"已核對可使用規則，受冷卻與角色條件限制":
@@ -2794,6 +2794,62 @@ async function submitArcadeDice(guess,stake){
     arcadeDiceSubmitting=false;
     if(state?.character)renderArcadeDice();
   }
+}
+let osakaPending=null,osakaBusy=false,osakaOwner=null;
+async function submitOsaka(mode){
+  if(osakaBusy)return;
+  if(osakaPending&&osakaPending.mode!==mode){notify("請先重試上一筆大阪挑戰",true);return;}
+  if(!osakaPending){
+    if(!window.confirm("開始"+(mode==="week"?"弱":"強")+"大阪挑戰？失敗可能損失現金。"))return;
+    osakaPending={mode,requestId:crypto.randomUUID()};
+  }
+  osakaBusy=true;renderOsaka();
+  try{
+    state=await api("osaka/play",osakaPending);osakaPending=null;render();
+  }catch(error){
+    if(error.status===400||error.status===401)osakaPending=null;
+    notify(error.message,true);
+  }finally{osakaBusy=false;renderOsaka();}
+}
+function renderOsaka(){
+  if(!state?.character)return;
+  const owner=JSON.stringify([state.user?.username,state.character.name]);
+  if(osakaOwner!==owner){osakaPending=null;osakaOwner=owner;}
+  const game=state.osaka;
+  const label={week:"弱",strong:"強"};
+  const names={win:"勝利",loss:"敗北",draw:"平手"};
+  text("osaka-status",!game?.catalogReady?
+    (game?.sourceInvalid?"原版 NPC 資料格式無效，挑戰未開放。":"原版 NPC 資料尚未齊備（缺 "+(game?.missingCount??10)+" 筆），挑戰未開放。"):
+    Object.values(game.locations).some(Boolean)?"所在城鎮可挑戰。":"所在城鎮沒有大阪挑戰或遊樂中心入口。");
+  const modes=el("osaka-modes");modes.replaceChildren();
+  for(const mode of ["week","strong"]){
+    const button=document.createElement("button");button.type="button";
+    button.textContent=(osakaPending?.mode===mode?"重試 ":"挑戰 ")+label[mode]+"大阪阿姨";
+    button.disabled=!game?.catalogReady||!game?.locations?.[mode]||osakaBusy||Boolean(osakaPending&&osakaPending.mode!==mode);
+    button.addEventListener("click",()=>submitOsaka(mode));modes.append(button);
+  }
+  const result=el("osaka-result");result.replaceChildren();
+  const history=el("osaka-history");history.replaceChildren();
+  const append=(parent,tag,content)=>{const node=document.createElement(tag);node.textContent=content;parent.append(node);return node;};
+  const battle=state.osakaResult??game?.latest;
+  if(battle){
+    append(result,"h4",label[battle.mode]+"｜"+battle.npc.name+"｜"+names[battle.outcome]);
+    append(result,"p","攻擊 "+battle.rounds.length+" 次｜現金變化 "+money(battle.moneyDelta));
+    append(result,"p","初始玩家 頭腦 "+battle.initial.player.brainEnergy+"／身體 "+battle.initial.player.bodyEnergy+
+      "｜對手 頭腦 "+battle.initial.npc.brainEnergy+"／身體 "+battle.initial.npc.bodyEnergy);
+    append(result,"p","結束玩家 頭腦 "+battle.player.brainEnergy+"／身體 "+battle.player.bodyEnergy);
+    if(battle.reward)append(result,"p",!battle.reward.granted?"背包已滿，未取得 "+battle.reward.name:
+      "取得 "+battle.reward.name+(battle.reward.blocked?"（原始欄位異常，待核對）":""));
+    const details=document.createElement("details");details.open=true;
+    append(details,"summary","逐次攻擊紀錄");
+    const list=document.createElement("ol");
+    for(const r of battle.rounds)append(list,"li",(r.actor==="player"?"玩家":battle.npc.name)+"："+(r.stat)+
+      "｜"+(r.energy==="brainEnergy"?"頭腦":"身體")+"傷害 "+r.damage+
+      "｜玩家 "+Math.max(0,r.player.brainEnergy)+"/"+Math.max(0,r.player.bodyEnergy)+
+      "｜對手 "+Math.max(0,r.npc.brainEnergy)+"/"+Math.max(0,r.npc.bodyEnergy));
+    details.append(list);result.append(details);
+  }else append(result,"p","尚無挑戰紀錄。");
+  for(const b of game?.history??[])append(history,"p",label[b.mode]+"｜"+b.name+"｜"+names[b.outcome]+"｜"+money(b.moneyDelta));
 }
 function renderArcadeDice(){
   if(!state?.character)return;
@@ -4137,6 +4193,7 @@ function render() {
   renderVending();
   renderFishing();
   renderCrafting();
+  renderOsaka();
   renderArcadeDice();
   renderArcadeHighLow();
   renderArcadeDonuts();
