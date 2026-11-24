@@ -32,47 +32,71 @@ function findTemplate(rules,row,raw){
   return OSAKA_MODES.flatMap(mode=>rules[mode].prizes).find(p=>p.usableShape&&
     p.name===row.original_name&&p.rawFields.every((v,i)=>[21,26,30].includes(i)||raw[i]===v));
 }
+// Upgrade old draft-only quarantined awards using immutable per-battle receipts.
+ // Never infer the weak/strong mix from the count alone or rewrite old receipts.
+export function migrateOsakaPowerPrizes(db,rules){
+  const rows=db.prepare("SELECT * FROM legacy_inventory_items WHERE original_id=? ORDER BY user_id,source_line").all(QUARANTINE);
+  const result={migrated:0,skipped:0};
+  if(!rows.length)return result;
+  db.exec("BEGIN IMMEDIATE");
+  try{
+    for(const row of rows){
+      let raw;
+      try{raw=JSON.parse(row.raw_fields_json);}catch{result.skipped++;continue;}
+      if(row.category!=="ゲットアイテム"||row.original_name!=="おばちゃんの力"||row.durability_unit!=="未核對"||
+        db.prepare("SELECT 1 FROM legacy_item_usage WHERE user_id=? AND source_line=?").get(row.user_id,row.source_line)||
+        db.prepare("SELECT 1 FROM legacy_inventory_items WHERE user_id=? AND original_id=? AND category=? AND original_name=?").get(row.user_id,ORIGIN,row.category,row.original_name)){
+        result.skipped++;continue;
+      }
+      const awards=db.prepare("SELECT mode,result_json FROM osaka_battles WHERE user_id=? ORDER BY id").all(row.user_id).flatMap(record=>{
+        const b=JSON.parse(record.result_json);
+        return b.reward?.granted&&b.reward.blocked&&b.reward.sourceLine===row.source_line?[{mode:record.mode,b}]:[];
+      });
+      if(!awards.length||awards.length!==row.durability||!awards.every(({mode,b})=>{
+        const p=rules[mode]?.prizes[0];
+        return p?.correction&&b.prizeIndex===0&&b.prize?.name===row.original_name&&
+          JSON.stringify(b.prize.rawFields)===JSON.stringify(p.originalRawFields);
+      })||JSON.stringify(raw)!==JSON.stringify(rules[awards[0].mode].prizes[0].originalRawFields)){
+        result.skipped++;continue;
+      }
+      const fields=[...rules[awards[0].mode].prizes[0].rawFields];
+      const count=awards.reduce((n,{mode})=>n+Number(rules[mode].prizes[0].rawFields[21]),0);
+      if(!Number.isSafeInteger(count)||count<1||count>1000000){result.skipped++;continue;}
+      fields[21]=String(count);fields[30]=String(row.purchased_at);
+      db.prepare("UPDATE legacy_inventory_items SET original_id=?,effect=?,durability=?,durability_unit=?,raw_fields_json=? WHERE user_id=? AND source_line=?")
+        .run(ORIGIN,fields[9],count,fields[22],JSON.stringify(fields),row.user_id,row.source_line);
+      result.migrated++;
+    }
+    db.exec("COMMIT");return result;
+  }catch(error){db.exec("ROLLBACK");throw error;}
+}
 function grantPrize(db,userId,rules,prize,now){
+  if(!prize.usableShape)throw new Error("大阪獎品資料無法安全使用");
   const rows=heldInventoryRows(db,userId,now);
-  // CGI checks all held mono.cgi entries before matching category/name; equipped gear is excluded.
   const stored=db.prepare("SELECT COUNT(*) n FROM equipment_items WHERE user_id=? AND status='stored'").get(userId).n;
   if(rows.length+stored>=25)return {name:prize.name,granted:false,reason:"inventory-full"};
-  const blocked=!prize.usableShape;
-  const origin=blocked?QUARANTINE:ORIGIN;
   const fields=[...prize.rawFields];
-  const existing=rows.find(row=>row.category==="ゲットアイテム"&&row.original_name===prize.name&&row.original_id===origin);
+  const existing=rows.find(row=>row.category==="ゲットアイテム"&&row.original_name===prize.name&&row.original_id===ORIGIN);
   if(existing){
     const raw=JSON.parse(existing.raw_fields_json);
-    if(!Array.isArray(raw)||raw.length!==33||raw[0]!==existing.category||raw[1]!==existing.original_name)
-      throw new Error("大阪獎品原始欄位異常");
-    let remaining;
-    if(blocked){
-      // Quarantine counts awards, not inferred use counts; every exact raw record stays in its receipt.
-      if(existing.durability_unit!=="未核對"||!OSAKA_MODES.some(m=>rules[m].prizes.some(p=>!p.usableShape&&p.rawFields.every((v,i)=>raw[i]===v))))
-        throw new Error("大阪待核對獎品來源異常");
-      remaining=existing.durability+1;
-    }else{
-      if(!findTemplate(rules,existing,raw)||raw[21]!==String(existing.durability)||existing.durability_unit!=="回"||
-         raw[30]!==String(existing.purchased_at)||existing.effect!==raw[9])
-        throw new Error("大阪獎品來源異常");
-      remaining=(existing.web_remaining??existing.durability)+Number(fields[21]);
-      // CGI same-name merging retains the first item's stats, effect and cooldown.
-      raw[21]=String(remaining);
-    }
+    if(!Array.isArray(raw)||raw.length!==33||raw[0]!==existing.category||raw[1]!==existing.original_name||
+       !findTemplate(rules,existing,raw)||raw[21]!==String(existing.durability)||existing.durability_unit!=="回"||
+       raw[30]!==String(existing.purchased_at)||existing.effect!==raw[9])
+      throw new Error("大阪獎品來源異常");
+    const remaining=(existing.web_remaining??existing.durability)+Number(fields[21]);
     if(!Number.isSafeInteger(remaining)||remaining<1||remaining>1000000)throw new Error("大阪獎品數量超出安全範圍");
+    raw[21]=String(remaining);
     db.prepare("UPDATE legacy_inventory_items SET durability=?,raw_fields_json=? WHERE user_id=? AND source_line=?")
       .run(remaining,JSON.stringify(raw),userId,existing.source_line);
-    if(!blocked)db.prepare("UPDATE legacy_item_usage SET remaining=? WHERE user_id=? AND source_line=?")
-      .run(remaining,userId,existing.source_line);
-    return {name:prize.name,granted:true,blocked,merged:true,sourceLine:existing.source_line};
+    db.prepare("UPDATE legacy_item_usage SET remaining=? WHERE user_id=? AND source_line=?").run(remaining,userId,existing.source_line);
+    return {name:prize.name,granted:true,blocked:false,merged:true,sourceLine:existing.source_line};
   }
   const sourceLine=Math.max(10_000_000,db.prepare("SELECT COALESCE(MAX(source_line),0) n FROM legacy_inventory_items WHERE user_id=?").get(userId).n+1);
   if(!Number.isSafeInteger(sourceLine))throw new Error("大阪獎品行號超出範圍");
-  // Malformed prizes remain byte-position-faithful; only the Web index marks an award count.
-  if(!blocked)fields[30]=String(Math.floor(now/1000));
+  fields[30]=String(Math.floor(now/1000));
   db.prepare("INSERT INTO legacy_inventory_items(user_id,original_id,source_line,category,original_name,effect,durability,durability_unit,purchased_at,last_used_at,raw_fields_json) VALUES(?,?,?,?,?,?,?,?,?,?,?)")
-    .run(userId,origin,sourceLine,fields[0],fields[1],fields[9],blocked?1:Number(fields[21]),blocked?"未核對":fields[22],Math.floor(now/1000),0,JSON.stringify(fields));
-  return {name:prize.name,granted:true,blocked,merged:false,sourceLine};
+    .run(userId,ORIGIN,sourceLine,fields[0],fields[1],fields[9],Number(fields[21]),fields[22],Math.floor(now/1000),0,JSON.stringify(fields));
+  return {name:prize.name,granted:true,blocked:false,merged:false,sourceLine};
 }
 export function playOsaka(db,userId,rules,catalog,{mode,requestId,now,rng=randomInt}={}){
   if(!Number.isSafeInteger(userId)||userId<1||!OSAKA_MODES.includes(mode)||typeof requestId!=="string"||!REQUEST.test(requestId)||
