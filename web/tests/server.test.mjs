@@ -6905,7 +6905,7 @@ function powerOsakaPlayer(srv,mode){
 }
 test("Osaka HTTP solo: missing NPC fails closed; valid dedicated test source enables both map paths, replay and restart",async()=>{
   const dir=mkdtempSync(join(tmpdir(),"town-osaka-http-"));
-  const env={OSAKA_NPC_ROOT:dir};
+  const env={OSAKA_NPC_ROOT:dir,OSAKA_NPC_POLICY:"original-only"};
   let srv=await start("solo",null,dir,env);
   try{
     assert.equal((await api(srv.url,"character",{name:"大阪單機",gender:"other",stats:defaultStats()})).status,200);
