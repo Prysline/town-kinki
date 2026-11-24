@@ -63,7 +63,7 @@ test("Osaka SQLite: both modes, first-template same-name stacking, actual item u
   assert.equal(character(db).money,7500);
  }finally{db?.close();rmSync(dir,{recursive:true,force:true});}
 });
-test("Osaka SQLite: every valid prize uses original effects; both malformed records kept separately from use",()=>{
+test("Osaka SQLite: all eight prizes use verified or approved corrected effects",()=>{
  const db=new DatabaseSync(":memory:");try{setup(db);
  for(const mode of ["week","strong"]){
   const id=mode==="week"?1:2;
@@ -71,13 +71,16 @@ test("Osaka SQLite: every valid prize uses original effects; both malformed reco
    const at=now+5000*drop;
    const b=play(db,id,mode,"osaka-"+mode+"-drop-"+drop,at,drop);
    const row=item(db,b.reward.sourceLine,id);
-   assert.equal(b.reward.blocked,drop===0);
+   assert.equal(b.reward.blocked,false);
+   const used=useLegacyItem(db,id,b.reward.sourceLine,"osaka-"+mode+"-use-"+drop,at);
    if(drop===0){
-    assert.deepEqual(JSON.parse(row.raw_fields_json),rules[mode].prizes[0].rawFields);
-    assert.throws(()=>useLegacyItem(db,id,b.reward.sourceLine,"osaka-blocked-001",at),/尚未支援/);
-    assert.ok(listLegacyInventoryItems(db,id,50,null,at).some(x=>x.blocked));
+    const amount=mode==="week"?3:10;
+    assert.deepEqual(b.prize.originalRawFields,rules[mode].prizes[0].originalRawFields);
+    assert.equal(row.durability,mode==="week"?3:5);
+    assert.deepEqual(used.changes.stats,Object.fromEntries(STAT_KEYS.slice(7).map(k=>[k,amount])));
+    assert.equal(used.changes.brainEnergy,-10);
+    assert.throws(()=>useLegacyItem(db,id,b.reward.sourceLine,"osaka-early-"+mode,at+1000),/間隔/);
    }else{
-    const used=useLegacyItem(db,id,b.reward.sourceLine,"osaka-"+mode+"-use-"+drop,at);
     const expected=drop===3?(mode==="week"?5:25):(mode==="week"?3:10);
     assert.equal(used.changes.stats.kokugo,expected);
     if(drop===2)assert.equal(used.changes.healthIndex,mode==="week"?15:20);
@@ -85,9 +88,10 @@ test("Osaka SQLite: every valid prize uses original effects; both malformed reco
   }
   assert.equal(inventorySlotUsage(db,id,now+15000).general.used,4);
  }
- const b=play(db,1,"strong","osaka-quarantine-merge",now+20000,0);
- assert.equal(b.reward.merged,true);assert.equal(item(db,b.reward.sourceLine).durability,2);
- assert.deepEqual(b.prize.rawFields,rules.strong.prizes[0].rawFields);
+ const b=play(db,1,"strong","osaka-power-merge",now+20000,0);
+ assert.equal(b.reward.merged,true);assert.equal(item(db,b.reward.sourceLine).durability,7);
+ assert.equal(JSON.parse(item(db,b.reward.sourceLine).raw_fields_json)[10],"3");
+ assert.deepEqual(b.prize.originalRawFields,rules.strong.prizes[0].originalRawFields);
  }finally{db.close();}
 });
 test("Osaka SQLite: capacity before stacking, rollback, map and catalog checks",()=>{
