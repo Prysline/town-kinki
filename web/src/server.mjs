@@ -53,6 +53,7 @@ import { initLegacyItemUseTables, listLegacyItemActions, listLegacyItemUseHistor
 import { initBankTables, settleBankInterest, bankOperation, bankOverview, bankLedger, recordBankEntry, transferToPlayer, BANK_TRANSFER_LIMIT, NEW_MEMBER_DAYS, NEW_MEMBER_TRANSFER_LIMIT, bankLoanOverview, borrowBankLoan, payoffBankLoan, bankTaxOverview, refreshBankTaxSnapshot } from "./banking.mjs";
 import { initSoloClock, gameTimestamp, advanceSoloClock, soloOffset } from "./solo-clock.mjs";
 import { deleteSoloCharacter } from "./solo-character.mjs";
+import { initStreetFightTables,streetFightOverview,playStreetFight } from "./street-fight.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const REPO_ROOT = resolve(ROOT, "..");
@@ -110,6 +111,7 @@ initCouponRedemptionTables(db);
 initFishingTables(db);
 initCraftingTables(db);
 initArcadeDiceTables(db);
+initStreetFightTables(db);
 initArcadeHighLowTables(db);
 initArcadeDonutTables(db);
 initInstantLotoTables(db);
@@ -439,6 +441,7 @@ function snapshot(user) {
     couponRedemptions:updated?listCouponRedemptions(db,user.id):[],
     fishing:updated?fishingOverview(db,user.id,fishingCatalog,now,today):null,
     crafting:updated?craftingOverview(db,user.id,craftingCatalog,now):null,
+    streetFight:updated?streetFightOverview(db,user.id,MODE):null,
     arcadeDice:updated?arcadeDiceOverview(db,user.id,arcadeDiceSource,now):null,
     arcadeHighLow:updated?arcadeHighLowOverview(db,user.id,arcadeHighLowSource,now):null,
     arcadeDonuts:updated?arcadeDonutsOverview(db,user.id,arcadeDonutsSource,now):null,
@@ -837,6 +840,16 @@ async function handle(req, res) {
         });
       }catch(error){throw new HttpError(400,error.message);}
       return sendJson(res,200,{...snapshot(user),craftingResult});
+    }
+
+    if(path==="/api/street-fight/play"){
+      if(!data||Object.keys(data).some(key=>key!=="requestId"))throw new HttpError(400,"街頭格鬥僅接受請求碼");
+      let streetFightResult;
+      try{
+        const now=gameNow();
+        streetFightResult=playStreetFight(db,user.id,{mode:MODE,requestId:data.requestId,now,today:calendarDay(now,GAME_TIMEZONE)});
+      }catch(error){throw new HttpError(400,error.message);}
+      return sendJson(res,200,{...snapshot(user),streetFightResult});
     }
 
     if(path==="/api/arcade/dice/play"){

@@ -2766,6 +2766,76 @@ function renderArcadeHighLow(){
   }
 }
 
+let streetFightPending=null;
+let streetFightBusy=false;
+function updateStreetFightCountdown(){
+  if(!state?.character)return;
+  const info=state.streetFight;
+  if(!info)return;
+  const remain=Math.max(0,(info.readyAt??0)-browserGameNow());
+  const enough=state.character.money>=info.minCash;
+  text("street-fight-status",state.mode==="solo"?"單機沒有已確認的原版街頭格鬥 NPC，不提供虛構對手。":
+    !info.available?"沒有其他已建立角色的居民。":
+    !enough?"Web 現金安全限制：至少準備 "+money(info.minCash)+"。":
+    remain>0?"行動間隔剩餘 "+Math.ceil(remain/1000)+" 秒。":"可隨機遇見其他居民。");
+  el("street-fight-play").disabled=streetFightBusy||!info.available||!enough||remain>0;
+}
+function renderStreetFight(){
+  updateStreetFightCountdown();
+  const target=el("street-fight-history");
+  target.replaceChildren();
+  for(const battle of state.streetFight?.history??[]){
+    const detail=document.createElement("details");
+    const heading=document.createElement("summary");
+    const time=new Date(battle.playedAt).toLocaleString("zh-TW");
+    const outcome={win:"勝利",loss:"敗北",draw:"平手",noOpponent:"未遇見對手"}[battle.outcome];
+    heading.textContent=time+"｜"+outcome+(battle.opponentName?"｜"+battle.opponentName+"｜現金 "+(battle.delta>=0?"+":"")+money(battle.delta):"");
+    detail.append(heading);
+    if(battle.rounds){
+      const summary=document.createElement("p");
+      summary.textContent="優惠券 +"+battle.coupons+"｜K 點 "+battle.kpointDelta+
+        "｜剩餘身體 "+battle.bodyEnergy+"、頭腦 "+battle.brainEnergy+
+        "｜起始能量（身體／頭腦）：本人 "+battle.initial.player.body+"/"+battle.initial.player.brain+
+        "、對手 "+battle.initial.opponent.body+"/"+battle.initial.opponent.brain;
+      detail.append(summary);
+      const stats=document.createElement("dl");
+      for(const key of Object.keys(labels))
+        addRow(stats,labels[key],battle.playerStats[key]+" / "+battle.opponentStats[key]);
+      detail.append(stats);
+      const list=document.createElement("ol");
+      for(const round of battle.rounds){
+        const li=document.createElement("li");
+        li.textContent=(round.attacker==="player"?battle.playerName:battle.opponentName)+"："+
+          round.label+"，"+(round.target==="brain"?"精神":"身體")+"傷害 "+round.damage+
+          "｜本人 "+round.player.body+"/"+round.player.brain+"；對手 "+round.opponent.body+"/"+round.opponent.brain;
+        list.append(li);
+      }
+      detail.append(list);
+    }
+    target.append(detail);
+  }
+}
+el("street-fight-play").onclick=async()=>{
+  if(streetFightBusy||!state?.streetFight?.available)return;
+  const owner=state.user?.username;
+  if(!window.confirm("隨機遇見居民並自動交戰，最多 50 次攻擊。可能損失現金、能量與 K 點，確定開始？"))return;
+  if(!streetFightPending||streetFightPending.owner!==owner)
+    streetFightPending={owner,requestId:crypto.randomUUID()};
+  streetFightBusy=true;
+  updateStreetFightCountdown();
+  try{
+    const next=await api("street-fight/play",{requestId:streetFightPending.requestId});
+    streetFightPending=null;
+    if(state?.user?.username!==owner)return;
+    state=next;render();
+    const result=state.streetFightResult;
+    notify(result.outcome==="noOpponent"?"這次沒有遇見可戰鬥的居民。":
+      ({win:"勝利",loss:"敗北",draw:"平手"}[result.outcome])+"：現金 "+money(result.delta)+
+      "，優惠券 "+result.coupons+"，K 點 "+result.kpointDelta+"。");
+  }catch(error){notify(error.message,true);}
+  finally{streetFightBusy=false;updateStreetFightCountdown();}
+};
+
 let pendingArcadeDice=null;
 let arcadeDiceSubmitting=false;
 async function submitArcadeDice(guess,stake){
@@ -4137,6 +4207,7 @@ function render() {
   renderVending();
   renderFishing();
   renderCrafting();
+  renderStreetFight();
   renderArcadeDice();
   renderArcadeHighLow();
   renderArcadeDonuts();
@@ -4483,6 +4554,7 @@ setInterval(()=>{
     renderSoloTime(); // 同步顯示遊戲時鐘，限時事件結束後也恢復快轉按鈕
   updateTrainingCountdowns(); // 每秒刷新課程灰階和剩餘時間，不重建卡片。
   updateRoadCountdown(); // 公路旅程到時間才開啟抵達按鈕。
+  updateStreetFightCountdown();
 },1000);
 el("room-close").addEventListener("click", closeRoom);
 el("room-config-form").addEventListener("submit", event => {

@@ -6878,3 +6878,34 @@ test("IT-02 單機 HTTP：百貨原版食物轉類購入→真正使用→60 分
     else await srv.stop();
   }
 });
+
+
+test("街頭格鬥 HTTP：單機不虛構對手，多人只由伺服器選擇",async()=>{
+  const solo=await start("solo");
+  try{
+    const a=await api(solo.url,"character",{name:"單機格鬥",gender:"male",stats:defaultStats()});
+    assert.equal(a.status,200);assert.equal(a.result.streetFight.available,false);
+    assert.equal((await api(solo.url,"street-fight/play",{requestId:"solo"})).status,400);
+  }finally{await solo.stop();}
+  let srv=await start("multi");
+  try{
+    const a=await api(srv.url,"register",{username:"street_a",password:"street-pass-a"});
+    const b=await api(srv.url,"register",{username:"street_b",password:"street-pass-b"});
+    assert.equal((await api(srv.url,"character",{name:"街頭甲",gender:"male",stats:defaultStats()},a.cookie)).status,200);
+    assert.equal((await api(srv.url,"character",{name:"街頭乙",gender:"male",stats:defaultStats()},b.cookie)).status,200);
+    assert.equal((await api(srv.url,"street-fight/play",{requestId:"x"})).status,401);
+    assert.equal((await api(srv.url,"street-fight/play",{requestId:"x",opponentId:1},b.cookie)).status,400);
+    const before=(await api(srv.url,"state",undefined,a.cookie)).result.character;
+    const replies=await Promise.all([1,2].map(()=>api(srv.url,"street-fight/play",{requestId:"same"},b.cookie)));
+    for(const reply of replies){assert.equal(reply.status,200);assert.equal(reply.result.streetFightResult.outcome,"draw");assert.equal(reply.result.streetFightResult.rounds.length,50);}
+    assert.equal(replies.filter(r=>r.result.streetFightResult.replayed).length,1);
+    assert.equal((await api(srv.url,"street-fight/play",{requestId:"new"},b.cookie)).status,400);
+    const view=(await api(srv.url,"state",undefined,a.cookie)).result;
+    assert.equal(view.streetFight.history.length,0);assert.equal(view.character.money,before.money);assert.equal(view.character.kpoint,before.kpoint);
+    const directory=srv.directory;await srv.stop({preserveData:true});
+    srv=await start("multi",null,directory);
+    const restored=(await api(srv.url,"state",undefined,b.cookie)).result;
+    assert.equal(restored.streetFight.history.length,1);assert.equal(restored.streetFight.history[0].outcome,"draw");
+    assert.equal((await api(srv.url,"street-fight/play",{requestId:"same"},b.cookie)).result.streetFightResult.replayed,true);
+  }finally{await srv.stop();}
+});

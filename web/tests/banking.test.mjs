@@ -297,7 +297,7 @@ test("星期一稅基門檻與 K 點六段折扣按原版整數規則",()=>{
   for(const [points,due] of expected)
     assert.equal(calculateWeeklyTax(6000000,points).due,due,"K 點 "+points);
   assert.throws(()=>calculateWeeklyTax(Number.MAX_SAFE_INTEGER+1,0),/稅基/);
-  assert.throws(()=>calculateWeeklyTax(6000000,-1),/K 點/);
+  assert.equal(calculateWeeklyTax(6000000,-1).due,60000); // 原版負 K 點與 0 點同為無折扣
 });
 
 test("跨入星期一先計息與還款，再依上次快照徵稅，重讀不雙扣",()=>{

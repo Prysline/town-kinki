@@ -35,7 +35,7 @@ export function calculateInterest(balance, perThousand) {
 // 原版折扣不是單調遞增：K 點 100/250/500 對應稅額的 1/2、1/3、1/4。
 export function calculateWeeklyTax(assessmentBase,kpoint=0) {
   if (!Number.isSafeInteger(assessmentBase) || assessmentBase<0 ||
-      !Number.isSafeInteger(kpoint) || kpoint<0)
+      !Number.isSafeInteger(kpoint))
     throw new Error("稅基或 K 點資料不正確");
   const ratePercent=assessmentBase<=1000000?0:assessmentBase<=10000000?1:
     assessmentBase<=100000000?3:assessmentBase<=1000000000?5:7;
@@ -101,7 +101,7 @@ export function initBankTables(db) {
     "user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,",
     "tax_day TEXT NOT NULL,",
     "assessment_base INTEGER NOT NULL CHECK(assessment_base>=0),",
-    "kpoint INTEGER NOT NULL CHECK(kpoint>=0),",
+    "kpoint INTEGER NOT NULL,",
     "rate_percent INTEGER NOT NULL CHECK(rate_percent>=0),",
     "gross INTEGER NOT NULL CHECK(gross>=0),",
     "discount INTEGER NOT NULL CHECK(discount>=0),",
@@ -113,6 +113,19 @@ export function initBankTables(db) {
     "CHECK(due=paid+unpaid));",
     "CREATE INDEX IF NOT EXISTS bank_tax_history_idx ON bank_tax_assessments(user_id,tax_day);"
   ].join("\n"));
+  // 街頭格鬥依原版允許負 K 點；舊稅務表只限制 K 點非負。
+  const taxSql=db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='bank_tax_assessments'").get().sql;
+  if(taxSql.includes("CHECK(kpoint>=0)")){
+    db.exec("BEGIN IMMEDIATE");
+    try{
+      db.exec("ALTER TABLE bank_tax_assessments RENAME TO bank_tax_assessments_old");
+      db.exec(taxSql.replace("CHECK(kpoint>=0)",""));
+      db.exec("INSERT INTO bank_tax_assessments SELECT * FROM bank_tax_assessments_old");
+      db.exec("DROP TABLE bank_tax_assessments_old");
+      db.exec("CREATE INDEX IF NOT EXISTS bank_tax_history_idx ON bank_tax_assessments(user_id,tax_day)");
+      db.exec("COMMIT");
+    }catch(error){db.exec("ROLLBACK");throw error;}
+  }
 }
 function assertDay(today) {
   if (typeof today !== "string" || !DATE.test(today))
