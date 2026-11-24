@@ -1623,10 +1623,11 @@ function renderLegacyItems(){
         controls.append(status,button);
       }else{
         const status=document.createElement("span");status.className="small inventory-item-status";
-        status.textContent=item.blocked?"原始欄位異常，已保留獎品，不可使用":verifiedVehicle?
+        status.textContent=verifiedVehicle?
           "可用於公路旅行（"+verifiedVehicle.seconds+" 秒）；不是背包直接使用道具":
           item.name==="健康保険"&&state.insurance?.active?
           "醫院自動生效，不需手動使用":"目前尚未支援直接使用";
+        if(item.blocked)status.textContent="原始欄位異常，已保留獎品，不可使用";
         controls.append(status);
       }
       if(verifiedVehicle){
