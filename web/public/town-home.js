@@ -17,6 +17,8 @@ export const FACILITY_PANELS=Object.freeze({
   "販売1":"fishing-panel",
   "合成":"crafting-panel",
   "ゲーセン":"arcade-dice-panel",
+  "おばちゃん":"osaka-panel",
+  "おばちゃん強":"osaka-panel",
   "問屋":"wholesale-panel",
   "建築":"housing-panel"
 });
