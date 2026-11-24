@@ -54,7 +54,7 @@ import { initBankTables, settleBankInterest, bankOperation, bankOverview, bankLe
 import { initSoloClock, gameTimestamp, advanceSoloClock, soloOffset } from "./solo-clock.mjs";
 import { deleteSoloCharacter } from "./solo-character.mjs";
 import {parseOsakaRules,loadOsakaNpcCatalog} from "./osaka-challenge-core.mjs";
-import {initOsakaTables,osakaOverview,playOsaka} from "./osaka-challenge.mjs";
+import {initOsakaTables,osakaOverview,playOsaka,migrateOsakaPowerPrizes} from "./osaka-challenge.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const REPO_ROOT = resolve(ROOT, "..");
@@ -133,6 +133,8 @@ initWholesaleTables(db);
 initPlayerStoreTables(db);
 // Administrator may supply the original dedicated NPC directory tree separately from player saves.
 const osakaRules=parseOsakaRules(decodeLegacyText(readFileSync(resolve(REPO_ROOT,"obatyan.cgi"))));
+const osakaUpgrade=migrateOsakaPowerPrizes(db,osakaRules);
+if(osakaUpgrade.skipped)console.warn("大阪舊版待核對獎品："+osakaUpgrade.skipped+" 筆無足夠收據或存在衝突，未修改");
 let osakaCatalog;
 try{osakaCatalog=loadOsakaNpcCatalog(resolve(process.env.OSAKA_NPC_ROOT||REPO_ROOT));}
 catch{osakaCatalog={available:false,npcs:[],missing:[],sourceInvalid:true};}
