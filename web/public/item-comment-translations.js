@@ -111,6 +111,14 @@ export const ORIGINAL_ITEM_COMMENTS_ZH_TW=Object.freeze({
 });
 export const displayOriginalItemComment=comment=>{
   const original=typeof comment==="string"?comment.trim():"";
+  // 依 gift-shop.mjs 的原版 33 欄組裝規則：原始備註 + Tab + 寄件人 + 固定日文後綴。
+  // 寄件人是使用者輸入的名稱，保持原文；只翻譯已確認的固定後綴。
+  const received=/^([^\t]*)\t([^\t\r\n]+)さんからの贈り物です。$/.exec(
+    typeof comment==="string"?comment.trimEnd():"");
+  if(received){
+    const note=displayOriginalItemComment(received[1]);
+    return (note?note+"｜":"")+"來自「"+received[2]+"」的禮物。";
+  }
   return Object.hasOwn(ORIGINAL_ITEM_COMMENTS_ZH_TW,original)?
     ORIGINAL_ITEM_COMMENTS_ZH_TW[original]:original;
 };

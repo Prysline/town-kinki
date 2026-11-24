@@ -1,6 +1,7 @@
 import { townCellAction } from "./town-home.js";
 import { displayRetailItemName,displayRetailItemCategory } from "./retail-item-translations.js";
 import { displayOriginalItemComment } from "./item-comment-translations.js";
+import { displayEventDescription,displayGiftErrorMessage } from "./event-gift-display-translations.js";
 import { shouldShowCompactEnergy } from "./energy-visibility.js";
 import { townTimePhase } from "./time-theme.js";
 import { groupedStatLines } from "./shop-effects.js";
@@ -1103,7 +1104,7 @@ async function startRoadJourney(destination,vehicleValue){
     (byBus?"巴士車資500元從現金扣款，不會迷路、事故或鍛鍊。":
       (sourceLine===null?"步行可能增加身體能力。":
         "有 1/10 機率發生事故，事故會扣所選載具1點耐久。")+
-      "原版會判定迷路：從和歌山以外出發，持有ローラースルーゴーゴー必迷路，否則有1/5機率；事故與迷路同時發生時可能改道至其他城鎮，實際結果到站時才會公布。")))return;
+      "原版會判定迷路：從和歌山以外出發，持有三輪滑板車必迷路，否則有1/5機率；事故與迷路同時發生時可能改道至其他城鎮，實際結果到站時才會公布。")))return;
   const key=String(destination)+":"+vehicleValue;
   if(!pendingRoadStart||pendingRoadStart.key!==key)
     pendingRoadStart={key,requestId:crypto.randomUUID()};
@@ -1676,7 +1677,7 @@ function renderLegacyItems(){
       "（"+gifts.length+" 筆）";details.append(summary);
     const note=document.createElement("p");note.className="small";
     note.textContent=giftVehicleCount?
-      "原版ギフト類別也包含交通商品。只有後端核實為本人可搭乘的項目才會顯示公路入口；其他禮品仍請於禮品店／郵件操作。公路事故可能消耗載具耐久。":
+      "原版禮品類別也包含交通商品。只有後端核實為本人可搭乘的項目才會顯示公路入口；其他禮品仍請於禮品店／郵件操作。公路事故可能消耗載具耐久。":
       "原版一般物品清單不顯示自購禮品；這些項目仍留在資料庫，請於禮品店／郵件中操作。";
     details.append(note);
     for(const gift of gifts){
@@ -1750,7 +1751,7 @@ function updateCockroachCountdown() {
   text("event-popup-title",active?"⚠ 限時事件：蟑螂！":"事件發生！");
   text("event-popup-body",active?
     "剩餘 "+(remaining/1000).toFixed(1)+" 秒，請立即處理。" :
-    recent.title+"："+recent.description);
+    recent.title+"："+displayEventDescription(recent.description));
   el("event-popup-claim").hidden=!active;
   el("event-alert").hidden=false;
   el("event-alert").textContent=active?"查看事件詳情":"查看事件紀錄";
@@ -1861,7 +1862,7 @@ function renderDining() {
     list.className="health-event-list";
     for (const event of state.healthEvents) {
       const item=document.createElement("li");
-      item.textContent=event.day+"｜"+event.title+"："+event.description+
+      item.textContent=event.day+"｜"+event.title+"："+displayEventDescription(event.description)+
         (event.oldHealthIndex!==event.newHealthIndex?
           "（疾病指數 "+event.oldHealthIndex+" → "+event.newHealthIndex+"）":"");
       list.append(item);
@@ -2290,7 +2291,7 @@ function renderMultiCard(){
   const blocked=info.multiplayerAdjacentRepeatBlocked===true;
   const enough=course.safe&&state.character.money>=course.stake;
   text("arcade-cardw-status",!available?
-    "目前城鎮沒有「ゲーセン」遊樂中心。":
+    "目前城鎮沒有遊樂中心。":
     blocked?"原版禁止同一位玩家連續抽卡；請等待其他玩家抽卡。":
     seconds>0?"單機多卡尚需等待 "+seconds+" 秒（可使用單機快轉）。":
     "可抽卡。所有玩家共用目前倍率 "+info.cardCount+"。");
@@ -2400,7 +2401,7 @@ function renderLoto6(){
   const current=selectors.map(x=>Number(x.value));
   const bank=state.character.bank;
   text("arcade-loto6-status",!available?
-    "目前所在城鎮沒有「ゲーセン」遊樂中心。":
+    "目前所在城鎮沒有遊樂中心。":
     "目前輪次：全服待開獎 "+info.pendingCount+"/"+info.drawCap+
     " 注；本人 "+info.myPendingCount+"/"+info.perUserLimit+
     " 注；當地時鐘 "+String(info.hour).padStart(2,"0")+
@@ -2500,7 +2501,7 @@ function renderInstantLoto(){
   const available=info.available===true;
   const remain=Math.max(0,(info.readyAt??0)-browserGameNow());
   text("arcade-loto-status",!available?
-    "目前城鎮沒有「ゲーセン」遊樂中心；可在單機編輯地圖放置。":
+    "目前城鎮沒有遊樂中心；可在單機編輯地圖放置。":
     remain>0?"原版最後一位玩樂透的仍是本人，需再等 "+
       Math.ceil(remain/1000)+" 秒（單機可快轉）。":
       "可立即開獎；僅當最後遊玩者仍是本人時，才有3分鐘限制。");
@@ -2633,7 +2634,7 @@ function renderArcadeDonuts(){
   const affordable=Number.isSafeInteger(selected.risk)&&
     state.character.money>=selected.risk;
   text("arcade-donuts-status",!available?
-    "所在城鎮沒有「ゲーセン」遊樂中心；須先建立原版建築。":
+    "所在城鎮沒有遊樂中心；須先建立原版建築。":
     wait>0?"目前模式冷卻中，還需 "+Math.ceil(wait/1000)+" 秒（單機可快轉時間）。":
       "這個模式已可抽牌。三個模式牌桌獨立，帳戶本人交易記錄隔離。");
   const initialReference=selected.rule==="same"?1:0;
@@ -2719,7 +2720,7 @@ function renderArcadeHighLow(){
   const stake=info.stake??0;
   const enough=Number.isSafeInteger(stake)&&stake>0&&state.character.money>=stake;
   text("arcade-highlow-status",!available?
-    "目前城鎮沒有「ゲーセン」遊樂中心；可使用單機地圖編輯器放置。":
+    "目前城鎮沒有遊樂中心；可使用單機地圖編輯器放置。":
     wait>0?"High／Low 冷卻中，還有 "+Math.ceil(wait/1000)+" 秒（單機可快轉時間）。":
       "High／Low 可進行下一局，牌桌與其他帳號共用。");
   const previous=info.previousCard;
@@ -2802,7 +2803,7 @@ function renderArcadeDice(){
   const available=info.available===true;
   const remain=Math.max(0,(info.readyAt??0)-browserGameNow());
   text("arcade-dice-status",!available?
-    "目前城鎮沒有「ゲーセン」遊樂中心；可使用單機地圖編輯器放置。":
+    "目前城鎮沒有遊樂中心；可使用單機地圖編輯器放置。":
     remain>0?"骰子遊戲冷卻中，還需 "+Math.ceil(remain/1000)+" 秒（單機可快轉遊戲時間）。":
       "遊樂中心已開放，現在可以擲骰。");
   const stake=el("arcade-dice-stake"),previous=stake.value;
@@ -3344,14 +3345,14 @@ async function submitGiftAction(action,{sourceLine,quantity,recipientName,name,m
     notify(result.replayed?"禮品操作已完成，未重複改變持有物或扣款。":
       converted?"「"+displayRetailItemName(result.name)+"」已轉換成禮品，手續費 "+money(result.fee)+"。":
       "已將「"+displayRetailItemName(result.name)+"」×"+quantity+" 送給「"+recipientName+"」。");
-  }catch(error){notify(error.message,true);}
+  }catch(error){notify(displayGiftErrorMessage(error.message),true);}
 }
 function renderGiftShop(){
   if(!state?.character)return;
   const available=state.giftShopAvailable===true;
   text("gift-status",available?
     "目前城鎮設有禮品店，轉換每次現金 50,000 元；本人未寄送禮品及收件方收到的禮品各有 10 格限制。":
-    "所在城鎮沒有原版「ギフト屋」；不能在此轉換物品，但已持有的禮品仍可寄送給其他角色。");
+    "所在城鎮沒有禮品店；不能在此轉換物品，但已持有的禮品仍可寄送給其他角色。");
   const target=el("gift-sources");
   target.replaceChildren();
   for(const item of state.giftSources??[]){
@@ -3432,7 +3433,7 @@ function renderGiftShop(){
     const line=document.createElement("li");
     line.textContent=new Date(event.createdAt).toLocaleString("zh-TW")+"｜"+
       (event.action==="convert"?"轉換禮品":"寄送給 "+(event.recipientName??"收件人"))+
-      "｜"+event.name+" ×"+(event.quantity||"全部")+
+      "｜"+displayRetailItemName(event.name)+" ×"+(event.quantity||"全部")+
       (event.fee?"｜手續費 "+money(event.fee):"");
     list.append(line);
   }
@@ -3486,7 +3487,7 @@ function renderMailbox(){
       item.append(heading,body);
       if(mail.type==="gift"&&mail.giftName){
         const gift=document.createElement("p");gift.className="small";
-        gift.textContent="禮品：「"+mail.giftName+"」×"+mail.quantity+" 回（日）";
+        gift.textContent="禮品：「"+displayRetailItemName(mail.giftName)+"」×"+mail.quantity+" 回（日）";
         item.append(gift);
       }
       const remove=document.createElement("button");
@@ -3532,7 +3533,7 @@ function renderRecycle(){
   const available=state.recycleAvailable===true;
   text("recycle-status",available?
     "目前城鎮設有回收商店｜貨架最多 50 筆、上架 7 天；所有玩家共用。":
-    "目前城鎮沒有原版「リサイ」，只能查看本人已持有物品，不可買賣回收品。");
+    "目前城鎮沒有回收商店，只能查看本人已持有物品，不可買賣回收品。");
   const market=el("recycle-market");
   market.replaceChildren();
   for(const item of state.recycleListings??[]){

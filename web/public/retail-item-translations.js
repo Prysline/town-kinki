@@ -74,5 +74,10 @@ const ITEM_CATEGORY_TRANSLATORS=Object.freeze([
 
 export const displayRetailItemName=name=>
   ITEM_NAME_TRANSLATORS.reduce((value,translate)=>translate(value),name);
+const DYNAMIC_ITEM_CATEGORY_ZH_TW=Object.freeze({
+  "ギフト商品":"已收禮品",
+  "リサイクル":"回收商品"
+});
 export const displayRetailItemCategory=category=>
-  ITEM_CATEGORY_TRANSLATORS.reduce((value,translate)=>translate(value),category);
+  ITEM_CATEGORY_TRANSLATORS.reduce((value,translate)=>translate(value),
+    DYNAMIC_ITEM_CATEGORY_ZH_TW[category]??category);
