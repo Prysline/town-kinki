@@ -6691,8 +6691,9 @@ test("單機實體百貨：購入ガチャピン與特殊信用卡後可背包�
         db.prepare("UPDATE retail_stock SET sku=?,remaining=5 WHERE shop='depart1' AND position=?")
           .run(item.sku,slot.position);
       }
-      db.prepare("UPDATE characters SET money=5000000,bank=3000000 WHERE name=?")
-        .run("寵物與卡片使用者");
+      // 隔離每日事件可能改動的能量：此測試驗收商品使用，不驗收事件亂數。
+      db.prepare("UPDATE characters SET money=5000000,bank=3000000,body_energy=?,brain_energy=? WHERE name=?")
+        .run(placed.result.maxBodyEnergy,placed.result.maxBrainEnergy,"寵物與卡片使用者");
     }finally{db.close();}
     const shelf=(await api(srv.url,"state")).result.retailGoods;
     for(const item of selected)
@@ -6703,7 +6704,7 @@ test("單機實體百貨：購入ガチャピン與特殊信用卡後可背包�
     });
     assert.equal(petPurchase.status,200);
     const petLine=petPurchase.result.retailResult.sourceLine;
-    assert.ok(petPurchase.result.legacyItemActions.some(x=>x.sourceLine===petLine&&x.canUse));
+    assert.ok(petPurchase.result.legacyItemActions.some(x=>x.sourceLine===petLine&&x.canUse),JSON.stringify(petPurchase.result.legacyItemActions.find(x=>x.sourceLine===petLine)));
     const petUse=await api(srv.url,"inventory/legacy/use",{
       sourceLine:petLine,requestId:"day_pet_direct_01"
     });
