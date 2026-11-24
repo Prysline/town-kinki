@@ -205,7 +205,7 @@ export function listLegacyInventoryItems(db,userId,limit=50,toDetails=null,now=D
     durability:x.durability,unit:x.durability_unit,purchasedAt:x.purchased_at,
     ...(details?{details}:{}),
     ...(x.original_id.startsWith("__web_")?{remaining:life.remaining}:{}),
-    ...(life.removeAt!==null?{removeAt:life.removeAt}:{}),readOnly:!["__web_retail__","__web_gift__","__web_recycle__","__web_store__","__web_coupon__","__web_fishing__","__web_crafting__","__web_treasure__"].includes(x.original_id),
+    ...(life.removeAt!==null?{removeAt:life.removeAt}:{}),readOnly:!["__web_retail__","__web_gift__","__web_recycle__","__web_store__","__web_coupon__","__web_fishing__","__web_crafting__","__web_treasure__","__web_b_league__"].includes(x.original_id),
     ...(x.original_id==="__web_retail__"?{origin:"retail"}:
       x.original_id==="__web_gift__"?{origin:"gift"}:
       x.original_id==="__web_recycle__"?{origin:"recycle"}:
@@ -213,7 +213,8 @@ export function listLegacyInventoryItems(db,userId,limit=50,toDetails=null,now=D
       x.original_id==="__web_coupon__"?{origin:"coupon"}:
       x.original_id==="__web_fishing__"?{origin:"fishing"}:
       x.original_id==="__web_crafting__"?{origin:"crafting"}:
-      x.original_id==="__web_treasure__"?{origin:"treasure"}:{})
+      x.original_id==="__web_treasure__"?{origin:"treasure"}:
+      x.original_id==="__web_b_league__"?{origin:"bLeague"}:{})
     };
   });
 }
