@@ -10,6 +10,7 @@ export const FACILITY_PANELS=Object.freeze({
   "デパ2":"retail-panel",
   "自販機":"vending-panel",
   "装備屋":"equipment-panel",
+  "Ｂリーグ":"b-league-panel",
   "ギフト屋":"gift-panel",
   "リサイ":"recycle-panel",
   "クーポン":"event-panel",
