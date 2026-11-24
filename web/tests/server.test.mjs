@@ -6914,3 +6914,61 @@ test("B league HTTP: server-owned result, reject tampering, replay and restart",
     assert.equal(c.result.character.money,a.result.character.money);
   }finally{await srv.stop();}
 });
+
+test("B league multiplayer HTTP: account-scoped receipts, duplicate concurrent requests, unauthenticated and forged requests",async()=>{
+  const seed=directory=>{
+    const db=new DatabaseSync(join(directory,"multi.sqlite"));
+    db.exec("CREATE TABLE town_maps(town_id INTEGER PRIMARY KEY, original_name TEXT NOT NULL DEFAULT '', original_record TEXT NOT NULL DEFAULT '', source TEXT NOT NULL, tiles_json TEXT NOT NULL, updated_at INTEGER NOT NULL)");
+    const tiles=Array(192).fill("");tiles[0]="Ｂリーグ";
+    db.prepare("INSERT INTO town_maps(town_id,source,tiles_json,updated_at) VALUES(0,'test',?,?)").run(JSON.stringify(tiles),Date.now());
+    db.close();
+  };
+  let srv=await start("multi",seed);
+  try{
+    const a=await api(srv.url,"register",{username:"arenaPlayerOne",password:"arena-test-password-one"});
+    const b=await api(srv.url,"register",{username:"arenaPlayerTwo",password:"arena-test-password-two"});
+    assert.equal(a.status,200);assert.equal(b.status,200);
+    assert.equal((await api(srv.url,"character",{name:"鬥技場甲",gender:"other",stats:defaultStats()},a.cookie)).status,200);
+    assert.equal((await api(srv.url,"character",{name:"鬥技場乙",gender:"other",stats:defaultStats()},b.cookie)).status,200);
+    const db=new DatabaseSync(join(srv.directory,"multi.sqlite"));
+    try{
+      const stats=Object.fromEntries(Object.keys(defaultStats()).map(k=>[k,5000]));
+      db.prepare("UPDATE characters SET stats_json=?,body_energy=1000,brain_energy=1000").run(JSON.stringify(stats));
+      const insert=db.prepare("INSERT INTO equipment_items(user_id,sku,type,name,power,accuracy,uses,status,created_at) VALUES(?,?,?,?,1000,101,10,'equipped',?)");
+      for(const row of db.prepare("SELECT user_id FROM characters").all()){
+        insert.run(row.user_id,"arena-test-weapon","武器","arena-test-weapon",Date.now());
+        insert.run(row.user_id,"arena-test-magic","魔法","arena-test-magic",Date.now());
+      }
+    }finally{db.close();}
+    const beforeA=(await api(srv.url,"state",undefined,a.cookie)).result;
+    const beforeB=(await api(srv.url,"state",undefined,b.cookie)).result;
+    const payload={rank:"d",requestId:"arena-multi-001"};
+    assert.equal((await api(srv.url,"b-league/play",payload)).status,401);
+    assert.equal((await api(srv.url,"b-league/play",{...payload,damage:99999},a.cookie)).status,400);
+    assert.equal((await api(srv.url,"b-league/play",{...payload,userId:2},a.cookie)).status,400);
+    const pair=await Promise.all([api(srv.url,"b-league/play",payload,a.cookie),api(srv.url,"b-league/play",payload,a.cookie)]);
+    assert.ok(pair.every(x=>x.status===200),JSON.stringify(pair.map(x=>x.result.error)));
+    assert.deepEqual(pair.map(x=>x.result.bLeagueResult.replayed).sort(),[false,true]);
+    const receipt=pair[0].result.bLeagueResult;
+    assert.equal(receipt.outcome,"win");
+    const afterA=(await api(srv.url,"state",undefined,a.cookie)).result;
+    const afterB=(await api(srv.url,"state",undefined,b.cookie)).result;
+    assert.equal(afterA.character.money,beforeA.character.money+receipt.moneyDelta);
+    assert.equal(afterA.character.kpoint,beforeA.character.kpoint+receipt.kpointDelta);
+    assert.equal(afterA.bLeague.history.length,1);
+    assert.equal(afterB.character.money,beforeB.character.money);
+    assert.equal(afterB.character.kpoint,beforeB.character.kpoint);
+    assert.deepEqual(afterB.equipmentItems,beforeB.equipmentItems);
+    assert.equal(afterB.bLeague.latest,null);
+    const ownB=await api(srv.url,"b-league/play",payload,b.cookie);
+    assert.equal(ownB.status,200);assert.equal(ownB.result.bLeagueResult.replayed,false);
+    assert.equal(ownB.result.bLeague.history.length,1);
+    assert.equal((await api(srv.url,"state",undefined,a.cookie)).result.character.money,afterA.character.money);
+    const dir=srv.directory;await srv.stop({preserveData:true});srv=await start("multi",null,dir);
+    const persisted=await api(srv.url,"state",undefined,a.cookie);
+    assert.equal(persisted.status,200);
+    assert.equal(persisted.result.bLeague.history.length,1);
+    assert.equal(persisted.result.character.money,afterA.character.money);
+    assert.equal((await api(srv.url,"state",undefined,b.cookie)).result.bLeague.history.length,1);
+  }finally{await srv.stop();}
+});
