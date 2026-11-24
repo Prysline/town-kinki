@@ -47,10 +47,11 @@ test("來源備註保留原文、數字與專賣店限制；玩家 UI 才翻譯"
   assert.ok(sample);
   assert.equal(sample[29],"※専門店限定商品。");
   assert.equal(displayOriginalItemComment(sample[29]),"※專賣店限定商品。");
+  assert.equal(displayOriginalItemComment("ウエイトアップ1"),"增重 1");
   assert.equal(displayOriginalItemComment("ウエイトアップ1食料品"),
-    "增重1／食品（原版標記）");
+    "增重 1／食品");
   assert.equal(displayOriginalItemComment("ウエイトアップ1ギフト"),
-    "增重1／禮品（原版標記）");
+    "增重 1／禮品");
   assert.equal(displayOriginalItemComment("10日間で使い捨てです。"),
     "使用期限為 10 天，用後即棄。");
   assert.equal(displayOriginalItemComment("お店の支払い時に使うと銀行から引き落としができます。"),
