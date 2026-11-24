@@ -1592,7 +1592,7 @@ function renderLegacyItems(){
       const name=document.createElement("strong");name.textContent=displayRetailItemName(item.name);
       const durability=document.createElement("span");durability.className="inventory-item-remaining";
       const amount=itemRemainingDurability(item,actionInfo,browserGameNow());
-      durability.textContent="剩餘 "+amount+(item.unit??"");
+      durability.textContent=item.origin==="bLeague"&&item.unit===""?"持有 "+amount+" 份（可重複使用）":"剩餘 "+amount+(item.unit??"");
       head.append(name,durability);card.append(head);
       const preview=document.createElement("div");preview.className="inventory-effects";
       for(const effect of itemInventoryEffects(info)){
@@ -3220,6 +3220,15 @@ function renderBLeague(){
   const names={win:"勝利",loss:"失敗",draw:"未分勝負"};
   const energy={brainEnergy:"頭腦",bodyEnergy:"身體"};
   const append=(parent,tag,value)=>{const node=document.createElement(tag);node.textContent=value;parent.append(node);return node;};
+  if(arena?.defaults?.length){
+    const gear=document.createElement("details");
+    append(gear,"summary","目前裝備／預設裝備");
+    for(const fallback of arena.defaults){
+      const item=(state.equipmentItems??[]).find(x=>x.status==="equipped"&&x.category===fallback.type)??fallback;
+      append(gear,"p",item.name+"｜威力 "+item.power+"｜命中／閃避 "+item.accuracy+"%｜Lv."+item.level+"｜經驗 "+item.experience+"｜剩餘 "+(item.uses??"∞"));
+    }
+    result.append(gear);
+  }
   if(battle){
     append(result,"h4",battle.monster.rank.toUpperCase()+" 級｜"+battle.monster.name+"｜"+names[battle.outcome]);
     append(result,"p","初始能量：玩家 頭腦 "+battle.initial.player.brainEnergy+"／身體 "+battle.initial.player.bodyEnergy+
