@@ -2159,7 +2159,7 @@ let pendingTreasureOpen=null;
 let treasureBusy=false;
 async function submitTreasureOpen(box){
   if(treasureBusy)return;
-  if(!window.confirm("確認花費 "+money(box.price)+" 開啟"+box.name+
+  if(!window.confirm("確認花費 "+money(box.price)+" 開啟"+displayRetailItemCategory(box.name)+
     "？伺服器會從原版獎池抽出一項，可能立即變更角色能力／現金或真正存入背包。"))return;
   if(!pendingTreasureOpen||pendingTreasureOpen.boxKey!==box.key)
     pendingTreasureOpen={boxKey:box.key,requestId:crypto.randomUUID()};
@@ -2173,7 +2173,7 @@ async function submitTreasureOpen(box){
     pendingTreasureOpen=null;
     render();
     notify(result.replayed?"這筆寶箱紀錄已結算，不會再次扣款或開獎。":
-      "寶箱抽中「"+result.itemName+"」！"+
+      "寶箱抽中「"+displayRetailItemName(result.itemName)+"」！"+
       (result.kind==="inventory"?"已真正加入本人背包。":
         "原版立即生效，能力／疾病／現金已結算。")+
       (result.rewardCash>0?" 另獲得 "+money(result.rewardCash)+" 元。":""));
@@ -2199,11 +2199,11 @@ function renderTreasure(){
   const full=slots>=25||gifts>=10||giftGoods>=11;
   const enough=state.character.money>=box.price;
   text("arcade-treasure-status",!available?
-    "目前城鎮沒有「ゲーセン」遊樂中心。":
+    "目前城鎮沒有遊樂中心。":
     seconds>0?"距下一次原版寶箱抽獎還需 "+seconds+" 秒（單機可快轉）。":
     "可以開箱：目前一般物品 "+slots+"/25格、禮品 "+gifts+
     "/10格、禮品商品 "+giftGoods+"/11格。");
-  text("arcade-treasure-quote",box.name+"｜開箱費 "+money(box.price)+
+  text("arcade-treasure-quote",displayRetailItemCategory(box.name)+"｜開箱費 "+money(box.price)+
     "｜原版獎池 "+box.poolSize+" 筆，實際可抽 "+box.selectable+
     " 筆（原碼排除最後一筆）｜身上現金 "+money(state.character.money)+
     (full?"｜背包容量已達上限":"")+
@@ -2218,7 +2218,7 @@ function renderTreasure(){
   history.replaceChildren();
   const rounds=info.history??[],last=rounds[0];
   text("arcade-treasure-result",last?
-    "最近一次："+last.itemName+"（"+
+    "最近一次："+displayRetailItemName(last.itemName)+"（"+
       (last.kind==="inventory"?"已收入背包":"已立即生效")+
       (last.rewardCash>0?"，取得 "+money(last.rewardCash)+"元":"")+"）":
     "尚無本人寶箱紀錄。");
@@ -2231,9 +2231,9 @@ function renderTreasure(){
   for(const round of rounds){
     const li=document.createElement("li");
     li.textContent=new Date(round.playedAt).toLocaleString("zh-TW")+
-      "｜"+boxes.find(b=>b.key===round.boxKey)?.name+
+      "｜"+displayRetailItemCategory(boxes.find(b=>b.key===round.boxKey)?.name??round.boxKey)+
       "｜費用 "+money(round.price)+
-      "｜"+round.itemName+
+      "｜"+displayRetailItemName(round.itemName)+
       (round.kind==="inventory"?"（入庫）":"（立即效果）")+
       (round.rewardCash>0?"，現金獎品 "+money(round.rewardCash):"");
     list.append(li);
