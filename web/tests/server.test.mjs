@@ -6878,3 +6878,39 @@ test("IT-02 單機 HTTP：百貨原版食物轉類購入→真正使用→60 分
     else await srv.stop();
   }
 });
+
+test("B league HTTP: server-owned result, reject tampering, replay and restart",async()=>{
+  let srv=await start("solo");
+  try{
+    const created=await api(srv.url,"character",{name:"鬥技場測試",gender:"other",stats:defaultStats()});
+    assert.equal(created.status,200);
+    assert.equal((await api(srv.url,"b-league/play",{rank:"d",requestId:"arena-http-001"})).status,400);
+    assert.equal((await api(srv.url,"map/tile",{row:0,column:0,symbol:"Ｂリーグ"})).status,200);
+    const db=new DatabaseSync(join(srv.directory,"solo.sqlite"));
+    try{
+      const stats=Object.fromEntries(Object.keys(defaultStats()).map(k=>[k,5000]));
+      db.prepare("UPDATE characters SET stats_json=?,body_energy=1000,brain_energy=1000").run(JSON.stringify(stats));
+      const uid=db.prepare("SELECT user_id FROM characters").get().user_id;
+      const insert=db.prepare("INSERT INTO equipment_items(user_id,sku,type,name,power,accuracy,uses,status,created_at) VALUES(?,?,?,?,1000,101,10,'equipped',?)");
+      insert.run(uid,"arena-test-weapon","武器","arena-test-weapon",Date.now());
+      insert.run(uid,"arena-test-magic","魔法","arena-test-magic",Date.now());
+    }finally{db.close();}
+    const payload={rank:"d",requestId:"arena-http-001"};
+    assert.equal((await api(srv.url,"b-league/play",{...payload,money:999999})).status,400);
+    assert.equal((await api(srv.url,"b-league/play",{...payload,userId:999})).status,400);
+    const a=await api(srv.url,"b-league/play",payload);
+    assert.equal(a.status,200,JSON.stringify(a.result));
+    const receipt=a.result.bLeagueResult;
+    assert.equal(receipt.outcome,"win");assert.equal(receipt.rounds.length,1);
+    assert.equal(receipt.replayed,false);
+    const b=await api(srv.url,"b-league/play",payload);
+    assert.equal(b.status,200);assert.deepEqual(b.result.bLeagueResult,{...receipt,replayed:true});
+    assert.equal(b.result.character.money,a.result.character.money);
+    assert.equal((await api(srv.url,"b-league/play",{...payload,rank:"s"})).status,400);
+    const dir=srv.directory;await srv.stop({preserveData:true});srv=await start("solo",null,dir);
+    const c=await api(srv.url,"state");
+    assert.equal(c.status,200);assert.equal(c.result.bLeague.history.length,1);
+    const {replayed,...saved}=receipt;assert.deepEqual(c.result.bLeague.latest,saved);
+    assert.equal(c.result.character.money,a.result.character.money);
+  }finally{await srv.stop();}
+});
