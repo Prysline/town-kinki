@@ -134,6 +134,7 @@ export function equipEquipment(db,userId,{itemId,requestId,now,hasBuilding}={}){
       throw new Error("目前所在城鎮沒有裝備屋");
     const selected=db.prepare("SELECT * FROM equipment_items WHERE user_id=? AND id=?").get(userId,itemId);
     if(!selected||selected.status!=="stored")throw new Error("找不到本人倉庫內可裝備的道具");
+    if(selected.uses<=0)throw new Error("裝備已損壞，請先鍛造恢復使用次數");
     // 原始 soubi_do：同一類別僅有一個正在使用，換裝時舊裝備回倉庫。
     db.prepare([
       "UPDATE equipment_items SET status='stored'",
