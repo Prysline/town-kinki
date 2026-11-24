@@ -968,6 +968,7 @@ async function handle(req, res) {
           cardSourceLine:data.cardSourceLine,
           now,day:calendarDay(now,GAME_TIMEZONE),timeZone:GAME_TIMEZONE,
           hasBuilding:(symbol,townId)=>{
+            if(roadOverview(db,user.id,roadSource,now).pending)throw new Error("公路旅程尚未抵達");
             const map=publicTownMap(db,townId,false);
             return map.configured&&map.cells.some(cell=>cell.key===symbol);
           }
@@ -981,8 +982,6 @@ async function handle(req, res) {
         if(!data||typeof data!=="object"||Array.isArray(data)||Object.keys(data).some(k=>!["rank","requestId"].includes(k)))
           throw new Error("鬥技場只接受難度與請求編號");
         const now=gameNow();
-        if(roadOverview(db,user.id,roadSource,now).pending)
-          throw new Error("公路旅程尚未抵達");
         result=playArena(db,user.id,arenaCatalog,arenaDrops,{rank:data.rank,requestId:data.requestId,now,
           hasBuilding:(symbol,townId)=>{
             const map=publicTownMap(db,townId,false);
