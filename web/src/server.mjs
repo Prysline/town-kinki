@@ -53,7 +53,8 @@ import { initLegacyItemUseTables, listLegacyItemActions, listLegacyItemUseHistor
 import { initBankTables, settleBankInterest, bankOperation, bankOverview, bankLedger, recordBankEntry, transferToPlayer, BANK_TRANSFER_LIMIT, NEW_MEMBER_DAYS, NEW_MEMBER_TRANSFER_LIMIT, bankLoanOverview, borrowBankLoan, payoffBankLoan, bankTaxOverview, refreshBankTaxSnapshot } from "./banking.mjs";
 import { initSoloClock, gameTimestamp, advanceSoloClock, soloOffset } from "./solo-clock.mjs";
 import { deleteSoloCharacter } from "./solo-character.mjs";
-import {parseOsakaRules,loadOsakaNpcCatalog} from "./osaka-challenge-core.mjs";
+import {parseOsakaRules} from "./osaka-challenge-core.mjs";
+import {resolveOsakaNpcCatalog} from "./osaka-npc-catalog.mjs";
 import {initOsakaTables,osakaOverview,playOsaka,migrateOsakaPowerPrizes} from "./osaka-challenge.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -135,9 +136,7 @@ initPlayerStoreTables(db);
 const osakaRules=parseOsakaRules(decodeLegacyText(readFileSync(resolve(REPO_ROOT,"obatyan.cgi"))));
 const osakaUpgrade=migrateOsakaPowerPrizes(db,osakaRules);
 if(osakaUpgrade.skipped)console.warn("大阪舊版待核對獎品："+osakaUpgrade.skipped+" 筆無足夠收據或存在衝突，未修改");
-let osakaCatalog;
-try{osakaCatalog=loadOsakaNpcCatalog(resolve(process.env.OSAKA_NPC_ROOT||REPO_ROOT));}
-catch{osakaCatalog={available:false,npcs:[],missing:[],sourceInvalid:true};}
+const osakaCatalog=resolveOsakaNpcCatalog(resolve(process.env.OSAKA_NPC_ROOT||REPO_ROOT),process.env.OSAKA_NPC_POLICY||"auto");
 const houseCatalog = parseHouseCatalog(
   decodeLegacyText(readFileSync(resolve(REPO_ROOT, "town_ini.cgi"))),
   decodeLegacyText(readFileSync(resolve(REPO_ROOT, "command.pl")))
