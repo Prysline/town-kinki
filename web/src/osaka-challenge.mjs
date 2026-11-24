@@ -121,7 +121,7 @@ export function playOsaka(db,userId,rules,catalog,{mode,requestId,now,rng=random
     const reward=battle.prize?grantPrize(db,userId,rules,battle.prize,now):null;
     db.prepare("UPDATE characters SET body_energy=?,brain_energy=?,money=?,recovered_at=? WHERE user_id=?")
       .run(battle.player.bodyEnergy,battle.player.brainEnergy,battle.player.money,now,userId);
-    const receipt={...battle,reward,playedAt:now};
+    const receipt={...battle,reward,playedAt:now,npcSource:battle.npc.source??"unknown",npcSourceVersion:battle.npc.sourceVersion??null};
     db.prepare("INSERT INTO osaka_battles(user_id,request_id,mode,played_at,result_json) VALUES(?,?,?,?,?)")
       .run(userId,requestId,mode,now,JSON.stringify(receipt));
     db.exec("COMMIT");
@@ -133,7 +133,8 @@ export function osakaOverview(db,userId,catalog){
   const locations=char?entrances(db,char.town_id):{week:false,strong:false};
   const rows=db.prepare("SELECT id,mode,played_at,result_json FROM osaka_battles WHERE user_id=? ORDER BY id DESC LIMIT 20").all(userId);
   return {catalogReady:catalog.available,missingCount:catalog.missing.length,sourceInvalid:Boolean(catalog.sourceInvalid),
+    npcSource:catalog.source??"unknown",npcSourceVersion:catalog.sourceVersion??null,npcPolicy:catalog.policy??"original-only",
     locations,modes:OSAKA_MODES,readyAt:rows.length?rows[0].played_at+OSAKA_COOLDOWN_MS:0,
     latest:rows.length?JSON.parse(rows[0].result_json):null,
-    history:rows.map(row=>{const b=JSON.parse(row.result_json);return {id:row.id,mode:row.mode,playedAt:row.played_at,name:b.npc.name,outcome:b.outcome,moneyDelta:b.moneyDelta,reward:b.reward};})};
+    history:rows.map(row=>{const b=JSON.parse(row.result_json);return {id:row.id,mode:row.mode,playedAt:row.played_at,name:b.npc.name,outcome:b.outcome,moneyDelta:b.moneyDelta,reward:b.reward,npcSource:b.npcSource??"unknown",npcSourceVersion:b.npcSourceVersion??null};})};
 }
