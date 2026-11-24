@@ -214,6 +214,25 @@
             <button type="button" data-facility="school-panel"><img src="/legacy-assets/school.gif" alt="">學校</button>
             <button type="button" data-facility="gym-panel"><img src="/legacy-assets/gym.gif" alt="">健身房</button>
           </nav>
+          <section class="map-starter" id="c-league-panel">
+            <h3>C 聯賽・角色培育</h3>
+            <p class="small">14 天一季，每季 100 場，間隔 1 分鐘。培育每點扣本人能力 1 點及 10,000 元；原版模仿者允許單機比賽。</p>
+            <p id="c-league-status" role="status"></p>
+            <details id="c-league-training">
+              <summary>培育角色／設定攻擊台詞</summary>
+              <label>名稱 <input id="c-league-name" maxlength="30"></label>
+              <label>圖片網址（可空白） <input id="c-league-image" type="url" maxlength="2048"></label>
+              <div id="c-league-fields"></div>
+              <label>付款 <select id="c-league-payment"></select></label>
+              <p id="c-league-cost"></p>
+              <button id="c-league-train" type="button">確認培育／儲存</button>
+            </details>
+            <p id="c-league-fighter"></p>
+            <button id="c-league-play" type="button" disabled>進行 C 聯賽</button>
+            <p id="c-league-result" role="status"></p>
+            <details><summary>本季排名／前季／累積積分／最近賽事</summary><div id="c-league-rankings"></div></details>
+            <details><summary>本人最近 20 場戰報</summary><div id="c-league-history"></div></details>
+          </section>
           <div class="map-editor" id="map-editor" hidden>
             <label class="map-editor-switch">
               <input type="checkbox" id="map-edit-toggle"> 開啟單機街區編輯模式

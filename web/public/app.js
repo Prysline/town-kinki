@@ -4079,6 +4079,84 @@ function renderBank() {
   target.append(list);
 }
 
+
+let cLeagueOwner=null,cLeagueBusy=false,cLeaguePending=null;
+function updateCLeagueCountdown(){
+  const info=state?.cLeague;if(!info||!state.character)return;
+  const record=info.record,played=(record?.wins??0)+(record?.losses??0)+(record?.draws??0);
+  const wait=Math.max(0,info.readyAt-browserGameNow());
+  text("c-league-status","第 "+info.season+" 季・第 "+info.day+" 天・"+played+" / "+info.matchLimit+" 場"+
+    (wait?"・冷卻 "+Math.ceil(wait/1000)+" 秒":""));
+  el("c-league-play").disabled=cLeagueBusy||!info.character||played>=info.matchLimit||wait>0;
+  el("c-league-train").disabled=cLeagueBusy;
+}
+function cLeagueCost(){
+  const amount=Array.from(el("c-league-fields").querySelectorAll("input[data-stat]")).reduce((n,input)=>n+Number(input.value||0),0);
+  text("c-league-cost","預計支付："+money(amount*10000));
+}
+function cLeagueLine(parent,value){const p=document.createElement("p");p.textContent=value;parent.append(p);}
+function renderCLeague(){
+  const info=state.cLeague;if(!info)return;
+  const owner=state.mode+":"+state.user?.username+":"+state.character.name;
+  const fields=el("c-league-fields");
+  if(cLeagueOwner!==owner||!fields.childElementCount){
+    cLeagueOwner=owner;cLeaguePending=null;
+    el("c-league-name").value=info.character?.name??"";el("c-league-image").value=info.character?.imageUrl??"";
+    fields.replaceChildren();
+    for(const [key,label] of Object.entries(labels)){
+      const row=document.createElement("div");row.className="small";
+      const title=document.createElement("label");title.textContent=label+" 移轉 ";
+      const input=document.createElement("input");input.type="number";input.min="0";input.step="1";input.value="0";input.dataset.stat=key;input.style.width="6em";title.append(input);
+      const comment=document.createElement("label");comment.textContent=" 台詞 ";
+      const field=document.createElement("input");field.maxLength=40;field.dataset.comment=key;field.value=info.character?.comments?.[key]??"";comment.append(field);
+      row.append(title,comment);fields.append(row);input.addEventListener("input",cLeagueCost);
+    }
+  }
+  for(const input of fields.querySelectorAll("input[data-stat]")){const k=input.dataset.stat;input.max=String(Math.max(0,state.character.stats[k]-1));input.title="本人 "+state.character.stats[k]+"／培育 "+(info.character?.stats[k]??0);}
+  const payment=el("c-league-payment"),oldPayment=payment.value;payment.replaceChildren();
+  for(const [value,label] of [["cash","現金"],...(state.classroomCreditCards??[]).map(c=>["credit:"+c.sourceLine,c.name+"（銀行付款）"])]){
+    const opt=document.createElement("option");opt.value=value;opt.textContent=label;payment.append(opt);
+  }
+  if([...payment.options].some(o=>o.value===oldPayment))payment.value=oldPayment;
+  const f=info.character;
+  text("c-league-fighter",f?f.name+"｜"+Object.entries(labels).map(([k,v])=>v+" "+f.stats[k]).join("・"):"尚未建立培育角色");
+  const root=el("c-league-rankings");root.replaceChildren();
+  for(const [heading,rows,previous,overall] of [["本季前十名",info.rankings,false,false],["前季前五名",info.previous,true,false],["累積前十名",info.overall,false,true]]){
+    const h=document.createElement("h4");h.textContent=heading;root.append(h);
+    rows.forEach((r,i)=>cLeagueLine(root,(i+1)+". "+r.name+"（"+r.owner+"） "+(overall?r.points+" 點":(previous?r.previousWins:r.wins)+" 勝／"+(previous?r.previousLosses:r.losses)+" 敗／"+(previous?r.previousDraws:r.draws)+" 和")+"・冠軍 "+r.champions));
+  }
+  const h=document.createElement("h4");h.textContent="最近對戰";root.append(h);
+  info.recent.forEach(r=>cLeagueLine(root,r.playerName+" vs "+r.opponentName+"｜"+({win:"勝利",loss:"敗北",draw:"平手"}[r.outcome])+" "+r.comment));
+  const history=el("c-league-history");history.replaceChildren();
+  for(const r of info.history){
+    const d=document.createElement("details"),summary=document.createElement("summary");
+    summary.textContent="第 "+r.season+" 季｜"+r.playerName+" vs "+r.opponentName+"｜"+({win:"勝利",loss:"敗北",draw:"平手"}[r.outcome])+"｜+"+money(r.reward);d.append(summary);
+    cLeagueLine(d,"初始能量："+r.initial.player.total+" / "+r.initial.opponent.total+"；本人累計傷害 "+r.damageDealt);
+    const list=document.createElement("ol");for(const turn of r.rounds){const li=document.createElement("li");li.textContent=(turn.attacker==="player"?r.playerName:r.opponentName)+"："+turn.comment+"（"+turn.label+"；傷害 "+turn.damage+"；能量 "+turn.playerEnergy+" / "+turn.opponentEnergy+"）";list.append(li);}d.append(list);history.append(d);
+  }
+  cLeagueCost();updateCLeagueCountdown();
+}
+async function submitCLeague(kind,data){
+  if(cLeagueBusy)return;
+  const owner=cLeagueOwner,key=JSON.stringify([kind,data]);
+  if(!cLeaguePending||cLeaguePending.owner!==owner||cLeaguePending.key!==key)cLeaguePending={owner,key,requestId:crypto.randomUUID()};
+  cLeagueBusy=true;updateCLeagueCountdown();
+  try{
+    const next=await api("c-league/"+kind,{...data,requestId:cLeaguePending.requestId});cLeaguePending=null;
+    if(cLeagueOwner!==owner||!state?.character)return;
+    state=next;if(kind==="train"){cLeagueOwner=null;el("c-league-fields").replaceChildren();}
+    render();const r=next.cLeagueResult;text("c-league-result",kind==="train"?"培育已儲存，支付 "+money(r.cost):({win:"勝利",loss:"敗北",draw:"平手"}[r.outcome])+"："+r.opponentName+"，獲得 "+money(r.reward));
+  }catch(e){notify(e.message,true);}finally{cLeagueBusy=false;updateCLeagueCountdown();}
+}
+el("c-league-train").onclick=()=>{
+  const transfers={},comments={};for(const input of el("c-league-fields").querySelectorAll("input[data-stat]"))transfers[input.dataset.stat]=Number(input.value||0);
+  for(const input of el("c-league-fields").querySelectorAll("input[data-comment]"))comments[input.dataset.comment]=input.value;
+  const payment=el("c-league-payment").value;
+  if(!window.confirm("確認培育？能力移轉不可退回。"))return;
+  submitCLeague("train",{name:el("c-league-name").value,imageUrl:el("c-league-image").value,transfers,comments,payment:payment==="cash"?"cash":"credit",...(payment==="cash"?{}:{cardSourceLine:Number(payment.split(":")[1])})});
+};
+el("c-league-play").onclick=()=>submitCLeague("play",{});
+
 function render() {
   if (!state) return;
   const solo = state.mode === "solo";
@@ -4137,6 +4215,7 @@ function render() {
   renderVending();
   renderFishing();
   renderCrafting();
+  renderCLeague();
   renderArcadeDice();
   renderArcadeHighLow();
   renderArcadeDonuts();
@@ -4483,6 +4562,7 @@ setInterval(()=>{
     renderSoloTime(); // 同步顯示遊戲時鐘，限時事件結束後也恢復快轉按鈕
   updateTrainingCountdowns(); // 每秒刷新課程灰階和剩餘時間，不重建卡片。
   updateRoadCountdown(); // 公路旅程到時間才開啟抵達按鈕。
+  updateCLeagueCountdown();
 },1000);
 el("room-close").addEventListener("click", closeRoom);
 el("room-config-form").addEventListener("submit", event => {

@@ -53,6 +53,7 @@ import { initLegacyItemUseTables, listLegacyItemActions, listLegacyItemUseHistor
 import { initBankTables, settleBankInterest, bankOperation, bankOverview, bankLedger, recordBankEntry, transferToPlayer, BANK_TRANSFER_LIMIT, NEW_MEMBER_DAYS, NEW_MEMBER_TRANSFER_LIMIT, bankLoanOverview, borrowBankLoan, payoffBankLoan, bankTaxOverview, refreshBankTaxSnapshot } from "./banking.mjs";
 import { initSoloClock, gameTimestamp, advanceSoloClock, soloOffset } from "./solo-clock.mjs";
 import { deleteSoloCharacter } from "./solo-character.mjs";
+import {initCLeagueTables,cLeagueOverview,trainCLeague,playCLeague} from "./c-league.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const REPO_ROOT = resolve(ROOT, "..");
@@ -105,6 +106,7 @@ initTownMapTable(db);
 initHousingTables(db);
 initRoomsTables(db);
 initBankTables(db);
+initCLeagueTables(db);
 initCharacterEvents(db);
 initCouponRedemptionTables(db);
 initFishingTables(db);
@@ -439,6 +441,7 @@ function snapshot(user) {
     couponRedemptions:updated?listCouponRedemptions(db,user.id):[],
     fishing:updated?fishingOverview(db,user.id,fishingCatalog,now,today):null,
     crafting:updated?craftingOverview(db,user.id,craftingCatalog,now):null,
+    cLeague:updated?cLeagueOverview(db,user.id,now):null,
     arcadeDice:updated?arcadeDiceOverview(db,user.id,arcadeDiceSource,now):null,
     arcadeHighLow:updated?arcadeHighLowOverview(db,user.id,arcadeHighLowSource,now):null,
     arcadeDonuts:updated?arcadeDonutsOverview(db,user.id,arcadeDonutsSource,now):null,
@@ -837,6 +840,14 @@ async function handle(req, res) {
         });
       }catch(error){throw new HttpError(400,error.message);}
       return sendJson(res,200,{...snapshot(user),craftingResult});
+    }
+
+    if(path==="/api/c-league/train"||path==="/api/c-league/play"){
+      const now=gameNow(),today=calendarDay(now,GAME_TIMEZONE);
+      let cLeagueResult;
+      try{cLeagueResult=path.endsWith("/train")?trainCLeague(db,user.id,data,now,today):playCLeague(db,user.id,data,now,today);}
+      catch(error){throw new HttpError(400,error.message);}
+      return sendJson(res,200,{...snapshot(user),cLeagueResult});
     }
 
     if(path==="/api/arcade/dice/play"){

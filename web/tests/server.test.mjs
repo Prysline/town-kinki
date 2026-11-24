@@ -6878,3 +6878,19 @@ test("IT-02 單機 HTTP：百貨原版食物轉類購入→真正使用→60 分
     else await srv.stop();
   }
 });
+
+test("C 聯賽 HTTP 單機培育、模仿者、重送、拒絕篡改與重啟",async()=>{
+  let srv=await start("solo");
+  try{
+    const made=await api(srv.url,"character",{name:"聯賽居民",gender:"male",stats:defaultStats()});assert.equal(made.status,200);
+    const created=await api(srv.url,"c-league/train",{requestId:"train",name:"聯賽角色",transfers:{kenkou:1}});assert.equal(created.status,200);
+    assert.equal(created.result.character.money,made.result.character.money-10000);assert.equal(created.result.character.stats.kenkou,made.result.character.stats.kenkou-1);
+    assert.equal(created.result.cLeague.character.stats.kenkou,1);
+    assert.equal((await api(srv.url,"c-league/play",{requestId:"x",opponentId:2})).status,400);
+    const played=await api(srv.url,"c-league/play",{requestId:"match"});assert.equal(played.status,200);assert.equal(played.result.cLeagueResult.mimic,true);assert.equal(played.result.character.money,created.result.character.money+played.result.cLeagueResult.reward);
+    assert.equal((await api(srv.url,"c-league/play",{requestId:"new"})).status,400);
+    const replay=await api(srv.url,"c-league/play",{requestId:"match"});assert.equal(replay.result.cLeagueResult.replayed,true);assert.equal(replay.result.character.money,played.result.character.money);
+    const directory=srv.directory;await srv.stop({preserveData:true});srv=await start("solo",null,directory);
+    const restored=(await api(srv.url,"state")).result;assert.equal(restored.cLeague.character.name,"聯賽角色");assert.equal(restored.cLeague.history.length,1);assert.equal(restored.character.money,played.result.character.money);
+  }finally{await srv.stop();}
+});
