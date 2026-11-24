@@ -30,15 +30,32 @@ export function parseOsakaRules(source){
     !/\$get_money\s*\*=\s*5/.test(source))
     throw new Error("大阪原版回合或結算規則改變");
   const rows=[...source.slice(prizeStart).matchAll(/'(ゲットアイテム<>[^']+)'/g)]
-    .map(m=>{
+    .map((m,index)=>{
       const fields=m[1].replace(/\\n$/,"").split("<>");
       if(fields.length===34&&fields[33]==="")fields.pop();
       if(fields.length!==33)throw new Error("大阪獎品欄位無法保存");
-      // 兩個「おばちゃんの力」原始欄位有錯位／不明效果。不修成推測效果。
+      const originalRawFields=Object.freeze([...fields]);
+      let correction=null;
+      // 使用者確認：修復原版兩筆「おばちゃんの力」，只接受已核對的原始形狀。
+      if(index===0||index===4){
+        if(fields[1]!=="おばちゃんの力")throw new Error("大阪獎品修正來源已變更");
+        if(index===0){
+          if(fields[9]!=="無3"||fields[20]!==""||fields[21]!=="3"||fields[22]!=="回")throw new Error("大阪弱獎品修正來源已變更");
+          fields.splice(9,1,"無","3");fields.splice(21,1);
+          correction="weak-missing-delimiter-extra-empty";
+        }else{
+          if(fields[9]!=="10"||fields[20]!=="5"||fields[21]!=="回"||fields[32]!=="")throw new Error("大阪強獎品修正來源已變更");
+          fields.splice(9,0,"無");fields.pop();
+          correction="strong-missing-effect-column";
+        }
+        const amount=index===0?"3":"10";
+        if(fields.length!==33||![10,11,12,13,14,15,16,18,19,20].every(i=>fields[i]===amount)||fields[17]!=="0"||fields[21]!== (index===0?"3":"5")||fields[22]!=="回"||fields[23]!=="30"||fields[28]!=="10")throw new Error("大阪獎品修正欄位核對失敗");
+      }
       const usableShape=fields[22]==="回"&&/^\d+$/.test(fields[21])&&
         /^(無|万能,\d+)$/.test(fields[9])&&
         STAT_KEYS.every((_,i)=>/^\d+$/.test(fields[i<7?i+2:i<14?i+3:i+4]));
-      return Object.freeze({name:fields[1],rawFields:Object.freeze(fields),usableShape});
+      if(!usableShape)throw new Error("大阪獎品資料無法安全使用");
+      return Object.freeze({name:fields[1],rawFields:Object.freeze(fields),originalRawFields,correction,usableShape});
     });
   if(rows.length!==8)throw new Error("大阪原版獎品陣列數量改變");
   return Object.freeze({
