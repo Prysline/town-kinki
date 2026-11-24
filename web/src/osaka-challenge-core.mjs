@@ -1,5 +1,5 @@
 // 原版 obatyan.cgi 與 town_lib.pl::weekobalog/strongobalog。
-// 不使用玩家私人檔或虛構的 NPC；來源未齊備時不得啟用正式入口。
+// 原版 NPC 讀取與戰鬥核心；重建資料由獨立模組與目錄選擇器負責。
 import {randomInt} from "node:crypto";
 import {readFileSync} from "node:fs";
 import {join} from "node:path";
@@ -87,7 +87,7 @@ export function parseOsakaNpcRecord(filename,source){
     if(!/^\d+$/.test(value)||!safe(Number(value)))throw new Error("大阪 NPC 原始能力無效");
     return [key,Number(value)];
   }));
-  const npc={sourceFile:filename,mode:filename[0]==="w"?"week":"strong",index:Number(filename[1]),name:fields[1],stats:Object.freeze(stats)};
+  const npc={source:"original-file",sourceFile:filename,mode:filename[0]==="w"?"week":"strong",index:Number(filename[1]),name:fields[1],stats:Object.freeze(stats)};
   // 不回傳 ID、密碼、IP、銀行或私人角色欄。
   return Object.freeze({...npc,...osakaNpcEnergy(stats)});
 }
@@ -104,7 +104,7 @@ export function loadOsakaNpcCatalog(repositoryRoot){
     }
   }
   // 不允許以部分池、零能力或其他玩家替代五名原版 NPC。
-  return {available:missing.length===0,npcs:missing.length?[]:npcs,missing};
+  return {available:missing.length===0,npcs:missing.length?[]:npcs,missing,source:missing.length?"unavailable":"original-file",sourceVersion:null};
 }
 export function simulateOsaka({rules,mode,player,npc,rng=randomInt}){
   if(!OSAKA_MODES.includes(mode)||npc.mode!==mode)throw new Error("大阪 NPC 難度不符");
