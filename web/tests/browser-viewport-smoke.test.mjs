@@ -25,10 +25,10 @@ async function freePort(){
     });
   });
 }
-async function startWeb(dir){
+async function startWeb(dir,mode="solo"){
   const port=await freePort();
   const child=spawn(process.execPath,["src/server.mjs"],{
-    cwd:WEB_ROOT,env:{...process.env,GAME_MODE:"solo",
+    cwd:WEB_ROOT,env:{...process.env,GAME_MODE:mode,
       HOST:"127.0.0.1",PORT:String(port),DATA_DIR:dir}
   });
   let output="";
@@ -666,6 +666,48 @@ test("Chrome：健身房減重→真實百貨寵物／信用卡→背包使用�
   }finally{
     await chrome?.stop();
     await web?.stop();
+    rmSync(workspace,{force:true,recursive:true,maxRetries:50,retryDelay:200});
+  }
+});
+
+test("Chrome 多人街頭格鬥：真實按鈕送出戰鬥、展開戰報、手機視窗",{
+  timeout:90000
+},async()=>{
+  const workspace=mkdtempSync(join(tmpdir(),"town-chrome-street-"));
+  let web=null,chrome=null;
+  try{
+    web=await startWeb(join(workspace,"sqlite"),"multi");
+    chrome=await openChrome(join(workspace,"chrome"));
+    await chrome.send("Page.enable");await chrome.send("Runtime.enable");
+    await viewport(chrome,1440,900);
+    await chrome.send("Page.navigate",{url:web.url});
+    await until(chrome,"Boolean(document.querySelector('#auth'))","登入頁");
+    const seeded=await evaluate(chrome,`(async()=>{
+      const post=(path,data)=>fetch("/api/"+path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)});
+      const stats=Object.fromEntries(["kokugo","suugaku","rika","syakai","eigo","ongaku","bijutu","looks","tairyoku","kenkou","speed","power","wanryoku","kyakuryoku","love","unique","etti"].map(k=>[k,20]));
+      const results=[];
+      for(const [username,name] of [["chrome_street_a","格鬥居民甲"],["chrome_street_b","格鬥居民乙"]]){
+        results.push((await post("register",{username,password:"chrome-street-pass"})).status);
+        results.push((await post("character",{name,gender:"male",stats})).status);
+      }
+      return results;
+    })()`);
+    assert.deepEqual(seeded,[200,200,200,200]);
+    await chrome.send("Page.reload");
+    await until(chrome,"!document.querySelector('#game')?.hidden && document.querySelector('#street-fight-play')?.disabled===false","格鬥入口可使用");
+    await evaluate(chrome,"window.confirm=()=>true");
+    await click(chrome,"#street-fight-play");
+    await until(chrome,"document.querySelector('#street-fight-history summary')?.textContent?.includes('平手')","顯示實際格鬥結果");
+    await click(chrome,"#street-fight-history summary");
+    await until(chrome,"document.querySelector('#street-fight-history details')?.open===true","戰報可展開");
+    assert.equal(await evaluate(chrome,"document.querySelectorAll('#street-fight-history details ol li').length"),50);
+    assert.equal(await evaluate(chrome,"document.querySelectorAll('#street-fight-history details dl dt').length"),17);
+    await viewport(chrome,375,812);
+    assert.ok(await evaluate(chrome,"document.querySelector('#street-fight-status')?.textContent?.length>0"));
+    const saved=await evaluate(chrome,"(async()=>{const s=await(await fetch('/api/state')).json();return s.streetFight.history.length})()");
+    assert.equal(saved,1);
+  }finally{
+    await chrome?.stop();await web?.stop();
     rmSync(workspace,{force:true,recursive:true,maxRetries:50,retryDelay:200});
   }
 });

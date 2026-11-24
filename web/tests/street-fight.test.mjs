@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
+import { readFileSync } from "node:fs";
 import { STAT_KEYS } from "../src/engine.mjs";
 import { initCharacterEvents,getCouponBalance } from "../src/events.mjs";
 import { initBankTables,calculateWeeklyTax } from "../src/banking.mjs";
@@ -116,4 +117,22 @@ test("敗北扣實際攻擊次數，對手不入帳；5秒邊界可重新出發"
     const again=playStreetFight(db,2,{...options,requestId:"boundary",now:6000,randomIndex:seq(0,8,1)});
     assert.equal(again.outcome,"loss");
   }finally{db.close();}
+});
+
+test("原版 CGI 來源契約：對手公式、抽選疏漏、回合與只寫本人存檔",()=>{
+  const source=readFileSync(new URL("../../game.cgi",import.meta.url),"utf8");
+  const battle=source.slice(source.indexOf("sub battle {"),source.indexOf("sub kougeki {"));
+  assert.ok(battle.includes('int (rand($#aite_erabi))'));
+  assert.ok(battle.includes('foreach (1..50)'));
+  assert.ok(battle.includes('$get_money=$sentou_kaisuu*300'));
+  assert.equal(battle.split('$get_money *= 5').length-1,2);
+  assert.ok(battle.includes('$kpoint -= 3'));
+  assert.ok(battle.includes('&log_kousin($my_log_file,$k_temp)'));
+  assert.ok(!battle.includes('&log_kousin($aite_log_file'));
+  assert.ok(battle.includes('$aite_looks/12'));
+  assert.ok(battle.includes('$aite_kenkou/4'));
+  assert.ok(battle.includes('$aite_bijutu/6'));
+  assert.ok(source.includes('$battle_rand = int(rand(16))+1'));
+  assert.ok(source.includes('$battle_rand <= 8 || $battle_rand == 14'));
+  assert.ok(source.includes('$iryoku_hanteiti = @_[1] + 5'));
 });

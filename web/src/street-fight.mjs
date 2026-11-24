@@ -47,6 +47,8 @@ export function simulateStreetFight(player,opponent,randomIndex=randomInt){
   if(Object.values(mine).some(n=>!Number.isSafeInteger(n)||n<0))
     throw new Error("街頭格鬥能量資料無效");
   const theirs=streetOpponentEnergy(b);
+  if(Object.values(theirs).some(n=>!Number.isSafeInteger(n)||n<0))
+    throw new Error("對手能量超出安全整數範圍");
   const initial={player:{...mine},opponent:{...theirs}};
   let playerTurn=a.speed>b.speed, outcome="draw", reason=null;
   const rounds=[];

@@ -6909,3 +6909,68 @@ test("街頭格鬥 HTTP：單機不虛構對手，多人只由伺服器選擇",a
     assert.equal((await api(srv.url,"street-fight/play",{requestId:"same"},b.cookie)).result.streetFightResult.replayed,true);
   }finally{await srv.stop();}
 });
+
+
+test("街頭格鬥 HTTP 勝敗、交易回滾、券/K點/現金及重啟一致",async()=>{
+  let srv=await start("multi");
+  try{
+    const a=await api(srv.url,"register",{username:"street_weak",password:"street-weak-pass"});
+    const b=await api(srv.url,"register",{username:"street_strong",password:"street-strong-pass"});
+    assert.equal((await api(srv.url,"character",{name:"街頭對手",gender:"male",stats:defaultStats()},a.cookie)).status,200);
+    assert.equal((await api(srv.url,"character",{name:"街頭玩家",gender:"male",stats:defaultStats()},b.cookie)).status,200);
+    function dbAction(fn){
+      const db=new DatabaseSync(join(srv.directory,"multi.sqlite"));
+      try{return fn(db);}finally{db.close();}
+    }
+    const allStats=n=>JSON.stringify(Object.fromEntries(Object.keys(defaultStats()).map(key=>[key,n])));
+    dbAction(db=>{
+      db.prepare("UPDATE characters SET stats_json=?,body_energy=1,brain_energy=1 WHERE name=?").run(allStats(1),"街頭對手");
+      db.prepare("UPDATE characters SET stats_json=?,body_energy=100,brain_energy=100 WHERE name=?").run(allStats(200),"街頭玩家");
+    });
+    const before=(await api(srv.url,"state",undefined,b.cookie)).result;
+    const otherBefore=dbAction(db=>db.prepare("SELECT * FROM characters WHERE name=?").get("街頭對手"));
+    dbAction(db=>db.exec("CREATE TRIGGER fail_street_http BEFORE INSERT ON street_fights BEGIN SELECT RAISE(ABORT,'forced street rollback'); END;"));
+    const failed=await api(srv.url,"street-fight/play",{requestId:"win"},b.cookie);
+    assert.equal(failed.status,400);
+    const afterFail=(await api(srv.url,"state",undefined,b.cookie)).result;
+    assert.equal(afterFail.character.money,before.character.money);
+    assert.equal(afterFail.character.kpoint,before.character.kpoint);
+    assert.equal(afterFail.couponBalance,before.couponBalance);
+    assert.equal(afterFail.character.bodyEnergy,before.character.bodyEnergy);
+    assert.equal(afterFail.character.brainEnergy,before.character.brainEnergy);
+    assert.equal(afterFail.streetFight.history.length,0);
+    dbAction(db=>db.exec("DROP TRIGGER fail_street_http"));
+    const won=await api(srv.url,"street-fight/play",{requestId:"win"},b.cookie);
+    assert.equal(won.status,200);
+    const win=won.result.streetFightResult;
+    assert.equal(win.outcome,"win");assert.equal(win.rounds.length,1);
+    assert.equal(won.result.character.money,before.character.money+1500);
+    assert.equal(won.result.couponBalance,before.couponBalance+win.coupons);
+    assert.equal(won.result.character.kpoint,before.character.kpoint+win.kpointDelta);
+    assert.deepEqual(dbAction(db=>db.prepare("SELECT * FROM characters WHERE name=?").get("街頭對手")),otherBefore);
+    dbAction(db=>{
+      db.exec("UPDATE street_fights SET played_at=0");
+      db.prepare("UPDATE characters SET stats_json=?,body_energy=100,brain_energy=100 WHERE name=?").run(allStats(200),"街頭對手");
+      db.prepare("UPDATE characters SET stats_json=?,body_energy=1,brain_energy=1,recovered_at=? WHERE name=?").run(allStats(1),Date.now(),"街頭玩家");
+    });
+    const lost=await api(srv.url,"street-fight/play",{requestId:"loss"},b.cookie);
+    assert.equal(lost.status,200);
+    const loss=lost.result.streetFightResult;
+    assert.equal(loss.outcome,"loss");assert.equal(loss.delta,-300);assert.equal(loss.rounds.length,1);
+    assert.equal(lost.result.character.money,won.result.character.money-300);
+    assert.equal(lost.result.couponBalance,won.result.couponBalance);
+    assert.equal(lost.result.character.kpoint,won.result.character.kpoint+loss.kpointDelta);
+    assert.equal(loss.reason==="body"?lost.result.character.bodyEnergy:lost.result.character.brainEnergy,0);
+    assert.equal((await api(srv.url,"state",undefined,a.cookie)).result.streetFight.history.length,0);
+    const directory=srv.directory;await srv.stop({preserveData:true});
+    srv=await start("multi",null,directory);
+    const restored=(await api(srv.url,"state",undefined,b.cookie)).result;
+    assert.deepEqual(restored.streetFight.history.map(x=>x.outcome),["loss","win"]);
+    assert.equal(restored.character.money,lost.result.character.money);
+    assert.equal(restored.character.kpoint,lost.result.character.kpoint);
+    assert.equal(restored.couponBalance,lost.result.couponBalance);
+    const replay=await api(srv.url,"street-fight/play",{requestId:"win"},b.cookie);
+    assert.equal(replay.result.streetFightResult.replayed,true);
+    assert.equal(replay.result.character.money,restored.character.money);
+  }finally{await srv.stop();}
+});
