@@ -2776,7 +2776,7 @@ function updateStreetFightCountdown(){
   const enough=state.character.money>=info.minCash;
   text("street-fight-status",state.mode==="solo"?"單機沒有已確認的原版街頭格鬥 NPC，不提供虛構對手。":
     !info.available?"沒有其他已建立角色的居民。":
-    !enough?"Web 現金安全限制：至少準備 "+money(info.minCash)+"。":
+    !enough?"參戰現金不足：至少需持有 "+money(info.minCash)+"（銀行存款不計）。":
     remain>0?"行動間隔剩餘 "+Math.ceil(remain/1000)+" 秒。":"可隨機遇見其他居民。");
   el("street-fight-play").disabled=streetFightBusy||!info.available||!enough||remain>0;
 }

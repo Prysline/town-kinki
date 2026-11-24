@@ -693,8 +693,20 @@ test("Chrome 多人街頭格鬥：真實按鈕送出戰鬥、展開戰報、手�
       return results;
     })()`);
     assert.deepEqual(seeded,[200,200,200,200]);
+    const setCash=amount=>{
+      const db=new DatabaseSync(join(workspace,"sqlite","multi.sqlite"));
+      try{db.prepare("UPDATE characters SET money=?,bank=1000000 WHERE name=?").run(amount,"格鬥居民乙");}
+      finally{db.close();}
+    };
+    setCash(14999);
     await chrome.send("Page.reload");
-    await until(chrome,"!document.querySelector('#game')?.hidden && document.querySelector('#street-fight-play')?.disabled===false","格鬥入口可使用");
+    await until(chrome,"!document.querySelector('#game')?.hidden && document.querySelector('#street-fight-status')?.textContent?.includes('參戰現金不足')","低於門檻顯示原因");
+    assert.equal(await evaluate(chrome,"document.querySelector('#street-fight-play').disabled"),true);
+    assert.match(await evaluate(chrome,"document.querySelector('#street-fight-status').textContent"),/15,000/);
+    assert.match(await evaluate(chrome,"document.querySelector('#street-fight-panel').textContent"),/不是固定入場費/);
+    setCash(15000);
+    await chrome.send("Page.reload");
+    await until(chrome,"!document.querySelector('#game')?.hidden && document.querySelector('#street-fight-play')?.disabled===false","恰好 15,000 元格鬥入口可使用");
     await evaluate(chrome,"window.confirm=()=>true");
     await click(chrome,"#street-fight-play");
     await until(chrome,"document.querySelector('#street-fight-history summary')?.textContent?.includes('平手')","顯示實際格鬥結果");

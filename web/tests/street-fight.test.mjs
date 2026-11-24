@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 import { STAT_KEYS } from "../src/engine.mjs";
 import { initCharacterEvents,getCouponBalance } from "../src/events.mjs";
 import { initBankTables,calculateWeeklyTax } from "../src/banking.mjs";
-import { STREET_ATTACKS,streetOpponentEnergy,simulateStreetFight,chooseStreetOpponent,
+import { STREET_ATTACKS,STREET_MAX_ATTACKS,STREET_LOSS_PER_ATTACK,STREET_MAX_LOSS,streetOpponentEnergy,simulateStreetFight,chooseStreetOpponent,
   initStreetFightTables,playStreetFight,streetFightOverview } from "../src/street-fight.mjs";
 const stats=n=>Object.fromEntries(STAT_KEYS.map(key=>[key,n]));
 const fighter=(n,bodyEnergy=100,brainEnergy=100)=>({stats:stats(n),bodyEnergy,brainEnergy});
@@ -135,4 +135,50 @@ test("原版 CGI 來源契約：對手公式、抽選疏漏、回合與只寫本
   assert.ok(source.includes('$battle_rand = int(rand(16))+1'));
   assert.ok(source.includes('$battle_rand <= 8 || $battle_rand == 14'));
   assert.ok(source.includes('$iryoku_hanteiti = @_[1] + 5'));
+});
+
+test("核准門檻：15,000 元現金、第 50 擊敗北恰扣至零，原請求可重送",()=>{
+  assert.equal(STREET_MAX_ATTACKS,50);
+  assert.equal(STREET_LOSS_PER_ATTACK,300);
+  assert.equal(STREET_MAX_LOSS,15000);
+  const db=setup();
+  try{
+    // 本人先攻但全數無效；對手每次臂力攻擊造成 1 點身體傷害。
+    db.prepare("UPDATE characters SET stats_json=?,body_energy=25,brain_energy=35,money=14999,bank=1000000 WHERE user_id=2")
+      .run(JSON.stringify({...stats(20),speed:21}));
+    db.prepare("UPDATE characters SET stats_json=? WHERE user_id=1").run(JSON.stringify({...stats(20),wanryoku:21}));
+    const before=db.prepare("SELECT * FROM characters ORDER BY id").all();
+    assert.throws(()=>playStreetFight(db,2,{...options,randomIndex:()=>{throw Error("門檻不足不得抽選");}}),/15,000/);
+    assert.deepEqual(db.prepare("SELECT * FROM characters ORDER BY id").all(),before);
+    assert.equal(streetFightOverview(db,2,"multi").readyAt,0);
+    assert.equal(streetFightOverview(db,2,"multi").history.length,0);
+    db.prepare("UPDATE characters SET money=15000 WHERE user_id=2").run();
+    const r=playStreetFight(db,2,{...options,randomIndex:seq(0,...Array.from({length:25},()=>[0,11]).flat(),1)});
+    assert.equal(r.rounds.length,50);
+    assert.equal(r.outcome,"loss");assert.equal(r.reason,"body");
+    assert.equal(r.delta,-15000);assert.equal(r.bodyEnergy,0);
+    const after=db.prepare("SELECT money,bank,body_energy FROM characters WHERE user_id=2").get();
+    assert.equal(after.money,0);assert.equal(after.bank,1000000);assert.equal(after.body_energy,0);
+    assert.deepEqual(db.prepare("SELECT * FROM characters WHERE user_id=1").get(),before[0]);
+    const replay=playStreetFight(db,2,{...options,now:6000,randomIndex:()=>{throw Error("不得重抽");}});
+    assert.deepEqual(replay,{...r,replayed:true});
+    assert.throws(()=>playStreetFight(db,2,{...options,now:6000,requestId:"new",randomIndex:()=>{throw Error("不得抽選");}}),/15,000/);
+    assert.equal(streetFightOverview(db,2,"multi").history.length,1);
+  }finally{db.close();}
+});
+test("核准原版抽選：兩名居民、抽到本人只抽一次，不扣款不改能力且冷卻持久化",()=>{
+  const db=setup();
+  try{
+    const before=db.prepare("SELECT * FROM characters ORDER BY id").all();
+    let draws=0;
+    const result=playStreetFight(db,1,{...options,randomIndex:n=>{assert.equal(n,1);draws++;return 0;}});
+    assert.equal(result.outcome,"noOpponent");assert.equal(draws,1);
+    assert.deepEqual(db.prepare("SELECT * FROM characters ORDER BY id").all(),before);
+    assert.equal(getCouponBalance(db,1),0);
+    assert.equal(streetFightOverview(db,1,"multi").readyAt,6000);
+    assert.equal(playStreetFight(db,1,{...options,randomIndex:()=>{throw Error("不得重抽");}}).replayed,true);
+    assert.throws(()=>playStreetFight(db,1,{...options,requestId:"fresh",now:5999,randomIndex:()=>{throw Error("冷卻不得抽選");}}),/間隔/);
+    assert.equal(playStreetFight(db,1,{...options,requestId:"fresh",now:6000,randomIndex:()=>0}).outcome,"noOpponent");
+    assert.equal(streetFightOverview(db,1,"multi").history.length,2);
+  }finally{db.close();}
 });

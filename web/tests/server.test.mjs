@@ -6974,3 +6974,42 @@ test("街頭格鬥 HTTP 勝敗、交易回滾、券/K點/現金及重啟一致",
     assert.equal(replay.result.character.money,restored.character.money);
   }finally{await srv.stop();}
 });
+
+test("街頭格鬥 HTTP 核准門檻：14,999 拒絕、15,000 接受、抽到本人與帳號獨立重送",async()=>{
+  const srv=await start("multi");
+  try{
+    const a=await api(srv.url,"register",{username:"street_limit_a",password:"street-limit-a"});
+    const b=await api(srv.url,"register",{username:"street_limit_b",password:"street-limit-b"});
+    assert.equal((await api(srv.url,"character",{name:"門檻居民甲",gender:"male",stats:defaultStats()},a.cookie)).status,200);
+    assert.equal((await api(srv.url,"character",{name:"門檻居民乙",gender:"male",stats:defaultStats()},b.cookie)).status,200);
+    const setMoney=(name,money)=>{
+      const db=new DatabaseSync(join(srv.directory,"multi.sqlite"));
+      try{db.prepare("UPDATE characters SET money=?,bank=1000000 WHERE name=?").run(money,name);}
+      finally{db.close();}
+    };
+    setMoney("門檻居民甲",15000);
+    setMoney("門檻居民乙",14999);
+    const before=(await api(srv.url,"state",undefined,b.cookie)).result;
+    assert.equal(before.streetFight.minCash,15000);
+    const denied=await api(srv.url,"street-fight/play",{requestId:"boundary"},b.cookie);
+    assert.equal(denied.status,400);assert.match(denied.result.error,/15,000/);
+    const after=(await api(srv.url,"state",undefined,b.cookie)).result;
+    assert.equal(after.character.money,14999);assert.equal(after.character.bank,1000000);
+    assert.equal(after.character.kpoint,before.character.kpoint);
+    assert.equal(after.couponBalance,before.couponBalance);
+    assert.equal(after.streetFight.readyAt,0);assert.equal(after.streetFight.history.length,0);
+    setMoney("門檻居民乙",15000);
+    const self=await api(srv.url,"street-fight/play",{requestId:"boundary"},a.cookie);
+    assert.equal(self.status,200);assert.equal(self.result.streetFightResult.outcome,"noOpponent");
+    assert.equal(self.result.character.money,15000);assert.equal(self.result.character.bank,1000000);
+    const battle=await api(srv.url,"street-fight/play",{requestId:"boundary"},b.cookie);
+    assert.equal(battle.status,200);assert.equal(battle.result.streetFightResult.outcome,"draw");
+    assert.equal(battle.result.streetFightResult.opponentName,"門檻居民甲");
+    assert.equal(battle.result.character.money,15000);assert.equal(battle.result.character.bank,1000000);
+    setMoney("門檻居民乙",14999);
+    const replay=await api(srv.url,"street-fight/play",{requestId:"boundary"},b.cookie);
+    assert.equal(replay.status,200);assert.equal(replay.result.streetFightResult.replayed,true);
+    assert.equal(replay.result.character.money,14999);assert.equal(replay.result.streetFight.history.length,1);
+    assert.equal((await api(srv.url,"state",undefined,a.cookie)).result.streetFight.history[0].outcome,"noOpponent");
+  }finally{await srv.stop();}
+});

@@ -4,7 +4,9 @@ import { getCouponBalance } from "./events.mjs";
 import { refreshBankTaxSnapshot } from "./banking.mjs";
 
 export const STREET_COOLDOWN_MS = 5000;
-export const STREET_MAX_LOSS = 15000;
+export const STREET_MAX_ATTACKS = 50;
+export const STREET_LOSS_PER_ATTACK = 300;
+export const STREET_MAX_LOSS = STREET_MAX_ATTACKS * STREET_LOSS_PER_ATTACK; // 核准的現金參戰門檻
 // game.cgi::kougekinaiyou: 健康沒有獨立攻擊；LOVE 是精神傷害。
 export const STREET_ATTACKS = Object.freeze([
   ["kokugo","brain","漢字問答"], ["suugaku","brain","數學難題"],
@@ -34,7 +36,7 @@ export function streetOpponentEnergy(stats){
     brain:Math.trunc(s.kokugo/6+s.suugaku/6+s.rika/6+s.syakai/6+s.eigo/6+s.ongaku/6+s.bijutu/6)
   };
 }
-// 原版 rand($#array) 保留：最後一列不參與，抽到自己就無對手。
+// 使用者已核准保留原版 rand($#array)：最後一列不參與，抽到自己就無對手，不重抽。
 // SQLite 沒有舊名單檔，採角色建立 ID 順序；不讀取舊玩家名單。
 export function chooseStreetOpponent(rows,userId,randomIndex=randomInt){
   if(rows.length<2)return null;
@@ -52,7 +54,7 @@ export function simulateStreetFight(player,opponent,randomIndex=randomInt){
   const initial={player:{...mine},opponent:{...theirs}};
   let playerTurn=a.speed>b.speed, outcome="draw", reason=null;
   const rounds=[];
-  for(let i=1;i<=50;i++){
+  for(let i=1;i<=STREET_MAX_ATTACKS;i++){
     const attack=STREET_ATTACKS[draw(randomIndex,16)];
     const damage=Math.max(0,(playerTurn?a:b)[attack.stat]-(playerTurn?b:a)[attack.stat]);
     (playerTurn?theirs:mine)[attack.target]-=damage;
@@ -66,7 +68,7 @@ export function simulateStreetFight(player,opponent,randomIndex=randomInt){
     if(mine.brain<=0){outcome="loss";reason="brain";break;}
     playerTurn=!playerTurn;
   }
-  const delta=outcome==="win"?rounds.length*1500:outcome==="loss"?-rounds.length*300:0;
+  const delta=outcome==="win"?rounds.length*1500:outcome==="loss"?-rounds.length*STREET_LOSS_PER_ATTACK:0;
   const coupons=outcome==="win"&&draw(randomIndex,10)===0?draw(randomIndex,5)+1:0;
   const kpointDelta=draw(randomIndex,10)===0?-3:0;
   return {outcome,reason,rounds,initial,delta,coupons,kpointDelta,
@@ -108,7 +110,7 @@ export function playStreetFight(db,userId,{mode,requestId,now,today,randomIndex=
     const rows=db.prepare("SELECT c.user_id,c.name,c.stats_json FROM characters c JOIN users u ON u.id=c.user_id ORDER BY c.id").all();
     if(rows.length<2)throw new Error("沒有其他已建立角色的居民");
     // Web 現金不得為負（銀行稅務/薪資契約）；抽選前拒絕，不能看結果再免費重抽。
-    // 原版可扣成負現金；此保護門檻為明示的相容性限制，待確認是否另行支援負現金。
+    // 使用者已核准：抽選前須持有最高敗北損失 15,000 元現金（含），銀行存款不計；實際扣款不截斷。
     if(!Number.isSafeInteger(actor.money)||actor.money<STREET_MAX_LOSS)
       throw new Error("Web 現金安全限制：街頭格鬥需備妥最高敗北損失 15,000 元");
     const opponent=chooseStreetOpponent(rows,userId,randomIndex);
