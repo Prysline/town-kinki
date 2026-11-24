@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
 import { LEGACY_CHARACTER_FIELDS } from "../src/legacy-character.mjs";
 import { initLegacyInventoryTables } from "../src/legacy-inventory.mjs";
+import { settleDailyIllnessEvent } from "../src/events.mjs";
 import { decodeLegacyText } from "../src/engine.mjs";
 import { parseLegacyRetailCatalog, ensureRetailDay, buyRetailItem } from "../src/retail.mjs";
 
@@ -6877,4 +6878,27 @@ test("IT-02 單機 HTTP：百貨原版食物轉類購入→真正使用→60 分
     if(resumed)await resumed.stop();
     else await srv.stop();
   }
+});
+
+test("戰鬥事件 #38 真實 SQLite 結算經 HTTP 顯示本人獎品／歷史並重啟保存",async()=>{
+  let srv=await start("multi");try{
+    const a=await api(srv.url,"register",{username:"event38_a",password:"event38-pass-a"});
+    const b=await api(srv.url,"register",{username:"event38_b",password:"event38-pass-b"});
+    const made=await api(srv.url,"character",{name:"戰鬥事件甲",gender:"male",stats:defaultStats()},a.cookie);
+    assert.equal(made.status,200);assert.equal((await api(srv.url,"character",{name:"戰鬥事件乙",gender:"male",stats:defaultStats()},b.cookie)).status,200);
+    const db=new DatabaseSync(join(srv.directory,"multi.sqlite"));
+    try{
+      const actor=db.prepare("SELECT user_id,stats_json,last_event_day FROM characters WHERE name=?").get("戰鬥事件甲");
+      const stats={...JSON.parse(actor.stats_json),power:1000};
+      db.prepare("UPDATE characters SET stats_json=?,last_event_day='2000-01-01' WHERE user_id=?").run(JSON.stringify(stats),actor.user_id);
+      const rolls=[0,(38-.5)/44,0,.55];
+      settleDailyIllnessEvent(db,actor.user_id,actor.last_event_day,made.result.gameTimeMs,()=>rolls.shift());
+    }finally{db.close();}
+    const state=(await api(srv.url,"state",undefined,a.cookie)).result;
+    assert.equal(state.healthEvents[0].originalId,38);assert.equal(state.healthEvents[0].effects.santaFightItem.status,"awarded");
+    const item=state.legacyInventory.find(x=>x.origin==="event38");assert.equal(item.name,"等身大サンタさん人形");assert.equal(item.remaining,10);
+    const other=(await api(srv.url,"state",undefined,b.cookie)).result;assert.equal(other.legacyInventory.some(x=>x.origin==="event38"),false);assert.equal(other.healthEvents.length,0);
+    const dir=srv.directory;await srv.stop({preserveData:true});srv=await start("multi",null,dir);
+    const restored=(await api(srv.url,"state",undefined,a.cookie)).result;assert.deepEqual(restored.healthEvents,state.healthEvents);assert.deepEqual(restored.legacyInventory.find(x=>x.origin==="event38"),item);
+  }finally{await srv.stop();}
 });

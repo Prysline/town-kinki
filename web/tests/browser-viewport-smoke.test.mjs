@@ -6,6 +6,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { createServer } from "node:net";
 import { mkdtempSync, rmSync, readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
+import { settleDailyIllnessEvent } from "../src/events.mjs";
 import { decodeLegacyText } from "../src/engine.mjs";
 import { parseLegacyRetailCatalog } from "../src/retail.mjs";
 import { join } from "node:path";
@@ -668,4 +669,28 @@ test("Chrome：健身房減重→真實百貨寵物／信用卡→背包使用�
     await web?.stop();
     rmSync(workspace,{force:true,recursive:true,maxRetries:50,retryDelay:200});
   }
+});
+
+test("Chrome 戰鬥事件 #38：真實事件結算後的彈窗與375px背包",{timeout:90000},async()=>{
+  const workspace=mkdtempSync(join(tmpdir(),"town-chrome-event38-"));let web=null,chrome=null;
+  try{
+    const dataDir=join(workspace,"sqlite");web=await startWeb(dataDir);chrome=await openChrome(join(workspace,"chrome"));
+    await chrome.send("Page.enable");await chrome.send("Runtime.enable");await viewport(chrome,1440,900);
+    await chrome.send("Page.navigate",{url:web.url});await until(chrome,"!document.querySelector('#create')?.hidden","建角入口");
+    await evaluate(chrome,"window.confirm=()=>true");await fill(chrome,'#create-form [name="name"]',"戰鬥事件居民");await click(chrome,"#create-submit");
+    await until(chrome,"!document.querySelector('#game')?.hidden","主畫面");
+    const state=await evaluate(chrome,"(async()=>await(await fetch('/api/state')).json())()");
+    const db=new DatabaseSync(join(dataDir,"solo.sqlite"));
+    try{
+      const actor=db.prepare("SELECT user_id,stats_json,last_event_day FROM characters").get();
+      db.prepare("UPDATE characters SET stats_json=?,last_event_day='2000-01-01' WHERE user_id=?").run(JSON.stringify({...JSON.parse(actor.stats_json),power:1000}),actor.user_id);
+      const rolls=[0,(38-.5)/44,0,.55];settleDailyIllnessEvent(db,actor.user_id,actor.last_event_day,state.gameTimeMs,()=>rolls.shift());
+    }finally{db.close();}
+    await chrome.send("Page.reload");await until(chrome,"!document.querySelector('#game')?.hidden||!document.querySelector('#solo-lobby')?.hidden","重載角色");
+    if(await evaluate(chrome,"!document.querySelector('#solo-lobby')?.hidden"))await click(chrome,"#solo-continue");
+    await until(chrome,"!document.querySelector('#event-popup')?.hidden&&document.querySelector('#event-popup-body').textContent.includes('聖誕老人戰鬥')","原版戰鬥事件彈窗");
+    assert.match(await evaluate(chrome,"document.querySelector('#event-popup-body').textContent"),/等身大聖誕老人偶/);
+    await click(chrome,"#event-popup-close");await viewport(chrome,375,812);
+    assert.match(await evaluate(chrome,"document.querySelector('#legacy-inventory-list').textContent"),/Web 聖誕老人戰鬥獎勵/);
+  }finally{await chrome?.stop();await web?.stop();rmSync(workspace,{force:true,recursive:true,maxRetries:50,retryDelay:200});}
 });
