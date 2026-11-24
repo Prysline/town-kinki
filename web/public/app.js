@@ -613,7 +613,7 @@ function renderRoom() {
     note.className="small";
     const shop=view.shop;
     note.textContent=shop?
-      "住宅商店「"+shop.title+"」｜"+shop.category+
+      "住宅商店「"+shop.title+"」｜"+displayRetailItemCategory(shop.category)+
       "｜目前 "+shop.items.length+" 種上架商品；普通存款／現金結帳。":
       "屋主尚未完成這間玩家商店的分類與店名設定。";
     body.append(note);
@@ -656,7 +656,7 @@ function renderRoom() {
       for(const card of state.classroomCreditCards??[]){
         const opt=document.createElement("option");
         opt.value="card:"+card.sourceLine;
-        opt.textContent="有效信用卡："+card.name;
+        opt.textContent="有效信用卡："+displayRetailItemName(card.name);
         pay.append(opt);
       }
       payLabel.append(pay);
@@ -2063,7 +2063,7 @@ function renderShopTable(target,goods,{shopName,onPurchase,emptyText}){
   for(const card of cards){
     const option=document.createElement("option");
     option.value="card:"+card.sourceLine;
-    option.textContent="信用卡："+card.name;payment.append(option);
+    option.textContent="信用卡："+displayRetailItemName(card.name);payment.append(option);
   }
   paymentLabel.append(payment);
   if(saved?.quantity&&[...qty.options].some(x=>x.value===String(saved.quantity)))
@@ -3927,7 +3927,7 @@ function renderTraining() {
       for(const card of cards){
         const opt=document.createElement("option");
         opt.value="credit:"+card.sourceLine;
-        opt.textContent=card.name+"（普通存款扣款）";
+        opt.textContent=displayRetailItemName(card.name)+"（普通存款扣款）";
         paymentSelect.append(opt);
       }
       const previous=oldChoices.get(lesson.key);
