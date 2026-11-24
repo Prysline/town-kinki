@@ -592,6 +592,20 @@
         </section>
       </div>
       <div id="facility-pane-games" class="facility-pane" role="tabpanel" aria-labelledby="facility-tab-games" tabindex="0" hidden>
+        <section class="card" id="osaka-panel">
+          <div class="heading">
+            <div><div class="eyebrow">原版大阪挑戰</div><h2>大阪おばちゃん挑戰</h2></div>
+            <span class="muted">obatyan.cgi／gamerand.cgi</span>
+          </div>
+          <p id="osaka-status" class="small" role="status"></p>
+          <details class="explain"><summary>原版規則及 Web 相容差異</summary>
+            <p class="small">弱／強各抽一名原版 NPC，速度較高先攻（同速由對手先攻），最多 50 次交替攻擊。16 種攻擊以雙方對應能力差計算傷害，不消耗裝備。勝利每次攻擊獲弱 1,500／強 5,000 元；敗北扣弱 300／強 1,000 元，Web 現金最低零；平手無金錢。四款原始獎品各 25%（已確認修正原版 rand(3) 疑似疏漏）。先檢查 25 格再合併，異常獎品原樣封存待核對。Web 共用五秒大阪行動間隔，伺服器原子結算；原版 NPC 不齊時禁止挑戰。</p>
+          </details>
+          <div id="osaka-modes" class="filters"></div>
+          <div id="osaka-result" aria-live="polite"></div>
+          <h3>本人最近 20 局</h3>
+          <div id="osaka-history"></div>
+        </section>
         <section class="card" id="arcade-dice-panel">
           <div class="heading">
             <div><div class="eyebrow">單機優先 · 原版遊樂中心</div><h2>雙骰猜奇偶</h2></div>
