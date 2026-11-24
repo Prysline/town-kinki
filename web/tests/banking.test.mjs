@@ -407,3 +407,25 @@ test("BK-04 房貸先還再依保存淨資產納稅，入帳順序與失敗回�
     assert.equal(db.prepare("SELECT remaining_payments FROM bank_loans WHERE user_id=1").get().remaining_payments,1);
   }finally{db.close();}
 });
+
+test("舊版非負 K 點稅務表升級保留歷史，負 K 點可在下週正確結算",()=>{
+  const db=createDb();
+  try{
+    settleBankInterest(db,1,"2026-11-22",1000);
+    settleBankInterest(db,1,"2026-11-23",2000);
+    const original=db.prepare("SELECT * FROM bank_tax_assessments").all();
+    const schema=db.prepare("SELECT sql FROM sqlite_master WHERE name='bank_tax_assessments'").get().sql;
+    db.exec("ALTER TABLE bank_tax_assessments RENAME TO previous_tax");
+    db.exec(schema.replace("kpoint INTEGER NOT NULL,","kpoint INTEGER NOT NULL CHECK(kpoint>=0),"));
+    db.exec("INSERT INTO bank_tax_assessments SELECT * FROM previous_tax; DROP TABLE previous_tax;");
+    initBankTables(db);
+    assert.deepEqual(db.prepare("SELECT * FROM bank_tax_assessments").all(),original);
+    db.prepare("UPDATE characters SET kpoint=-3 WHERE user_id=1").run();
+    settleBankInterest(db,1,"2026-11-29",3000);
+    const next=settleBankInterest(db,1,"2026-11-30",4000);
+    assert.equal(next.tax.discount,0);
+    assert.equal(bankTaxOverview(db,1).lastAssessment.kpoint,-3);
+    initBankTables(db);
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM bank_tax_assessments").get().n,2);
+  }finally{db.close();}
+});

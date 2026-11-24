@@ -88,3 +88,32 @@ test("寫入歷史失敗時券、能量、K點、現金一併回滾；低現金�
     assert.throws(()=>playStreetFight(db,2,{...options,randomIndex:()=>{throw Error("不應抽選");}}),/15,000/);
   }finally{db.close();}
 });
+
+test("優惠券安全整數容量與現金上限：超出時整筆回滾",()=>{
+  const db=setup();
+  try{
+    db.prepare("INSERT INTO character_coupons VALUES(?,?)").run(2,Number.MAX_SAFE_INTEGER);
+    const before=db.prepare("SELECT * FROM characters").all();
+    assert.throws(()=>playStreetFight(db,2,{...options,randomIndex:seq(0,8,0,4,0)}),/優惠券餘額/);
+    assert.deepEqual(db.prepare("SELECT * FROM characters").all(),before);
+    assert.equal(getCouponBalance(db,2),Number.MAX_SAFE_INTEGER);
+    db.prepare("UPDATE characters SET money=? WHERE user_id=2").run(Number.MAX_SAFE_INTEGER);
+    assert.throws(()=>playStreetFight(db,2,{...options,randomIndex:seq(0,8,1,1)}),/安全整數/);
+    assert.equal(streetFightOverview(db,2,"multi").history.length,0);
+  }finally{db.close();}
+});
+test("敗北扣實際攻擊次數，對手不入帳；5秒邊界可重新出發",()=>{
+  const db=setup();
+  try{
+    db.prepare("UPDATE characters SET stats_json=?,body_energy=1,brain_energy=1,money=15000 WHERE user_id=2").run(JSON.stringify(stats(1)));
+    db.prepare("UPDATE characters SET stats_json=? WHERE user_id=1").run(JSON.stringify(stats(200)));
+    const r=playStreetFight(db,2,{...options,randomIndex:seq(0,8,1)});
+    assert.equal(r.outcome,"loss");assert.equal(r.delta,-300);
+    assert.equal(db.prepare("SELECT money FROM characters WHERE user_id=2").get().money,14700);
+    assert.equal(db.prepare("SELECT money FROM characters WHERE user_id=1").get().money,100000);
+    assert.throws(()=>playStreetFight(db,2,{...options,requestId:"early",now:5999}),/間隔/);
+    db.prepare("UPDATE characters SET money=15000 WHERE user_id=2").run();
+    const again=playStreetFight(db,2,{...options,requestId:"boundary",now:6000,randomIndex:seq(0,8,1)});
+    assert.equal(again.outcome,"loss");
+  }finally{db.close();}
+});

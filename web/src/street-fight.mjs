@@ -103,7 +103,7 @@ export function playStreetFight(db,userId,{mode,requestId,now,today,randomIndex=
     const actor=db.prepare("SELECT user_id,name,money,kpoint,stats_json,body_energy,brain_energy,recovered_at FROM characters WHERE user_id=?").get(userId);
     if(!actor)throw new Error("請先建立角色");
     if(now<readyAt(db,userId))throw new Error("街頭格鬥尚在 5 秒行動間隔");
-    const rows=db.prepare("SELECT user_id,name,stats_json FROM characters ORDER BY id").all();
+    const rows=db.prepare("SELECT c.user_id,c.name,c.stats_json FROM characters c JOIN users u ON u.id=c.user_id ORDER BY c.id").all();
     if(rows.length<2)throw new Error("沒有其他已建立角色的居民");
     // Web 現金不得為負（銀行稅務/薪資契約）；抽選前拒絕，不能看結果再免費重抽。
     // 原版可扣成負現金；此保護門檻為明示的相容性限制，待確認是否另行支援負現金。
