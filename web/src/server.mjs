@@ -53,6 +53,8 @@ import { initLegacyItemUseTables, listLegacyItemActions, listLegacyItemUseHistor
 import { initBankTables, settleBankInterest, bankOperation, bankOverview, bankLedger, recordBankEntry, transferToPlayer, BANK_TRANSFER_LIMIT, NEW_MEMBER_DAYS, NEW_MEMBER_TRANSFER_LIMIT, bankLoanOverview, borrowBankLoan, payoffBankLoan, bankTaxOverview, refreshBankTaxSnapshot } from "./banking.mjs";
 import { initSoloClock, gameTimestamp, advanceSoloClock, soloOffset } from "./solo-clock.mjs";
 import { deleteSoloCharacter } from "./solo-character.mjs";
+import {parseOsakaRules,loadOsakaNpcCatalog} from "./osaka-challenge-core.mjs";
+import {initOsakaTables,osakaOverview,playOsaka} from "./osaka-challenge.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const REPO_ROOT = resolve(ROOT, "..");
@@ -123,11 +125,17 @@ initLegacyItemUseTables(db);
 initRetailTables(db);
 initVendingTables(db);
 initEquipmentTables(db);
+initOsakaTables(db);
 initGiftTables(db);
 initPrivateMailTables(db);
 initRecycleTables(db);
 initWholesaleTables(db);
 initPlayerStoreTables(db);
+// Administrator may supply the original dedicated NPC directory tree separately from player saves.
+const osakaRules=parseOsakaRules(decodeLegacyText(readFileSync(resolve(REPO_ROOT,"obatyan.cgi"))));
+let osakaCatalog;
+try{osakaCatalog=loadOsakaNpcCatalog(resolve(process.env.OSAKA_NPC_ROOT||REPO_ROOT));}
+catch{osakaCatalog={available:false,npcs:[],missing:[],sourceInvalid:true};}
 const houseCatalog = parseHouseCatalog(
   decodeLegacyText(readFileSync(resolve(REPO_ROOT, "town_ini.cgi"))),
   decodeLegacyText(readFileSync(resolve(REPO_ROOT, "command.pl")))
@@ -439,6 +447,7 @@ function snapshot(user) {
     couponRedemptions:updated?listCouponRedemptions(db,user.id):[],
     fishing:updated?fishingOverview(db,user.id,fishingCatalog,now,today):null,
     crafting:updated?craftingOverview(db,user.id,craftingCatalog,now):null,
+    osaka:updated?osakaOverview(db,user.id,osakaCatalog):null,
     arcadeDice:updated?arcadeDiceOverview(db,user.id,arcadeDiceSource,now):null,
     arcadeHighLow:updated?arcadeHighLowOverview(db,user.id,arcadeHighLowSource,now):null,
     arcadeDonuts:updated?arcadeDonutsOverview(db,user.id,arcadeDonutsSource,now):null,
@@ -837,6 +846,15 @@ async function handle(req, res) {
         });
       }catch(error){throw new HttpError(400,error.message);}
       return sendJson(res,200,{...snapshot(user),craftingResult});
+    }
+
+    if(path==="/api/osaka/play"){
+      if(!data||typeof data!=="object"||Array.isArray(data)||Object.keys(data).some(k=>!["mode","requestId"].includes(k)))
+        throw new HttpError(400,"大阪挑戰只接受難度及請求識別碼");
+      let osakaResult;
+      try{osakaResult=playOsaka(db,user.id,osakaRules,osakaCatalog,{mode:data.mode,requestId:data.requestId,now:gameNow()});}
+      catch(error){throw new HttpError(400,error.message);}
+      return sendJson(res,200,{...snapshot(user),osakaResult});
     }
 
     if(path==="/api/arcade/dice/play"){
