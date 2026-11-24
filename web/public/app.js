@@ -1,5 +1,6 @@
 import { townCellAction } from "./town-home.js";
 import { displayRetailItemName,displayRetailItemCategory } from "./retail-item-translations.js";
+import { displayOriginalItemComment } from "./item-comment-translations.js";
 import { shouldShowCompactEnergy } from "./energy-visibility.js";
 import { townTimePhase } from "./time-theme.js";
 import { groupedStatLines } from "./shop-effects.js";
@@ -1650,7 +1651,7 @@ function renderLegacyItems(){
       const lines=[
         "熱量："+(info?.calories??"未確認")+" kcal｜使用間隔："+(info?.intervalMinutes??"未確認")+" 分鐘",
         "身體能量消耗："+(info?.bodyCost??"未確認")+"｜頭腦能量消耗："+(info?.brainCost??"未確認"),
-        "原版備註："+(info?.comment?.trim()||"沒有提供文字備註"),
+        "原版備註（繁中顯示）："+(displayOriginalItemComment(info?.comment)||"沒有提供文字備註"),
         "來源："+(item.readOnly?"歷史來源封存":item.origin==="fishing"?"Web 釣魚／餌料店":item.origin==="crafting"?"Web 合成屋":"Web 購入或轉換")+
           "（記錄位置 "+item.sourceLine+"；原始內容不在此頁修改）",
         "Web 使用狀態："+(verifiedVehicle?"已核對為本人可用公路載具，出發須於公路面板操作，事故可能扣耐久":
@@ -2000,7 +2001,7 @@ function retailEffectDetails(item){
       "｜使用間隔："+(info.intervalMinutes??0)+" 分鐘",
     "身體能量消耗："+(info.bodyCost??0)+"（負數表示恢復）"+
       "｜頭腦能量消耗："+(info.brainCost??0)+"（負數表示恢復）",
-    "原版備註："+(info.comment?.trim()||"沒有提供文字備註"),
+    "原版備註（繁中顯示）："+(displayOriginalItemComment(info.comment)||"沒有提供文字備註"),
     "Web 生效狀態："+(
       info.usage==="automatic"?"已支援：健康保險於醫院自動計算，不需手動使用":
       info.usage==="payment"?"已支援：有效期內可於支援信用卡的商店從普通銀行付款；也可在背包依原版規則使用（部分卡片具有能力增益）":
