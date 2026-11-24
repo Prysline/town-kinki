@@ -6,7 +6,7 @@ import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {decodeLegacyText,STAT_KEYS} from "../src/engine.mjs";
 import {parseOsakaRules,parseOsakaNpcRecord} from "../src/osaka-challenge-core.mjs";
-import {initOsakaTables,playOsaka,osakaOverview} from "../src/osaka-challenge.mjs";
+import {initOsakaTables,playOsaka,osakaOverview,migrateOsakaPowerPrizes} from "../src/osaka-challenge.mjs";
 import {initTownMapTable,storeTownMap} from "../src/town-storage.mjs";
 import {initEquipmentTables} from "../src/equipment.mjs";
 import {useLegacyItem,listLegacyItemActions} from "../src/legacy-item-use.mjs";
@@ -115,5 +115,27 @@ test("Osaka SQLite: capacity before stacking, rollback, map and catalog checks",
  assert.deepEqual(osakaOverview(db,1,catalog).locations,{week:false,strong:true});
  assert.throws(()=>play(db,1,"week","osaka-location-001",now+10000),/入口/);
  assert.throws(()=>playOsaka(db,1,rules,{available:false,missing:["test"],npcs:[]},{mode:"strong",requestId:"osaka-missing-001",now:now+10000}),/NPC 資料/);
+ }finally{db.close();}
+});
+
+test("Osaka upgrade: receipt-proven old power awards preserve first template, correct uses, original receipt and isolation",()=>{
+ const db=new DatabaseSync(":memory:");try{setup(db);
+ const raw=rules.week.prizes[0].originalRawFields;
+ const insert=db.prepare("INSERT INTO legacy_inventory_items(user_id,original_id,source_line,category,original_name,effect,durability,durability_unit,purchased_at,last_used_at,raw_fields_json) VALUES(?,?,?,?,?,?,?,?,?,?,?)");
+ for(const id of [1,2])insert.run(id,"__web_osaka_quarantine__",10000000,raw[0],raw[1],raw[9],2,"未核對",now/1000,0,JSON.stringify(raw));
+ const receipt=db.prepare("INSERT INTO osaka_battles(user_id,request_id,mode,played_at,result_json) VALUES(1,?,?,?,?)");
+ for(const [i,mode] of ["week","strong"].entries()){
+  const p=rules[mode].prizes[0];
+  receipt.run("old-power-"+i,mode,now+i*5000,JSON.stringify({prizeIndex:0,prize:{name:p.name,rawFields:p.originalRawFields},reward:{granted:true,blocked:true,sourceLine:10000000}}));
+ }
+ const before=db.prepare("SELECT * FROM osaka_battles ORDER BY id").all();
+ assert.deepEqual(migrateOsakaPowerPrizes(db,rules),{migrated:1,skipped:1});
+ const upgraded=item(db,10000000);
+ assert.equal(upgraded.original_id,"__web_osaka__");assert.equal(upgraded.durability,8);
+ assert.equal(upgraded.durability_unit,"回");assert.equal(JSON.parse(upgraded.raw_fields_json)[10],"3");
+ assert.equal(item(db,10000000,2).durability_unit,"未核對");
+ assert.deepEqual(db.prepare("SELECT * FROM osaka_battles ORDER BY id").all(),before);
+ assert.deepEqual(migrateOsakaPowerPrizes(db,rules),{migrated:0,skipped:1});
+ assert.equal(useLegacyItem(db,1,10000000,"osaka-upgrade-use",now+10000).changes.stats.power,3);
  }finally{db.close();}
 });
