@@ -140,7 +140,7 @@ test("原 CGI 建築代碼只連到 Web 真正已實作的設施入口",()=>{
   const expected={
     "銀行":"bank-panel","病院":"hospital-panel","職安":"jobs-panel",
     "教室":"classroom-panel","食堂":"dining-panel","食堂２":"dining-panel",
-    "デパ":"retail-panel","デパ2":"retail-panel","自販機":"vending-panel","装備屋":"equipment-panel","ギフト屋":"gift-panel","リサイ":"recycle-panel","クーポン":"event-panel","釣り":"fishing-panel","販売1":"fishing-panel","合成":"crafting-panel","ゲーセン":"arcade-dice-panel","問屋":"wholesale-panel","建築":"housing-panel"
+    "デパ":"retail-panel","デパ2":"retail-panel","自販機":"vending-panel","装備屋":"equipment-panel","ギフト屋":"gift-panel","リサイ":"recycle-panel","クーポン":"event-panel","釣り":"fishing-panel","販売1":"fishing-panel","合成":"crafting-panel","ゲーセン":"arcade-dice-panel","おばちゃん":"osaka-panel","おばちゃん強":"osaka-panel","問屋":"wholesale-panel","建築":"housing-panel"
   };
   assert.deepEqual(FACILITY_PANELS,expected);
   for(const [key,panelId] of Object.entries(expected)){
@@ -1024,4 +1024,16 @@ test("第66階段：公路選單說明不再錯稱專門店備註禁止百貨購
   assert.ok(script.includes("百貨禮品"));
   assert.ok(script.includes("vehicle.append(option)"));
   assert.ok(script.includes("option.textContent=displayRetailItemName(item.name)"));
+});
+
+test("大阪挑戰：原版兩種地圖入口與遊樂中心共用伺服器戰鬥面板",()=>{
+  for(const key of ["おばちゃん","おばちゃん強"]){
+    assert.deepEqual(townCellAction(describeTile(key)),{kind:"facility",panelId:"osaka-panel"});
+  }
+  const games=html.slice(html.indexOf('id="facility-pane-games"'));
+  for(const id of ["osaka-panel","osaka-status","osaka-modes","osaka-result","osaka-history"])
+    assert.match(games,new RegExp('id="'+id+'"'));
+  assert.match(script,/api\("osaka\/play",osakaPending\)/);
+  assert.match(script,/!game\?\.catalogReady/);
+  assert.match(script,/item\.blocked\?/);
 });
