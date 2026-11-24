@@ -19,7 +19,7 @@ export function cEnergy(stats){
 }
 function draw(rng,n){const x=rng(n);if(!Number.isInteger(x)||x<0||x>=n)throw Error("C 聯賽亂數超出範圍");return x;}
 export function chooseCLeagueOpponent(rows,own,rng=randomInt){
-  // Perl int(rand($#taisen_list)): 一名對手時 rand(0) 仍截成 0；兩名以上排除最後一列。
+  // 使用者已核准保留 Perl int(rand($#taisen_list)): 一名對手時 rand(0) 仍截成 0；兩名以上排除最後一列。
   const selected=rows.length?rows[draw(rng,Math.max(1,rows.length-1))]:null;
   const mimic=draw(rng,3)===0||!selected;
   return {opponent:mimic?{...own,name:"模仿者"+own.name,owner:"模仿者"+own.owner}:selected,mimic};
@@ -41,8 +41,10 @@ export function simulateCLeague(player,opponent,rng=randomInt){
     rounds.push({turn,attacker:playerTurn?"player":"opponent",stat,label:STAT_LABELS[stat],
       type:i<=7||i===14||i===15?"brain":"body",comment:(playerTurn?player:opponent).comments?.[stat]||C_DEFAULT_COMMENTS[stat],
       playerRoll:ar,opponentRoll:br,damage:safe(damage),playerEnergy:signed(mine),opponentEnergy:signed(theirs)});
+    // 已核准原版：先攻擊，再判對手零、本人零；雙方零也判本人勝利。
     if(theirs<=0n){outcome="win";break;}if(mine<=0n){outcome="loss";break;}playerTurn=!playerTurn;
   }
+  // 原版只有計算收入為零時補發 100 元，非收入下限。
   const reward=safe((outcome==="win"?dealt*2n:outcome==="loss"?dealt:dealt*3n/2n)||100n);
   return {outcome,reward,damageDealt:safe(dealt),initial,rounds};
 }
@@ -103,7 +105,8 @@ export function trainCLeague(db,id,data,now,today){
     if(![a.money,a.bank,assets.term_balance??0,assets.daily_payment??0,assets.remaining_payments??0].every(validInt))throw Error("居民資產資料無效");
     const net=BigInt(a.money)+BigInt(a.bank)+BigInt(assets.term_balance??0)-BigInt(assets.daily_payment??0)*BigInt(assets.remaining_payments??0);
     if(BigInt(cost)>net&&cost>0)throw Error("不得超過總資產");
-    if(cost>(payment==="cash"?a.money:a.bank))throw Error("付款餘額不足");
+    // 已核准 Web 相容性：信用付款只扣普通存款，不透支或挪用其他資產。
+    if(cost>(payment==="cash"?a.money:a.bank))throw Error(payment==="credit"?"普通存款付款餘額不足，不可透支":"現金付款餘額不足");
     const money=a.money-(payment==="cash"?cost:0),bank=a.bank-(payment==="credit"?cost:0);
     const merged={...C_DEFAULT_COMMENTS,...prior?.comments};for(const [k,v] of Object.entries(comments))if(v)merged[k]=v;
     db.prepare("INSERT INTO c_league_chars VALUES(?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET name=excluded.name,image_url=excluded.image_url,stats_json=excluded.stats_json,comments_json=excluded.comments_json").run(id,name,imageUrl,JSON.stringify(target),JSON.stringify(merged));

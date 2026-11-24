@@ -686,6 +686,9 @@ test("Chrome C 聯賽：實際培育、模仿者比賽、戰報與手機視窗",
     assert.equal(await evaluate(chrome,"document.querySelector('#c-league-play').disabled"),true);
     const saved=await evaluate(chrome,"(async()=>{const s=await(await fetch('/api/state')).json();return {n:s.cLeague.history.length,kenkou:s.cLeague.character.stats.kenkou,mimic:s.cLeague.history[0].mimic}})()");
     assert.deepEqual(saved,{n:1,kenkou:1,mimic:true});
+    assert.match(await evaluate(chrome,"document.querySelector('#c-league-result').textContent"),/勝利.*100/);
+    assert.match(await evaluate(chrome,"document.querySelector('#c-league-panel').textContent"),/零能量可參賽/);
+    assert.match(await evaluate(chrome,"document.querySelector('#c-league-training').textContent"),/餘額不足拒絕/);
     await viewport(chrome,375,812);
     assert.ok(await evaluate(chrome,"document.querySelector('#c-league-status').textContent.includes('1 / 100')"));
   }finally{await chrome?.stop();await web?.stop();rmSync(workspace,{force:true,recursive:true,maxRetries:50,retryDelay:200});}

@@ -6920,3 +6920,28 @@ test("C 聯賽 HTTP 多人角色與戰績隔離、同請求碼並發只結算一
     assert.equal((await api(srv.url,"c-league/train",{requestId:"new",transfers:{kenkou:-1}},b.cookie)).status,400);
   }finally{await srv.stop();}
 });
+
+test("C 聯賽 HTTP 已核准信用付款足額邊界及零能力模仿者勝利",async()=>{
+  let srv=await start("solo");try{
+    const made=await api(srv.url,"character",{name:"聯賽定案居民",gender:"male",stats:defaultStats()});assert.equal(made.status,200);
+    const zero=await api(srv.url,"c-league/train",{requestId:"zero",name:"零能力"});assert.equal(zero.status,200);
+    const played=await api(srv.url,"c-league/play",{requestId:"zero-match"});assert.equal(played.status,200);
+    const result=played.result.cLeagueResult;
+    assert.equal(result.outcome,"win");assert.equal(result.reward,100);assert.equal(result.rounds.length,1);assert.equal(result.mimic,true);
+    assert.equal(played.result.character.money,zero.result.character.money+100);
+    const dbAction=fn=>{const db=new DatabaseSync(join(srv.directory,"solo.sqlite"));try{return fn(db);}finally{db.close();}};
+    const raw=Array(33).fill("");raw[0]="日用品";raw[1]="クレジットカード";raw[9]="クレジット";raw[21]="3";raw[22]="日";raw[30]=String(Math.floor(played.result.gameTimeMs/1000)-1);raw[26]="0";
+    dbAction(db=>{const id=db.prepare("SELECT user_id FROM characters").get().user_id;injectOriginalConsumable(db,id,1,raw);db.prepare("UPDATE characters SET bank=9999").run();db.prepare("UPDATE bank_accounts SET term_balance=1000000").run();});
+    const before=(await api(srv.url,"state")).result;assert.ok(before.classroomCreditCards.some(c=>c.sourceLine===1));
+    const request={requestId:"credit-boundary",name:"已培育",transfers:{kenkou:1},payment:"credit",cardSourceLine:1};
+    const denied=await api(srv.url,"c-league/train",request);assert.equal(denied.status,400);assert.match(denied.result.error,/普通存款付款餘額不足/);
+    const after=(await api(srv.url,"state")).result;assert.equal(after.character.money,before.character.money);assert.equal(after.character.bank,9999);assert.deepEqual(after.character.stats,before.character.stats);assert.deepEqual(after.cLeague.character,before.cLeague.character);
+    dbAction(db=>db.prepare("UPDATE characters SET bank=10000").run());
+    const paid=await api(srv.url,"c-league/train",request);assert.equal(paid.status,200);assert.equal(paid.result.character.bank,0);assert.equal(paid.result.character.money,before.character.money);assert.equal(paid.result.cLeague.character.stats.kenkou,1);
+    const replay=await api(srv.url,"c-league/train",request);assert.equal(replay.status,200);assert.equal(replay.result.cLeagueResult.replayed,true);
+    assert.equal(dbAction(db=>db.prepare("SELECT COUNT(*) AS n FROM bank_ledger WHERE action='C 聯賽信用付款'").get().n),1);
+    const dir=srv.directory;await srv.stop({preserveData:true});srv=await start("solo",null,dir);
+    const restored=(await api(srv.url,"state")).result;assert.equal(restored.cLeague.record.wins,1);assert.equal(restored.cLeague.history[0].reward,100);assert.equal(restored.character.bank,0);
+    assert.equal((await api(srv.url,"c-league/play",{requestId:"zero-match"})).result.cLeagueResult.replayed,true);
+  }finally{await srv.stop();}
+});

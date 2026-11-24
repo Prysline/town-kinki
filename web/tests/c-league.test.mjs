@@ -103,3 +103,62 @@ test("C 聯賽被動查詢不啟動賽季、明確進入才結算，前五積分
     assert.equal(cLeagueOverview(db,1,now+C_SEASON_MS*4).season,3); // 原版多季未進入，只結算一次
   }finally{db.close();}
 });
+
+test("已核准原版抽選：候選 0/1/2/3 人的索引及三分之一模仿者",()=>{
+  const own=f(10,"本人"),rows=[f(11,"甲"),f(12,"乙"),f(13,"丙")];
+  for(let size=0;size<=3;size++)for(let index=0;index<Math.max(1,size-1);index++)for(let roll=0;roll<3;roll++){
+    const bounds=[],values=size?[index,roll]:[roll];
+    const r=chooseCLeagueOpponent(rows.slice(0,size),own,n=>{bounds.push(n);return values.shift();});
+    assert.deepEqual(bounds,size?[Math.max(1,size-1),3]:[3]);
+    assert.equal(r.mimic,roll===0||size===0);
+    assert.equal(r.opponent.name,r.mimic?"模仿者本人":rows[index].name);
+  }
+});
+test("已核准信用付款：9,999 拒絕、10,000 扣至零；現金定存不挪用、帳簿失敗整筆回滾",()=>{
+  const db=setup();try{
+    db.exec("CREATE TABLE legacy_inventory_items(user_id INTEGER,source_line INTEGER,category TEXT,original_name TEXT,effect TEXT,durability INTEGER,durability_unit TEXT,purchased_at INTEGER,raw_fields_json TEXT)");
+    const fields=Array(33).fill("");fields[0]="日用品";fields[1]="信用卡";fields[9]="クレジット";fields[21]="3";fields[22]="日";fields[30]="900";
+    db.prepare("INSERT INTO legacy_inventory_items VALUES(?,?,?,?,?,?,?,?,?)").run(1,1,fields[0],fields[1],fields[9],3,"日",900,JSON.stringify(fields));
+    trainCLeague(db,1,{requestId:"base",name:"原角色"},now,today);
+    db.prepare("UPDATE characters SET bank=9999 WHERE user_id=1").run();
+    db.prepare("UPDATE bank_accounts SET term_balance=1000000 WHERE user_id=1").run();
+    const state=()=>({actor:db.prepare("SELECT * FROM characters WHERE user_id=1").get(),fighter:db.prepare("SELECT * FROM c_league_chars WHERE user_id=1").get(),account:db.prepare("SELECT * FROM bank_accounts WHERE user_id=1").get(),tax:db.prepare("SELECT * FROM bank_tax_state WHERE user_id=1").get(),ledger:db.prepare("SELECT * FROM bank_ledger WHERE user_id=1 ORDER BY id").all(),requests:db.prepare("SELECT * FROM c_league_requests WHERE user_id=1 ORDER BY id").all()});
+    const request={requestId:"boundary",name:"新角色",transfers:{kenkou:1},comments:{kenkou:"新台詞"},payment:"credit",cardSourceLine:1};
+    const insufficient=state();assert.throws(()=>trainCLeague(db,1,request,now,today),/普通存款付款餘額不足/);assert.deepEqual(state(),insufficient);
+    db.prepare("UPDATE characters SET bank=10000 WHERE user_id=1").run();
+    const exact=state();
+    db.exec("CREATE TRIGGER fail_c_credit BEFORE INSERT ON bank_ledger BEGIN SELECT RAISE(ABORT,'forced credit ledger'); END;");
+    assert.throws(()=>trainCLeague(db,1,request,now,today),/forced credit ledger/);assert.deepEqual(state(),exact);
+    db.exec("DROP TRIGGER fail_c_credit");
+    const result=trainCLeague(db,1,request,now,today);
+    assert.equal(result.cost,10000);assert.equal(result.character.name,"新角色");assert.equal(result.character.stats.kenkou,1);
+    const paid=state();assert.equal(paid.actor.bank,0);assert.equal(paid.actor.money,exact.actor.money);assert.deepEqual(paid.account,exact.account);
+    assert.equal(JSON.parse(paid.actor.stats_json).kenkou,99);
+    assert.equal(paid.ledger.length,exact.ledger.length+1);assert.equal(paid.ledger.at(-1).debit,10000);assert.equal(paid.ledger.at(-1).balance,0);
+    assert.deepEqual(trainCLeague(db,1,request,now,today),{...result,replayed:true});assert.deepEqual(state(),paid);
+    assert.throws(()=>trainCLeague(db,1,{...request,requestId:"new"},now,today),/餘額不足/);assert.deepEqual(state(),paid);
+  }finally{db.close();}
+});
+test("已核准零能量：100場勝利上限、60秒邊界與跨季重送",()=>{
+  const db=setup();try{
+    trainCLeague(db,1,{requestId:"zero",name:"零能力"},now,today);
+    const before=db.prepare("SELECT * FROM characters WHERE user_id=1").get();
+    for(let i=0;i<C_MATCH_LIMIT;i++){
+      const time=now+i*60000,request={requestId:"zero-"+i};
+      if(i===1)assert.throws(()=>playCLeague(db,1,request,time-1,today,()=>{throw Error("不得抽選");}),/間隔/);
+      const result=playCLeague(db,1,request,time,today,()=>2);
+      assert.equal(result.outcome,"win");assert.equal(result.mimic,true);assert.equal(result.reward,100);
+      assert.equal(result.initial.player.total,0);assert.equal(result.initial.opponent.total,0);
+      assert.equal(result.rounds.length,1);assert.equal(result.rounds[0].attacker,"opponent");assert.equal(result.rounds[0].damage,0);
+    }
+    assert.throws(()=>playCLeague(db,1,{requestId:"101"},now+100*60000,today,()=>{throw Error("不得抽選");}),/100/);
+    const info=cLeagueOverview(db,1,now+100*60000);
+    assert.equal(info.record.wins,100);assert.equal(info.history.length,20);
+    const after=db.prepare("SELECT * FROM characters WHERE user_id=1").get();
+    assert.equal(after.money,before.money+10000);assert.deepEqual({...after,money:before.money},{...before});
+    const next=cLeagueOverview(db,1,now+C_SEASON_MS);assert.equal(next.record.previousWins,100);assert.equal(next.record.points,10);
+    assert.equal(playCLeague(db,1,{requestId:"zero-0"},now+C_SEASON_MS,today,()=>{throw Error("不得重抽");}).replayed,true);
+    assert.equal(cLeagueOverview(db,1,now+C_SEASON_MS).record.wins,0);
+    assert.equal(db.prepare("SELECT money FROM characters WHERE user_id=1").get().money,after.money);
+  }finally{db.close();}
+});

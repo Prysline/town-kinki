@@ -217,6 +217,7 @@
           <section class="map-starter" id="c-league-panel">
             <h3>C 聯賽・角色培育</h3>
             <p class="small">14 天一季，每季 100 場，間隔 1 分鐘。培育每點扣本人能力 1 點及 10,000 元；原版模仿者允許單機比賽。</p>
+            <p class="small">保留原版抽選：排除本人後，兩名以上候選對手的最後一列不參與；另有三分之一機率遇到模仿者，無對手時也使用模仿者。零能量可參賽；雙方能量皆零時，第一次攻擊後判本人勝利，收入為零時補發 100 元。</p>
             <p id="c-league-status" role="status"></p>
             <button id="c-league-open" type="button">進入／更新 C 聯賽</button>
             <details id="c-league-training">
@@ -225,7 +226,8 @@
               <label>圖片網址（可空白） <input id="c-league-image" type="url" maxlength="2048"></label>
               <div id="c-league-fields"></div>
               <label>付款 <select id="c-league-payment"></select></label>
-              <p id="c-league-cost"></p>
+              <p class="small">信用付款須持有本人有效信用卡，只扣普通存款；餘額不足拒絕，不挪用現金或定存。</p>
+              <p id="c-league-cost" role="status"></p>
               <button id="c-league-train" type="button">確認培育／儲存</button>
             </details>
             <p id="c-league-fighter"></p>

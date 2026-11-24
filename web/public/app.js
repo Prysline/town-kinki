@@ -4093,7 +4093,9 @@ function updateCLeagueCountdown(){
 }
 function cLeagueCost(){
   const amount=Array.from(el("c-league-fields").querySelectorAll("input[data-stat]")).reduce((n,input)=>n+Number(input.value||0),0);
-  text("c-league-cost","預計支付："+money(amount*10000));
+  const cost=amount*10000,credit=el("c-league-payment").value.startsWith("credit:");
+  const balance=credit?state?.character?.bank:state?.character?.money;
+  text("c-league-cost","預計支付："+money(cost)+(Number.isSafeInteger(balance)?"｜"+(credit?"普通存款":"現金")+" "+money(balance)+(cost>balance?"・付款餘額不足":""):""));
 }
 function cLeagueLine(parent,value){const p=document.createElement("p");p.textContent=value;parent.append(p);}
 function renderCLeague(){
@@ -4159,6 +4161,7 @@ el("c-league-train").onclick=()=>{
   if(!window.confirm("確認培育？能力移轉不可退回。"))return;
   submitCLeague("train",{name:el("c-league-name").value,imageUrl:el("c-league-image").value,transfers,comments,payment:payment==="cash"?"cash":"credit",...(payment==="cash"?{}:{cardSourceLine:Number(payment.split(":")[1])})});
 };
+el("c-league-payment").addEventListener("change",cLeagueCost);
 el("c-league-play").onclick=()=>submitCLeague("play",{});
 el("c-league-open").onclick=()=>submitCLeague("open",{});
 
