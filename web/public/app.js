@@ -2960,7 +2960,7 @@ function renderFishing(){
 
 let pendingCraftingAction=null;
 async function submitCrafting(recipe,quantity){
-  if(!window.confirm("使用本人實際材料合成「"+recipe.name+"」共 "+quantity+
+  if(!window.confirm("使用本人實際材料合成「"+displayRetailItemName(recipe.name)+"」共 "+quantity+
     " 組？材料會扣除，成品將增加 "+(recipe.durability*quantity)+" 回耐久；手續費 0 元。"))return;
   const key=recipe.key+":"+quantity;
   if(!pendingCraftingAction||pendingCraftingAction.key!==key)
@@ -2974,7 +2974,7 @@ async function submitCrafting(recipe,quantity){
     render();
     notify(result.replayed?
       "這筆合成已經完成，不會重複扣材料或增加成品。":
-      "合成完成：「"+result.name+"」"+result.quantity+" 組，共增加 "+
+      "合成完成：「"+displayRetailItemName(result.name)+"」"+result.quantity+" 組，共增加 "+
         result.addedDurability+" 回耐久，已入本人背包。");
   }catch(error){notify(error.message,true);}
 }
@@ -2989,9 +2989,9 @@ function renderCrafting(){
   for(const recipe of recipes){
     const tile=document.createElement("article");tile.className="training-tile";
     const title=document.createElement("strong");
-    title.textContent=recipe.name+"（"+recipe.category+"，每組 "+recipe.durability+" 回）";
+    title.textContent=displayRetailItemName(recipe.name)+"（"+displayRetailItemCategory(recipe.category)+"，每組 "+recipe.durability+" 回）";
     const materials=document.createElement("p");materials.className="small";
-    materials.textContent="需要："+recipe.ingredients.map(i=>i.name+" "+i.quantity+
+    materials.textContent="需要："+recipe.ingredients.map(i=>displayRetailItemName(i.name)+" "+i.quantity+
       " 回（持有 "+i.owned+" 回）").join("＋");
     const count=document.createElement("p");count.className="small";
     count.textContent="最多可製作 "+recipe.maxBatches+" 組"+
@@ -3003,7 +3003,7 @@ function renderCrafting(){
   for(const recipe of recipes){
     const option=document.createElement("option");
     option.value=recipe.key;
-    option.textContent=recipe.name+"（可製作 "+recipe.maxBatches+" 組）";
+    option.textContent=displayRetailItemName(recipe.name)+"（可製作 "+recipe.maxBatches+" 組）";
     option.disabled=recipe.maxBatches===0;
     select.append(option);
   }
@@ -3041,7 +3041,7 @@ function renderCrafting(){
     for(const item of info.history){
       const li=document.createElement("li");
       li.textContent=new Date(item.createdAt).toLocaleString("zh-TW")+
-        "｜"+item.name+" × "+item.quantity+"（新增 "+item.addedDurability+" 回）";
+        "｜"+displayRetailItemName(item.name)+" × "+item.quantity+"（新增 "+item.addedDurability+" 回）";
       ordered.append(li);
     }
     history.append(ordered);
