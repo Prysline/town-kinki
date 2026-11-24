@@ -10,6 +10,7 @@ import { DatabaseSync } from "node:sqlite";
 import { LEGACY_CHARACTER_FIELDS } from "../src/legacy-character.mjs";
 import { initLegacyInventoryTables } from "../src/legacy-inventory.mjs";
 import { settleDailyIllnessEvent } from "../src/events.mjs";
+import { playStreetFight } from "../src/street-fight.mjs";
 import { decodeLegacyText } from "../src/engine.mjs";
 import { parseLegacyRetailCatalog, ensureRetailDay, buyRetailItem } from "../src/retail.mjs";
 
@@ -7337,5 +7338,82 @@ test("戰鬥事件 #38 真實 SQLite 結算經 HTTP 顯示本人獎品／歷史�
     const other=(await api(srv.url,"state",undefined,b.cookie)).result;assert.equal(other.legacyInventory.some(x=>x.origin==="event38"),false);assert.equal(other.healthEvents.length,0);
     const dir=srv.directory;await srv.stop({preserveData:true});srv=await start("multi",null,dir);
     const restored=(await api(srv.url,"state",undefined,a.cookie)).result;assert.deepEqual(restored.healthEvents,state.healthEvents);assert.deepEqual(restored.legacyInventory.find(x=>x.origin==="event38"),item);
+  }finally{await srv.stop();}
+});
+
+test("A～E 聯合 HTTP：街頭負K點→B聯賽→大阪→C聯賽→#38，跨模組同請求碼、重送、重啟與隔離",async()=>{
+  const seed=directory=>{
+    const db=new DatabaseSync(join(directory,"multi.sqlite"));
+    db.exec("CREATE TABLE town_maps(town_id INTEGER PRIMARY KEY, original_name TEXT NOT NULL DEFAULT '', original_record TEXT NOT NULL DEFAULT '', source TEXT NOT NULL, tiles_json TEXT NOT NULL, updated_at INTEGER NOT NULL)");
+    const tiles=Array(192).fill("");tiles[0]="Ｂリーグ";tiles[1]="おばちゃん";tiles[2]="おばちゃん強";
+    db.prepare("INSERT INTO town_maps(town_id,source,tiles_json,updated_at) VALUES(0,'test',?,?)").run(JSON.stringify(tiles),Date.now());db.close();
+  };
+  let srv=await start("multi",seed,null,{OSAKA_NPC_POLICY:"auto"});try{
+    const a=await api(srv.url,"register",{username:"joint_a",password:"joint-test-pass-a"});
+    const b=await api(srv.url,"register",{username:"joint_b",password:"joint-test-pass-b"});
+    for(const [cookie,name] of [[a.cookie,"聯驗甲"],[b.cookie,"聯驗乙"]])assert.equal((await api(srv.url,"character",{name,gender:"other",stats:defaultStats()},cookie)).status,200);
+    const before=(await api(srv.url,"state",undefined,b.cookie)).result;
+    const dbAction=fn=>{const db=new DatabaseSync(join(srv.directory,"multi.sqlite"));try{db.exec("PRAGMA foreign_keys=ON");return fn(db);}finally{db.close();}};
+    const actor=dbAction(db=>{
+      const a=db.prepare("SELECT user_id,last_event_day FROM characters WHERE name='聯驗甲'").get();
+      const b=db.prepare("SELECT user_id FROM characters WHERE name='聯驗乙'").get();
+      const stats=Object.fromEntries(Object.keys(defaultStats()).map(k=>[k,5000]));
+      db.prepare("UPDATE characters SET stats_json=?,body_energy=1000,brain_energy=1000,recovered_at=?").run(JSON.stringify(stats),before.gameTimeMs);
+      db.prepare("UPDATE characters SET money=1000000 WHERE user_id=?").run(b.user_id);
+      const equip=db.prepare("INSERT INTO equipment_items(user_id,sku,type,name,power,accuracy,uses,status,created_at) VALUES(?,?,?,?,1000,101,10,'equipped',?)");
+      for(const type of ["武器","魔法"])equip.run(b.user_id,"joint-"+type,type,"joint-"+type,before.gameTimeMs);
+      const fight=playStreetFight(db,b.user_id,{mode:"multi",requestId:"joint",now:before.gameTimeMs,today:a.last_event_day,randomIndex:()=>0});
+      assert.equal(fight.kpointDelta,-3);assert.equal(db.prepare("SELECT kpoint FROM characters WHERE user_id=?").get(b.user_id).kpoint,-3);
+      return {a,b};
+    });
+    const s0=(await api(srv.url,"state",undefined,b.cookie)).result;
+    assert.equal(s0.character.kpoint,-3);assert.equal(s0.bLeague.available,true);assert.equal(s0.osaka.npcSource,"reconstructed");assert.equal(s0.cLeague.started,false);
+    const otherBefore=(await api(srv.url,"state",undefined,a.cookie)).result;
+    const arena=await api(srv.url,"b-league/play",{rank:"d",requestId:"joint"},b.cookie);assert.equal(arena.status,200,JSON.stringify(arena.result.error));assert.equal(arena.result.bLeagueResult.outcome,"win");
+    assert.equal(arena.result.character.kpoint,-3+arena.result.bLeagueResult.kpointDelta);
+    const osaka=await api(srv.url,"osaka/play",{mode:"week",requestId:"joint"},b.cookie);assert.equal(osaka.status,200,JSON.stringify(osaka.result.error));assert.equal(osaka.result.osakaResult.npcSource,"reconstructed");
+    assert.equal((await api(srv.url,"c-league/train",{requestId:"joint-train",name:"聯驗培育"},b.cookie)).status,200);
+    const league=await api(srv.url,"c-league/play",{requestId:"joint"},b.cookie);assert.equal(league.status,200);assert.equal(league.result.cLeagueResult.reward,100);
+    const cash=league.result.character.money;
+    dbAction(db=>{
+      db.prepare("UPDATE characters SET last_event_day='2000-01-01' WHERE user_id=?").run(actor.b.user_id);
+      const rolls=[0,(38-.5)/44,0,.55];settleDailyIllnessEvent(db,actor.b.user_id,actor.a.last_event_day,league.result.gameTimeMs,()=>rolls.shift());
+    });
+    const done=(await api(srv.url,"state",undefined,b.cookie)).result;
+    assert.equal(done.character.money,cash);assert.equal(done.healthEvents[0].originalId,38);assert.ok(done.legacyInventory.some(x=>x.origin==="event38"));
+    for(const [route,payload,key] of [["street-fight/play",{requestId:"joint"},"streetFightResult"],["b-league/play",{rank:"d",requestId:"joint"},"bLeagueResult"],["osaka/play",{mode:"week",requestId:"joint"},"osakaResult"],["c-league/play",{requestId:"joint"},"cLeagueResult"]]){
+      const replay=await api(srv.url,route,payload,b.cookie);assert.equal(replay.status,200);assert.equal(replay.result[key].replayed,true);assert.equal(replay.result.character.money,cash);
+    }
+    const other=(await api(srv.url,"state",undefined,a.cookie)).result;
+    assert.equal(other.character.money,otherBefore.character.money);assert.equal(other.character.kpoint,otherBefore.character.kpoint);assert.equal(other.bLeague.history.length,0);assert.equal(other.osaka.history.length,0);assert.equal(other.streetFight.history.length,0);assert.equal(other.cLeague.history.length,0);
+    const dir=srv.directory;await srv.stop({preserveData:true});srv=await start("multi",null,dir,{OSAKA_NPC_POLICY:"auto"});
+    const restored=(await api(srv.url,"state",undefined,b.cookie)).result;
+    for(const key of ["bLeague","osaka","streetFight","cLeague"])assert.deepEqual(restored[key].history,done[key].history,key);
+    assert.equal(restored.character.money,cash);assert.equal(restored.character.kpoint,done.character.kpoint);assert.deepEqual(restored.healthEvents,done.healthEvents);
+    assert.deepEqual(dbAction(db=>db.prepare("PRAGMA foreign_key_check").all()),[]);
+  }finally{await srv.stop();}
+});
+test("A～E 單機角色刪除：B、大阪、C聯賽及事件戰報／獎品外鍵清除，街頭不造對手",async()=>{
+  const srv=await start("solo",null,null,{OSAKA_NPC_POLICY:"auto"});try{
+    const made=await api(srv.url,"character",{name:"聯驗刪除",gender:"other",stats:defaultStats()});assert.equal(made.status,200);
+    for(const [column,symbol] of [[0,"Ｂリーグ"],[1,"おばちゃん"]])assert.equal((await api(srv.url,"map/tile",{row:0,column,symbol})).status,200);
+    const dbAction=fn=>{const db=new DatabaseSync(join(srv.directory,"solo.sqlite"));try{db.exec("PRAGMA foreign_keys=ON");return fn(db);}finally{db.close();}};
+    dbAction(db=>{
+      const row=db.prepare("SELECT user_id,last_event_day FROM characters").get();
+      const stats=Object.fromEntries(Object.keys(defaultStats()).map(k=>[k,5000]));
+      db.prepare("UPDATE characters SET stats_json=?,body_energy=1000,brain_energy=1000,recovered_at=?").run(JSON.stringify(stats),made.result.gameTimeMs);
+      const equip=db.prepare("INSERT INTO equipment_items(user_id,sku,type,name,power,accuracy,uses,status,created_at) VALUES(?,?,?,?,1000,101,10,'equipped',?)");
+      for(const type of ["武器","魔法"])equip.run(row.user_id,"joint-solo-"+type,type,"joint-"+type,made.result.gameTimeMs);
+      db.prepare("UPDATE characters SET last_event_day='2000-01-01'").run();
+      const rolls=[0,(38-.5)/44,0,.55];settleDailyIllnessEvent(db,row.user_id,row.last_event_day,made.result.gameTimeMs,()=>rolls.shift());
+    });
+    for(const [route,payload] of [["b-league/play",{rank:"d",requestId:"b"}],["osaka/play",{mode:"week",requestId:"o"}],["c-league/train",{requestId:"t",name:"刪除培育"}],["c-league/play",{requestId:"c"}]]){
+      const x=await api(srv.url,route,payload);assert.equal(x.status,200,JSON.stringify(x.result.error));
+    }
+    assert.equal((await api(srv.url,"street-fight/play",{requestId:"s"})).status,400);
+    const tables=["b_league_battles","b_league_default_gear","osaka_battles","c_league_chars","c_league_entries","c_league_requests","character_events","legacy_inventory_items"];
+    dbAction(db=>{for(const t of tables)assert.ok(db.prepare("SELECT COUNT(*) n FROM "+t).get().n>0,t);});
+    const deleted=await api(srv.url,"solo/character/delete",{characterName:"聯驗刪除",confirm:true});assert.equal(deleted.status,200,JSON.stringify(deleted.result.error));
+    dbAction(db=>{for(const t of [...tables,"street_fights"])assert.equal(db.prepare("SELECT COUNT(*) n FROM "+t).get().n,0,t);assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(),[]);});
   }finally{await srv.stop();}
 });
