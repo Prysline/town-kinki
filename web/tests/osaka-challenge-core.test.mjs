@@ -20,9 +20,9 @@ function npcRecord(filename,value=24,overrides={}){
 const npc=(filename,value=24,overrides={})=>parseOsakaNpcRecord(filename,npcRecord(filename,value,overrides));
 const player=(value=100,extra={})=>({stats:stats(value),bodyEnergy:100,brainEnergy:100,money:1000,...extra});
 const seq=(...values)=>n=>{assert.ok(values.length,"unexpected RNG");const v=values.shift();assert.ok(v>=0&&v<n);return v;};
-test("Osaka original source: 16 attacks, separate base money, four declared and only three reachable prizes",()=>{
+test("Osaka original source: 16 attacks, separate base money, four declared prizes and original three-choice discrepancy",()=>{
  assert.deepEqual(rules.attackIndices,[1,2,3,4,5,6,7,8,9,11,12,13,14,15,16,17]);
- assert.equal(rules.attackLimit,50);assert.equal(rules.dropChoices,3);
+ assert.equal(rules.attackLimit,50);assert.equal(rules.originalDropChoices,3);
  assert.equal(rules.week.base,300);assert.equal(rules.strong.base,1000);
  assert.deepEqual(rules.week.prizes.map(x=>x.name),["おばちゃんの力","関西弁翻訳機","おばちゃんの知恵薬","おばちゃんの知恵袋"]);
  assert.deepEqual(rules.strong.prizes.map(x=>x.name),["おばちゃんの力","関西弁翻訳機","おばちゃんの知恵薬（スーパー）","おばちゃんの知恵袋（スーパー）"]);
@@ -31,6 +31,7 @@ test("Osaka original source: 16 attacks, separate base money, four declared and 
    assert.equal(rules[mode].prizes[0].usableShape,false);
    assert.equal(rules[mode].prizes[1].usableShape,true);
    assert.equal(rules[mode].prizes[2].usableShape,true);
+   assert.equal(rules[mode].prizes[3].usableShape,true);
  }
  assert.equal(rules.week.prizes[0].rawFields[9],"無3");
  assert.equal(rules.strong.prizes[0].rawFields[21],"回");
@@ -68,10 +69,10 @@ test("Osaka all sixteen attacks use the source attribute and mental/body target,
   assert.equal(round.damage,976);assert.equal(result.outcome,"win");assert.equal(result.rounds.length,1);
  }
 });
-test("Osaka week/strong: original one-turn reward, all three accessible prize indices, no fourth or K points",()=>{
+test("Osaka week/strong: original one-turn cash reward, corrected four accessible prize indices, no K points",()=>{
  for(const [mode,file,base] of [["week","w1log.cgi",300],["strong","s1log.cgi",1000]]){
-  for(let drop=0;drop<3;drop++){
-   const result=simulateOsaka({rules,mode,player:player(),npc:npc(file),rng:seq(0,drop)});
+  for(let drop=0;drop<rules[mode].prizes.length;drop++){
+   const result=simulateOsaka({rules,mode,player:player(),npc:npc(file),rng:(n)=>{if(n===16)return 0;assert.equal(n,4);return drop;}});
    assert.equal(result.outcome,"win");assert.equal(result.moneyDelta,base*5);
    assert.equal(result.originalCashDelta,base*5);assert.equal(result.prizeIndex,drop);
    assert.equal(result.prize.name,rules[mode].prizes[drop].name);
@@ -88,4 +89,11 @@ test("Osaka strict speed order, loss cash floor, fifty-attack draw and no reward
  assert.equal(b.originalCashDelta,-300);assert.equal(b.moneyDelta,-5);
  const c=simulateOsaka({rules,mode:"week",player:player(24),npc:npc("w1log.cgi"),rng:n=>n-1});
  assert.equal(c.rounds.length,50);assert.equal(c.outcome,"draw");assert.equal(c.moneyDelta,0);assert.equal(c.prize,null);
+});
+
+test("Osaka corrected prize selection derives range from array length, not original or hard-coded four",()=>{
+ const extra={name:"TEST-only future prize"};
+ const expanded={...rules,week:{...rules.week,prizes:[...rules.week.prizes,extra]}};
+ const result=simulateOsaka({rules:expanded,mode:"week",player:player(),npc:npc("w1log.cgi"),rng:n=>{if(n===16)return 0;assert.equal(n,5);return 4;}});
+ assert.equal(result.prizeIndex,4);assert.equal(result.prize,extra);
 });
