@@ -6665,11 +6665,11 @@ test("單機實體百貨：購入ガチャピン與特殊信用卡後可背包�
   const srv=await start("solo");
   let reopened=null;
   try{
+    anchorSoloTestAtNoon(srv);
     const created=await api(srv.url,"character",{
       name:"寵物與卡片使用者",gender:"other",stats:defaultStats()
     });
     assert.equal(created.status,200);
-    anchorSoloTestAtNoon(srv);
     const placed=await api(srv.url,"map/tile",{row:0,column:0,symbol:"デパ"});
     assert.equal(placed.status,200);
     const catalog=parseLegacyRetailCatalog(decodeLegacyText(
@@ -6780,11 +6780,11 @@ test("IT-02 單機 HTTP：百貨原版食物轉類購入→真正使用→60 分
   const srv=await start("solo");
   let resumed=null;
   try{
+    anchorSoloTestAtNoon(srv);
     const created=await api(srv.url,"character",{
       name:"原版食物轉類居民",gender:"other",stats:defaultStats()
     });
     assert.equal(created.status,200);
-    anchorSoloTestAtNoon(srv);
     assert.equal((await api(srv.url,"map/tile",{row:0,column:0,symbol:"デパ"})).status,200);
     const catalog=parseLegacyRetailCatalog(decodeLegacyText(
       readFileSync(resolve(root,"../dat_dir/syouhin.cgi"))
@@ -6812,8 +6812,7 @@ test("IT-02 單機 HTTP：百貨原版食物轉類購入→真正使用→60 分
       }
     }finally{sqlite.close();}
     const initial=(await api(srv.url,"state")).result;
-    // 角色在跨日回傳時可能合法觸發原版日常事件（如暴食 +5kg）；
-    // 這裡驗證食物本身 +1.5kg，不假定事件之後仍固定是60kg。
+    // 建角前已固定遊戲日，這裡獨立驗證食物本身 +1.5kg。
     const expectedFirstWeight=Math.round((initial.character.weight+1.5)*100)/100;
     const expectedSecondWeight=Math.round((expectedFirstWeight+1.5)*100)/100;
     for(const item of chosen){
@@ -6863,7 +6862,8 @@ test("IT-02 單機 HTTP：百貨原版食物轉類購入→真正使用→60 分
     assert.equal(replay.status,200);
     assert.equal(replay.result.itemUseResult.replayed,true);
     assert.equal(replay.result.character.weight,expectedFirstWeight);
-    assert.equal((await api(resumed.url,"solo/time/advance",{preset:"1h"})).status,200);
+    const advanced=await api(resumed.url,"solo/time/advance",{preset:"1h"});
+    assert.equal(advanced.status,200,JSON.stringify(advanced.result.error));
     const second=await api(resumed.url,"inventory/legacy/use",{
       sourceLine:receipts[1],requestId:"it02_food_marker_use_second"
     });
@@ -7006,8 +7006,8 @@ test("Osaka HTTP solo: missing NPC fails closed; valid dedicated test source ena
   const env={OSAKA_NPC_ROOT:dir,OSAKA_NPC_POLICY:"original-only"};
   let srv=await start("solo",null,dir,env);
   try{
-    assert.equal((await api(srv.url,"character",{name:"大阪單機",gender:"other",stats:defaultStats()})).status,200);
     anchorSoloTestAtNoon(srv);
+    assert.equal((await api(srv.url,"character",{name:"大阪單機",gender:"other",stats:defaultStats()})).status,200);
     let x=await api(srv.url,"map/tile",{row:0,column:0,symbol:"おばちゃん"});
     assert.equal(x.status,200);assert.equal(x.result.osaka.catalogReady,false);assert.equal(x.result.osaka.missingCount,10);
     assert.equal((await api(srv.url,"osaka/play",{mode:"week",requestId:"osaka-http-001"})).status,400);
@@ -7062,8 +7062,8 @@ test("Osaka HTTP auto: rebuilt source in solo, original-file priority after rest
   const env={OSAKA_NPC_ROOT:dir,OSAKA_NPC_POLICY:"auto"};
   let srv=await start("solo",null,dir,env);
   try{
-    assert.equal((await api(srv.url,"character",{name:"大阪重建測試",gender:"other",stats:defaultStats()})).status,200);
     anchorSoloTestAtNoon(srv);
+    assert.equal((await api(srv.url,"character",{name:"大阪重建測試",gender:"other",stats:defaultStats()})).status,200);
     const map=await api(srv.url,"map/tile",{row:0,column:0,symbol:"おばちゃん"});
     assert.equal(map.status,200);assert.equal(map.result.osaka.catalogReady,true);
     assert.equal(map.result.osaka.npcSource,"reconstructed");
@@ -7521,5 +7521,97 @@ test("階段F現況：工作教室及三戰鬥時鐘獨立、精確拒絕回滾�
     assert.equal(final.character.lastEventDay,next.result.character.lastEventDay);
     assert.deepEqual(final.healthEvents,next.result.healthEvents);
     assert.deepEqual(dbAction(db=>db.prepare("PRAGMA foreign_key_check").all()),[]);
+  }finally{await srv.stop();}
+});
+
+test("階段F多人固定時鐘：四戰鬥、百貨及食物同毫秒獨立，4999/5000與59999/60000邊界、收據隔離",async()=>{
+  const {playArena,parseArenaDrops}=await import("../src/b-league.mjs");
+  const {parseArenaCatalog}=await import("../src/b-league-core.mjs");
+  const {playOsaka}=await import("../src/osaka-challenge.mjs");
+  const {parseOsakaRules}=await import("../src/osaka-challenge-core.mjs");
+  const {RECONSTRUCTED_OSAKA_NPCS}=await import("../src/osaka-npc-reconstruction.mjs");
+  const {playCLeague,trainCLeague}=await import("../src/c-league.mjs");
+  const {useLegacyItem}=await import("../src/legacy-item-use.mjs");
+  const source=p=>decodeLegacyText(readFileSync(resolve(root,"..",p)));
+  const seed=directory=>{
+    const db=new DatabaseSync(join(directory,"multi.sqlite"));
+    db.exec("CREATE TABLE town_maps(town_id INTEGER PRIMARY KEY, original_name TEXT NOT NULL DEFAULT '', original_record TEXT NOT NULL DEFAULT '', source TEXT NOT NULL, tiles_json TEXT NOT NULL, updated_at INTEGER NOT NULL)");
+    const tiles=Array(192).fill("");tiles[0]="Ｂリーグ";tiles[1]="おばちゃん";tiles[2]="おばちゃん強";tiles[3]="デパ";
+    db.prepare("INSERT INTO town_maps(town_id,source,tiles_json,updated_at) VALUES(0,'test',?,?)").run(JSON.stringify(tiles),Date.now());db.close();
+  };
+  const srv=await start("multi",seed,null,{OSAKA_NPC_POLICY:"auto"});
+  try{
+    const a=await api(srv.url,"register",{username:"f_clock_a",password:"phase-f-clock-a"});
+    const b=await api(srv.url,"register",{username:"f_clock_b",password:"phase-f-clock-b"});
+    assert.equal(a.status,200);assert.equal(b.status,200);
+    const ma=await api(srv.url,"character",{name:"固定時鐘甲",gender:"other",stats:defaultStats()},a.cookie);
+    const mb=await api(srv.url,"character",{name:"固定時鐘乙",gender:"other",stats:defaultStats()},b.cookie);
+    assert.equal(ma.status,200);assert.equal(mb.status,200);
+    const db=new DatabaseSync(join(srv.directory,"multi.sqlite"));
+    try{
+      db.exec("PRAGMA foreign_keys=ON");
+      const ids=db.prepare("SELECT user_id,last_event_day FROM characters ORDER BY id").all();
+      const [u,v]=ids.map(r=>r.user_id),today=ids[1].last_event_day;
+      // 固定在該遊戲日中午；核心直接執行，沒有正式 API 時鐘/亂數注入。
+      const now=Date.parse(today+"T12:00:00+08:00");
+      const stats=Object.fromEntries(Object.keys(defaultStats()).map(k=>[k,5000]));
+      db.prepare("UPDATE characters SET stats_json=?,body_energy=1000,brain_energy=1000,recovered_at=?,money=1000000").run(JSON.stringify(stats),now);
+      const equip=db.prepare("INSERT INTO equipment_items(user_id,sku,type,name,power,accuracy,uses,status,created_at) VALUES(?,?,?,?,1000,101,30,'equipped',?)");
+      for(const id of [u,v])for(const type of ["武器","魔法"])equip.run(id,"fixed-"+type,type,"fixed-"+type,now);
+      const arena=parseArenaCatalog(source("dat_dir/battle.cgi")),drops=parseArenaDrops(source("battle.cgi"));
+      const rules=parseOsakaRules(source("obatyan.cgi")),npcs={available:true,npcs:RECONSTRUCTED_OSAKA_NPCS};
+      const retail=parseLegacyRetailCatalog(source("dat_dir/syouhin.cgi"));
+      const food=retail.find(x=>x.name==="どすこいちゃんこ");assert.ok(food);
+      ensureRetailDay(db,retail,today);
+      const existing=db.prepare("SELECT position FROM retail_stock WHERE shop='depart1' AND sku=?").get(food.sku);
+      if(existing)db.prepare("UPDATE retail_stock SET remaining=5 WHERE shop='depart1' AND sku=?").run(food.sku);
+      else{const slot=db.prepare("SELECT position FROM retail_stock WHERE shop='depart1' ORDER BY position LIMIT 1").get();assert.ok(slot);db.prepare("UPDATE retail_stock SET sku=?,remaining=5 WHERE shop='depart1' AND position=?").run(food.sku,slot.position);}
+      const hasBuilding=(symbol,town)=>town===0&&["Ｂリーグ","おばちゃん","おばちゃん強","デパ"].includes(symbol);
+      let rngState=17;const rng=n=>{rngState=(Math.imul(rngState,1664525)+1013904223)>>>0;return rngState%n;};
+      const forbidden=()=>{throw Error("拒絕或重送不得抽選");};
+      for(const id of [u,v])trainCLeague(db,id,{requestId:"fixed-train",name:"固定培育"+id},now,today);
+      const run=[
+        (id,requestId,time,r)=>playArena(db,id,arena,drops,{rank:"d",requestId,now:time,today,hasBuilding,rng:r}),
+        (id,requestId,time,r)=>playOsaka(db,id,rules,npcs,{mode:"week",requestId,now:time,today,rng:r}),
+        (id,requestId,time,r)=>playStreetFight(db,id,{mode:"multi",requestId,now:time,today,randomIndex:r}),
+        (id,requestId,time,r)=>playCLeague(db,id,{requestId},time,today,r)
+      ];
+      const tables=["characters","equipment_items","bank_accounts","bank_tax_state","bank_ledger","b_league_battles","b_league_default_gear","osaka_battles","street_fights","c_league_entries","c_league_requests","legacy_inventory_items","retail_purchases","retail_stock","legacy_item_usage","legacy_item_use_history","character_coupons"];
+      const snapshot=()=>Object.fromEntries(tables.map(table=>[table,db.prepare("SELECT * FROM "+table).all()]));
+      const buy=(id,requestId,time,day=today)=>buyRetailItem(db,id,retail,{shop:"depart1",sku:food.sku,requestId,now:time,day,hasBuilding});
+      const first=run.map(play=>play(v,"fixed-first",now,rng));
+      assert.deepEqual(first.map(x=>x.createdAt??x.playedAt),[now,now,now,now]);
+      const purchased=buy(v,"fixed-first",now);assert.equal(purchased.replayed,false);
+      const used=useLegacyItem(db,v,purchased.sourceLine,"fixed-first",now,rng);
+      assert.equal(used.changes.food,true);assert.equal(used.usedAt,now);
+      const before=snapshot();
+      for(let i=0;i<run.length;i++){
+        assert.throws(()=>run[i](v,"fixed-second",now+(i===3?59999:4999),forbidden),/間隔/);
+        assert.deepEqual(snapshot(),before);
+        assert.equal(run[i](v,"fixed-first",now+1,forbidden).replayed,true);
+        assert.deepEqual(snapshot(),before);
+      }
+      assert.equal(buy(v,"fixed-first",now+86400000,new Date(now+86400000).toISOString().slice(0,10)).replayed,true);
+      assert.equal(useLegacyItem(db,v,purchased.sourceLine,"fixed-first",now+86400000,forbidden).replayed,true);
+      assert.deepEqual(snapshot(),before);
+      assert.throws(()=>useLegacyItem(db,v,purchased.sourceLine,"fixed-food-early",now+1,forbidden),/60 分鐘|間隔/);
+      assert.deepEqual(snapshot(),before);
+      // 第二帳號同一時間、同一請求碼可以獨立結算，不共用個人冷卻。
+      const other=run.map(play=>play(u,"fixed-first",now,rng));
+      assert.ok(other.every(x=>x.replayed===false));
+      for(let i=0;i<run.length;i++){
+        const result=run[i](v,"fixed-second",now+(i===3?60000:5000),rng);
+        assert.equal(result.replayed,false);
+        assert.equal(result.createdAt??result.playedAt,now+(i===3?60000:5000));
+      }
+      for(const table of ["b_league_battles","osaka_battles","street_fights"]){
+        assert.equal(db.prepare("SELECT COUNT(*) n FROM "+table+" WHERE user_id=?").get(v).n,2);
+        assert.equal(db.prepare("SELECT COUNT(*) n FROM "+table+" WHERE user_id=?").get(u).n,1);
+      }
+      assert.equal(db.prepare("SELECT COUNT(*) n FROM retail_purchases WHERE user_id=?").get(v).n,1);
+      assert.equal(db.prepare("SELECT COUNT(*) n FROM retail_purchases WHERE user_id=?").get(u).n,0);
+      assert.equal(db.prepare("SELECT COUNT(*) n FROM legacy_item_use_history WHERE user_id=?").get(v).n,1);
+      assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(),[]);
+    }finally{db.close();}
   }finally{await srv.stop();}
 });
