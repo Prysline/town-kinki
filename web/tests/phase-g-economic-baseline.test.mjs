@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import {DatabaseSync} from "node:sqlite";
 import {readFileSync} from "node:fs";
 import {STAT_KEYS,decodeLegacyText,maxBodyEnergy,maxBrainEnergy,recoverEnergy,createCharacterData,parseLegacyJobs,jobEligibility,performWork} from "../src/engine.mjs";
-import {initBankTables,settleBankInterest,refreshBankTaxSnapshot} from "../src/banking.mjs";
+import {initBankTables,settleBankInterest,refreshBankTaxSnapshot,bankOperation} from "../src/banking.mjs";
 import {initCharacterEvents,getCouponBalance,settleDailyIllnessEvent} from "../src/events.mjs";
 import {getCockroachChallenge,claimCockroach} from "../src/event-cockroach.mjs";
 import {initTownMapTable,storeTownMap} from "../src/town-storage.mjs";
@@ -206,11 +206,11 @@ const jobs=parseLegacyJobs(read("dat_dir/job.cgi"));
 const lessons=[...parseLegacySchool(read("dat_dir/school.cgi")),...parseLegacyGym(read("dat_dir/gym.cgi")),...parseLegacyClassroom(read("dat_dir/kyushitu.cgi"))];
 const meals=[...parseLegacyMeals(read("dat_dir/syouhin.cgi"),"main"),...parseLegacyMeals(read("dat_dir/syokudou2.cgi"),"second")];
 const fieldMap={townId:"town_id",money:"money",bank:"bank",bodyEnergy:"body_energy",brainEnergy:"brain_energy",recoveredAt:"recovered_at",healthIndex:"health_index",lastHealthDay:"last_health_day",lastEventDay:"last_event_day",lastMealAt:"last_meal_at",height:"height",weight:"weight",bmi:"bmi",jobId:"job_id",salaryPayment:"salary_payment",workProgress:"work_progress",lastWorkAt:"last_work_at",workCount:"work_count",jobWorkCount:"job_work_count",jobExperience:"job_experience",masteredJob:"mastered_job",lastSchoolDay:"last_school_day",lastGymAt:"last_gym_at",gymReadyAt:"gym_ready_at",classroomReadyAt:"classroom_ready_at"};
-function grow(mode,pace,seed){
+function grow(mode,pace,seed,{duration=14,skipB=false,savings=false}={}){
   const db=database(profiles[0]),rng=random(seed),eventRng=random(seed^0x12345678),menuRng=random(seed^0x5f3759df);
   const unit=()=>eventRng(16777216)/16777216;
   let serial=0;const request=prefix=>prefix+"-"+String(++serial).padStart(8,"0");
-  const report={mode,pace,seed,wages:0,workCount:0,workBlocked:0,schoolCount:0,gymCount:0,classroomCount:0,lessonCost:0,mealCost:0,mealCount:0,mealMissed:0,medicalCost:0,travelCost:0,gearCost:0,trainingCost:0,rewardUses:0,eventCash:0,eventIds:[],cockroachClaims:0,gross:0,attempts:0,skipped:0,battles:{},days:[]};
+  const report={mode,pace,seed,duration,skipB,savings,interest:0,taxPaid:0,eventBank:0,deposits:0,withdrawals:0,wages:0,workCount:0,workBlocked:0,schoolCount:0,gymCount:0,classroomCount:0,lessonCost:0,mealCost:0,mealCount:0,mealMissed:0,medicalCost:0,travelCost:0,gearCost:0,trainingCost:0,rewardUses:0,eventCash:0,eventIds:[],cockroachClaims:0,gross:0,attempts:0,skipped:0,battles:{},days:[]};
   try{
     for(const [name,type] of [["job_id","TEXT"],["salary_payment","TEXT"],["work_progress","INTEGER"],["last_work_at","INTEGER"],["work_count","INTEGER"],["job_work_count","INTEGER"],["job_experience","INTEGER"],["mastered_job","TEXT"],["last_school_day","TEXT"],["last_gym_at","INTEGER"],["gym_ready_at","INTEGER"],["classroom_ready_at","INTEGER"]])db.exec("ALTER TABLE characters ADD COLUMN "+name+" "+type);
     initDiningStockTables(db);
@@ -225,7 +225,7 @@ function grow(mode,pace,seed){
       trainCLeague(db,1,{requestId:request("rival-c"),name:"模擬對手"},start,dayAt(start));
       playCLeague(db,1,{requestId:request("rival-play")},start,dayAt(start),rng);
     }
-    for(const type of ["武器","防具","魔法","御守"]){
+    if(!skipB)for(const type of ["武器","防具","魔法","御守"]){
       const selected=gear.filter(g=>g.category===type&&g.uses>0&&g.price<=created.money/16).sort((a,b)=>b.power-a.power||b.accuracy-a.accuracy||a.price-b.price||a.sourceLine-b.sourceLine)[0];
       if(!selected||row(db).money<=selected.price)continue;
       const bought=buyEquipment(db,actor,gear,{sku:selected.sku,requestId:request("buy-gear"),now:start,hasBuilding});
@@ -266,18 +266,24 @@ function grow(mode,pace,seed){
       const r=eatMeal(ch,selected,now);takeDiningStock(db,selected);save(r.character);
       report.mealCount++;report.mealCost+=r.paid;
     };
-    for(let d=0;d<14;d++){
+    for(let d=0;d<duration;d++){
       const morning=start+d*dayMs,today=dayAt(morning);
-      settleBankInterest(db,actor,today,morning);
+      const settled=settleBankInterest(db,actor,today,morning);
+      report.interest+=settled.ordinary+settled.term;
+      report.taxPaid+=settled.tax?.paid??0;
       const before=recoverEnergy(load(),morning);
       save(settleDailyHealth(before,today,maxBodyEnergy(before.stats),maxBrainEnergy(before.stats),morning).character);
-      const cashBefore=row(db).money;
+      const cashBefore=row(db).money,bankBefore=row(db).bank;
       const evt=settleDailyIllnessEvent(db,actor,today,morning,unit);
       if(evt.event)report.eventIds.push(evt.originalId);
       if(getCockroachChallenge(db,actor,morning)?.status==="active"){
         claimCockroach(db,actor,morning+1000,unit);report.cockroachClaims++;
       }
-      report.eventCash+=row(db).money-cashBefore;
+      report.eventCash+=row(db).money-cashBefore;report.eventBank+=row(db).bank-bankBefore;
+      if(savings&&row(db).money<50000&&row(db).bank>0){
+        const amount=Math.min(50000-row(db).money,row(db).bank);
+        bankOperation(db,actor,"withdraw",amount,today,morning+2000);report.withdrawals+=amount;
+      }
       // If a real event moved the resident, use the real train tariff to return.
       const ch=load();
       if(ch.townId!==0&&ch.money>=quoteTrainFare(ch.townId,0)){
@@ -316,16 +322,26 @@ function grow(mode,pace,seed){
         report.trainingCost+=trainCLeague(db,actor,{requestId:request("c-train"),transfers:{kokugo:1}},at,today).cost;
       }
       refreshBankTaxSnapshot(db,actor,today);
-      const actions=["B-d","Osaka-week",...(mode==="multi"?["Street"]:[]),"C"];
+      const actions=[...(!skipB?["B-d"]:[]),"Osaka-week",...(mode==="multi"?["Street"]:[]),"C"];
       // Strong Osaka only when actual earned stats reach the stated threshold.
-      if(STAT_KEYS.every(k=>load().stats[k]>=100))actions.splice(2,0,"Osaka-strong");
+      if(STAT_KEYS.every(k=>load().stats[k]>=100))actions.splice(actions.indexOf("Osaka-week")+1,0,"Osaka-strong");
       for(const [i,key] of actions.entries())battle(key,at+i*(pace==="spaced"?3600000:5000),today);
-      const end=load();report.days.push({day:d+1,cash:end.money,stats:end.stats,health:end.healthIndex,weight:end.weight});
+      if(savings&&row(db).money>50000){
+        const amount=Math.floor((row(db).money-50000)/4);
+        if(amount>0){bankOperation(db,actor,"deposit",amount,today,morning+13*3600000);report.deposits+=amount;}
+      }
+      refreshBankTaxSnapshot(db,actor,today);
+      const end=load();report.days.push({day:d+1,cash:end.money,bank:end.bank,stats:end.stats,health:end.healthIndex,weight:end.weight});
     }
-    const final=load();report.finalCash=final.money;report.net=final.money-created.money;report.kpoint=row(db).kpoint;report.coupons=getCouponBalance(db,actor);
+    const final=load();report.finalCash=final.money;report.finalBank=final.bank;report.net=final.money-created.money;report.netAssets=final.money+final.bank-created.money;report.kpoint=row(db).kpoint;report.coupons=getCouponBalance(db,actor);
+    report.season=db.prepare("SELECT number FROM c_league_season WHERE id=1").get().number;
+    report.seasonRecord=db.prepare("SELECT wins,losses,draws,prev_wins,prev_losses,prev_draws,champions,points FROM c_league_entries WHERE user_id=?").get(actor);
+    report.inventory=db.prepare("SELECT i.original_name name,COALESCE(u.remaining,i.durability) remaining FROM legacy_inventory_items i LEFT JOIN legacy_item_usage u ON u.user_id=i.user_id AND u.source_line=i.source_line WHERE i.user_id=? ORDER BY i.source_line").all(actor);
     report.taxUnpaid=db.prepare("SELECT COALESCE(SUM(unpaid),0) n FROM bank_tax_assessments WHERE user_id=?").get(actor).n;
     report.finalStats=final.stats;
-    assert.equal(report.net,report.wages+report.eventCash+report.gross-report.lessonCost-report.mealCost-report.medicalCost-report.travelCost-report.gearCost-report.trainingCost);
+    assert.equal(report.net,report.wages+report.eventCash+report.gross-report.lessonCost-report.mealCost-report.medicalCost-report.travelCost-report.gearCost-report.trainingCost-report.deposits+report.withdrawals);
+    assert.equal(report.netAssets,report.wages+report.eventCash+report.eventBank+report.gross-report.lessonCost-report.mealCost-report.medicalCost-report.travelCost-report.gearCost-report.trainingCost+report.interest-report.taxPaid);
+    assert.equal(report.finalBank,report.deposits-report.withdrawals+report.eventBank+report.interest-report.taxPaid);
     assert.ok(final.money>=0);assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(),[]);
     return report;
   }finally{db.close();}
@@ -336,4 +352,21 @@ test("階段G新角色真實成長路徑：工作、食堂、訓練、事件、�
   assert.equal(rows.length,16);
   assert.deepEqual(grow("solo","spaced",17),rows[0]);
   for(const r of rows){const {days,...summary}=r;console.log("G_GROWTH "+JSON.stringify({...summary,dayCash:days.map(d=>d.cash),lastDay:days.at(-1)}));}
+});
+
+test("階段G 42日三賽季新角策略對照：含銀行真實結息稅款、保留／暫緩B聯賽",()=>{
+  const rows=[];
+  for(const mode of ["solo","multi"])for(const skipB of [false,true])for(const seed of [17,20261125,97,314159]){
+    const r=grow(mode,"spaced",seed,{duration:42,skipB,savings:true});
+    assert.equal(r.days.length,42);assert.equal(r.season,3);
+    assert.equal(r.battles.C.attempts,42);assert.equal(r.seasonRecord.wins+r.seasonRecord.losses+r.seasonRecord.draws,14);
+    if(skipB)assert.equal(r.battles["B-d"],undefined);
+    rows.push(r);
+  }
+  assert.equal(rows.length,16);
+  assert.deepEqual(grow("solo","spaced",17,{duration:42,skipB:false,savings:true}),rows[0]);
+  for(const r of rows){
+    const {days,...summary}=r;
+    console.log("G_LONG "+JSON.stringify({...summary,dayAssets:days.map(d=>d.cash+d.bank),lastDay:days.at(-1)}));
+  }
 });
