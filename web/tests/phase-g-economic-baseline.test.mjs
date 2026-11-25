@@ -4,9 +4,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {DatabaseSync} from "node:sqlite";
 import {readFileSync} from "node:fs";
-import {STAT_KEYS,decodeLegacyText,maxBodyEnergy,maxBrainEnergy,recoverEnergy} from "../src/engine.mjs";
+import {STAT_KEYS,decodeLegacyText,maxBodyEnergy,maxBrainEnergy,recoverEnergy,createCharacterData,parseLegacyJobs,jobEligibility,performWork} from "../src/engine.mjs";
 import {initBankTables,settleBankInterest,refreshBankTaxSnapshot} from "../src/banking.mjs";
-import {initCharacterEvents,getCouponBalance} from "../src/events.mjs";
+import {initCharacterEvents,getCouponBalance,settleDailyIllnessEvent} from "../src/events.mjs";
+import {getCockroachChallenge,claimCockroach} from "../src/event-cockroach.mjs";
 import {initTownMapTable,storeTownMap} from "../src/town-storage.mjs";
 import {parseArenaCatalog} from "../src/b-league-core.mjs";
 import {initArenaTables,parseArenaDrops,playArena} from "../src/b-league.mjs";
@@ -18,7 +19,11 @@ import {initCLeagueTables,trainCLeague,playCLeague,C_MATCH_LIMIT,C_INTERVAL_MS} 
 import {parseLegacyEquipmentCatalog,buyEquipment,equipEquipment,forgeEquipment,EQUIPMENT_SYMBOL} from "../src/equipment.mjs";
 import {parseLegacyRetailCatalog,initRetailTables,ensureRetailDay,buyRetailItem} from "../src/retail.mjs";
 import {listLegacyItemActions,useLegacyItem} from "../src/legacy-item-use.mjs";
-import {settleDailyHealth,getTreatmentQuote,treatAtHospital} from "../src/health.mjs";
+import {settleDailyHealth,getTreatmentQuote,treatAtHospital,conditionWithIllness} from "../src/health.mjs";
+import {parseLegacySchool,parseLegacyGym,parseLegacyClassroom,trainingAvailability,performTraining} from "../src/training.mjs";
+import {parseLegacyMeals,deriveCondition,eatMeal,hungerStatus} from "../src/dining.mjs";
+import {initDiningStockTables,ensureDiningRotation,listedDiningMeals,takeDiningStock} from "../src/dining-stock.mjs";
+import {quoteTrainFare,travelByTrain} from "../src/transport.mjs";
 
 const read=p=>decodeLegacyText(readFileSync(new URL("../../"+p,import.meta.url)));
 const arena=parseArenaCatalog(read("dat_dir/battle.cgi")),drops=parseArenaDrops(read("battle.cgi"));
@@ -62,9 +67,10 @@ function resident(db,now){
   const r=row(db);
   return recoverEnergy({money:r.money,stats:JSON.parse(r.stats_json),bodyEnergy:r.body_energy,brainEnergy:r.brain_energy,recoveredAt:r.recovered_at,healthIndex:r.health_index,lastHealthDay:r.last_health_day,lastMealAt:r.last_meal_at,height:r.height,weight:r.weight,bmi:r.bmi},now);
 }
-function run(profile,mode,schedule,seed){
+function run(profile,mode,schedule,seed,gearPolicy="cheap"){
   const db=database(profile),rng=random(seed),stockRng=random(seed^0x5f3759df);
   const result={profile:profile.name,mode,schedule,seed,attempts:0,win:0,loss:0,draw:0,noOpponent:0,skippedCash:0,skippedCap:0,gross:0,gearCost:0,foodCost:0,medicalCost:0,trainingCost:0,gearUses:0,foodUsed:0,foodNotStocked:0,prizeGranted:0,prizeBlocked:0,days:[]};
+  result.gearPolicy=gearPolicy;result.winRounds=0;result.winCash=0;result.lossCash=0;
   let serial=0;const id=prefix=>prefix+"-"+String(++serial).padStart(8,"0");
   try{
     const cMode=mode.startsWith("C-");
@@ -79,7 +85,7 @@ function run(profile,mode,schedule,seed){
     if(mode.startsWith("B-")){
       // Real catalog, conservative initial budget; not a claim about player preferences.
       for(const type of ["武器","防具","魔法","御守"]){
-        const selected=gear.filter(g=>g.category===type&&g.uses>0&&g.price<=profile.cash/16).sort((a,b)=>a.price-b.price||a.sourceLine-b.sourceLine)[0];
+        const selected=gear.filter(g=>g.category===type&&g.uses>0&&g.price<=profile.cash/16).sort((a,b)=>gearPolicy==="power"?b.power-a.power||b.accuracy-a.accuracy||a.price-b.price||a.sourceLine-b.sourceLine:a.price-b.price||a.sourceLine-b.sourceLine)[0];
         if(!selected||row(db).money<=selected.price)continue;
         const bought=buyEquipment(db,actor,gear,{sku:selected.sku,requestId:id("gear-buy"),now:start,hasBuilding});
         result.gearCost-=bought.amount;
@@ -121,7 +127,8 @@ function run(profile,mode,schedule,seed){
         assert.equal(used.changes.food,true);result.foodUsed++;
       }
       refreshBankTaxSnapshot(db,actor,today);
-      const attempts=cMode?(schedule==="spaced"?7:100):(schedule==="spaced"?4:24);
+      const matched=schedule==="spaced"||schedule==="matched-fast";
+      const attempts=cMode?(matched?7:100):(matched?4:24);
       const interval=schedule==="spaced"?3600000:(cMode?C_INTERVAL_MS:5000);
       for(let i=0;i<attempts;i++){
         if(cMode&&result.attempts>=C_MATCH_LIMIT){result.skippedCap+=attempts-i;break;}
@@ -139,6 +146,8 @@ function run(profile,mode,schedule,seed){
         assert.equal(after.money-before.money,delta);
         assert.ok(Object.hasOwn(result,battle.outcome));
         result.attempts++;result[battle.outcome]++;result.gross+=delta;
+        if(battle.outcome==="win"){result.winRounds+=battle.rounds.length;result.winCash+=delta;}
+        if(battle.outcome==="loss")result.lossCash+=delta;
         result.gearUses+=usesBefore-db.prepare("SELECT COALESCE(SUM(uses),0) n FROM equipment_items WHERE user_id=?").get(actor).n;
         if(!cMode&&battle.reward?.granted===true)result.prizeGranted++;
         if(!cMode&&battle.reward?.granted===false)result.prizeBlocked++;
@@ -172,4 +181,159 @@ test("階段G 14日固定種子經濟基線：正式四戰鬥交易、真實商�
     const {days,items,...summary}=r;
     console.log("G_ECON "+JSON.stringify({...summary,dayCash:days.map(d=>d.cash),lastDay:days.at(-1),items}));
   }
+});
+
+test("階段G等場次間隔及B裝備選擇對照：14日、四種子、真實核心",()=>{
+  const rows=[];
+  const seeds=[17,20261125,97,314159];
+  for(const profile of profiles)for(const mode of ["B-d","Osaka-week","Osaka-strong","Street"])for(const seed of seeds){
+    const spaced=run(profile,mode,"spaced",seed),fast=run(profile,mode,"matched-fast",seed);
+    assert.equal(spaced.attempts+spaced.skippedCash,56);
+    assert.equal(fast.attempts+fast.skippedCash,56);
+    rows.push(spaced,fast);
+  }
+  for(const profile of profiles)for(const seed of seeds)rows.push(run(profile,"B-d","spaced",seed,"power"));
+  assert.equal(rows.length,72);
+  for(const r of rows){
+    const {days,items,...summary}=r;
+    console.log("G_MATCHED "+JSON.stringify({...summary,dayCash:days.map(d=>d.cash)}));
+  }
+});
+
+// Separate progression experiment: initial character from production creation, actual
+// work/training/meal/reward/event cores. Persistence adapter exists only in the test.
+const jobs=parseLegacyJobs(read("dat_dir/job.cgi"));
+const lessons=[...parseLegacySchool(read("dat_dir/school.cgi")),...parseLegacyGym(read("dat_dir/gym.cgi")),...parseLegacyClassroom(read("dat_dir/kyushitu.cgi"))];
+const meals=[...parseLegacyMeals(read("dat_dir/syouhin.cgi"),"main"),...parseLegacyMeals(read("dat_dir/syokudou2.cgi"),"second")];
+const fieldMap={townId:"town_id",money:"money",bank:"bank",bodyEnergy:"body_energy",brainEnergy:"brain_energy",recoveredAt:"recovered_at",healthIndex:"health_index",lastHealthDay:"last_health_day",lastEventDay:"last_event_day",lastMealAt:"last_meal_at",height:"height",weight:"weight",bmi:"bmi",jobId:"job_id",salaryPayment:"salary_payment",workProgress:"work_progress",lastWorkAt:"last_work_at",workCount:"work_count",jobWorkCount:"job_work_count",jobExperience:"job_experience",masteredJob:"mastered_job",lastSchoolDay:"last_school_day",lastGymAt:"last_gym_at",gymReadyAt:"gym_ready_at",classroomReadyAt:"classroom_ready_at"};
+function grow(mode,pace,seed){
+  const db=database(profiles[0]),rng=random(seed),eventRng=random(seed^0x12345678),menuRng=random(seed^0x5f3759df);
+  const unit=()=>eventRng(16777216)/16777216;
+  let serial=0;const request=prefix=>prefix+"-"+String(++serial).padStart(8,"0");
+  const report={mode,pace,seed,wages:0,workCount:0,workBlocked:0,schoolCount:0,gymCount:0,classroomCount:0,lessonCost:0,mealCost:0,mealCount:0,mealMissed:0,medicalCost:0,travelCost:0,gearCost:0,trainingCost:0,rewardUses:0,eventCash:0,eventIds:[],cockroachClaims:0,gross:0,attempts:0,skipped:0,battles:{},days:[]};
+  try{
+    for(const [name,type] of [["job_id","TEXT"],["salary_payment","TEXT"],["work_progress","INTEGER"],["last_work_at","INTEGER"],["work_count","INTEGER"],["job_work_count","INTEGER"],["job_experience","INTEGER"],["mastered_job","TEXT"],["last_school_day","TEXT"],["last_gym_at","INTEGER"],["gym_ready_at","INTEGER"],["classroom_ready_at","INTEGER"]])db.exec("ALTER TABLE characters ADD COLUMN "+name+" "+type);
+    initDiningStockTables(db);
+    const load=()=>{const r=row(db);return {...Object.fromEntries(Object.entries(fieldMap).map(([k,v])=>[k,r[v]])),stats:JSON.parse(r.stats_json)};};
+    const save=c=>{db.prepare("UPDATE characters SET "+Object.values(fieldMap).map(v=>v+"=?").join(",")+",stats_json=? WHERE user_id=?").run(...Object.keys(fieldMap).map(k=>c[k]??null),JSON.stringify(c.stats),actor);};
+    const created=createCharacterData("模擬新居民","other",start,stats(20));
+    save(created);
+    const job=jobs.find(j=>j.key===created.jobId);assert.ok(job);
+    // A minimal zero-transfer C character, then a budget-limited real transfer on day 8.
+    trainCLeague(db,actor,{requestId:request("create-c"),name:"模擬培育"},start,dayAt(start));
+    if(mode==="multi"){
+      trainCLeague(db,1,{requestId:request("rival-c"),name:"模擬對手"},start,dayAt(start));
+      playCLeague(db,1,{requestId:request("rival-play")},start,dayAt(start),rng);
+    }
+    for(const type of ["武器","防具","魔法","御守"]){
+      const selected=gear.filter(g=>g.category===type&&g.uses>0&&g.price<=created.money/16).sort((a,b)=>b.power-a.power||b.accuracy-a.accuracy||a.price-b.price||a.sourceLine-b.sourceLine)[0];
+      if(!selected||row(db).money<=selected.price)continue;
+      const bought=buyEquipment(db,actor,gear,{sku:selected.sku,requestId:request("buy-gear"),now:start,hasBuilding});
+      report.gearCost-=bought.amount;
+      equipEquipment(db,actor,{itemId:bought.itemId,requestId:request("equip-gear"),now:start,hasBuilding});
+    }
+    const battle=(key,now,today)=>{
+      const before=row(db);
+      // Conservative voluntary entry policy; no changes to server eligibility or reward.
+      if(key!=="C"&&(before.town_id!==0||before.money<15000)){report.skipped++;return;}
+      if(key!=="C"){
+        const current=recoverEnergy(load(),now);
+        if(current.bodyEnergy<1||current.brainEnergy<1){report.skipped++;return;}
+      }
+      let r;
+      if(key==="B-d")r=playArena(db,actor,arena,drops,{rank:"d",requestId:request("battle"),now,today,hasBuilding,rng});
+      else if(key==="Osaka-week"||key==="Osaka-strong")r=playOsaka(db,actor,osaka,npcs,{mode:key.slice(6),requestId:request("battle"),now,today,rng});
+      else if(key==="Street")r=playStreetFight(db,actor,{mode:"multi",requestId:request("battle"),now,today,randomIndex:rng});
+      else r=playCLeague(db,actor,{requestId:request("battle")},now,today,rng);
+      assert.equal(r.replayed,false);
+      const delta=key==="C"?r.reward:(r.moneyDelta??r.delta??0);
+      assert.equal(row(db).money-before.money,delta);
+      const m=report.battles[key]??={attempts:0,win:0,loss:0,draw:0,noOpponent:0,gross:0,winRounds:0,prizes:0};
+      m.attempts++;m[r.outcome]++;m.gross+=delta;
+      if(r.outcome==="win")m.winRounds+=r.rounds.length;
+      if(key!=="C"&&r.reward?.granted)m.prizes++;
+      report.attempts++;report.gross+=delta;
+    };
+    const mealAt=(now,today)=>{
+      if(row(db).town_id!==0){report.mealMissed++;return;}
+      const ch=recoverEnergy(load(),now);
+      if(!hungerStatus(ch.lastMealAt,now).canEat){report.mealMissed++;return;}
+      ensureDiningRotation(db,meals,today,menuRng);
+      const affordable=listedDiningMeals(db,meals).filter(m=>m.stock>0&&m.price<=ch.money);
+      const list=affordable.filter(m=>m.calories>=200&&m.calories<=800);
+      const selected=(list.length?list:affordable).sort((a,b)=>a.price-b.price||a.key.localeCompare(b.key))[0];
+      if(!selected){report.mealMissed++;return;}
+      const r=eatMeal(ch,selected,now);takeDiningStock(db,selected);save(r.character);
+      report.mealCount++;report.mealCost+=r.paid;
+    };
+    for(let d=0;d<14;d++){
+      const morning=start+d*dayMs,today=dayAt(morning);
+      settleBankInterest(db,actor,today,morning);
+      const before=recoverEnergy(load(),morning);
+      save(settleDailyHealth(before,today,maxBodyEnergy(before.stats),maxBrainEnergy(before.stats),morning).character);
+      const cashBefore=row(db).money;
+      const evt=settleDailyIllnessEvent(db,actor,today,morning,unit);
+      if(evt.event)report.eventIds.push(evt.originalId);
+      if(getCockroachChallenge(db,actor,morning)?.status==="active"){
+        claimCockroach(db,actor,morning+1000,unit);report.cockroachClaims++;
+      }
+      report.eventCash+=row(db).money-cashBefore;
+      // If a real event moved the resident, use the real train tariff to return.
+      const ch=load();
+      if(ch.townId!==0&&ch.money>=quoteTrainFare(ch.townId,0)){
+        const r=travelByTrain(ch,0);save(r.character);report.travelCost+=r.fare;
+      }
+      const medical=load(),quote=getTreatmentQuote(medical);
+      if(medical.townId===0&&quote.disease.key!=="healthy"&&medical.money>=quote.price){
+        const r=treatAtHospital(medical,morning+5000);save(r.character);report.medicalCost+=r.paid;
+      }
+      if(row(db).town_id===0)for(const item of db.prepare("SELECT id,uses,status FROM equipment_items WHERE user_id=? AND status!='sold' ORDER BY id").all(actor)){
+        if(item.uses!==0||row(db).money<25000)continue;
+        report.gearCost-=forgeEquipment(db,actor,{itemId:item.id,usesUp:10,requestId:request("repair"),now:morning+5000,hasBuilding}).amount;
+        equipEquipment(db,actor,{itemId:item.id,requestId:request("equip"),now:morning+5000,hasBuilding});
+      }
+      mealAt(morning+60000,today);
+      const useTime=morning+120000;
+      const award=listLegacyItemActions(db,actor,recoverEnergy(load(),useTime),useTime).find(x=>["MB","ゲットアイテム"].includes(x.category)&&x.canUse);
+      if(award){const r=useLegacyItem(db,actor,award.sourceLine,request("award-use"),useTime,rng);assert.equal(r.replayed,false);report.rewardUses++;}
+      for(const hour of [1,3]){
+        const now=morning+hour*3600000,c=recoverEnergy(load(),now);
+        const condition=conditionWithIllness(deriveCondition(c,maxBodyEnergy(c.stats),maxBrainEnergy(c.stats),now),c);
+        if(jobEligibility(c,job)||c.bodyEnergy<job.bodyCost||c.brainEnergy<job.brainCost||condition.baseExperience===null){report.workBlocked++;continue;}
+        const r=performWork(c,job,now,()=>rng(16777216)/16777216);save(r.character);report.workCount++;report.wages+=r.paid+r.bonus;
+      }
+      // Keep chronology monotonic: work above at 10/12; lessons at 13/14/15.
+      mealAt(morning+4*3600000,today);
+      for(const [index,type] of ["school","gym","classroom"].entries()){
+        const now=morning+(5+index)*3600000,c=load();
+        const available=lessons.filter(x=>x.type===type&&c.money-x.price>=15000&&!trainingAvailability(c,x,now,today));
+        const selected=available.sort((a,b)=>a.price-b.price||a.key.localeCompare(b.key))[0];
+        if(!selected)continue;
+        const r=performTraining(c,selected,now,today);save(r.character);report[type+"Count"]++;report.lessonCost+=r.paid;
+      }
+      const at=morning+8*3600000;
+      if(d===7&&row(db).money>=25000&&load().stats.kokugo>1){
+        report.trainingCost+=trainCLeague(db,actor,{requestId:request("c-train"),transfers:{kokugo:1}},at,today).cost;
+      }
+      refreshBankTaxSnapshot(db,actor,today);
+      const actions=["B-d","Osaka-week",...(mode==="multi"?["Street"]:[]),"C"];
+      // Strong Osaka only when actual earned stats reach the stated threshold.
+      if(STAT_KEYS.every(k=>load().stats[k]>=100))actions.splice(2,0,"Osaka-strong");
+      for(const [i,key] of actions.entries())battle(key,at+i*(pace==="spaced"?3600000:5000),today);
+      const end=load();report.days.push({day:d+1,cash:end.money,stats:end.stats,health:end.healthIndex,weight:end.weight});
+    }
+    const final=load();report.finalCash=final.money;report.net=final.money-created.money;report.kpoint=row(db).kpoint;report.coupons=getCouponBalance(db,actor);
+    report.taxUnpaid=db.prepare("SELECT COALESCE(SUM(unpaid),0) n FROM bank_tax_assessments WHERE user_id=?").get(actor).n;
+    report.finalStats=final.stats;
+    assert.equal(report.net,report.wages+report.eventCash+report.gross-report.lessonCost-report.mealCost-report.medicalCost-report.travelCost-report.gearCost-report.trainingCost);
+    assert.ok(final.money>=0);assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(),[]);
+    return report;
+  }finally{db.close();}
+}
+test("階段G新角色真實成長路徑：工作、食堂、訓練、事件、獎品與混合戰鬥",()=>{
+  const rows=[];
+  for(const mode of ["solo","multi"])for(const pace of ["spaced","compact"])for(const seed of [17,20261125,97,314159])rows.push(grow(mode,pace,seed));
+  assert.equal(rows.length,16);
+  assert.deepEqual(grow("solo","spaced",17),rows[0]);
+  for(const r of rows){const {days,...summary}=r;console.log("G_GROWTH "+JSON.stringify({...summary,dayCash:days.map(d=>d.cash),lastDay:days.at(-1)}));}
 });
