@@ -6,6 +6,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { createServer } from "node:net";
 import { mkdtempSync, rmSync, readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
+import { settleDailyIllnessEvent } from "../src/events.mjs";
 import { decodeLegacyText } from "../src/engine.mjs";
 import { parseLegacyRetailCatalog } from "../src/retail.mjs";
 import { join } from "node:path";
@@ -25,10 +26,10 @@ async function freePort(){
     });
   });
 }
-async function startWeb(dir){
+async function startWeb(dir,mode="solo"){
   const port=await freePort();
   const child=spawn(process.execPath,["src/server.mjs"],{
-    cwd:WEB_ROOT,env:{...process.env,GAME_MODE:"solo",
+    cwd:WEB_ROOT,env:{...process.env,GAME_MODE:mode,
       HOST:"127.0.0.1",PORT:String(port),DATA_DIR:dir}
   });
   let output="";
@@ -668,4 +669,106 @@ test("Chrome：健身房減重→真實百貨寵物／信用卡→背包使用�
     await web?.stop();
     rmSync(workspace,{force:true,recursive:true,maxRetries:50,retryDelay:200});
   }
+});
+
+test("Chrome 多人街頭格鬥：真實按鈕送出戰鬥、展開戰報、手機視窗",{
+  timeout:90000
+},async()=>{
+  const workspace=mkdtempSync(join(tmpdir(),"town-chrome-street-"));
+  let web=null,chrome=null;
+  try{
+    web=await startWeb(join(workspace,"sqlite"),"multi");
+    chrome=await openChrome(join(workspace,"chrome"));
+    await chrome.send("Page.enable");await chrome.send("Runtime.enable");
+    await viewport(chrome,1440,900);
+    await chrome.send("Page.navigate",{url:web.url});
+    await until(chrome,"Boolean(document.querySelector('#auth'))","登入頁");
+    const seeded=await evaluate(chrome,`(async()=>{
+      const post=(path,data)=>fetch("/api/"+path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)});
+      const stats=Object.fromEntries(["kokugo","suugaku","rika","syakai","eigo","ongaku","bijutu","looks","tairyoku","kenkou","speed","power","wanryoku","kyakuryoku","love","unique","etti"].map(k=>[k,20]));
+      const results=[];
+      for(const [username,name] of [["chrome_street_a","格鬥居民甲"],["chrome_street_b","格鬥居民乙"]]){
+        results.push((await post("register",{username,password:"chrome-street-pass"})).status);
+        results.push((await post("character",{name,gender:"male",stats})).status);
+      }
+      return results;
+    })()`);
+    assert.deepEqual(seeded,[200,200,200,200]);
+    const setCash=amount=>{
+      const db=new DatabaseSync(join(workspace,"sqlite","multi.sqlite"));
+      try{db.prepare("UPDATE characters SET money=?,bank=1000000 WHERE name=?").run(amount,"格鬥居民乙");}
+      finally{db.close();}
+    };
+    setCash(14999);
+    await chrome.send("Page.reload");
+    await until(chrome,"!document.querySelector('#game')?.hidden && document.querySelector('#street-fight-status')?.textContent?.includes('參戰現金不足')","低於門檻顯示原因");
+    assert.equal(await evaluate(chrome,"document.querySelector('#street-fight-play').disabled"),true);
+    assert.match(await evaluate(chrome,"document.querySelector('#street-fight-status').textContent"),/15,000/);
+    assert.match(await evaluate(chrome,"document.querySelector('#street-fight-panel').textContent"),/不是固定入場費/);
+    setCash(15000);
+    await chrome.send("Page.reload");
+    await until(chrome,"!document.querySelector('#game')?.hidden && document.querySelector('#street-fight-play')?.disabled===false","恰好 15,000 元格鬥入口可使用");
+    await evaluate(chrome,"window.confirm=()=>true");
+    await click(chrome,"#street-fight-play");
+    await until(chrome,"document.querySelector('#street-fight-history summary')?.textContent?.includes('平手')","顯示實際格鬥結果");
+    await click(chrome,"#street-fight-history summary");
+    await until(chrome,"document.querySelector('#street-fight-history details')?.open===true","戰報可展開");
+    assert.equal(await evaluate(chrome,"document.querySelectorAll('#street-fight-history details ol li').length"),50);
+    assert.equal(await evaluate(chrome,"document.querySelectorAll('#street-fight-history details dl dt').length"),17);
+    await viewport(chrome,375,812);
+    assert.ok(await evaluate(chrome,"document.querySelector('#street-fight-status')?.textContent?.length>0"));
+    const saved=await evaluate(chrome,"(async()=>{const s=await(await fetch('/api/state')).json();return s.streetFight.history.length})()");
+    assert.equal(saved,1);
+  }finally{
+    await chrome?.stop();await web?.stop();
+    rmSync(workspace,{force:true,recursive:true,maxRetries:50,retryDelay:200});
+  }
+});
+
+test("Chrome C 聯賽：實際培育、模仿者比賽、戰報與手機視窗",{timeout:90000},async()=>{
+  const workspace=mkdtempSync(join(tmpdir(),"town-chrome-c-league-"));let web=null,chrome=null;
+  try{
+    web=await startWeb(join(workspace,"sqlite"));chrome=await openChrome(join(workspace,"chrome"));
+    await chrome.send("Page.enable");await chrome.send("Runtime.enable");await viewport(chrome,1440,900);
+    await chrome.send("Page.navigate",{url:web.url});await until(chrome,"!document.querySelector('#create')?.hidden","建角入口");
+    await evaluate(chrome,"window.confirm=()=>true");await fill(chrome,'#create-form [name="name"]',"聯賽測試居民");await click(chrome,"#create-submit");
+    await until(chrome,"!document.querySelector('#game')?.hidden","主畫面");
+    await click(chrome,"#c-league-open");await until(chrome,"document.querySelector('#c-league-result')?.textContent?.includes('已進入第 1 季')","明確進入聯賽");
+    await click(chrome,"#c-league-training summary");await fill(chrome,"#c-league-name","模仿測試");await fill(chrome,'#c-league-fields input[data-stat="kenkou"]',1);
+    await click(chrome,"#c-league-train");await until(chrome,"document.querySelector('#c-league-result')?.textContent?.includes('培育已儲存')","實際培育完成");
+    await until(chrome,"document.querySelector('#c-league-play')?.disabled===false","比賽可用");await click(chrome,"#c-league-play");
+    await until(chrome,"document.querySelector('#c-league-history summary')?.textContent?.includes('模仿者')","模仿者戰報");
+    assert.equal(await evaluate(chrome,"document.querySelector('#c-league-play').disabled"),true);
+    const saved=await evaluate(chrome,"(async()=>{const s=await(await fetch('/api/state')).json();return {n:s.cLeague.history.length,kenkou:s.cLeague.character.stats.kenkou,mimic:s.cLeague.history[0].mimic}})()");
+    assert.deepEqual(saved,{n:1,kenkou:1,mimic:true});
+    assert.match(await evaluate(chrome,"document.querySelector('#c-league-result').textContent"),/勝利.*100/);
+    assert.match(await evaluate(chrome,"document.querySelector('#c-league-panel').textContent"),/零能量可參賽/);
+    assert.match(await evaluate(chrome,"document.querySelector('#c-league-training').textContent"),/餘額不足拒絕/);
+    await viewport(chrome,375,812);
+    assert.ok(await evaluate(chrome,"document.querySelector('#c-league-status').textContent.includes('1 / 100')"));
+  }finally{await chrome?.stop();await web?.stop();rmSync(workspace,{force:true,recursive:true,maxRetries:50,retryDelay:200});}
+});
+
+test("Chrome 戰鬥事件 #38：真實事件結算後的彈窗與375px背包",{timeout:90000},async()=>{
+  const workspace=mkdtempSync(join(tmpdir(),"town-chrome-event38-"));let web=null,chrome=null;
+  try{
+    const dataDir=join(workspace,"sqlite");web=await startWeb(dataDir);chrome=await openChrome(join(workspace,"chrome"));
+    await chrome.send("Page.enable");await chrome.send("Runtime.enable");await viewport(chrome,1440,900);
+    await chrome.send("Page.navigate",{url:web.url});await until(chrome,"!document.querySelector('#create')?.hidden","建角入口");
+    await evaluate(chrome,"window.confirm=()=>true");await fill(chrome,'#create-form [name="name"]',"戰鬥事件居民");await click(chrome,"#create-submit");
+    await until(chrome,"!document.querySelector('#game')?.hidden","主畫面");
+    const state=await evaluate(chrome,"(async()=>await(await fetch('/api/state')).json())()");
+    const db=new DatabaseSync(join(dataDir,"solo.sqlite"));
+    try{
+      const actor=db.prepare("SELECT user_id,stats_json,last_event_day FROM characters").get();
+      db.prepare("UPDATE characters SET stats_json=?,last_event_day='2000-01-01' WHERE user_id=?").run(JSON.stringify({...JSON.parse(actor.stats_json),power:1000}),actor.user_id);
+      const rolls=[0,(38-.5)/44,0,.55];settleDailyIllnessEvent(db,actor.user_id,actor.last_event_day,state.gameTimeMs,()=>rolls.shift());
+    }finally{db.close();}
+    await chrome.send("Page.reload");await until(chrome,"!document.querySelector('#game')?.hidden||!document.querySelector('#solo-lobby')?.hidden","重載角色");
+    if(await evaluate(chrome,"!document.querySelector('#solo-lobby')?.hidden"))await click(chrome,"#solo-continue");
+    await until(chrome,"!document.querySelector('#event-popup')?.hidden&&document.querySelector('#event-popup-body').textContent.includes('聖誕老人戰鬥')","原版戰鬥事件彈窗");
+    assert.match(await evaluate(chrome,"document.querySelector('#event-popup-body').textContent"),/等身大聖誕老人偶/);
+    await click(chrome,"#event-popup-close");await viewport(chrome,375,812);
+    assert.match(await evaluate(chrome,"document.querySelector('#legacy-inventory-list').textContent"),/Web 聖誕老人戰鬥獎勵/);
+  }finally{await chrome?.stop();await web?.stop();rmSync(workspace,{force:true,recursive:true,maxRetries:50,retryDelay:200});}
 });

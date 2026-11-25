@@ -297,7 +297,7 @@ test("星期一稅基門檻與 K 點六段折扣按原版整數規則",()=>{
   for(const [points,due] of expected)
     assert.equal(calculateWeeklyTax(6000000,points).due,due,"K 點 "+points);
   assert.throws(()=>calculateWeeklyTax(Number.MAX_SAFE_INTEGER+1,0),/稅基/);
-  assert.throws(()=>calculateWeeklyTax(6000000,-1),/K 點/);
+  assert.equal(calculateWeeklyTax(6000000,-1).due,60000); // 原版負 K 點與 0 點同為無折扣
 });
 
 test("跨入星期一先計息與還款，再依上次快照徵稅，重讀不雙扣",()=>{
@@ -405,5 +405,27 @@ test("BK-04 房貸先還再依保存淨資產納稅，入帳順序與失敗回�
     assert.deepEqual(bankLedger(db,1).map(x=>x.action),
       ["每週納稅","住宅貸款每日還款","普通存款利息"]);
     assert.equal(db.prepare("SELECT remaining_payments FROM bank_loans WHERE user_id=1").get().remaining_payments,1);
+  }finally{db.close();}
+});
+
+test("舊版非負 K 點稅務表升級保留歷史，負 K 點可在下週正確結算",()=>{
+  const db=createDb();
+  try{
+    settleBankInterest(db,1,"2026-11-22",1000);
+    settleBankInterest(db,1,"2026-11-23",2000);
+    const original=db.prepare("SELECT * FROM bank_tax_assessments").all();
+    const schema=db.prepare("SELECT sql FROM sqlite_master WHERE name='bank_tax_assessments'").get().sql;
+    db.exec("ALTER TABLE bank_tax_assessments RENAME TO previous_tax");
+    db.exec(schema.replace("kpoint INTEGER NOT NULL,","kpoint INTEGER NOT NULL CHECK(kpoint>=0),"));
+    db.exec("INSERT INTO bank_tax_assessments SELECT * FROM previous_tax; DROP TABLE previous_tax;");
+    initBankTables(db);
+    assert.deepEqual(db.prepare("SELECT * FROM bank_tax_assessments").all(),original);
+    db.prepare("UPDATE characters SET kpoint=-3 WHERE user_id=1").run();
+    settleBankInterest(db,1,"2026-11-29",3000);
+    const next=settleBankInterest(db,1,"2026-11-30",4000);
+    assert.equal(next.tax.discount,0);
+    assert.equal(bankTaxOverview(db,1).lastAssessment.kpoint,-3);
+    initBankTables(db);
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM bank_tax_assessments").get().n,2);
   }finally{db.close();}
 });
