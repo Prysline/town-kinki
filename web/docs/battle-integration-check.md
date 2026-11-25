@@ -25,3 +25,6 @@ CI 初版 d6322f93：880/880、server/app 語法通過；第二版 750320ad：88
 - #114 三個非重疊檔以相同 blob SHA 納入，PROJECT-STATUS-AND-PLAN 的 DB-04 行合併兩方資訊。新候選僅 `web/**`，不讀或修改舊 CGI 玩家資料。
 - [正式 push](https://github.com/Prysline/town-kinki/actions/runs/45589938092) 809/809；[PR #1](https://github.com/Prysline/town-kinki/actions/runs/45589945906) 808/809：第59階段六號樂透第一張人工票 HTTP 400（預期200）。既有測試建角後設定次日05:40，可能觸發每日隨機事件（#1 扒手可扣現金、#23 UFO 可移動城鎮）；失敗日誌沒有回應正文，不能確認實際事件。將測試時鐘設定移至建角前，並加入失敗回應診斷；不修改任何正式規則或放寬斷言。
 - 新候選 push/PR CI 尚待實際驗證；只在兩者成功後合併 Web 長期分支。F 審查隨整合帶入但未核准全域冷卻新規則；G～J 不提前標完成。
+
+## 2026-11-25 正式合併確認
+- [#121](https://github.com/Prysline/town-kinki/pull/121) 已合併至長期 Web 分支 `e2e3004ad9af13021c4bae540863f9ca26e34b10`；原五 PR 已關閉並逐一標註取代關係。合併 tree 與已驗證 HEAD 相同。合併前 push/PR 885/885；合併後 push 884/885、PR #1 885/885。失敗是 IT-02 食品測試快轉 409，非戰鬥。此段取代前段歷史的禁止直接合併及候選狀態；F～J 的產品決策仍未核准。

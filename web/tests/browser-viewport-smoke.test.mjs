@@ -61,65 +61,95 @@ function chromeExecutable(){
   }
   throw new Error("GitHub Runner 找不到 Chrome/Chromium；瀏覽器驗收不可假裝通過");
 }
+// Chrome chooses and owns its debugging port; no release-and-rebind race.
+// Retry only startup, never a game action, UI assertion, or completed transaction.
+async function stopChromeProcess(child){
+  if(child.exitCode!==null||child.signalCode!==null||!child.pid)return;
+  const done=new Promise(ok=>child.once("exit",ok));
+  const signal=s=>{
+    if(process.platform!=="win32"){
+      try{process.kill(-child.pid,s);}catch{child.kill(s);}
+    }else child.kill(s);
+  };
+  signal("SIGTERM");
+  await Promise.race([done,pause(2500)]);
+  if(child.exitCode===null&&child.signalCode===null){
+    signal("SIGKILL");await Promise.race([done,pause(2500)]);
+  }
+}
 async function openChrome(browserDataDir){
   const command=chromeExecutable();
-  const port=await freePort();
-  const child=spawn(command,[
-    "--headless=new","--no-sandbox","--disable-dev-shm-usage",
-    "--disable-gpu","--no-first-run","--no-default-browser-check",
-    "--remote-allow-origins=*","--remote-debugging-address=127.0.0.1",
-    "--remote-debugging-port="+port,
-    "--user-data-dir="+browserDataDir,"about:blank"
-  ],{stdio:"ignore",detached:process.platform!=="win32"});
-  let socketUrl=null;
-  for(let i=0;i<120;i++){
-    if(child.exitCode!==null)break;
+  const diagnostics=[];
+  for(let attempt=1;attempt<=2;attempt++){
+    const profile=browserDataDir+"-attempt-"+attempt;
+    const child=spawn(command,[
+      "--headless=new","--no-sandbox","--disable-dev-shm-usage",
+      "--disable-gpu","--no-first-run","--no-default-browser-check",
+      "--remote-allow-origins=*","--remote-debugging-address=127.0.0.1",
+      "--remote-debugging-port=0",
+      "--user-data-dir="+profile,"about:blank"
+    ],{stdio:["ignore","ignore","pipe"],detached:process.platform!=="win32"});
+    let stderr="",spawnError=null,ws=null,lastError="";
+    child.stderr.on("data",x=>{stderr=(stderr+x).slice(-8000);});
+    child.on("error",e=>{spawnError=e;});
     try{
-      const response=await fetch("http://127.0.0.1:"+port+"/json/list",
-        {signal:AbortSignal.timeout(400)});
-      const entries=await response.json();
-      socketUrl=entries.find(x=>x.type==="page")?.webSocketDebuggerUrl;
-      if(socketUrl)break;
-    }catch{}
-    await pause(100);
-  }
-  if(!socketUrl){
-    child.kill();
-    throw new Error("Chrome DevTools 協定頁面無法開啟");
-  }
-  const ws=new WebSocket(socketUrl);
-  await new Promise((ok,fail)=>{
-    ws.addEventListener("open",ok,{once:true});
-    ws.addEventListener("error",fail,{once:true});
-  });
-  let lastId=0;
-  const pending=new Map();
-  ws.addEventListener("message",event=>{
-    const message=JSON.parse(event.data);
-    if(!message.id)return;
-    const slot=pending.get(message.id);
-    if(!slot)return;
-    pending.delete(message.id);
-    if(message.error)slot.fail(new Error(JSON.stringify(message.error)));
-    else slot.ok(message.result??{});
-  });
-  const send=(method,params={})=>new Promise((ok,fail)=>{
-    const id=++lastId;
-    pending.set(id,{ok,fail});
-    ws.send(JSON.stringify({id,method,params}));
-  });
-  return {send,async stop(){
-    ws.close();
-    if(child.exitCode===null){
-      const done=new Promise(ok=>child.once("exit",ok));
-      // Chromium 啟動多個寫入 profile 的子程序，必須結束獨立 process group。
-      if(process.platform!=="win32"){
-        try{process.kill(-child.pid,"SIGTERM");}catch{child.kill();}
-      }else child.kill();
-      await Promise.race([done,pause(5000)]);
+      const deadline=Date.now()+18000;
+      let socketUrl=null;
+      while(Date.now()<deadline){
+        if(spawnError||child.exitCode!==null||child.signalCode!==null)break;
+        try{
+          const port=Number(readFileSync(join(profile,"DevToolsActivePort"),"utf8").split(/\r?\n/)[0]);
+          if(!Number.isInteger(port)||port<1||port>65535)throw Error("DevTools port 尚未寫入");
+          const response=await fetch("http://127.0.0.1:"+port+"/json/list",{signal:AbortSignal.timeout(400)});
+          if(!response.ok)throw Error("DevTools HTTP "+response.status);
+          const entries=await response.json();
+          socketUrl=entries.find(x=>x.type==="page")?.webSocketDebuggerUrl;
+          if(socketUrl)break;
+          lastError="DevTools page 尚未建立";
+        }catch(e){lastError=e.message;}
+        await pause(100);
+      }
+      if(!socketUrl)throw Error("Chrome DevTools 協定頁面無法開啟："+(spawnError?.message??lastError));
+      ws=new WebSocket(socketUrl);
+      await new Promise((ok,fail)=>{
+        const timer=setTimeout(()=>fail(Error("Chrome WebSocket 啟動逾時")),4000);
+        ws.addEventListener("open",()=>{clearTimeout(timer);ok();},{once:true});
+        ws.addEventListener("error",()=>{clearTimeout(timer);fail(Error("Chrome WebSocket 啟動失敗"));},{once:true});
+      });
+      let lastId=0;
+      const pending=new Map();
+      const rejectPending=message=>{
+        for(const slot of pending.values()){clearTimeout(slot.timer);slot.fail(Error(message));}
+        pending.clear();
+      };
+      ws.addEventListener("close",()=>rejectPending("Chrome CDP 連線中斷"));
+      ws.addEventListener("message",event=>{
+        const message=JSON.parse(event.data);
+        if(!message.id)return;
+        const slot=pending.get(message.id);
+        if(!slot)return;
+        pending.delete(message.id);clearTimeout(slot.timer);
+        if(message.error)slot.fail(Error(JSON.stringify(message.error)));
+        else slot.ok(message.result??{});
+      });
+      const send=(method,params={})=>new Promise((ok,fail)=>{
+        if(ws.readyState!==WebSocket.OPEN){fail(Error("Chrome CDP 未連線："+method));return;}
+        const id=++lastId;
+        const timer=setTimeout(()=>{pending.delete(id);fail(Error("Chrome CDP 指令逾時："+method));},15000);
+        pending.set(id,{ok,fail,timer});
+        try{ws.send(JSON.stringify({id,method,params}));}
+        catch(e){pending.delete(id);clearTimeout(timer);fail(e);}
+      });
+      if(attempt>1)console.log("Chrome startup recovered on attempt "+attempt);
+      return {send,async stop(){rejectPending("Chrome 已關閉");ws.close();await stopChromeProcess(child);await pause(500);}};
+    }catch(e){
+      if(ws&&ws.readyState!==WebSocket.CLOSED)ws.close();
+      await stopChromeProcess(child);
+      const detail="attempt "+attempt+"｜"+e.message+"｜exit="+child.exitCode+"｜signal="+child.signalCode+"｜stderr="+stderr;
+      diagnostics.push(detail);console.log("Chrome startup diagnostic: "+detail);
     }
-    await pause(500);
-  }};
+  }
+  throw Error("Chrome 啟動兩次皆失敗（不跳過測試）\n"+diagnostics.join("\n"));
 }
 async function evaluate(cdp,expression){
   const outcome=await cdp.send("Runtime.evaluate",{
@@ -715,8 +745,15 @@ test("Chrome 多人街頭格鬥：真實按鈕送出戰鬥、展開戰報、手�
     await until(chrome,"document.querySelector('#street-fight-history details')?.open===true","戰報可展開");
     assert.equal(await evaluate(chrome,"document.querySelectorAll('#street-fight-history details ol li').length"),50);
     assert.equal(await evaluate(chrome,"document.querySelectorAll('#street-fight-history details dl dt').length"),17);
-    await viewport(chrome,375,812);
-    assert.ok(await evaluate(chrome,"document.querySelector('#street-fight-status')?.textContent?.length>0"));
+    for(const width of [1440,768,375]){
+      await viewport(chrome,width,width===375?812:width===768?1024:900);
+      assert.ok(await evaluate(chrome,"document.querySelector('#street-fight-status')?.textContent?.length>0"));
+      if(await evaluate(chrome,"document.querySelector('#street-fight-history details')?.open"))await click(chrome,"#street-fight-history summary");
+      await click(chrome,"#street-fight-history summary");
+      await until(chrome,"document.querySelector('#street-fight-history details')?.open===true","街頭 "+width+"px 戰報");
+      assert.equal(await evaluate(chrome,"document.querySelectorAll('#street-fight-history details ol li').length"),50);
+      assert.equal(await evaluate(chrome,"document.querySelectorAll('#street-fight-history details dl dt').length"),17);
+    }
     const saved=await evaluate(chrome,"(async()=>{const s=await(await fetch('/api/state')).json();return s.streetFight.history.length})()");
     assert.equal(saved,1);
   }finally{
@@ -744,8 +781,15 @@ test("Chrome C 聯賽：實際培育、模仿者比賽、戰報與手機視窗",
     assert.match(await evaluate(chrome,"document.querySelector('#c-league-result').textContent"),/勝利.*100/);
     assert.match(await evaluate(chrome,"document.querySelector('#c-league-panel').textContent"),/零能量可參賽/);
     assert.match(await evaluate(chrome,"document.querySelector('#c-league-training').textContent"),/餘額不足拒絕/);
-    await viewport(chrome,375,812);
-    assert.ok(await evaluate(chrome,"document.querySelector('#c-league-status').textContent.includes('1 / 100')"));
+    for(const width of [1440,768,375]){
+      await viewport(chrome,width,width===375?812:width===768?1024:900);
+      assert.ok(await evaluate(chrome,"document.querySelector('#c-league-status').textContent.includes('1 / 100')"));
+      if(!await evaluate(chrome,"document.querySelector('#c-league-history').parentElement.open"))await click(chrome,"#c-league-panel details:has(> #c-league-history) > summary");
+      if(await evaluate(chrome,"document.querySelector('#c-league-history details')?.open"))await click(chrome,"#c-league-history summary");
+      await click(chrome,"#c-league-history summary");
+      await until(chrome,"document.querySelector('#c-league-history details')?.open===true","C聯賽 "+width+"px 戰報");
+      assert.ok(await evaluate(chrome,"document.querySelectorAll('#c-league-history ol li').length>0"));
+    }
   }finally{await chrome?.stop();await web?.stop();rmSync(workspace,{force:true,recursive:true,maxRetries:50,retryDelay:200});}
 });
 
@@ -768,8 +812,12 @@ test("Chrome 戰鬥事件 #38：真實事件結算後的彈窗與375px背包",{t
     if(await evaluate(chrome,"!document.querySelector('#solo-lobby')?.hidden"))await click(chrome,"#solo-continue");
     await until(chrome,"!document.querySelector('#event-popup')?.hidden&&document.querySelector('#event-popup-body').textContent.includes('聖誕老人戰鬥')","原版戰鬥事件彈窗");
     assert.match(await evaluate(chrome,"document.querySelector('#event-popup-body').textContent"),/等身大聖誕老人偶/);
-    await click(chrome,"#event-popup-close");await viewport(chrome,375,812);
-    assert.match(await evaluate(chrome,"document.querySelector('#legacy-inventory-list').textContent"),/Web 聖誕老人戰鬥獎勵/);
+    await click(chrome,"#event-popup-close");
+    for(const width of [1440,768,375]){
+      await viewport(chrome,width,width===375?812:width===768?1024:900);
+      await click(chrome,"#profile-tab-inventory");
+      assert.match(await evaluate(chrome,"document.querySelector('#legacy-inventory-list').textContent"),/Web 聖誕老人戰鬥獎勵/);
+    }
   }finally{await chrome?.stop();await web?.stop();rmSync(workspace,{force:true,recursive:true,maxRetries:50,retryDelay:200});}
 });
 
@@ -900,10 +948,23 @@ test("階段H Chrome B聯賽與大阪：1440/768/375真實地圖點擊、回應�
     assert.deepEqual(savedReceipt("osaka_battles"),battles);
     assert.deepEqual(restored.equipmentItems,beforeRestart.equipmentItems);
     assert.equal(restored.legacyItemActions.find(x=>x.sourceLine===award.sourceLine).remaining,beforeRestart.legacyItemActions.find(x=>x.sourceLine===award.sourceLine).remaining);
-    await enter("A1","b-league-panel","shops");
-    assert.match(await evaluate(chrome,"document.querySelector('#b-league-result h4').textContent"),/勝利/);
-    await enter("A3","osaka-panel","games");
-    assert.match(await evaluate(chrome,"document.querySelector('#osaka-result h4').textContent"),/強｜.*勝利/);
+    for(const width of [1440,768,375]){
+      await viewport(chrome,width,width===375?812:width===768?1024:900);
+      await enter("A1","b-league-panel","shops");
+      assert.match(await evaluate(chrome,"document.querySelector('#b-league-result h4').textContent"),/勝利/);
+      await click(chrome,"#b-league-result details:has(ol) > summary");
+      await until(chrome,"!document.querySelector('#b-league-result details:has(ol)').open","B戰報收合 "+width);
+      await click(chrome,"#b-league-result details:has(ol) > summary");
+      await until(chrome,"document.querySelector('#b-league-result details:has(ol)').open","B戰報展開 "+width);
+      assert.equal(await evaluate(chrome,"document.querySelectorAll('#b-league-result ol li').length"),1);
+      await enter("A3","osaka-panel","games");
+      assert.match(await evaluate(chrome,"document.querySelector('#osaka-result h4').textContent"),/強｜.*勝利/);
+      await click(chrome,"#osaka-result details > summary");
+      await until(chrome,"!document.querySelector('#osaka-result details').open","大阪戰報收合 "+width);
+      await click(chrome,"#osaka-result details > summary");
+      await until(chrome,"document.querySelector('#osaka-result details').open","大阪戰報展開 "+width);
+      assert.equal(await evaluate(chrome,"document.querySelectorAll('#osaka-result ol li').length"),battles[1].result.rounds.length);
+    }
     console.log("H_BROWSER "+JSON.stringify({widths:[1440,768,375],arenaReceipts:first.length,osakaReceipts:battles.length,retry:true,restart:true,npc:battles[1].result.npcSource}));
   }finally{await chrome?.stop();await web?.stop();rmSync(workspace,{force:true,recursive:true,maxRetries:50,retryDelay:200});}
 });
