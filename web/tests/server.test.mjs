@@ -7446,3 +7446,79 @@ test("戰鬥整合：B聯賽、大阪及#38現金獎勵稅基溢位全交易回�
     assert.equal(won.result.bLeagueResult.replayed,false);assert.equal(osaka.result.osakaResult.replayed,false);
   }finally{await srv.stop();}
 });
+
+
+test("階段F現況：工作教室及三戰鬥時鐘獨立、精確拒絕回滾、重啟跨日舊收據",async()=>{
+  const {playArena,parseArenaDrops}=await import("../src/b-league.mjs");
+  const {parseArenaCatalog}=await import("../src/b-league-core.mjs");
+  const {playOsaka}=await import("../src/osaka-challenge.mjs");
+  const {parseOsakaRules}=await import("../src/osaka-challenge-core.mjs");
+  const {RECONSTRUCTED_OSAKA_NPCS}=await import("../src/osaka-npc-reconstruction.mjs");
+  const {playCLeague}=await import("../src/c-league.mjs");
+  const source=p=>decodeLegacyText(readFileSync(resolve(root,"..",p)));
+  let srv=await start("solo",null,null,{OSAKA_NPC_POLICY:"auto"});
+  try{
+    anchorSoloTestAtNoon(srv);
+    const made=await api(srv.url,"character",{name:"行動時鐘居民",gender:"other",stats:defaultStats()});
+    assert.equal(made.status,200);
+    for(const [column,symbol] of [[0,"Ｂリーグ"],[1,"おばちゃん"]])
+      assert.equal((await api(srv.url,"map/tile",{row:0,column,symbol})).status,200);
+    const dbAction=fn=>{const db=new DatabaseSync(join(srv.directory,"solo.sqlite"));try{db.exec("PRAGMA foreign_keys=ON");return fn(db);}finally{db.close();}};
+    dbAction(db=>{
+      const stats=Object.fromEntries(Object.keys(defaultStats()).map(k=>[k,5000]));
+      db.prepare("UPDATE characters SET stats_json=?,body_energy=1000,brain_energy=1000,recovered_at=?,money=1000000").run(JSON.stringify(stats),made.result.gameTimeMs);
+      const id=db.prepare("SELECT user_id FROM characters").get().user_id;
+      const equip=db.prepare("INSERT INTO equipment_items(user_id,sku,type,name,power,accuracy,uses,status,created_at) VALUES(?,?,?,?,1000,101,10,'equipped',?)");
+      for(const type of ["武器","魔法"])equip.run(id,"clock-"+type,type,"clock-"+type,made.result.gameTimeMs);
+    });
+    const worked=await api(srv.url,"work",{});assert.equal(worked.status,200,JSON.stringify(worked.result.error));
+    const lesson=worked.result.trainingLessons.find(x=>x.type==="classroom"&&x.price===10000);
+    assert.ok(lesson);
+    const trained=await api(srv.url,"train",{key:lesson.key});
+    assert.equal(trained.status,200,JSON.stringify(trained.result.error));
+    assert.ok(trained.result.workCooldownMs>0);
+    const actions=[
+      ["b-league/play",{rank:"d",requestId:"phase-f-clock"},"bLeagueResult","bLeague",5000,"createdAt"],
+      ["osaka/play",{mode:"week",requestId:"phase-f-clock"},"osakaResult","osaka",5000,"playedAt"],
+      ["c-league/play",{requestId:"phase-f-clock"},"cLeagueResult","cLeague",60000,null]
+    ];
+    const a=await api(srv.url,actions[0][0],actions[0][1]);assert.equal(a.status,200,JSON.stringify(a.result.error));
+    const o=await api(srv.url,actions[1][0],actions[1][1]);assert.equal(o.status,200,JSON.stringify(o.result.error));
+    assert.equal((await api(srv.url,"c-league/train",{requestId:"phase-f-train",name:"時鐘培育"})).status,200);
+    const c=await api(srv.url,actions[2][0],actions[2][1]);assert.equal(c.status,200,JSON.stringify(c.result.error));
+    const ready=Object.fromEntries(actions.map(x=>[x[3],c.result[x[3]].readyAt]));
+    assert.equal(ready.bLeague,a.result.bLeagueResult.createdAt+5000);
+    assert.equal(ready.osaka,o.result.osakaResult.playedAt+5000);
+    assert.equal(ready.cLeague,c.result.cLeagueResult.playedAt+60000);
+    const tables=["characters","equipment_items","bank_accounts","bank_tax_state","bank_ledger","b_league_battles","b_league_default_gear","osaka_battles","c_league_entries","c_league_requests","legacy_inventory_items"];
+    dbAction(db=>{
+      const row=db.prepare("SELECT user_id,last_event_day FROM characters").get();
+      const state=()=>Object.fromEntries(tables.map(table=>[table,db.prepare("SELECT * FROM "+table).all()]));
+      const before=state();
+      const forbiddenRng=()=>{throw Error("冷卻拒絕不應抽亂數");};
+      assert.throws(()=>playArena(db,row.user_id,parseArenaCatalog(source("dat_dir/battle.cgi")),parseArenaDrops(source("battle.cgi")),{rank:"d",requestId:"phase-f-denied-b",now:ready.bLeague-1,today:row.last_event_day,hasBuilding:()=>true,rng:forbiddenRng}),/間隔/);
+      assert.deepEqual(state(),before);
+      assert.throws(()=>playOsaka(db,row.user_id,parseOsakaRules(source("obatyan.cgi")),{available:true,npcs:RECONSTRUCTED_OSAKA_NPCS},{mode:"week",requestId:"phase-f-denied-o",now:ready.osaka-1,today:row.last_event_day,rng:forbiddenRng}),/間隔/);
+      assert.deepEqual(state(),before);
+      assert.throws(()=>playCLeague(db,row.user_id,{requestId:"phase-f-denied-c"},ready.cLeague-1,row.last_event_day,forbiddenRng),/間隔/);
+      assert.deepEqual(state(),before);
+    });
+    const histories=Object.fromEntries(actions.map(x=>[x[3],c.result[x[3]].history]));
+    const dir=srv.directory;await srv.stop({preserveData:true});srv=await start("solo",null,dir,{OSAKA_NPC_POLICY:"auto"});
+    const restored=(await api(srv.url,"state")).result;
+    for(const [, , ,key] of actions){assert.equal(restored[key].readyAt,ready[key]);assert.deepEqual(restored[key].history,histories[key]);}
+    const next=await api(srv.url,"solo/time/advance",{preset:"1d"});
+    assert.equal(next.status,200,JSON.stringify(next.result.error));
+    assert.ok(next.result.character.lastEventDay>restored.character.lastEventDay);
+    for(const [route,payload,resultKey,key] of actions){
+      const replay=await api(srv.url,route,payload);assert.equal(replay.status,200,JSON.stringify(replay.result.error));
+      assert.equal(replay.result[resultKey].replayed,true);
+      assert.equal(replay.result[key].readyAt,ready[key]);
+      assert.deepEqual(replay.result[key].history,histories[key]);
+    }
+    const final=(await api(srv.url,"state")).result;
+    assert.equal(final.character.lastEventDay,next.result.character.lastEventDay);
+    assert.deepEqual(final.healthEvents,next.result.healthEvents);
+    assert.deepEqual(dbAction(db=>db.prepare("PRAGMA foreign_key_check").all()),[]);
+  }finally{await srv.stop();}
+});
