@@ -4,11 +4,11 @@
 >
 > 產品範圍與禁止事項以 [已確認的專案政策](project-scope-no-legacy-player-import.md) 為準；本文件只統一**現行狀態與排序**，不可推翻使用者確認的範圍。原始 CGI 決定可核對的原版行為；實際 Web 程式及測試決定已實作與自動驗證的事實；[技術差異矩陣](migration-audit.md) 保留原始功能 ID／CGI 來源；各 `phaseXX-*.md` 是當時技術證據與決策，**不是目前待辦**。文件與程式矛盾時，必須回到實際程式、測試、PR、CI 與必要的 CGI 查證，不得只挑較新的文字。
 
-## 2026-11-25｜戰鬥系列最新接續基準（本驗證分支）
+## 2026-11-25｜戰鬥系列 A～E 聯合正式整合候選
 
-- 正式長期整合分支 `feature/web-dual-mode-phase1` HEAD `9db33c96faace21f4f3ada3fb533a701b44dcc3f`，[基準 CI](https://github.com/Prysline/town-kinki/actions/runs/45318206229) 808/808；與下列候選版分開，不宣稱戰鬥 PR 已合併。
-- 驗證分支 `feature/web-battle-integration-check`，已驗證程式 HEAD `3feae7bdc580084d3c7de8ff2016e03e2f1f203d`，[完整 Push CI](https://github.com/Prysline/town-kinki/actions/runs/45488845388) 883/883，零失敗、跳過、取消，server/app 語法檢查成功。後續文件提交不是新的測試證據；重新開窗須查分支實際 HEAD 與其 CI。
-- 五個原始 PR 均維持 Draft、未合併；整合候選只在獨立分支，禁止直接合併。各階段實作與自動驗證完成，非真人手動驗收、非正式上線。
+- 正式長期整合分支 `feature/web-dual-mode-phase1` 已合併 #114，HEAD `05a1af58a59e2c286ef5160fdc04655fe7745409`，[push CI](https://github.com/Prysline/town-kinki/actions/runs/45589938092) 809/809；[長期 PR #1 CI](https://github.com/Prysline/town-kinki/actions/runs/45589945906) 808/809（六號樂透 HTTP 預期 200 實際 400）。
+- 獨立驗證分支已合併 #120，HEAD `d1ca0a78011efff958ea134a26ceed232002b9d7`，[push CI](https://github.com/Prysline/town-kinki/actions/runs/45589967956) 884/884、零失敗／跳過／取消、server/app 語法成功。此為同步 #114 前的證據。
+- 使用者已授權 A～E 聯合整合。新分支 `feature/web-battle-a-e-consolidation` 同步上述兩個 HEAD，保留五原始 PR 的 43 個差異檔案與後續修正。待新 HEAD 的 push/PR CI 均成功，再合併至正式 Web 分支並標記原五 PR 由聯合 PR 取代；不宣稱已合併，master 唯讀。真人、經濟、正式部署與 F～J 仍未完成。
 
 | 階段 | 原始 PR / HEAD | 候選版已完成 | 剩餘界線 |
 |---|---|---|---|
@@ -22,7 +22,7 @@
 
 ### 戰鬥系列後續 F～J（F 已開始，其餘未開始）
 
-2026-11-25：重新查得本依賴文件 HEAD `5c91cda3108d2acc074ef8f9037c55d0549077ba` [push CI](https://github.com/Prysline/town-kinki/actions/runs/45577323700) 實際 883/883、零失敗／跳過／取消、server/app 語法成功；另開 `feature/web-phase-f-action-cooldown-audit` 做 F 來源查核與現況測試。見 [F 行動間隔與跨玩法冷卻審查](phase-f-action-cooldown-audit.md)。原版是城鎮 access gate，不能直接等同所有 Web POST 的 5 秒鎖。尚未核准操作頻率改變；新分支測試與 CI 狀態另依實際 HEAD 驗證。
+2026-11-25：#120 已合併至驗證分支，來源審查與現況測試已通過 884/884；見 [F 行動間隔與跨玩法冷卻審查](phase-f-action-cooldown-audit.md)。原版是城鎮 access gate，不能直接等同所有 Web POST 的 5 秒鎖。尚未核准操作頻率改變；F 仍待決策與補驗。
 
 | 階段 | 工作種類／範圍 | 必須達成的驗收 |
 |---|---|---|
@@ -118,7 +118,7 @@
 | AC-02 | 單人刪角／繼續遊戲 | 指定範圍已實作 | `server.test.mjs`：單機角色刪除、重啟保存、跨日快轉 | 未驗（無真人實機證據） | Web 可繼續進度與單機時間；不等於全系統歷史持久化已逐一驗收 | `src/server.mjs`、`tests/server.test.mjs`、[第48階段](phase48-core-gameplay-restart.md) | 真人返回首頁／繼續、跨版本 SQLite 升級驗收 | P1 |
 | AC-03 | 公開部署／管理權限／速率限制 | 部分實作 | 既有盤點列有程式／測試線索；本輪未逐項重跑，需按風險核對 | 未驗（無真人實機證據） | 原版完整等價性待核實（不得以入口／測試數量代替） | [`migration-audit.md`](migration-audit.md) 原始 CGI 與 Web 來源列；src/server.mjs；README 安全限制 | 先查核：未有完整登入速率限制及公開部署審查；不宜公開直接部署 | 公開部署前門檻 |
 | AC-04 | 原版個人設定及備忘錄／朋友清單／死亡通知 | 部分實作 | 既有盤點列有程式／測試線索；本輪未逐項重跑，需按風險核對 | 未驗（無真人實機證據） | 原版完整等價性待核實（不得以入口／測試數量代替） | [`migration-audit.md`](migration-audit.md) 原始 CGI 與 Web 來源列；Web 有獨立 solo 刪角及帳號登入，沒有等價的完整原版設定資料模型 | 先查核：原版備忘錄可保存、好友清單和字體／音效設定可編輯；死亡通知含密碼及原始關聯檔處理，不能用 Web solo 刪角代稱完成 | P2 |
-| DB-04 | SQLite 遷移／還原 | 部分實作 |第48階段跨兩次 Node 重啟；第67階段 `solo-save.test.mjs`／HTTP 還原續玩、WAL、SHA-256、外鍵；PR #35 真實歷史 schema 子集升級已由 PR #94 驗證（合併前／後 push 與 PR CI 均成功）；PR #53 寄禮信箱舊 FK→雙階段升級及寄件者刪帳保護由已合併 PR #96 補測；最終 PR HEAD push／PR CI、合併後 Web push／長期 PR #1 CI 均 success（合併後 715/715）；PR #113 新增第62階段 Web 公路舊 SQLite 的實體 WAL 備份／還原／HTTP 到站／重啟跨版驗收（測試／文件提交 `ba58629c` 的 [push CI](https://github.com/Prysline/town-kinki/actions/runs/45315268903) 與 [PR CI](https://github.com/Prysline/town-kinki/actions/runs/45315275294) 均成功，808/808） | 未驗（無真人實機證據） | 不適用：新版 SQLite 保存與恢復，不以舊 CGI 匯入衡量 |[第67階段](phase67-solo-save-backup-restore.md)、`scripts/solo-save.mjs`、`tests/solo-save.test.mjs`、`tests/server.test.mjs`；[第68階段跨版測試](phase68-sqlite-pr35-upgrade-verification.md)、[第69階段舊信箱跨版測試](phase69-pr53-gift-mail-upgrade.md)、[PR #96](https://github.com/Prysline/town-kinki/pull/96)、[PR #113](https://github.com/Prysline/town-kinki/pull/113)、[第70階段公路跨版驗收](phase70-pr86-road-wal-upgrade.md) |**CLI 備份／驗證／新目錄還原已完成**；待跨 Web 版本升級矩陣、跨設備演練、定期管理與真人操作；其他 Web 歷史版本、跨 OS／設備仍待驗收，PR #96 不代表全面矩陣完成 | P1（驗收） |
+| DB-04 | SQLite 遷移／還原 | 部分實作 |第48階段跨兩次 Node 重啟；第67階段 `solo-save.test.mjs`／HTTP 還原續玩、WAL、SHA-256、外鍵；PR #35 真實歷史 schema 子集升級已由 PR #94 驗證（合併前／後 push 與 PR CI 均成功）；PR #53 寄禮信箱舊 FK→雙階段升級及寄件者刪帳保護由已合併 PR #96 補測；最終 PR HEAD push／PR CI、合併後 Web push／長期 PR #1 CI 均 success（合併後 715/715）；PR #113 新增第62階段 Web 公路舊 SQLite 的實體 WAL 備份／還原／HTTP 到站／重啟跨版驗收（已合併 PR #113；測試／文件提交 `ba58629c` 的 [push CI](https://github.com/Prysline/town-kinki/actions/runs/45315268903) 與 [PR CI](https://github.com/Prysline/town-kinki/actions/runs/45315275294) 均成功，808/808）；PR #114 已合併，合併後 push CI 809/809；長期 PR #1 同 HEAD 808/809（六號樂透既有測試失敗，聯合候選修正測試時鐘） | 未驗（無真人實機證據） | 不適用：新版 SQLite 保存與恢復，不以舊 CGI 匯入衡量 |[第67階段](phase67-solo-save-backup-restore.md)、`scripts/solo-save.mjs`、`tests/solo-save.test.mjs`、`tests/server.test.mjs`；[第68階段跨版測試](phase68-sqlite-pr35-upgrade-verification.md)、[第69階段舊信箱跨版測試](phase69-pr53-gift-mail-upgrade.md)、[PR #96](https://github.com/Prysline/town-kinki/pull/96)、[PR #113](https://github.com/Prysline/town-kinki/pull/113)、[第70階段公路跨版驗收](phase70-pr86-road-wal-upgrade.md)、[PR #114](https://github.com/Prysline/town-kinki/pull/114)、[第71階段禮品舊帳簿跨版驗收](phase71-pr42-gift-events-wal-upgrade.md) |**CLI 備份／驗證／新目錄還原已完成**；待跨 Web 版本升級矩陣、跨設備演練、定期管理與真人操作；其他 Web 歷史版本、跨 OS／設備仍待驗收，PR #96 不代表全面矩陣完成 | P1（驗收） |
 | DB-05 | Web 自建個人檔案與職業投稿 | 未實作 | 無已移植玩法驗證；原版來源需核對 | 未驗（無真人實機證據） | 原版已確認有程式或資料；可達條件仍依來源核定 | [`migration-audit.md`](migration-audit.md) 原始 CGI 與 Web 來源列；Web 尚缺完整建立／投稿功能 | 先查核：讓新玩家自行填寫，不匯入既有玩家資料 | 後續／P2 |
 | UI-01 | 三欄位狀態切換與原始資訊 | 部分實作 | 既有盤點列有程式／測試線索；本輪未逐項重跑，需按風險核對 | 未驗（無真人實機證據） | 原版完整等價性待核實（不得以入口／測試數量代替） | [`migration-audit.md`](migration-audit.md) 原始 CGI 與 Web 來源列；public/index.html L176-L202；public/app.js | 先查核：有 ARIA tab 與原版分頁；實機 375px/768px/桌機驗收缺少 | P1 |
 | UI-02 | 事件通知及 20 秒挑戰 | 部分實作 | 既有盤點列有程式／測試線索；本輪未逐項重跑，需按風險核對 | 未驗（無真人實機證據） | 原版完整等價性待核實（不得以入口／測試數量代替） | [`migration-audit.md`](migration-audit.md) 原始 CGI 與 Web 來源列；public/app.js；src/event-cockroach.mjs | 先查核：程式顯示與 API 存在；真實操作與動態尺寸未驗證 | P1 |
@@ -210,7 +210,7 @@
 
 ## 七、下一階段優先序（只選仍有缺口）
 
-**當前接續：上方戰鬥系列 F～J，從 F 開始，不重開 A～E。** 下列全專案優先序保留，P0 高風險缺陷仍優先；戰鬥候選尚未獲合併授權。
+**當前接續：上方戰鬥系列 F～J，從 F 開始，不重開 A～E。** 下列全專案優先序保留，P0 高風險缺陷仍優先；A～E 已獲聯合整合授權；F～J 的新增玩法與限制仍須按各階段核准。
 
 1. **P0（發現即先做）**：單機無法建角／獲薪／購物／使用／繼續遊玩，或經證實造成資產丟失、SQLite 損毀、越權與重複扣款的問題。當前**未憑文件發現尚待實作的 P0**；不得無根據建立新 P0 階段。
 2. **P1／驗收**：第48與67階段已測循環的真人桌面／375／768px 操作；新版 Web schema 跨版本升級與不同設備還原演練。這是**驗收階段，不是重寫循環或重做 CLI 備份**。

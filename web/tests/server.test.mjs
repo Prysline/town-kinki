@@ -5435,6 +5435,8 @@ test("第59階段單機HTTP：六號樂透在06:00由玩家明確觸發，銀行
     assert.equal((await api(srv.url,"arcade/loto6/buy",{
       numbers:[1,2,3,4,5,6],requestId:"phase59_no_character"
     })).status,400);
+    // 在建角之前設定遊戲日，避免快轉跨日抽到扒手／UFO 等無關事件。
+    anchorSoloLoto6BeforeSix(srv);
     const created=await api(srv.url,"character",{
       name:"第59階段六號樂透玩家",gender:"other",stats:defaultStats()
     });
@@ -5451,7 +5453,6 @@ test("第59階段單機HTTP：六號樂透在06:00由玩家明確觸發，銀行
     assert.equal(starter.status,200);
     assert.equal(starter.result.mapStarterResult.placed,21);
     assert.equal(starter.result.loto6.available,true);
-    anchorSoloLoto6BeforeSix(srv);
     const initial=(await api(srv.url,"state")).result;
     assert.equal(initial.loto6.hour,5);
     assert.equal(initial.loto6.due,false);
@@ -5469,7 +5470,7 @@ test("第59階段單機HTTP：六號樂透在06:00由玩家明確觸發，銀行
       random:"true",requestId:"phase59_invalid_random"
     })).status,400);
     const bought=await api(srv.url,"arcade/loto6/buy",manual);
-    assert.equal(bought.status,200);
+    assert.equal(bought.status,200,JSON.stringify(bought.result));
     assert.deepEqual(bought.result.loto6TicketResult.numbers,manual.numbers);
     assert.equal(bought.result.loto6TicketResult.randomSelected,false);
     assert.equal(bought.result.character.money,beginMoney-2500);

@@ -19,3 +19,9 @@ CI 初版 d6322f93：880/880、server/app 語法通過；第二版 750320ad：88
 - 程式 HEAD `3feae7bdc580084d3c7de8ff2016e03e2f1f203d` 的 [Push CI](https://github.com/Prysline/town-kinki/actions/runs/45488845388) 883/883，0 fail/skipped/cancelled；server/app 語法成功。三項新增整合測試均通過。
 - 2026-11-25 重新核對五原始 HEAD、Draft、未合併及正式基準不變。
 - F～J 詳見 [現行計畫](PROJECT-STATUS-AND-PLAN.md)；下一窗從 F 來源核對開始，禁止直接合併。真人手動、正式營運平衡、原版 NPC 十筆、#36/#37、全面跨版本備份與回滾仍待查驗。此更新只改文件，不將舊 CI 冒稱文件新 HEAD 測試。
+
+## 2026-11-25 聯合整合接續（使用者已授權）
+- 以上為歷史驗證紀錄；本次不逐個直接合併五個重疊 PR。從 `d1ca0a78011efff958ea134a26ceed232002b9d7`（#120 合併後 884/884）同步正式分支 `05a1af58a59e2c286ef5160fdc04655fe7745409`（#114 已合併）。逐檔核對五 PR 共 43 個來源差異檔，整合版無缺檔；保留原有共同檔與稅基修正。
+- #114 三個非重疊檔以相同 blob SHA 納入，PROJECT-STATUS-AND-PLAN 的 DB-04 行合併兩方資訊。新候選僅 `web/**`，不讀或修改舊 CGI 玩家資料。
+- [正式 push](https://github.com/Prysline/town-kinki/actions/runs/45589938092) 809/809；[PR #1](https://github.com/Prysline/town-kinki/actions/runs/45589945906) 808/809：第59階段六號樂透第一張人工票 HTTP 400（預期200）。既有測試建角後設定次日05:40，可能觸發每日隨機事件（#1 扒手可扣現金、#23 UFO 可移動城鎮）；失敗日誌沒有回應正文，不能確認實際事件。將測試時鐘設定移至建角前，並加入失敗回應診斷；不修改任何正式規則或放寬斷言。
+- 新候選 push/PR CI 尚待實際驗證；只在兩者成功後合併 Web 長期分支。F 審查隨整合帶入但未核准全域冷卻新規則；G～J 不提前標完成。
