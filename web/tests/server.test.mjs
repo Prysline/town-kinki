@@ -4924,6 +4924,7 @@ test("第55階段多人 HTTP：遊樂中心骰子紀錄、下注與冷卻只屬�
 test("第56階段單機 HTTP：High/Low 空桌原版種子、真實現金輸贏、十分鐘、重送及重啟存檔",async()=>{
   let srv=await start("solo");
   const directory=srv.directory;
+  anchorSoloTestAtNoon(srv);
   try{
     assert.equal((await api(srv.url,"arcade/highlow/play",{
       guess:"hi",requestId:"phase56_missing_character"
@@ -5610,6 +5611,7 @@ test("第59階段多人HTTP：六號樂透共用待開獎注數、各自現金�
 test("第60階段單機HTTP：多卡五課程共用倍率、下注結算、五秒適配與SQLite重啟",async()=>{
   let srv=await start("solo");
   const dir=srv.directory;
+  anchorSoloTestAtNoon(srv);
   try{
     assert.equal((await api(srv.url,"arcade/cardw/draw",{
       course:0,requestId:"phase60_missing_character"
