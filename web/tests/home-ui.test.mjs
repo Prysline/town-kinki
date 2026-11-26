@@ -772,7 +772,7 @@ test("第51階段：原版優惠券兌換所地圖入口、30獎品、本人事�
   assert.match(script,/state\.couponRedemptions/);
   assert.match(script,/state\.couponShopAvailable===true/);
   assert.match(script,/button\.disabled=!reward\.canRedeem/);
-  assert.match(script,/heading\.textContent=reward\.originalName/);
+  assert.match(script,/heading\.textContent=displayRetailItemName\(reward\.originalName\)/);
   assert.match(script,/reason\.textContent=reward\.reason/);
   assert.match(script,/const result=state\.couponResult/);
   assert.match(script,/await api\("coupon\/redeem",pendingCouponRedemption\)/);
@@ -955,7 +955,7 @@ test("第62階段：公路旅行原版秒數、寶箱載具選擇、倒數完成
 });
 
 test("第63階段：原版迷路／事故後改道只在抵達時公布，並列原定與實際目的地",()=>{
-  assert.ok(html.includes("持有「ローラースルーゴーゴー」必定迷路"));
+  assert.ok(html.includes("持有「三輪滑板車」必定迷路"));
   assert.ok(html.includes("否則有1/5機率迷路"));
   assert.ok(html.includes("只有「迷路且發生交通事故」"));
   assert.ok(html.includes("單純迷路時"));
@@ -986,7 +986,7 @@ test("第64階段：原版500元巴士納入既有公路選單、現金檢查與
 test("第65階段：真實百貨車輛顯示來源與耐久，仍使用原安全DOM",()=>{
   assert.ok(html.includes("第66階段重新核對的18種原版百貨"));
   assert.ok(html.includes("購買流水與33欄原始資料相符"));
-  assert.ok(html.includes("専門店限定商品"));
+  assert.ok(html.includes("專賣店限定商品"));
   assert.ok(script.includes('item.origin==="retail"?(item.category==="ギフト"?"百貨禮品":"百貨")'));
   assert.ok(script.includes('item.origin==="coupon"?"優惠券":"寶箱"'));
   assert.ok(script.includes("可用寶箱／百貨載具"));
@@ -1035,7 +1035,7 @@ test("IT-02 本人優惠券與一般類別合法載具在背包可進入公路�
 
 test("第66階段：公路選單說明不再錯稱專門店備註禁止百貨購入",()=>{
   assert.match(html,/18種原版百貨/);
-  assert.match(html,/6種標有「専門店限定商品」/);
+  assert.match(html,/6種標有「專賣店限定商品」/);
   assert.match(html,/7種禮品類別車/);
   assert.match(html,/禮品屋轉換或跨玩家收到的物品仍需要額外來源鏈驗證/);
   assert.ok(script.includes("百貨禮品"));

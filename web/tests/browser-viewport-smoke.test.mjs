@@ -406,13 +406,14 @@ test("Chrome：原版優惠券獎車實際兌換→手機背包可辨識→公�
     await click(chrome,"#facility-tab-events");
     await until(chrome,"document.querySelectorAll('#coupon-rewards .training-tile').length===30",
       "真正 30 款原版優惠券兌換選項");
+    // 原始鍵仍經 API 驗證，僅 UI 比對改為已確認的繁中顯示。
     const prizes=[
-      ["福引券",1],["ポルシェ",9]
+      ["福引券","抽獎券",1],["ポルシェ","保時捷",9]
     ];
-    for(const [name,nth] of prizes){
+    for(const [name,displayName,nth] of prizes){
       const selector="#coupon-rewards .training-tile:nth-child("+nth+")";
       assert.match(await evaluate(chrome,
-        "document.querySelector("+JSON.stringify(selector)+")?.textContent"),new RegExp(name));
+        "document.querySelector("+JSON.stringify(selector)+")?.textContent"),new RegExp(displayName));
       await click(chrome,selector+" button");
       await until(chrome,"document.querySelector('#result-dialog')?.open && "+
         "document.querySelector('#result-dialog-message')?.textContent?.includes('已扣除')",
@@ -432,10 +433,13 @@ test("Chrome：原版優惠券獎車實際兌換→手機背包可辨識→公�
     const vehicleSelector='#legacy-inventory-list .inventory-item[data-source-line="'+line+'"]';
     await until(chrome,"document.querySelector("+JSON.stringify(vehicleSelector)+")!==null",
       "375px 真實背包顯示本人的券獎保時捷");
-    assert.match(await evaluate(chrome,
-      "document.querySelector("+JSON.stringify(vehicleSelector)+")?.textContent"),
-      /可用於公路旅行/);
+    const vehicleText=await evaluate(chrome,
+      "document.querySelector("+JSON.stringify(vehicleSelector)+")?.textContent");
+    assert.match(vehicleText,/保時捷/);
+    assert.match(vehicleText,/可用於公路旅行/);
     const otherSelector='#legacy-inventory-list .inventory-item[data-source-line="'+before.other.sourceLine+'"]';
+    assert.match(await evaluate(chrome,
+      "document.querySelector("+JSON.stringify(otherSelector)+")?.textContent"),/抽獎券/);
     assert.equal(await evaluate(chrome,
       "document.querySelector("+JSON.stringify(otherSelector+" .inventory-road-link")+")===null"),
       true,"非載具福引券不可誤顯示公路捷徑");
@@ -1199,6 +1203,7 @@ test("Chrome：三棟訓練共用付款列、各自保存選擇、信用扣款�
       assert.equal(await evaluate(chrome,`document.querySelectorAll("#"+${JSON.stringify(type)}+"-panel .training-payment select").length`),1);
       assert.equal(await evaluate(chrome,`document.querySelectorAll("#"+${JSON.stringify(type)}+"-lessons select").length`),0);
       assert.match(await evaluate(chrome,`document.querySelector("#"+${JSON.stringify(type)}+"-payment-balance").textContent`),/現金.*普通存款/);
+      assert.equal(await evaluate(chrome,`[...document.querySelector("#"+${JSON.stringify(type)}+"-payment").options].find(o=>o.value==="credit:1").textContent`),"信用卡（普通存款扣款）");
     }
     assert.equal(await evaluate(chrome,"document.querySelector('#school-lessons button').disabled"),true);
     await select("school","credit:1");
