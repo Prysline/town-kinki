@@ -20,6 +20,17 @@
 - 同一 Draft PR 追加審查：第一版可經符號連結繞過 WAL 防護，已於本機重現；追加 realpathSync 真實路徑解析，驗證／還原共用真實來源，合法快照的符號連結仍可使用。新增回歸在第一版 4/5，修正後 5/5，語法成功。符號連結測試在 Linux 執行，Windows 權限／設備演練尚未驗證。
 - 既有 CLI 不是新功能；不更動資料表或遊戲 API。J-1 未合併前不宣稱完成，合併後須核對正式 HEAD/tree/雙 CI。
 
+## J-1 正式驗收
+
+- #139 已合併 `0ebd42100de9bbf84834995641681d006dd91935`，tree `9409ba6cfd1086181570396df2d52f56efcf2efc`。合併前 [Push](https://github.com/Prysline/town-kinki/actions/runs/45815722218)／[PR](https://github.com/Prysline/town-kinki/actions/runs/45815734733)，合併後 [Push](https://github.com/Prysline/town-kinki/actions/runs/45816981606)／[長期 PR #1](https://github.com/Prysline/town-kinki/actions/runs/45816991773) 四份完整日誌皆 957/957，fail/cancelled/skipped/todo=0、server/app 語法成功，測試 tree 一致。
+- 其後 #136 i18n 合併，正式基準 `a5b6a4f2865ca1d1a2fc04432ba02f3373455907`，tree `cade5967ad9f353c3999915c7fca872267ed19cd`。[Push](https://github.com/Prysline/town-kinki/actions/runs/45823836341)／[長期 PR #1](https://github.com/Prysline/town-kinki/actions/runs/45823844212) 完整日誌均 962/962、其餘計數 0、語法成功；差異僅九個 web 檔案，不更改銀行或備份工具。master 不變，#1 Draft。
+
+## J-2｜#103 歷史稅表實體遷移（候選驗收）
+
+- `tests/sqlite-pr103-bank-tax-upgrade.test.mjs` 取 #103 真實歷史 Web bank DDL、核心表及逐欄新增順序，建立代表性 schema 子集。已繳與未繳歷史、帳簿、稅基、兩個隔離測試帳號與 WAL 提交資料均為合成 fixture。
+- 驗收設計：一致備份、兩個新目錄還原、來源 bytes/SHA-256 不變；在正式遷移複製後注入真實 SQL 錯誤、DDL 回滾、關閉重啟重試、索引及其他約束保留；稅務 INSERT 失敗時利息／銀行餘額／帳簿／稅基整筆回滾。另一未升級副本走實際 server 啟動順序，負 K 點星期一結算、歷史欠稅、HTTP 存款、同日重送、重啟及帳號隔離。
+- 本切片不修改正式遊戲程式或 schema。測試的負 K 點以隔離資料注入，非新增單機對手；不代表完整歷史 DB 或真人操作驗收。重建後的候選檔完整 HTTP 測試待本 PR 同 HEAD 雙 CI，不沿用上一工作環境的局部測試結果。
+
 ## 後續驗收切片（待逐項查證）
 
 1. #103 真實舊稅表、負 K 點、索引及歷史資料的實體 WAL 升級與失敗回滾；保留 #104/#105 已驗證情境。
