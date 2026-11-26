@@ -1821,28 +1821,88 @@ function updateCockroachCountdown() {
   el("event-alert").hidden=false;
   el("event-alert").textContent=active?"查看事件詳情":"查看事件紀錄";
 }
-let pendingCouponRedemption=null;
-async function submitCouponRedemption(reward){
-  if(!reward.canRedeem)return;
-  if(!window.confirm("確定使用 "+reward.requiredCoupons+" 點 Web 事件優惠券，兌換「"+
-    displayRetailItemName(reward.originalName)+"」嗎？此獎品會以原版 33 欄入庫；部分獎品效果仍未支援。"))return;
-  if(!pendingCouponRedemption||
-     pendingCouponRedemption.sourceIndex!==reward.sourceIndex||
-     pendingCouponRedemption.originalName!==reward.originalName)
-    pendingCouponRedemption={
-      sourceIndex:reward.sourceIndex,originalName:reward.originalName,
-      requestId:crypto.randomUUID()
-    };
+// 保留每位角色、每件獎品未確認的請求；重新整理同一分頁也沿用原編號。
+const couponPendingMemory=new Map();
+const couponPendingPrefix="town-coupon-pending:";
+let couponRedemptionBusy=false;
+function couponOwner(){
+  return state?.user&&state?.character?
+    JSON.stringify([state.mode,state.user.username,state.character.name]):null;
+}
+function couponPendingKey(owner,reward){
+  return couponPendingPrefix+owner+":"+JSON.stringify([reward.sourceIndex,reward.originalName]);
+}
+function getPendingCoupon(owner,reward){
+  if(!owner)return null;
+  const key=couponPendingKey(owner,reward);
+  if(couponPendingMemory.has(key))return couponPendingMemory.get(key);
   try{
-    state=await api("coupon/redeem",pendingCouponRedemption);
-    const result=state.couponResult;
-    pendingCouponRedemption=null;
+    const value=JSON.parse(sessionStorage.getItem(key));
+    if(value?.sourceIndex===reward.sourceIndex&&value.originalName===reward.originalName&&
+       typeof value.requestId==="string"&&/^[A-Za-z0-9_-]{8,80}$/.test(value.requestId)){
+      couponPendingMemory.set(key,value);
+      return value;
+    }
+  }catch{}
+  return null;
+}
+function savePendingCoupon(owner,reward,value){
+  const key=couponPendingKey(owner,reward);
+  if(value)couponPendingMemory.set(key,value);
+  else couponPendingMemory.delete(key);
+  try{
+    if(value)sessionStorage.setItem(key,JSON.stringify(value));
+    else sessionStorage.removeItem(key);
+  }catch{}
+}
+function clearPendingCoupons(owner){
+  if(!owner)return;
+  const prefix=couponPendingPrefix+owner+":";
+  for(const key of couponPendingMemory.keys())if(key.startsWith(prefix))couponPendingMemory.delete(key);
+  try{
+    for(let i=sessionStorage.length-1;i>=0;i--){
+      const key=sessionStorage.key(i);
+      if(key?.startsWith(prefix))sessionStorage.removeItem(key);
+    }
+  }catch{}
+}
+async function submitCouponRedemption(reward){
+  const owner=couponOwner();
+  if(!owner||couponRedemptionBusy)return;
+  let pendingCouponRedemption=getPendingCoupon(owner,reward);
+  if(!pendingCouponRedemption&&!reward.canRedeem)return;
+  const prompt=pendingCouponRedemption?
+    "重新確認上次「"+displayRetailItemName(reward.originalName)+"」的兌換結果？已完成的請求不會再次扣券或發獎。":
+    "確定使用 "+reward.requiredCoupons+" 點 Web 事件優惠券，兌換「"+
+      displayRetailItemName(reward.originalName)+"」嗎？此獎品會以原版 33 欄入庫；部分獎品效果仍未支援。";
+  if(!window.confirm(prompt))return;
+  if(!pendingCouponRedemption){
+    pendingCouponRedemption={sourceIndex:reward.sourceIndex,originalName:reward.originalName,
+      requestId:crypto.randomUUID()};
+    savePendingCoupon(owner,reward,pendingCouponRedemption);
+  }
+  couponRedemptionBusy=true;
+  try{
+    renderCouponShop();
+    const response=await api("coupon/redeem",pendingCouponRedemption);
+    const result=response.couponResult;
+    if(!result||result.sourceIndex!==reward.sourceIndex||result.originalName!==reward.originalName)
+      throw new Error("未能確認優惠券兌換結果，請重試原請求。");
+    savePendingCoupon(owner,reward,null);
+    if(couponOwner()!==owner)return;
+    state=response;
     render();
     notify(result.replayed?
       "這筆優惠券兌換已處理過，沒有再次扣券或發獎。":
       "已扣除 "+result.couponCost+" 點 Web 事件券，兌換「"+
       displayRetailItemName(result.originalName)+"」，獎品已加入本人背包。");
-  }catch(error){notify(error.message,true);}
+  }catch(error){
+    // 即使 HTTP 回報錯誤，交易亦可能已提交但後續 snapshot 失敗；保留原編號。
+    if(couponOwner()===owner)notify(error.message,true);
+  }finally{
+    couponRedemptionBusy=false;
+    if(state?.character)renderCouponShop();
+  }
 }
 function renderCouponShop(){
   const available=state.couponShopAvailable===true;
@@ -1862,11 +1922,13 @@ function renderCouponShop(){
       "（是獎品本身的耐久，並非優惠券到期時間）";
     const button=document.createElement("button");
     button.type="button";
-    button.textContent=reward.canRedeem?"兌換這件獎品":"目前不可兌換";
-    button.disabled=!reward.canRedeem;
+    const pending=getPendingCoupon(couponOwner(),reward);
+    button.textContent=couponRedemptionBusy?"兌換處理中":pending?"重試上次兌換":
+      reward.canRedeem?"兌換這件獎品":"目前不可兌換";
+    button.disabled=couponRedemptionBusy||(!pending&&!reward.canRedeem);
     const reason=document.createElement("p");reason.className="small";
-    reason.textContent=reward.reason??"";
-    reason.hidden=!reward.reason;
+    reason.textContent=pending?"上次請求尚未確認；重試會使用同一編號。":reward.reason??"";
+    reason.hidden=!reason.textContent;
     button.addEventListener("click",()=>submitCouponRedemption(reward));
     tile.append(heading,info,button,reason);
     target.append(tile);
@@ -4840,7 +4902,7 @@ el("solo-continue").addEventListener("click",()=>{
 let soloDeleteBusy=false;
 el("solo-delete-form").addEventListener("submit",async event=>{
   event.preventDefault();
-  if(soloDeleteBusy||state?.mode!=="solo"||!soloAtHome||!state?.character)return;
+  if(soloDeleteBusy||couponRedemptionBusy||state?.mode!=="solo"||!soloAtHome||!state?.character)return;
   const entered=el("solo-delete-name").value;
   if(entered!==state.character.name){
     notify("角色名稱不符，沒有刪除任何資料。",true);
@@ -4852,7 +4914,9 @@ el("solo-delete-form").addEventListener("submit",async event=>{
   soloDeleteBusy=true;
   el("solo-delete-submit").disabled=true;
   try{
+    const owner=couponOwner();
     state=await api("solo/character/delete",{characterName:entered,confirm:true});
+    clearPendingCoupons(owner);
     // 刪除後回建角畫面；已保存的城鎮與單機虛擬時鐘繼續沿用。
     soloAtHome=false;
     try{sessionStorage.removeItem("town-solo-at-home");}catch{}
