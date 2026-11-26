@@ -1,4 +1,6 @@
 import { townCellAction } from "./town-home.js";
+import { displayLoto6DrawReason,formatLoto6DrawNotice } from "./loto6-display.js";
+import { displayJobName,displayGameError,displayBankLedgerAction } from "./game-display-translations.js";
 import { displayRetailItemName,displayRetailItemCategory } from "./retail-item-translations.js";
 import { displayBattleMonsterName } from "./battle-item-translations.js";
 import { displayOriginalItemComment } from "./item-comment-translations.js";
@@ -122,6 +124,7 @@ function showResultDialog(message,title,error){
   }
 }
 function notify(message,error=false,{title,inline=false,source}={}){
+  if(error)message=displayGameError(message,state?.jobs);
   if((error||inline)&&showInlineFeedback(message,error,source))return;
   showResultDialog(message,title||(error?"操作未完成":"操作結果"),error);
 }
@@ -1391,7 +1394,7 @@ function jobRequirementsPanel(job) {
     status.push(["性別",job.gender==="male"?"男":"女",
       state.character.gender!==job.gender]);
   if(job.previousJob)
-    status.push(["前置精通",job.previousJob,
+    status.push(["前置精通",displayJobName(job.previousJob,state.jobs),
       state.character.masteredJob!==job.previousJob]);
   for(const [label,required,missing] of status){
     const row=document.createElement("div");
@@ -1453,7 +1456,7 @@ function renderJobs() {
     eligibility.className="job-eligibility"+(job.reason?" locked":"");
     eligibility.textContent=job.key===state.character.jobId?"目前任職中":
       job.reason?(job.previousJob&&job.reason.startsWith("需先精通")?
-        "尚未解鎖："+job.reason:"目前未達就職條件："+job.reason):"可應徵";
+        "尚未解鎖："+displayGameError(job.reason,state.jobs):"目前未達就職條件："+displayGameError(job.reason,state.jobs)):"可應徵";
     desc.textContent = "薪資 " + money(job.salary) + "／每 " + job.payEvery +
       " 次工作 · 體力 " + job.bodyCost + " · 頭腦 " + job.brainCost;
     const requirements=jobRequirementsPanel(job);
@@ -2073,6 +2076,9 @@ function describeOriginalRetailEffect(code){
     "結核":"結核時改善疾病指數","ウエイトアップ":"增加體重",
     "ダイエット":"減少體重","身長":"增加身高","縮み":"減少身高"
   };
+  const categories={"ギフト":"禮品","ファ":"速食","食料品":"食品"};
+  if(Object.hasOwn(categories,code))return "原版分類標記："+categories[code];
+  if(code==="クレジット")return "信用卡付款功能（須符合有效期與本人持有條件）";
   if(code==="無")return "原版標記「無」；仍須查看下方能力增減值";
   if(code==="万能,")
     return "原版沒有填寫治療幅度；不會推定治病加成，一般能力與熱量需依原版欄位及 Web 支援狀態核對";
@@ -2080,19 +2086,19 @@ function describeOriginalRetailEffect(code){
     return "依原版能力增減和能量消耗欄位生效；原版沒有額外特殊分支";
   if(code==="効果")
     return "原版沒有額外特殊分支；已核對的牛奶與聖代透過負能量消耗恢復能量";
-  const compound=/^([^,]+),(\d+),(食料品|ファ)$/.exec(code);
-  if(compound&&names[compound[1]]){
+  const compound=/^([^,]+),(\d+),(食料品|ファ|ギフト)$/.exec(code);
+  if(compound&&Object.hasOwn(names,compound[1])){
     const unit=["身長","縮み"].includes(compound[1])?" cm":
       ["ウエイトアップ","ダイエット"].includes(compound[1])?" kg":"";
     return names[compound[1]]+" "+compound[2]+unit+
-      "｜原版分類標記："+(compound[3]==="ファ"?"速食":"食品")+
+      "｜原版分類標記："+categories[compound[3]]+
       "（第三段不是額外能力數值）";
   }
   const match=/^([^,]+),(\d+)$/.exec(code);
-  if(match&&names[match[1]]){
+  if(match&&Object.hasOwn(names,match[1])){
     const unit=["身長","縮み"].includes(match[1])?" cm":
       ["ウエイトアップ","ダイエット"].includes(match[1])?" kg":"";
-    return names[match[1]]+" "+match[2]+unit+"（原版："+code+"）";
+    return names[match[1]]+" "+match[2]+unit;
   }
   return "原版特殊代碼："+code+"（尚未將此代碼解讀成確定效果）";
 }
@@ -2496,12 +2502,7 @@ async function checkLoto6Draw(){
     state=await api("arcade/loto6/check",{});
     const result=state.loto6DrawResult;
     render();
-    notify(result.drawn?
-      "六號樂透已開獎（"+result.reason+"），中獎號碼 "+
-      result.winningNumbers.join("、")+
-      "。共結算 "+result.ticketCount+" 注，獎金合計 "+
-      money(result.totalPrize)+" 匯入各玩家的普通銀行。":
-      "目前六號樂透尚未達06:00開獎條件，也未累計200注。");
+    notify(formatLoto6DrawNotice(result,money));
   }catch(error){notify(error.message,true);}
   finally{loto6Busy=false;if(state?.character)renderLoto6();}
 }
@@ -2568,7 +2569,7 @@ function renderLoto6(){
   text("arcade-loto6-result",info.lastDraw?
     "最近開獎："+info.lastDraw.day+
     "｜號碼 "+info.lastDraw.numbers.join("、")+
-    "｜"+(info.lastDraw.reason==="06:00"?"06:00時段":"200注滿額")+
+    "｜"+displayLoto6DrawReason(info.lastDraw.reason)+
     "｜共結算 "+info.lastDraw.ticketCount+" 注":
     "尚無六號樂透開獎紀錄。");
   const history=el("arcade-loto6-history");history.replaceChildren();
@@ -4450,7 +4451,7 @@ function renderBank() {
     const date = new Date(item.occurredAt).toLocaleString("zh-TW");
     const amount = item.credit > 0 ? "入帳 " + money(item.credit) :
       item.debit > 0 ? "支出 " + money(item.debit) : "金額未變動";
-    li.textContent = date + "｜" + who + "｜" + item.action + "｜" +
+    li.textContent = date + "｜" + who + "｜" + displayBankLedgerAction(item.action) + "｜" +
       amount + "｜餘額 " + money(item.balance);
     list.append(li);
   }
@@ -4495,7 +4496,7 @@ function renderCLeague(){
   }
   for(const input of fields.querySelectorAll("input[data-stat]")){const k=input.dataset.stat;input.max=String(Math.max(0,state.character.stats[k]-1));input.title="本人 "+state.character.stats[k]+"／培育 "+(info.character?.stats[k]??0);}
   const payment=el("c-league-payment"),oldPayment=payment.value;payment.replaceChildren();
-  for(const [value,label] of [["cash","現金"],...(state.classroomCreditCards??[]).map(c=>["credit:"+c.sourceLine,c.name+"（銀行付款）"])]){
+  for(const [value,label] of [["cash","現金"],...(state.classroomCreditCards??[]).map(c=>["credit:"+c.sourceLine,displayRetailItemName(c.name)+"（銀行付款）"])]){
     const opt=document.createElement("option");opt.value=value;opt.textContent=label;payment.append(opt);
   }
   if([...payment.options].some(o=>o.value===oldPayment))payment.value=oldPayment;
@@ -4595,7 +4596,7 @@ function render() {
   text("work-count", c.workCount + " 次（目前職業 " + c.jobWorkCount + " 次）");
   text("job-experience", jobExperience + " XP");
   // masteredJob 是原版單一前置職業欄位，並非完整履歷。
-  text("mastered-job", c.masteredJob || "無");
+  text("mastered-job", displayJobName(c.masteredJob,state.jobs) || "無");
   text("measurements", c.height + " 公分／" + c.weight + " 公斤");
   renderDining();
   renderRetail();
