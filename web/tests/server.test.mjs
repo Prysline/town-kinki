@@ -2326,7 +2326,8 @@ test("單機 HTTP：蟑螂 20 秒挑戰由伺服器驗證，K 點數與事件獎
     const before=await api(srv.url,"state");
     assert.equal(before.result.cockroachChallenge.status,"active");
     assert.equal(before.result.character.kpoint,0);
-    const claimed=await api(srv.url,"events/cockroach/claim",{userId:999,now:0});
+    const eventId=before.result.cockroachChallenge.eventId;
+    const claimed=await api(srv.url,"events/cockroach/claim",{eventId,userId:999,now:0});
     assert.equal(claimed.status,200);
     assert.equal(claimed.result.cockroachResult.status,"caught");
     const reward=claimed.result.cockroachResult.reward;
@@ -2336,7 +2337,7 @@ test("單機 HTTP：蟑螂 20 秒挑戰由伺服器驗證，K 點數與事件獎
     assert.equal(claimed.result.character.stats.looks,17);
     assert.equal(claimed.result.cockroachChallenge,null);
     assert.equal(claimed.result.healthEvents[0].effects.cockroach,"caught");
-    const repeated=await api(srv.url,"events/cockroach/claim",{});
+    const repeated=await api(srv.url,"events/cockroach/claim",{eventId});
     assert.equal(repeated.status,400);
     assert.equal((await api(srv.url,"state")).result.character.kpoint,3);
   }finally{await srv.stop();}
@@ -2371,9 +2372,11 @@ test("多人 HTTP：其他登入者不能搶領 #44，逾期操作亦不會發�
         "VALUES(?,?,?,?,'pending')"
       ].join(" ")).run(Number(history.lastInsertRowid),userId,now-30000,now-10000);
     }finally{db.close();}
-    const blocked=await api(srv.url,"events/cockroach/claim",{userId:1},second.cookie);
+    const own=await api(srv.url,"state",undefined,first.cookie);
+    const eventId=own.result.cockroachChallenge.eventId;
+    const blocked=await api(srv.url,"events/cockroach/claim",{eventId,userId:1},second.cookie);
     assert.equal(blocked.status,400);
-    const expired=await api(srv.url,"events/cockroach/claim",{now:1},first.cookie);
+    const expired=await api(srv.url,"events/cockroach/claim",{eventId,now:1},first.cookie);
     assert.equal(expired.status,200);
     assert.equal(expired.result.cockroachResult.status,"escaped");
     assert.equal(expired.result.character.kpoint,0);
@@ -7616,4 +7619,79 @@ test("階段F多人固定時鐘：四戰鬥、百貨及食物同毫秒獨立，4
       assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(),[]);
     }finally{db.close();}
   }finally{await srv.stop();}
+});
+
+test("I HTTP：丟棄蟑螂領獎回應、真實 Node 重啟、跨日舊ID與空請求均不能誤領新事件",async()=>{
+  const srv=await start("solo");
+  let restarted;
+  try{
+    anchorSoloTestAtNoon(srv);
+    const created=await api(srv.url,"character",{name:"跨日蟑螂驗收",gender:"other",stats:defaultStats()});
+    assert.equal(created.status,200);
+    const day=created.result.character.lastEventDay;
+    assert.match(day,/^\d{4}-\d{2}-\d{2}$/);
+    const adjacent=(d,n)=>new Date(Date.parse(d+"T00:00:00Z")+n*86400000).toISOString().slice(0,10);
+    const db=new DatabaseSync(join(srv.directory,"solo.sqlite"));
+    let uid,oldId;
+    try{
+      uid=db.prepare("SELECT user_id FROM characters WHERE name=?").get("跨日蟑螂驗收").user_id;
+      db.prepare("UPDATE characters SET last_event_day=? WHERE user_id=?").run(adjacent(day,-1),uid);
+      const rolls=[0,(44-.5)/44];
+      const now=Date.now()+created.result.gameTimeOffsetMs;
+      const old=settleDailyIllnessEvent(db,uid,day,now,()=>{assert.ok(rolls.length);return rolls.shift();});
+      assert.equal(old.originalId,44);
+      oldId=db.prepare("SELECT event_id FROM character_cockroach_challenges WHERE user_id=?").get(uid).event_id;
+    }finally{db.close();}
+    const request={eventId:oldId};
+    // 真實 HTTP 已提交後，測試客戶端故意丟棄回應正文；不重試交易或斷言。
+    const discarded=await fetch(srv.url+"/api/events/cockroach/claim",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(request)});
+    assert.equal(discarded.status,200);
+    await discarded.body.cancel();
+    await srv.stop({preserveData:true});
+    restarted=await start("solo",undefined,srv.directory);
+    const restored=(await api(restarted.url,"state")).result;
+    const oldHistory=restored.healthEvents.find(e=>e.id===oldId);
+    assert.equal(oldHistory.effects.cockroach,"caught");
+    assert.ok(oldHistory.effects.money>=1&&oldHistory.effects.money<=20000);
+    assert.equal(restored.character.money,100000+oldHistory.effects.money);
+    assert.equal(restored.character.kpoint,3);
+    assert.equal(restored.character.stats.looks,17);
+    assert.equal(restored.bankTax.assessmentBase,restored.character.money);
+    assert.equal(restored.cockroachChallenge,null);
+    const nextDay=adjacent(day,1);
+    const nextDb=new DatabaseSync(join(srv.directory,"solo.sqlite"));
+    let newId;
+    try{
+      // 固定測試亂數與遊戲時鐘；正式玩家仍由既有每日抽選決定事件。
+      const offset=restored.gameTimeOffsetMs+86400000;
+      nextDb.prepare("UPDATE solo_clock SET offset_ms=? WHERE id=1").run(offset);
+      const rolls=[0,(34-.5)/44,0];
+      const next=settleDailyIllnessEvent(nextDb,uid,nextDay,Date.now()+offset,()=>{assert.ok(rolls.length);return rolls.shift();});
+      assert.equal(next.originalId,34);
+      newId=nextDb.prepare("SELECT event_id FROM character_cockroach_challenges WHERE user_id=? AND status='pending'").get(uid).event_id;
+    }finally{nextDb.close();}
+    assert.notEqual(oldId,newId);
+    const before=(await api(restarted.url,"state")).result;
+    assert.equal(before.cockroachChallenge.eventId,newId);
+    assert.equal(before.cockroachChallenge.status,"active");
+    for(const bad of [request,{}, {eventId:String(newId)}, {eventId:0}, {eventId:newId+100000}]){
+      assert.equal((await api(restarted.url,"events/cockroach/claim",bad)).status,400);
+    }
+    const untouched=(await api(restarted.url,"state")).result;
+    assert.equal(untouched.cockroachChallenge.eventId,newId);
+    assert.equal(untouched.character.money,before.character.money);
+    assert.equal(untouched.character.kpoint,3);
+    assert.equal(untouched.bankTax.assessmentBase,before.bankTax.assessmentBase);
+    assert.deepEqual(untouched.healthEvents.find(e=>e.id===oldId),oldHistory);
+    const claimed=await api(restarted.url,"events/cockroach/claim",{eventId:newId});
+    assert.equal(claimed.status,200);
+    assert.equal(claimed.result.cockroachResult.status,"caught");
+    assert.equal(claimed.result.character.money,before.character.money+claimed.result.cockroachResult.reward);
+    assert.equal(claimed.result.character.kpoint,6);
+    assert.equal(claimed.result.character.stats.looks,14);
+    assert.equal(claimed.result.bankTax.assessmentBase,claimed.result.character.money);
+    assert.equal((await api(restarted.url,"events/cockroach/claim",{eventId:newId})).status,400);
+    assert.equal((await api(restarted.url,"state")).result.character.kpoint,6);
+    console.log("I_COCKROACH "+JSON.stringify({discarded:true,restart:true,oldId,newId,oldRejected:true,newCaught:true}));
+  }finally{await (restarted??srv).stop();}
 });
