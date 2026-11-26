@@ -6,6 +6,7 @@ import { maxBodyEnergy,maxBrainEnergy } from "../src/engine.mjs";
 import { resolveNonItemEvent,NON_ITEM_EVENT_IDS } from "../src/event-effects.mjs";
 import { EVENT_BONUS_ITEMS,findEventBonusItem } from "../src/event-item-bonus.mjs";
 import { initLegacyItemUseTables } from "../src/legacy-item-use.mjs";
+import { initBankTables,bankTaxOverview,refreshBankTaxSnapshot } from "../src/banking.mjs";
 import {
   initCharacterEvents,settleDailyIllnessEvent,listCharacterEvents,getCouponBalance
 } from "../src/events.mjs";
@@ -220,5 +221,52 @@ test("極端數值：現金與優惠券溢位時不消耗道具、不寫事件�
     trigger(db,{choice:.51,extra:[.99]});
     assert.equal(getCouponBalance(db,1),15);
     assert.equal(usage(db),3);
+  }finally{db.close();}
+});
+
+test("I：福袋現金獎單獨合法但合計稅基溢位時，耐久、金額、歷史、日期完整回滾",()=>{
+  const db=dbForEvents();
+  try{
+    db.exec("ALTER TABLE characters ADD COLUMN bank INTEGER NOT NULL DEFAULT 0");
+    initBankTables(db);
+    addItem(db);
+    initial(db);initial(db,2);
+    db.prepare("UPDATE characters SET bank=? WHERE user_id=1").run(Number.MAX_SAFE_INTEGER-100000);
+    refreshBankTaxSnapshot(db,1,"2026-11-18");
+    refreshBankTaxSnapshot(db,2,"2026-11-18");
+    const before=db.prepare("SELECT * FROM characters WHERE user_id=1").get();
+    const other=db.prepare("SELECT * FROM characters WHERE user_id=2").get();
+    const tax=bankTaxOverview(db,1),otherTax=bankTaxOverview(db,2);
+    assert.throws(()=>trigger(db,{choice:0}),/稅基資產超出安全範圍/);
+    assert.deepEqual(db.prepare("SELECT * FROM characters WHERE user_id=1").get(),before);
+    assert.deepEqual(bankTaxOverview(db,1),tax);
+    assert.equal(usage(db),undefined);
+    assert.equal(getCouponBalance(db,1),0);
+    assert.equal(listCharacterEvents(db,1).length,0);
+    db.prepare("UPDATE characters SET bank=100000 WHERE user_id=1").run();
+    refreshBankTaxSnapshot(db,1,"2026-11-18");
+    trigger(db,{choice:0});
+    assert.equal(bankTaxOverview(db,1).assessmentBase,100200000);
+    assert.equal(usage(db),3);
+    assert.equal(listCharacterEvents(db,1)[0].effects.money,100000000);
+    assert.deepEqual(db.prepare("SELECT * FROM characters WHERE user_id=2").get(),other);
+    assert.deepEqual(bankTaxOverview(db,2),otherTax);
+  }finally{db.close();}
+});
+
+test("I：福袋優惠券分支不變更現金／存款，不因稅基更新故障而阻塞",()=>{
+  const db=dbForEvents();
+  try{
+    db.exec("ALTER TABLE characters ADD COLUMN bank INTEGER NOT NULL DEFAULT 0");
+    initBankTables(db);
+    addItem(db);initial(db);
+    refreshBankTaxSnapshot(db,1,"2026-11-18");
+    const tax=bankTaxOverview(db,1);
+    db.exec("CREATE TRIGGER i_coupon_tax BEFORE UPDATE ON bank_tax_state BEGIN SELECT RAISE(ABORT,'unexpected tax update'); END;");
+    trigger(db,{choice:.51,extra:[.99]});
+    assert.equal(getCouponBalance(db,1),15);
+    assert.equal(usage(db),3);
+    assert.equal(listCharacterEvents(db,1)[0].effects.coupons,15);
+    assert.deepEqual(bankTaxOverview(db,1),tax);
   }finally{db.close();}
 });

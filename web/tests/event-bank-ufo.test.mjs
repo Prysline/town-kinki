@@ -6,7 +6,7 @@ import { resolveNonItemEvent } from "../src/event-effects.mjs";
 import { findEventBonusItem } from "../src/event-item-bonus.mjs";
 import { initCharacterEvents,settleDailyIllnessEvent,listCharacterEvents } from "../src/events.mjs";
 import { initLegacyItemUseTables } from "../src/legacy-item-use.mjs";
-import { initBankTables,bankLedger } from "../src/banking.mjs";
+import { initBankTables,bankLedger,bankTaxOverview,refreshBankTaxSnapshot } from "../src/banking.mjs";
 
 const STATS={kokugo:20,suugaku:20,rika:20,syakai:20,bijutu:20,love:20,
   eigo:20,ongaku:20,looks:20,tairyoku:20,kenkou:20,speed:20,power:20,
@@ -275,5 +275,115 @@ test("攝影機抓到竊賊的十萬元謝禮若溢位，不消耗耐久或標�
     trigger(db,16,{choices:[.99]});
     assert.equal(state(db).money,100500);
     assert.equal(remaining(db,1).remaining,2);
+  }finally{db.close();}
+});
+
+test("I：21 種既有資產事件同步本人稅基、歷史與每日標記，不改原金額或抽選",()=>{
+  const cases=[
+    {id:1,choices:[0,.99],cash:1},
+    {id:2,choices:[0],cash:1},
+    {id:5,cash:-1000},
+    {id:13,choices:[0],cash:10000},
+    {id:16,choices:[.99],bank:-20000},
+    {id:17,choices:[0],cash:1000},
+    {id:18,choices:[0],cash:5000},
+    {id:19,cash:-30000},
+    {id:20,choices:[0],cash:100000},
+    {id:22,choices:[0],cash:-66667},
+    {id:23,choices:[0],cash:10000,item:"ブラタンメンバーズカード"},
+    {id:24,choices:[0,0],cash:1000000},
+    {id:29,cash:10000},
+    {id:31,cash:100},
+    {id:32,cash:500000},
+    {id:33,choices:[.99],cash:-50000},
+    {id:34,choices:[0],cash:100000,item:"等身大サンタさん人形",unit:"回"},
+    {id:35,choices:[0],cash:-10000},
+    {id:38,choices:[.99],cash:10000,power:1000},
+    {id:41,cash:1000},
+    {id:42,choices:[.99],cash:-50000}
+  ];
+  for(const c of cases){
+    const db=setup();
+    try{
+      if(c.item)addItem(db,1,c.item,{unit:c.unit??"日"});
+      if(c.power)db.prepare("UPDATE characters SET stats_json=? WHERE user_id=1").run(JSON.stringify({...STATS,power:c.power}));
+      first(db);first(db,2);
+      refreshBankTaxSnapshot(db,1,"2026-11-18");
+      refreshBankTaxSnapshot(db,2,"2026-11-18");
+      const other=state(db,2),otherTax=bankTaxOverview(db,2);
+      const money=100000+(c.cash??0),bank=100000+(c.bank??0);
+      const result=trigger(db,c.id,{choices:c.choices??[]});
+      assert.equal(result.originalId,c.id);
+      assert.equal(state(db).money,money,"現金 #"+c.id);
+      assert.equal(state(db).bank,bank,"銀行 #"+c.id);
+      const tax=bankTaxOverview(db,1);
+      assert.equal(tax.assessmentBase,money+bank,"稅基 #"+c.id);
+      assert.equal(tax.snapshotDay,"2026-11-19");
+      assert.equal(state(db).last_event_day,"2026-11-19");
+      const history=listCharacterEvents(db,1);
+      assert.equal(history.length,1);
+      assert.equal(history[0].originalId,c.id);
+      if(c.cash!==undefined)assert.equal(history[0].effects.money,c.cash);
+      if(c.bank!==undefined){
+        assert.equal(history[0].effects.bank,c.bank);
+        assert.deepEqual(bankLedger(db,1).map(e=>[e.debit,e.balance]),[[-c.bank,bank]]);
+      }else assert.equal(bankLedger(db,1).length,0);
+      assert.equal(settleDailyIllnessEvent(db,1,"2026-11-19",100001,()=>{throw Error("不可重抽");}).checked,false);
+      assert.deepEqual(bankTaxOverview(db,1),tax);
+      assert.deepEqual(state(db,2),other);
+      assert.deepEqual(bankTaxOverview(db,2),otherTax);
+      assert.equal(listCharacterEvents(db,2).length,0);
+      assert.equal(bankLedger(db,2).length,0);
+    }finally{db.close();}
+  }
+});
+
+test("I：攝影機竊盜的稅基或歷史寫入故障，銀行、帳簿、兩次耐久、抽選日全部回滾",()=>{
+  const db=setup();
+  try{
+    addItem(db,1,"防犯カメラ",{durability:2});
+    first(db);first(db,2);
+    refreshBankTaxSnapshot(db,1,"2026-11-18");
+    refreshBankTaxSnapshot(db,2,"2026-11-18");
+    const before=state(db),tax=bankTaxOverview(db,1),other=state(db,2),otherTax=bankTaxOverview(db,2);
+    for(const [op,table] of [["UPDATE","bank_tax_state"],["INSERT","character_events"]]){
+      db.exec("CREATE TRIGGER i_reject BEFORE "+op+" ON "+table+" BEGIN SELECT RAISE(ABORT,'I blocked'); END;");
+      assert.throws(()=>trigger(db,16,{choices:[0]}),/I blocked/);
+      assert.deepEqual(state(db),before);
+      assert.deepEqual(bankTaxOverview(db,1),tax);
+      assert.equal(remaining(db,1),undefined);
+      assert.equal(bankLedger(db,1).length,0);
+      assert.equal(listCharacterEvents(db,1).length,0);
+      assert.deepEqual(state(db,2),other);
+      assert.deepEqual(bankTaxOverview(db,2),otherTax);
+      db.exec("DROP TRIGGER i_reject");
+    }
+    trigger(db,16,{choices:[0]});
+    assert.equal(state(db).bank,80000);
+    assert.equal(remaining(db,1).remaining,0);
+    assert.equal(bankTaxOverview(db,1).assessmentBase,180000);
+    assert.equal(bankLedger(db,1).length,1);
+    assert.equal(listCharacterEvents(db,1).length,1);
+  }finally{db.close();}
+});
+
+test("I：攝影機現金謝禮與會員卡獎金更新稅基；無資產異動的 UFO 不刷新稅基",()=>{
+  const db=setup();
+  try{
+    addItem(db,1,"防犯カメラ",{durability:2});
+    addItem(db,2,"ブラタンメンバーズカード",{durability:1});
+    first(db);refreshBankTaxSnapshot(db,1,"2026-11-18");
+    trigger(db,16,{choices:[.99]});
+    assert.equal(bankTaxOverview(db,1).assessmentBase,300000);
+    assert.equal(remaining(db,1).remaining,1);
+    trigger(db,23,{choices:[.99],day:"2026-11-20"});
+    const tax=bankTaxOverview(db,1);
+    assert.equal(tax.assessmentBase,1300000);
+    assert.equal(remaining(db,2).remaining,0);
+    db.exec("CREATE TRIGGER i_no_tax BEFORE UPDATE ON bank_tax_state BEGIN SELECT RAISE(ABORT,'unexpected tax update'); END;");
+    trigger(db,23,{choices:[0,0],day:"2026-11-21"});
+    assert.equal(state(db).town_id,0);
+    assert.deepEqual(bankTaxOverview(db,1),tax);
+    assert.equal(listCharacterEvents(db,1).length,3);
   }finally{db.close();}
 });
