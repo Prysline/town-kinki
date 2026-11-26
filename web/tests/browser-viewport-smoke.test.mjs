@@ -1222,6 +1222,13 @@ test("Chrome：三棟訓練共用付款列、各自保存選擇、信用扣款�
     await click(chrome,"#facility-tab-training");
     for(const [type,index,key,width] of [["school",1,"school-2",1440],["gym",2,"gym-3",768],["classroom",1,"classroom-2",375]]){
       await viewport(chrome,width,width===375?812:900);
+      if(type==="classroom"){
+        // 原版一般頭腦上限 23，學校耗 16 後需先自然恢復再上教室。
+        const advanced=await evaluate(chrome,"(async()=>{const r=await fetch('/api/solo/time/advance',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({preset:'5m'})});return r.status})()");
+        assert.equal(advanced,200);
+        await click(chrome,"#profile-tab-status");await click(chrome,"#refresh");await click(chrome,"#facility-tab-training");
+        await until(chrome,"!document.querySelector('#classroom-lessons .training-tile:nth-child(1) button').disabled","教室能量恢復");
+      }
       const before=await state(),lesson=before.trainingLessons.find(x=>x.key===key);
       await click(chrome,`#${type}-lessons .training-tile:nth-child(${index}) button`);
       await until(chrome,"document.querySelector('#result-dialog')?.open&&document.querySelector('#result-dialog-message').textContent.includes('普通銀行存款扣除')",type+"信用付款");

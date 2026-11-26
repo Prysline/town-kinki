@@ -7705,6 +7705,7 @@ test("I HTTP：丟棄蟑螂領獎回應、真實 Node 重啟、跨日舊ID與空
 test("三棟訓練信用付款 HTTP：本人卡、餘額、獨立冷卻、帳簿與交易失敗回滾",async()=>{
   const srv=await start("solo");
   try{
+    anchorSoloTestAtNoon(srv);
     const created=await api(srv.url,"character",{name:"共用付款驗收",gender:"other",stats:defaultStats()});
     assert.equal(created.status,200);
     const purchased=Math.floor(created.result.gameTimeMs/1000)-60;
@@ -7736,6 +7737,7 @@ test("三棟訓練信用付款 HTTP：本人卡、餘額、獨立冷卻、帳簿
     }finally{fault.exec("DROP TRIGGER training_credit_fault");fault.close();}
     assert.deepEqual(comparable(await get()),comparable(start));
     for(const [key,label] of [["school-2","學校"],["gym-3","健身房"],["classroom-2","教室"]]){
+      if(key==="classroom-2")assert.equal((await api(srv.url,"solo/time/advance",{preset:"5m"})).status,200);
       const before=await get();
       const price=before.trainingLessons.find(x=>x.key===key).price;
       const paid=await api(srv.url,"train",{key,payment:"credit",sourceLine:1});

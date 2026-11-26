@@ -143,9 +143,9 @@ test("核准門檻：15,000 元現金、第 50 擊敗北恰扣至零，原請求
   assert.equal(STREET_MAX_LOSS,15000);
   const db=setup();
   try{
-    // 本人先攻但全數無效；對手每次臂力攻擊造成 1 點身體傷害。
+    // 本人先攻但全數無效；提高體力使原版一般上限仍為25，對手每次臂力攻擊造成1點身體傷害。
     db.prepare("UPDATE characters SET stats_json=?,body_energy=25,brain_energy=35,money=14999,bank=1000000 WHERE user_id=2")
-      .run(JSON.stringify({...stats(20),speed:21}));
+      .run(JSON.stringify({...stats(20),speed:21,tairyoku:36}));
     db.prepare("UPDATE characters SET stats_json=? WHERE user_id=1").run(JSON.stringify({...stats(20),wanryoku:21}));
     const before=db.prepare("SELECT * FROM characters ORDER BY id").all();
     assert.throws(()=>playStreetFight(db,2,{...options,randomIndex:()=>{throw Error("門檻不足不得抽選");}}),/15,000/);
