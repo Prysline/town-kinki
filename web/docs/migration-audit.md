@@ -122,7 +122,7 @@
 
 **可達性：** `event.pl` 在 L314 以 `int(rand(44))+1` 抽 #01～#44；原始碼雖有 #45（L855）及 #46（L860），但在這個抽選入口不可達，另列為「原版存在、預設不可抽」，**不得自行更改為 46 個事件**。
 
-**Web 觀察：** `src/event-effects.mjs::NON_ITEM_EVENT_IDS` 有 37 個非疾病分支；`src/events.mjs::ILLNESS_EVENTS` 有 #04、#15，共 39/44 個程式分支。#34（PR #10）、#35（PR #9）已合併整合分支。「程式已有」只表示分支存在，不代表原作全部細節與實際 UI 已驗收。
+**Web 觀察：** `src/event-effects.mjs::NON_ITEM_EVENT_IDS` 有 42 個非疾病分支；`src/events.mjs::ILLNESS_EVENTS` 有 #04、#15，共 44/44 個程式分支，I 已完成指定範圍自動驗收（#137 正式合併後雙 CI 955/955）。「程式已有」只表示分支存在，不代表原作全部細節與實際 UI 已驗收。
 
 | 事件 ID | 原版條件／效果（摘要） | 原版位置 | Web 分支／測試線索 | 完成度／整合狀態 | 尚需驗收／阻塞 |
 |---|---|---|---|---|---|
@@ -153,7 +153,7 @@
 | #25 | 大阪阿姨：體重 -1kg | [event.pl L603](../../event.pl#L603) | `src/event-effects.mjs::case 25`; tests/event-effects.test.mjs | 程式已有／待逐分支複核 | 來源條件、機率、道具有效性、安全值差異、歷史及交易回滾 |
 | #26 | 街頭打鬥：能量減損 | [event.pl L608](../../event.pl#L608) | `src/event-effects.mjs::case 26`; tests/event-effects.test.mjs | 程式已有／待逐分支複核 | 來源條件、機率、道具有效性、安全值差異、歷史及交易回滾 |
 | #27 | 溫泉券：雙能量 +1,000 | [event.pl L625](../../event.pl#L625) | `src/event-effects.mjs::case 27`; tests/event-effects.test.mjs | 程式已有／待逐分支複核 | 來源條件、機率、道具有效性、安全值差異、歷史及交易回滾 |
-| #28 | 捐款 10,000：呼叫 kifu（待追實際結果） | [event.pl L631](../../event.pl#L631) | `尚無對應事件實作` | 未實作 | 必須先查清 kifu 的完整副作用與使用對象，再實作捐款交易 |
+| #28 | 捐款 10,000：kifu，足額成功 K+3，自抽無金流 | [event.pl L631](../../event.pl#L631) | `src/event-resident-transfer.mjs`; tests/event-resident-transfer.test.mjs | #137 已合併／自動驗收 | 資金不足取消；真人另驗 |
 | #29 | 幸運星砂：現金翻倍或撿錢 | [event.pl L636](../../event.pl#L636) | `src/event-effects.mjs::case 29`; tests/event-cash-item.test.mjs | 程式已有／待逐分支複核 | 來源條件、機率、道具有效性、安全值差異、歷史及交易回滾 |
 | #30 | 優惠券：隨機 1～5 張 | [event.pl L647](../../event.pl#L647) | `src/event-effects.mjs::case 30`; tests/event-coupon.test.mjs | 程式已有／待逐分支複核 | 來源條件、機率、道具有效性、安全值差異、歷史及交易回滾 |
 | #31 | MiG-25 耐久／販賣機找零 | [event.pl L653](../../event.pl#L653) | `src/event-effects.mjs::case 31`; tests/event-collection.test.mjs | 程式已有／待逐分支複核 | 來源條件、機率、道具有效性、安全值差異、歷史及交易回滾 |
@@ -161,17 +161,17 @@
 | #33 | 搞笑藝人／鹿：趣味或能量效果 | [event.pl L674](../../event.pl#L674) | `src/event-effects.mjs::case 33`; tests/event-collection.test.mjs | 程式已有／待逐分支複核 | 來源條件、機率、道具有效性、安全值差異、歷史及交易回滾 |
 | #34 | 聖誕人偶：現金翻倍／雙能量恢復／蟑螂 20 秒 | [event.pl L689](../../event.pl#L689) | `src/event-effects.mjs::case 34`; tests/event-santa.test.mjs | 程式已合併整合分支（PR #10） | 仍須實際驗收限時事件、回耐久與重送 |
 | #35 | 四次元福袋：四分支、扣回數 | [event.pl L710](../../event.pl#L710) | `src/event-effects.mjs::case 35`; tests/event-bag.test.mjs | 程式已合併整合分支（PR #9） | 仍須驗收四種結果、券數、耐久及無結果分支 |
-| #36 | 惡魔之笛：捐款／扣現金／被偷錢 | [event.pl L732](../../event.pl#L732) | `尚無對應事件實作` | 未實作 | kifu2/kifu3 及惡魔／天使之笛原版副作用未完全追查，先做依賴圖 |
-| #37 | 天使之笛：捐款／得獎／收錢 | [event.pl L750](../../event.pl#L750) | `尚無對應事件實作` | 未實作 | kifu2/kifu3 及惡魔／天使之笛原版副作用未完全追查，先做依賴圖 |
-| #38 | 與聖誕老人戰鬥：力量門檻、掉寶／1 萬元、失敗歸零能量 | [event.pl L769](../../event.pl#L769) | `尚無對應事件實作` | 未實作 | 依賴 get_itm/get_itm2 道具生成、背包容量、封存格式與交易 |
+| #36 | 惡魔之笛：強奪普通存款／反噬／無笛失現金 | [event.pl L732](../../event.pl#L732) | `src/event-resident-transfer.mjs`; tests/event-resident-transfer.test.mjs | #137 已合併／自動驗收 | 成功 K-3，不足額不耗笛；自抽耗笛；真人另驗 |
+| #37 | 天使之笛：贈款／直接得現金／無笛得現金 | [event.pl L750](../../event.pl#L750) | `src/event-resident-transfer.mjs`; tests/event-resident-transfer.test.mjs | #137 已合併／自動驗收 | 成功 K+3，不足額不耗笛；自抽耗笛；真人另驗 |
+| #38 | 與聖誕老人戰鬥：力量門檻、掉寶／1 萬元、失敗歸零身體能量 | [event.pl L769](../../event.pl#L769) | `src/event-santa-fight.mjs`; tests/event-battle.test.mjs | 已合併／自動驗收 | 六種可達獎品、容量25及耐久；真人另驗 |
 | #39 | 工作集中：經驗增減 | [event.pl L789](../../event.pl#L789) | `src/event-effects.mjs::case 39`; tests/event-effects.test.mjs | 程式已有／待逐分支複核 | 來源條件、機率、道具有效性、安全值差異、歷史及交易回滾 |
-| #40 | 河中物品：得道具或失 500 元 | [event.pl L799](../../event.pl#L799) | `尚無對應事件實作` | 未實作 | 依賴 get_itm/get_itm2 道具生成、背包容量、封存格式與交易 |
+| #40 | 河中物品：先嘗試入庫，再抽提示／扣500（不撤銷獎品） | [event.pl L799](../../event.pl#L799) | `src/event-santa-fight.mjs`; tests/event-battle.test.mjs | #135 已合併／自動驗收 | 前兩種書籍、容量25、耐久與稅基同交易；真人另驗 |
 | #41 | 販賣機找零：獲 1,000 元 | [event.pl L814](../../event.pl#L814) | `src/event-effects.mjs::case 41`; tests/event-effects.test.mjs | 程式已有／待逐分支複核 | 來源條件、機率、道具有效性、安全值差異、歷史及交易回滾 |
 | #42 | 球隊應援票券：精力／能力／道具效果 | [event.pl L819](../../event.pl#L819) | `src/event-effects.mjs::case 42`; tests/event-collection.test.mjs | 程式已有／待逐分支複核 | 來源條件、機率、道具有效性、安全值差異、歷史及交易回滾 |
 | #43 | 失戀無食慾：體重 -5kg | [event.pl L845](../../event.pl#L845) | `src/event-effects.mjs::case 43`; tests/event-effects.test.mjs | 程式已有／待逐分支複核 | 來源條件、機率、道具有效性、安全值差異、歷史及交易回滾 |
 | #44 | 蟑螂：20 秒領賞、K 點數及外貌變化 | [event.pl L850](../../event.pl#L850) | `src/event-effects.mjs::case 44`; tests/event-cockroach.test.mjs | 程式已有／待逐分支複核 | 20 秒截止、跨帳號及同事件二次領取 |
 
-**原版 #45／#46：** `event.pl` L855–863 含「遭搶劫現金減半」及「銀行帳戶扣 1/3」，但預設 44 項抽選不會選中；標記「原始碼存在、不可達」，不得計入 39/44，也不得擅自開放。
+**原版 #45／#46：** `event.pl` L855–863 含「遭搶劫現金減半」及「銀行帳戶扣 1/3」，但預設 44 項抽選不會選中；標記「原始碼存在、不可達」，不得計入 44/44，也不得擅自開放。
 
 **事件後續必要工作：** 逐 ID 建立分支覆蓋表，對照 `event.pl` 全部條件、`motimono_kensa_ev*`、`kifu*`、`get_itm*`、抽選權重與資產/能力上下限；以亂數固定種子驗證、同日防重、跨日、多人隔離、歷史寫入失敗 rollback、二次領獎、逾時、單機快轉。**目前只核實已存在 39 個實作分支與各自測試檔線索，不宣稱 39 個完整等價驗收。**
 
@@ -237,7 +237,7 @@
 2. **P1/健身房欄位來源**：`dat_dir/gym.cgi` 的能力增益、費用及能量欄位已對照；「間」與「効果」尚需實際執行路徑驗證。未確定的字串只保留原始資料，不視為待移植的新遊戲效果。
 3. **P1/職業需求數值表（PR #22 已修復核心展示）**：原版 `basic.cgi::job_change` L2753–2781 明確輸出每個職業的 17 項能力與 BMI、性別、身高、薪資等，並提供玩家當前值對照；`job.cgi::top` 的滑鼠提示也有各項需求。舊 Web 只向前端送簡化 `reason`，PR #22 已補完整原版數值及玩家比較，**並非原版不存在**。實機驗收仍待完成。
 4. **P1/食堂每日菜單與庫存（PR #31 核心已修）**：依 `command.pl` L919–999、L1161–1245 及資料第 25 欄，兩間食堂每日各抽最多 30 道，跨玩家共用庫存；原版低現金造成重抽的漏洞沒有複製，待真實瀏覽器／原版全局食堂 log 與城市旗標驗收。
-5. **P0/事件分支**：缺 #28、#36、#37、#38、#40；其中 #28、#36、#37 的 `kifu*` 要先追完整實作；#38、#40 需物品產生與背包容量。
+5. **P0/事件分支（歷史缺口已完成）**：#28、#36、#37、#38、#40 已整合並自動驗收；詳 [I 階段](phase-i-event-reward-audit.md)。
 6. **P0/展示（PR #13 已合併）**：`public/index.html` 的 `#measurements`、`#physique-status` 已移至狀態分頁常駐體格摘要；`public/app.js` 延用相同資料流。真實瀏覽器截圖和操作驗收仍未完成。
 7. **來源警示**：`src/dining.mjs` L66 用 `2995` 日門檻，對應 `town_ini.cgi` 的 `deleteUser=3000` 與原版 `top.pl` 的 `deleteUser - 5`；數字有來源，真正不同是 Web 無用餐紀錄的 provisional 保護與原版刪角機制。
 
@@ -273,7 +273,7 @@
 | P0-C：狀態頁體格整理 | `public/index.html`、`public/app.js`、`public/style.css`、UI tests | P0-B 欄位定案 | 手機 375px/768px 與桌面真實瀏覽器／鍵盤檢查 | 無瀏覽器驗證不得標註視覺驗收成功 |
 | P1-A：餐飲日表及庫存 | `src/dining.mjs`、`src/server.mjs`、SQLite 日菜單／庫存表、tests | P0-B、每日時鐘與餐飲交易 | 隨機菜單、跨日、賣完、同城共用、重送完整回滾 | 不憑空生成原版不存在的商品或菜單 |
 | P1-B：健身資料來源核對 | `src/training.mjs`、原版 gym 相關 CGI／tests | 確認原版實際健身執行函式 | 原版費用、能力增益、課程時間及失敗回滾 | 無原版執行依據的欄位只保留資料，不建立額外效果功能 |
-| P1-C：剩餘五事件 | `src/event-effects.mjs`、`src/events.mjs`、物品交易／庫存、tests | `kifu*`、`get_itm*`、來源交易已可表示 | 每 ID 亂數、耐久、容量、日限額、多人隔離、rollback | 未有贈送/物品產生交易時不可用假獎勵替代 |
+| P1-C：剩餘五事件（歷史缺口已完成） | `src/event-effects.mjs`、`src/events.mjs`、物品交易／庫存、tests | `kifu*`、`get_itm*`、來源交易已可表示 | 每 ID 亂數、耐久、容量、日限額、多人隔離、rollback | 未有贈送/物品產生交易時不可用假獎勵替代 |
 | P1-D：職業條件原版數值展示 | src/server.mjs::snapshot、public/app.js::renderJobs、UI tests | WK-04、dat_dir/job.cgi 的 150 筆已解析數值 | 每個可選／不可選職業解析完整 17 項能力，UI 只顯示需求 >0 的值（PR #29）、BMI／身高／性別、薪資獎金及發薪週期 | 不因資料缺失假定職業可應徵，不改伺服器資格判定 |
 | P1-E：薪資去向與銀行明細 | src/engine.mjs、src/server.mjs、src/banking.mjs、SQLite、tests | WK-05 原版 shiharai 與現行銀行交易模型已比對 | 現金／普通銀行領款切換、升級獎金與發薪、帳簿、多人交易防重與回滾 | 僅依新 Web 角色本人儲存的薪資偏好執行 |
 | P1-F：教室獨立訓練 | dat_dir/kyushitu.cgi、src/training.mjs／新模組、server/UI/DB/tests | TR-04～TR-06 原版完整執行分支；與 school/gym 分離 | 4 課原始增益、雙能量、分鐘冷卻、減重、現金與授信付款、多人防重／回滾 | 不把教室來源套到 gym/school；不複製原始 CGI 缺少銀行餘額檢查的風險 |
