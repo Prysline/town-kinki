@@ -1,4 +1,5 @@
 import { townCellAction } from "./town-home.js";
+import { displayLoto6DrawReason } from "./loto6-display.js";
 import { displayRetailItemName,displayRetailItemCategory } from "./retail-item-translations.js";
 import { displayBattleMonsterName } from "./battle-item-translations.js";
 import { displayOriginalItemComment } from "./item-comment-translations.js";
@@ -2497,7 +2498,7 @@ async function checkLoto6Draw(){
     const result=state.loto6DrawResult;
     render();
     notify(result.drawn?
-      "六號樂透已開獎（"+result.reason+"），中獎號碼 "+
+      "六號樂透已開獎（"+displayLoto6DrawReason(result.reason)+"），中獎號碼 "+
       result.winningNumbers.join("、")+
       "。共結算 "+result.ticketCount+" 注，獎金合計 "+
       money(result.totalPrize)+" 匯入各玩家的普通銀行。":
@@ -2568,7 +2569,7 @@ function renderLoto6(){
   text("arcade-loto6-result",info.lastDraw?
     "最近開獎："+info.lastDraw.day+
     "｜號碼 "+info.lastDraw.numbers.join("、")+
-    "｜"+(info.lastDraw.reason==="06:00"?"06:00時段":"200注滿額")+
+    "｜"+displayLoto6DrawReason(info.lastDraw.reason)+
     "｜共結算 "+info.lastDraw.ticketCount+" 注":
     "尚無六號樂透開獎紀錄。");
   const history=el("arcade-loto6-history");history.replaceChildren();

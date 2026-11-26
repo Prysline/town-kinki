@@ -4,6 +4,7 @@ import {runInNewContext} from "node:vm";
 import { readFileSync } from "node:fs";
 import { describeTile } from "../src/town-map.mjs";
 import { FACILITY_PANELS,townCellAction } from "../public/town-home.js";
+import { displayLoto6DrawReason } from "../public/loto6-display.js";
 
 const html=readFileSync(new URL("../public/index.html",import.meta.url),"utf8");
 const css=readFileSync(new URL("../public/style.css",import.meta.url),"utf8");
@@ -1149,4 +1150,15 @@ test("I-5 優惠券前端：連點、交錯獎品、失敗後重新整理及角�
   calls[4].reject(new Error("失敗"));await newRequest;
   ctx.clearPendingCoupons(ctx.couponOwner());
   assert.equal(storage.size,0,"明確刪除角色時清除該角色的待確認編號");
+});
+
+
+test("六號樂透開獎通知及最近開獎紀錄共用繁中原因，保留原始原因鍵",()=>{
+  assert.equal(displayLoto6DrawReason("06:00"),"06:00時段");
+  assert.equal(displayLoto6DrawReason("200 tickets"),"累計售出 200 注開獎");
+  assert.equal(displayLoto6DrawReason(null),"開獎原因未記錄");
+  assert.equal(displayLoto6DrawReason("unknown"),"開獎原因未記錄");
+  assert.ok(script.includes('"六號樂透已開獎（"+displayLoto6DrawReason(result.reason)+"），中獎號碼 "'));
+  assert.ok(script.includes('"｜"+displayLoto6DrawReason(info.lastDraw.reason)+'));
+  assert.ok(!script.includes("200注滿額"));
 });
