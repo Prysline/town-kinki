@@ -1,7 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { createServer } from "node:net";
 import { mkdtempSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve, dirname } from "node:path";
@@ -16,20 +15,16 @@ function insert(db,table,values){
   db.prepare("INSERT INTO "+table+" ("+keys.join(",")+") VALUES ("+keys.map(()=>"?").join(",")+")").run(...Object.values(values));
 }
 async function serve(dir){
-  const port=await new Promise((ok,fail)=>{
-    const socket=createServer();
-    socket.once("error",fail);
-    socket.listen(0,"127.0.0.1",()=>{const port=socket.address().port;socket.close(()=>ok(port));});
-  });
   const child=spawn(process.execPath,["src/server.mjs"],{
-    cwd:root,env:{...process.env,GAME_MODE:"solo",HOST:"127.0.0.1",PORT:String(port),DATA_DIR:dir}
+    cwd:root,env:{...process.env,GAME_MODE:"solo",HOST:"127.0.0.1",PORT:"0",DATA_DIR:dir}
   });
-  let log="";
-  child.stdout.on("data",x=>log+=x);
+  let log="",stdout="";
+  child.stdout.on("data",x=>{stdout+=x;log+=x;});
   child.stderr.on("data",x=>log+=x);
-  const url="http://127.0.0.1:"+port;
   for(let i=0;i<100;i++){
     if(child.exitCode!==null)break;
+    const url=stdout.match(/^TOWN Web \[(?:solo|multi)\] (http:\/\/127\.0\.0\.1:[1-9]\d*)\r?\n/m)?.[1];
+    if(!url){await delay(100);continue;}
     try{
       const response=await fetch(url+"/api/state",{signal:AbortSignal.timeout(350)});
       if(response.ok){

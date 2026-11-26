@@ -1355,8 +1355,9 @@ async function handle(req, res) {
   }
 }
 
-createServer(handle).listen(PORT, HOST, () => {
-  console.log("TOWN Web [" + MODE + "] http://" + HOST + ":" + PORT);
+const httpServer = createServer(handle);
+httpServer.listen(PORT, HOST, () => {
+  console.log("TOWN Web [" + MODE + "] http://" + HOST + ":" + httpServer.address().port);
   console.log("已載入職業：" + jobs.length + "，翻譯：" + jobs.filter(job => job.translated).length);
   console.log("原始地圖匯入城鎮：" + (importedTownIds.length ? importedTownIds.join(", ") : "無，保持未設定狀態"));
 });
