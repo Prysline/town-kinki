@@ -7808,3 +7808,74 @@ test("I-5 優惠券 HTTP：並行同編號、丟棄成功回應、重啟重送�
     }finally{saved.close();}
   }finally{await srv.stop();}
 });
+
+test("I 階段真實 SQLite/HTTP：三種居民事件、河中書籍、兩笛手動使用與重啟隔離",async()=>{
+  const {grantSantaFightItem}=await import("../src/event-santa-fight.mjs");
+  let srv=await start("multi");try{
+    const residents=[];
+    for(const [i,name] of ["事件驗收甲","事件驗收乙","事件驗收丙","事件驗收丁"].entries()){
+      const registered=await api(srv.url,"register",{username:"i6_accept_"+i,password:"i6-accept-pass-"+i});
+      const made=await api(srv.url,"character",{name,gender:"other",stats:defaultStats()},registered.cookie);
+      assert.equal(made.status,200,JSON.stringify(made.result.error));
+      residents.push({name,cookie:registered.cookie,day:made.result.character.lastEventDay,now:made.result.gameTimeMs});
+    }
+    const day=residents[0].day,now=residents.at(-1).now;
+    assert.ok(residents.every(r=>r.day===day));
+    const db=new DatabaseSync(join(srv.directory,"multi.sqlite"));
+    try{
+      db.exec("PRAGMA foreign_keys=ON");
+      const rows=db.prepare("SELECT user_id,name FROM characters ORDER BY user_id").all();
+      assert.deepEqual(rows.map(x=>x.name),residents.map(x=>x.name));
+      db.exec("BEGIN IMMEDIATE");
+      db.prepare("UPDATE characters SET money=100000,bank=100000,kpoint=0,last_event_day='2000-01-01'").run();
+      grantSantaFightItem(db,rows[0].user_id,0,now);
+      grantSantaFightItem(db,rows[1].user_id,1,now);
+      db.exec("COMMIT");
+      for(const [i,id,values] of [[0,36,[0,0,.375]],[1,37,[0,0,.625]],[2,28,[.125]],[3,40,[0,.99]]]){
+        const rolls=[0,(id-.5)/44,...values];
+        const result=settleDailyIllnessEvent(db,rows[i].user_id,day,now,()=>{assert.ok(rolls.length,"額外事件亂數");return rolls.shift();},"multi");
+        assert.equal(result.originalId,id);assert.equal(rolls.length,0);
+      }
+      assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(),[]);
+    }finally{db.close();}
+    const expected=[[100002,110000,-3,2],[99998,99998,3,2],[90000,100002,3,2],[99500,100000,0,1]];
+    const states=[];
+    for(const [i,r] of residents.entries()){
+      const response=await api(srv.url,"state",undefined,r.cookie);assert.equal(response.status,200);
+      const state=response.result,[cash,bank,k,history]=expected[i];
+      assert.deepEqual([state.character.money,state.character.bank,state.character.kpoint,state.healthEvents.length],[cash,bank,k,history]);
+      assert.equal(state.character.lastEventDay,day);
+      assert.equal(state.bankTax.assessmentBase,cash+bank);
+      states.push(state);
+    }
+    assert.equal(states[0].bankLedger[0].credit,10000);assert.equal(states[1].bankLedger[0].debit,2);assert.equal(states[2].bankLedger[0].credit,2);
+    const book=states[3].legacyInventory.find(x=>x.origin==="event40");
+    assert.equal(book.name,"英文解釈教室");assert.equal(book.remaining,3);assert.equal(states[3].healthEvents[0].effects.riverItem.status,"awarded");
+    assert.equal(states[2].legacyInventory.some(x=>x.origin==="event38"),false);
+    const requests=[];
+    for(const i of [0,1]){
+      const before=states[i],item=before.legacyInventory.find(x=>x.origin==="event38");
+      assert.equal(item.name,i===0?"悪魔の笛":"天使の笛");assert.equal(item.remaining,4);
+      assert.equal(before.legacyItemActions.find(x=>x.sourceLine===item.sourceLine)?.canUse,true);
+      const payload={sourceLine:item.sourceLine,requestId:"i6-flute-manual-"+i};requests.push(payload);
+      const used=await api(srv.url,"inventory/legacy/use",payload,residents[i].cookie);assert.equal(used.status,200,JSON.stringify(used.result.error));
+      assert.equal(used.result.itemUseResult.replayed,false);assert.deepEqual(used.result.itemUseResult.changes.stats,{});
+      assert.equal(used.result.legacyItemActions.find(x=>x.sourceLine===item.sourceLine).remaining,3);
+      assert.equal(used.result.character.money,before.character.money);assert.equal(used.result.character.bank,before.character.bank);assert.equal(used.result.character.kpoint,before.character.kpoint);
+      assert.deepEqual(used.result.healthEvents,before.healthEvents);
+      const denied=await api(srv.url,"inventory/legacy/use",{...payload,requestId:"i6-flute-cooldown-"+i},residents[i].cookie);assert.equal(denied.status,400);assert.match(denied.result.error,/間隔/);
+    }
+    const directory=srv.directory;await srv.stop({preserveData:true});srv=await start("multi",null,directory);
+    for(const [i,r] of residents.entries()){
+      const after=(await api(srv.url,"state",undefined,r.cookie)).result;
+      const [cash,bank,k,history]=expected[i];assert.deepEqual([after.character.money,after.character.bank,after.character.kpoint,after.healthEvents.length],[cash,bank,k,history]);
+      assert.deepEqual(after.healthEvents,states[i].healthEvents);
+      if(i<2){
+        const replay=await api(srv.url,"inventory/legacy/use",requests[i],r.cookie);assert.equal(replay.status,200);assert.equal(replay.result.itemUseResult.replayed,true);
+        assert.equal(replay.result.legacyItemActions.find(x=>x.sourceLine===requests[i].sourceLine).remaining,3);
+        assert.deepEqual(replay.result.healthEvents,after.healthEvents);
+      }else if(i===3)assert.deepEqual(after.legacyInventory.find(x=>x.origin==="event40"),book);
+    }
+    const final=new DatabaseSync(join(directory,"multi.sqlite"));try{assert.deepEqual(final.prepare("PRAGMA foreign_key_check").all(),[]);}finally{final.close();}
+  }finally{await srv.stop();}
+});
