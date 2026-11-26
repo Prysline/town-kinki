@@ -91,9 +91,23 @@
 - #145 首輪 [PR](https://github.com/Prysline/town-kinki/actions/runs/45855464247) 969/969，兩項 J-4c 成功；[Push](https://github.com/Prysline/town-kinki/actions/runs/45855452497) 968/969，第840項既有第55階段多人骰子 HTTP 測試在啟動時 EADDRINUSE（127.0.0.1:36495），不是遊戲斷言失敗；server/app 語法步驟因 npm test 失敗未執行。保留紅燈，不以另一份成功替代。
 - 根因為 11 個 HTTP 測試啟動器先綁定空埠、關閉再啟動子程序，存在 TOCTOU。改由現有 PORT=0 讓 OS 在實際 server 綁定時原子分配，啟動日誌印出實際 server.address().port，測試等待自己的子程序日誌並保留 HTTP /api/state readiness。固定 PORT 的正式啟動方式不變，沒有新增測試 API 或改遊戲規則。原斷言、測試並行與超時保留；新增雙子程序同時啟動、不同 URL、真正建角與另一存檔隔離測試。待新 HEAD 雙 CI 完整日誌及合併後雙 CI。
 
+
+## J-4 正式驗收
+
+- #145 已合併正式 HEAD `b084e46e3551f7da470d33438290f1e2153ca470`，tree `63bc512f3e8e2add84a29bbc326307dfbb4e20d1`；候選 `d1a2e8b568c05833f15016734048558c122808b9`、#145 合成 `c9b67bc9b18608ea153a02619e2faf49f7aa151d`、#1 合成 `57e0d540ca2ad4f9b2303f9271c3eac0763b1809` 同 tree。
+- 合併前 [Push](https://github.com/Prysline/town-kinki/actions/runs/45856408980) job 140035836178（6311 行）、[PR](https://github.com/Prysline/town-kinki/actions/runs/45856418555) job 140035868089（6327 行）；合併後 [Push](https://github.com/Prysline/town-kinki/actions/runs/45861165887) job 140052260113（6311 行）、[長期 PR #1](https://github.com/Prysline/town-kinki/actions/runs/45861175640) job 140052293423（6327 行），[正式交接](https://github.com/Prysline/town-kinki/pull/145#issuecomment-7198283180) 四份完整日誌 970/970、fail/cancelled/skipped/todo=0、server/app 語法成功。本窗重新取得合併後兩組完整日誌，核對 checkout 與全部 970 個 ok。保留首輪 Push EADDRINUSE 失敗紀錄，非隱藏或降斷言。master `f74e077780ed96f9b271f66e5afe63037c7c7403` 不變，#1 Draft，#146 另窗。
+- J-4a/b/c 指定範圍正式完成，不再重做。合成 fixture 不是完整真實舊資料庫、自然 RNG、真人或跨設備驗收。
+
+## J-5｜聯合歷史升級與故障復原（候選切片）
+
+- 既有 J-1–4 已分別驗證單機 WAL 防護、稅表遷移、兩模式戰鬥收據、跨 I 歷史事件／券／稅基；第67–71階段既有 CLI、百貨、房屋、郵件、禮品及未完成公路旅程還原證據保留，不重做。多人快照使用測試 SQLite backup() / COPYFILE_EXCL，不新增正式多人備份功能。
+- 基準 tree 遞迴檔案清冊及上述測試／工具盤點定位本切片：J-3b 有戰鬥獲券與負 K 點，J-4c 有事件、券與耐久，但未在同一歷史 fixture 串接街頭獲券→同碼歷史兌換→新兌換失敗／重試。新增測試沿用 J-4c 的 #137 post-I 歷史 schema 子集，補同版街頭表及正式核心；#137 與基準 street-fight blob `1c0a6e95208fcba0d4e1a2e65abb7b2dbd052c5d`、events `3c7e4ea023f6bb12d5085d8a16d6d08849988594`、banking `faa6920f3fe1539f095f73a4098d98b2b5f2664f`、coupon-redemption `7a7138e659827bfbda5a7d834286ecb989b115ed`、legacy-inventory `0a58961d6ff7018c51aecd4362955c6bdd155214`、engine `161d8930b78c954b511ff17f3f463d5b5fd82369` 一致。既有兩項 J-4c 測試原斷言保留。
+- 新增 J-5 test：三個合成帳號、真實核心受控 RNG 產生戰鬥勝利、券及負 K 點，與既存事件、銀行帳簿、稅基、庫存、同請求碼分模組收據一同 WAL 快照；新目錄拒絕覆寫、FK/integrity、來源主檔/WAL/快照 SHA-256。正式 HTTP 歷史重送、另一帳號隔離、未登入／冒用拒絕；注入券收據 INSERT 失敗，核對整個受測歷史資料集合原子回滾，重試只扣一次券、只發一次獎品，重啟後重送及歷史保存。
+- 無玩法、schema、正式 API 變更；只用合成 Web 資料與公開原版規則來源。本機 GitHub DNS 仍失敗，未跑完整 repo，不冒稱本機測試。待同 HEAD Push/PR 完整 CI、diff/合成 tree 與合併後雙 CI。J-5 未結案；聯合證據覆蓋及 J-6 完成清冊另待正式確認。
+
 ## 後續驗收切片（待逐項查證）
 
 1. 【J-2 已完成】#103 真實舊稅表、負 K 點、索引及歷史資料的實體 WAL 升級與失敗回滾；保留 #104/#105 已驗證情境。
 2. 【J-3a／J-3b 已完成】以歷史公開 Web 戰鬥模組／正式 #121 代表性 schema 核對收據、NPC 來源、重送及帳號隔離，連同舊稅表交叉驗證。
-3. 【J-4 進行中】以歷史 Web 事件與券 schema 及 I 前後的正式版本測試歷史、道具耐久、領獎／兌換收據、銀行帳簿與稅基不丟失；保留核准兩笛規則。
-4. 聯合回歸與故障復原（新目錄、來源及快照保留、integrity_check、foreign_key_check、HTTP 續玩與重啟、帳號隔離）；整理同 HEAD 四組 CI 及完成界線。真人、跨設備、正式部署演練另列，不能由 CI 取代。
+3. 【J-4 已完成】以歷史 Web 事件與券 schema 及 I 前後的正式版本測試歷史、道具耐久、領獎／兌換收據、銀行帳簿與稅基不丟失；保留核准兩笛規則。
+4. 【J-5 候選／J-6 待辦】聯合回歸與故障復原（新目錄、來源及快照保留、integrity_check、foreign_key_check、HTTP 續玩與重啟、帳號隔離）；整理同 HEAD 四組 CI 及完成界線。真人、跨設備、正式部署演練另列，不能由 CI 取代。
