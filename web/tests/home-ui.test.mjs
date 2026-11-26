@@ -4,7 +4,7 @@ import {runInNewContext} from "node:vm";
 import { readFileSync } from "node:fs";
 import { describeTile } from "../src/town-map.mjs";
 import { FACILITY_PANELS,townCellAction } from "../public/town-home.js";
-import { displayLoto6DrawReason } from "../public/loto6-display.js";
+import { displayLoto6DrawReason,formatLoto6DrawNotice } from "../public/loto6-display.js";
 
 const html=readFileSync(new URL("../public/index.html",import.meta.url),"utf8");
 const css=readFileSync(new URL("../public/style.css",import.meta.url),"utf8");
@@ -1153,12 +1153,22 @@ test("I-5 優惠券前端：連點、交錯獎品、失敗後重新整理及角�
 });
 
 
-test("六號樂透開獎通知及最近開獎紀錄共用繁中原因，保留原始原因鍵",()=>{
+test("六號樂透三種通知及最近開獎紀錄顯示確認文案，保留原始原因鍵",()=>{
   assert.equal(displayLoto6DrawReason("06:00"),"06:00時段");
   assert.equal(displayLoto6DrawReason("200 tickets"),"累計售出 200 注開獎");
   assert.equal(displayLoto6DrawReason(null),"開獎原因未記錄");
   assert.equal(displayLoto6DrawReason("unknown"),"開獎原因未記錄");
-  assert.ok(script.includes('"六號樂透已開獎（"+displayLoto6DrawReason(result.reason)+"），中獎號碼 "'));
+  const draw={drawn:true,reason:"06:00",winningNumbers:[1,6,12,18,24,36],ticketCount:7,totalPrize:5000};
+  const money=value=>String(value);
+  assert.equal(formatLoto6DrawNotice(draw,money),
+    "六號樂透已開獎（每日 06:00 定時開獎），中獎號碼 1、6、12、18、24、36。共結算 7 注，獎金合計 5000 匯入各玩家的普通銀行。");
+  assert.equal(formatLoto6DrawNotice({...draw,reason:"200 tickets",ticketCount:200},money),
+    "六號樂透已開獎（彩券已累計售出 200 注），中獎號碼 1、6、12、18、24、36。共結算 200 注，獎金合計 5000 匯入各玩家的普通銀行。");
+  assert.equal(formatLoto6DrawNotice({drawn:false},money),
+    "目前尚未到達六號樂透的 06:00 開獎時間，彩券也未累計售出 200 注。");
+  assert.ok(formatLoto6DrawNotice({...draw,reason:"unknown"},money).includes("開獎原因未記錄"));
+  assert.equal(draw.reason,"06:00");
+  assert.ok(script.includes("notify(formatLoto6DrawNotice(result,money));"));
   assert.ok(script.includes('"｜"+displayLoto6DrawReason(info.lastDraw.reason)+'));
   assert.ok(!script.includes("200注滿額"));
 });
