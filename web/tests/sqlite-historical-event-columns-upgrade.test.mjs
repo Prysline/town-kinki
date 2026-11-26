@@ -34,12 +34,12 @@ async function serve(dir,zone){
   const child=spawn(process.execPath,["src/server.mjs"],{
     cwd:root,env:{...process.env,GAME_MODE:"solo",HOST:"127.0.0.1",PORT:"0",DATA_DIR:dir,GAME_TIMEZONE:zone}
   });
-  let log="";
-  child.stdout.on("data",x=>log+=x);
+  let log="",stdout="";
+  child.stdout.on("data",x=>{stdout+=x;log+=x;});
   child.stderr.on("data",x=>log+=x);
   for(let i=0;i<100;i++){
     if(child.exitCode!==null)break;
-    const url=log.match(/^TOWN Web \[(?:solo|multi)\] (http:\/\/127\.0\.0\.1:[1-9]\d*)\r?$/m)?.[1];
+    const url=stdout.match(/^TOWN Web \[(?:solo|multi)\] (http:\/\/127\.0\.0\.1:[1-9]\d*)\r?\n/m)?.[1];
     if(!url){await delay(100);continue;}
     try{
       const response=await fetch(url+"/api/state",{signal:AbortSignal.timeout(350)});

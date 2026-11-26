@@ -21,15 +21,15 @@ async function start(mode, seed, existingDirectory = null, extraEnv = {}) {
   const child = spawn(process.execPath, ["src/server.mjs"], {
     cwd: root, env: { ...process.env, HOST: "127.0.0.1", GAME_MODE: mode, DATA_DIR: directory, ...extraEnv, PORT: "0" }
   });
-  let log = "";
-  child.stdout.on("data", data => { log += data; });
+  let log = "", stdout = "";
+  child.stdout.on("data", data => { stdout += data; log += data; });
   child.stderr.on("data", data => { log += data; });
   let url;
   let ready = false;
   for (let i = 0; i < 90; i++) {
     if (child.exitCode !== null) break;
     // 等子程序真正完成 OS bind 才連線，不把釋放後的空埠當成保留埠。
-    url = log.match(/^TOWN Web \[(?:solo|multi)\] (http:\/\/127\.0\.0\.1:[1-9]\d*)\r?$/m)?.[1];
+    url = stdout.match(/^TOWN Web \[(?:solo|multi)\] (http:\/\/127\.0\.0\.1:[1-9]\d*)\r?\n/m)?.[1];
     if (!url) { await delay(100); continue; }
     try {
       const response = await fetch(url + "/api/state", { signal: AbortSignal.timeout(400) });

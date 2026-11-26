@@ -28,12 +28,12 @@ async function serve(dataDir){
     cwd:root,env:{...process.env,GAME_MODE:"solo",HOST:"127.0.0.1",
       PORT:"0",DATA_DIR:dataDir}
   });
-  let logs="";
-  child.stdout.on("data",chunk=>logs+=chunk);
+  let logs="",stdout="";
+  child.stdout.on("data",chunk=>{stdout+=chunk;logs+=chunk;});
   child.stderr.on("data",chunk=>logs+=chunk);
   for(let i=0;i<100;i++){
     if(child.exitCode!==null)break;
-    const url=logs.match(/^TOWN Web \[(?:solo|multi)\] (http:\/\/127\.0\.0\.1:[1-9]\d*)\r?$/m)?.[1];
+    const url=stdout.match(/^TOWN Web \[(?:solo|multi)\] (http:\/\/127\.0\.0\.1:[1-9]\d*)\r?\n/m)?.[1];
     if(!url){await delay(100);continue;}
     try{
       const response=await fetch(url+"/api/state",{signal:AbortSignal.timeout(350)});
