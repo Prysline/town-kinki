@@ -103,3 +103,41 @@ export function projectOriginalOnsenExitEnergy(state,config,exitKey,now){
   return {bath,maxima,bodyEnergy:clamp(raw.body,maxima.body),brainEnergy:clamp(raw.brain,maxima.brain),
     lastBodyAt:now,lastBrainAt:now};
 }
+
+// basic.cgi 的能力區段為每個 CGI 請求重新初始化的 Perl 全域變數。
+// 僅模型化正常正整數能力的原始分支，不修正作者筆誤或在玩家端執行。
+const SILVER_DRAW_KEYS=Object.freeze(Object.keys(BODY_WEIGHTS));
+const GOLD_DRAW_KEYS=Object.freeze([...SILVER_DRAW_KEYS,...BRAIN_KEYS,"love","unique","etti"]);
+export function projectOriginalOnsenAbilityRolls(stats,key,random=Math.random){
+  if(!BATHS.some(b=>b[0]===key))throw Error("未知的原版浴池");
+  const keys=key==="special_dou"?["tairyoku","kenkou"]:
+    key==="special_gin"?SILVER_DRAW_KEYS:key==="special_kin"?GOLD_DRAW_KEYS:[];
+  const sides=key==="special_dou"?10:20;
+  const next={...stats};
+  for(const stat of keys){
+    if(!Number.isSafeInteger(stats?.[stat])||stats[stat]<=0)
+      throw Error("能力來源模型限正整數："+stat);
+  }
+  const rolls=keys.map(stat=>{
+    const value=random();
+    if(!Number.isFinite(value)||value<0||value>=1)throw Error("無效的受控亂數");
+    return {stat,sides,roll:Math.floor(value*sides)+1};
+  });
+  const gains={};
+  for(const {stat,roll} of rolls){
+    // 銀／金：tairyoku_up 與 tairyku_up 不同，未初始化讀成 0，實際體力不變。
+    if(sides===20&&stat==="tairyoku")continue;
+    // spped_up 未初始化，判斷永遠通過，因此 speed_up 1～20 都會增加。
+    if(!(sides===20&&stat==="speed")&&roll>(sides===10?3:10))continue;
+    // $$kyakuryoku 對正整數能力解參照 Perl 的唯讀數字變數。原版在扣款、寫檔前中止。
+    // 保留未提交的暫存能力供差分比較，不把這些值當成可保存的交易結果。
+    if(sides===20&&stat==="kyakuryoku")return {
+      status:"source-abort",reason:"read-only-value",rolls,stats:{...stats},gains:{},uncommittedStats:next
+    };
+    const total=next[stat]+roll;
+    if(!Number.isSafeInteger(total))throw Error("能力數值超出安全整數範圍");
+    next[stat]=total;
+    gains[stat]=roll;
+  }
+  return {status:"source-ok",rolls,stats:next,gains};
+}
