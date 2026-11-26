@@ -759,12 +759,16 @@ test("Chrome 多人街頭格鬥：真實按鈕送出戰鬥、展開戰報、手�
     setCash(14999);
     await chrome.send("Page.reload");
     await until(chrome,"!document.querySelector('#game')?.hidden && document.querySelector('#street-fight-status')?.textContent?.includes('參戰現金不足')","低於門檻顯示原因");
+    await click(chrome,"#home-street-fight");
+    assert.equal(await evaluate(chrome,"document.querySelector('#facility-pane-battle').hidden"),false);
+    assert.equal(await evaluate(chrome,"document.querySelector('#map-editor').hidden"),true);
     assert.equal(await evaluate(chrome,"document.querySelector('#street-fight-play').disabled"),true);
     assert.match(await evaluate(chrome,"document.querySelector('#street-fight-status').textContent"),/15,000/);
     assert.match(await evaluate(chrome,"document.querySelector('#street-fight-panel').textContent"),/不是固定入場費/);
     setCash(15000);
     await chrome.send("Page.reload");
     await until(chrome,"!document.querySelector('#game')?.hidden && document.querySelector('#street-fight-play')?.disabled===false","恰好 15,000 元格鬥入口可使用");
+    await click(chrome,"#home-street-fight");
     await evaluate(chrome,"window.confirm=()=>true");
     await loseBattleResponse(chrome,"street-fight/play");
     await click(chrome,"#street-fight-play");
@@ -819,6 +823,8 @@ test("Chrome C 聯賽：實際培育、模仿者比賽、戰報與手機視窗",
     await chrome.send("Page.navigate",{url:web.url});await until(chrome,"!document.querySelector('#create')?.hidden","建角入口");
     await evaluate(chrome,"window.confirm=()=>true");await fill(chrome,'#create-form [name="name"]',"聯賽測試居民");await click(chrome,"#create-submit");
     await until(chrome,"!document.querySelector('#game')?.hidden","主畫面");
+    await click(chrome,"#home-c-league");
+    assert.equal(await evaluate(chrome,"document.querySelector('#facility-pane-battle').hidden"),false);
     await click(chrome,"#c-league-open");await until(chrome,"document.querySelector('#c-league-result')?.textContent?.includes('已進入第 1 季')","明確進入聯賽");
     await click(chrome,"#c-league-training summary");
     // The actual form submits an empty name; verify server rejection leaves no fighter or cash change.
@@ -866,6 +872,7 @@ test("Chrome C 聯賽：實際培育、模仿者比賽、戰報與手機視窗",
     if(await evaluate(chrome,"!document.querySelector('#solo-lobby')?.hidden"))await click(chrome,"#solo-continue");
     await until(chrome,"!document.querySelector('#game')?.hidden","C重啟主畫面");
     assert.deepEqual(await browserBattleState(chrome,"cLeague"),cCommitted);
+    await click(chrome,"#home-c-league");
     assert.match(await evaluate(chrome,"document.querySelector('#c-league-history summary').textContent"),/模仿者/);
     console.log("H_C_LEAGUE "+JSON.stringify({retry:true,restart:true,invalidRejected:true,widths:[1440,768,375]}));
   }finally{await chrome?.stop();await web?.stop();rmSync(workspace,{force:true,recursive:true,maxRetries:50,retryDelay:200});}
@@ -1016,6 +1023,7 @@ test("階段H Chrome B聯賽與大阪：1440/768/375真實地圖點擊、回應�
     const battles=savedReceipt("osaka_battles");assert.equal(battles.length,2);
     assert.equal(battles[1].result.outcome,"win");assert.equal(battles[1].result.reward.granted,true);
     // Same resident, same actual save: from B to Osaka to C and the existing #38 event.
+    await click(chrome,"#home-c-league");
     await click(chrome,"#c-league-open");
     await until(chrome,"document.querySelector('#c-league-result')?.textContent?.includes('已進入第 1 季')","跨玩法進入C聯賽");
     if(!await evaluate(chrome,"document.querySelector('#c-league-training').open"))await click(chrome,"#c-league-training summary");
@@ -1088,5 +1096,78 @@ test("階段H Chrome B聯賽與大阪：1440/768/375真實地圖點擊、回應�
       assert.equal(await evaluate(chrome,"document.querySelectorAll('#osaka-result ol li').length"),battles[1].result.rounds.length);
     }
     console.log("H_BROWSER "+JSON.stringify({widths:[1440,768,375],arenaReceipts:first.length,osakaReceipts:battles.length,retry:true,restart:true,npc:battles[1].result.npcSource,cLeagueReceipts:crossC.history.length,event38:eventHistory.length,osakaRetry:true}));
+  }finally{await chrome?.stop();await web?.stop();rmSync(workspace,{force:true,recursive:true,maxRetries:50,retryDelay:200});}
+});
+
+test("Chrome 街區編輯：1440/768/375 工具列緊鄰地圖、連續儲存不跳頁、戰鬥獨立入口與重啟", {timeout:90000},async()=>{
+  const workspace=mkdtempSync(join(tmpdir(),"town-chrome-map-edit-"));
+  const dataDir=join(workspace,"sqlite");let web=null,chrome=null;
+  try{
+    web=await startWeb(dataDir);chrome=await openChrome(join(workspace,"chrome"));
+    await chrome.send("Page.enable");await chrome.send("Runtime.enable");await viewport(chrome,1440,900);
+    await chrome.send("Page.navigate",{url:web.url});
+    await until(chrome,"!document.querySelector('#create')?.hidden","建角入口");
+    await evaluate(chrome,"window.confirm=()=>true");await fill(chrome,'#create-form [name="name"]',"街區動線驗收");await click(chrome,"#create-submit");
+    await until(chrome,"!document.querySelector('#game')?.hidden","主畫面");
+    assert.equal(await evaluate(chrome,"document.querySelector('#facility-pane-battle').hidden"),true);
+    assert.equal(await evaluate(chrome,"document.querySelector('#map-editor').nextElementSibling.classList.contains('map-scroll')"),true);
+    assert.equal(await evaluate(chrome,"document.querySelector('#map-palette').disabled"),true);
+    await click(chrome,"#map-edit-toggle");
+    await until(chrome,"document.querySelector('#map-editor').classList.contains('is-editing')&&!document.querySelector('#map-palette').disabled","編輯模式已啟用");
+    await evaluate(chrome,`(()=>{const real=window.fetch.bind(window),scroll=Element.prototype.scrollIntoView;
+      window.mapEditTrace={requests:[],feedbackScrolls:0};
+      Element.prototype.scrollIntoView=function(...args){if(this.matches(".operation-feedback,#map-edit-feedback"))window.mapEditTrace.feedbackScrolls++;return scroll.apply(this,args);};
+      window.fetch=async(input,init)=>{
+        if(String(input)==="/api/map/tile"){
+          const payload=JSON.parse(init.body),cell=document.querySelectorAll("#town-map .map-cell")[payload.row*16+payload.column];
+          window.mapEditTrace.requests.push({payload,top:cell.getBoundingClientRect().top,left:document.querySelector("#map-workspace .map-scroll").scrollLeft});
+        }
+        return real(input,init);
+      };return true;})()`);
+    const edits=[{width:1440,height:900,cell:"A1",row:0,column:0,symbol:"道横"},
+      {width:768,height:1024,cell:"F8",row:5,column:7,symbol:"道縦"},
+      {width:375,height:812,cell:"L16",row:11,column:15,symbol:"道１"},
+      {width:375,height:812,cell:"L15",row:11,column:14,symbol:"道１"}];
+    for(const edit of edits){
+      await viewport(chrome,edit.width,edit.height);
+      // 真實 select 的值及 change 事件；格子本身以 CDP 實體滑鼠點擊。
+      const selected=await evaluate(chrome,`(()=>{const p=document.querySelector("#map-palette");p.value=${JSON.stringify(edit.symbol)};p.dispatchEvent(new Event("change",{bubbles:true}));return p.value;})()`);
+      assert.equal(selected,edit.symbol);
+      const selector='#town-map button[aria-label^='+JSON.stringify(edit.cell+"：")+']';
+      await evaluate(chrome,`document.querySelector(${JSON.stringify(selector)}).scrollIntoView({behavior:"instant",block:"center",inline:"nearest"});true`);
+      await pause(250);
+      const visible=await evaluate(chrome,`(()=>{const e=document.querySelector("#map-editor"),r=e.getBoundingClientRect(),p=document.querySelector("#map-palette").getBoundingClientRect(),c=document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect(),head=document.querySelector("#compact-status");return {top:r.top,bottom:r.bottom,paletteTop:p.top,paletteBottom:p.bottom,viewport:innerHeight,cellTop:c.top,headBottom:head.hidden?0:head.getBoundingClientRect().bottom,sticky:getComputedStyle(e).position};})()`);
+      assert.equal(visible.sticky,"sticky");
+      assert.ok(visible.paletteTop>=visible.headBottom-2&&visible.paletteBottom<=visible.viewport&&visible.bottom<=visible.cellTop+3,"工具列與所編輯格子應同時可見："+JSON.stringify(visible));
+      await click(chrome,selector);
+      await until(chrome,`document.querySelector("#map-edit-feedback").textContent.includes(${JSON.stringify(edit.cell+"：")})&&document.querySelector("#map-edit-feedback").textContent.includes("已儲存")&&document.querySelector("#town-map").getAttribute("aria-busy")==="false"`,"實際格子儲存 "+edit.cell);
+      const observed=await evaluate(chrome,`(async()=>{const s=await(await fetch("/api/state")).json(),cell=document.querySelectorAll("#town-map .map-cell")[${edit.row*16+edit.column}],trace=window.mapEditTrace.requests.at(-1);return {raw:s.map.cells[${edit.row*16+edit.column}].raw,top:cell.getBoundingClientRect().top,left:document.querySelector("#map-workspace .map-scroll").scrollLeft,trace,selected:document.querySelector("#map-palette").value,feedbackScrolls:window.mapEditTrace.feedbackScrolls};})()`);
+      assert.equal(observed.raw,edit.symbol);
+      assert.equal(observed.selected,edit.symbol);
+      assert.deepEqual(observed.trace.payload,{row:edit.row,column:edit.column,symbol:edit.symbol});
+      assert.ok(Math.abs(observed.top-observed.trace.top)<=8,"儲存後格子不得跳離原視窗："+JSON.stringify(observed));
+      assert.ok(Math.abs(observed.left-observed.trace.left)<=2,"水平地圖位置應保留");
+      assert.equal(observed.feedbackScrolls,0);
+    }
+    const trace=await evaluate(chrome,"window.mapEditTrace");assert.equal(trace.requests.length,edits.length);
+    await click(chrome,"#map-edit-toggle");
+    assert.equal(await evaluate(chrome,"document.querySelector('#map-palette').disabled"),true);
+    assert.equal(await evaluate(chrome,"document.querySelector('#map-editor').classList.contains('is-editing')"),false);
+    await click(chrome,"#home-street-fight");
+    assert.equal(await evaluate(chrome,"document.querySelector('#facility-pane-battle').hidden"),false);
+    assert.match(await evaluate(chrome,"document.querySelector('#street-fight-status').textContent"),/單機沒有/);
+    await click(chrome,"#home-c-league");
+    assert.equal(await evaluate(chrome,"document.activeElement.id"),"c-league-panel");
+    await click(chrome,"#facility-tab-jobs");
+    assert.equal(await evaluate(chrome,"document.querySelector('#facility-pane-battle').hidden"),true);
+    await web.stop();web=await startWeb(dataDir);
+    await chrome.send("Page.navigate",{url:web.url});
+    await until(chrome,"!document.querySelector('#game')?.hidden||!document.querySelector('#solo-lobby')?.hidden","重啟街區");
+    if(await evaluate(chrome,"!document.querySelector('#solo-lobby')?.hidden"))await click(chrome,"#solo-continue");
+    await until(chrome,"!document.querySelector('#game')?.hidden","重啟主畫面");
+    const saved=await evaluate(chrome,`(async()=>{const s=await(await fetch("/api/state")).json();return ${JSON.stringify(edits.map(e=>e.row*16+e.column))}.map(i=>s.map.cells[i].raw);})()`);
+    assert.deepEqual(saved,edits.map(e=>e.symbol));
+    assert.equal(await evaluate(chrome,"document.querySelector('#facility-pane-battle').hidden"),true);
+    console.log("UI_MAP_EDIT "+JSON.stringify({widths:[1440,768,375],saved:edits.length,feedbackScrolls:trace.feedbackScrolls,restart:true,battleTab:true}));
   }finally{await chrome?.stop();await web?.stop();rmSync(workspace,{force:true,recursive:true,maxRetries:50,retryDelay:200});}
 });

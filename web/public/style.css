@@ -662,3 +662,23 @@ input,select,textarea{background-color:#fff;color:#23352d}
 .map-axis{background:var(--town-map-axis-bg);color:var(--town-map-axis-ink)}
 .map-cell:hover{background:var(--town-map-hover)}
 footer{color:var(--town-page-muted)}
+
+/* 街區編輯工具只在地圖區內固定，不遮蓋其他設施；多人仍由 hidden 控制。 */
+.game-shell .map-workspace{min-width:0;position:relative}
+.game-shell .map-workspace .map-editor{margin:.35rem 0;padding:.5rem .6rem;box-shadow:none}
+.game-shell .map-edit-controls{display:flex;align-items:center;gap:.35rem .75rem;flex-wrap:wrap}
+.game-shell .map-edit-controls .map-editor-switch{margin:0!important;flex:0 1 auto}
+.game-shell .map-edit-controls .map-editor-switch input{margin:0}
+.game-shell .map-edit-controls label[for="map-palette"]{display:flex;align-items:center;gap:.35rem;flex:1 1 230px;min-width:0;margin:0}
+.game-shell .map-edit-controls select{flex:1;min-width:0;max-width:none;margin:0}
+.game-shell .map-editor #map-edit-status,.game-shell .map-editor #map-edit-feedback{margin:.2rem 0 0;overflow-wrap:anywhere;line-height:1.4}
+.game-shell .map-editor #map-edit-feedback{min-height:1.4em}
+.game-shell .map-editor.is-editing{position:sticky;top:0;z-index:4;border-color:#347250;background:#f1f8ef;box-shadow:0 2px 6px #23352d24}
+body.compact-status-active .game-shell .map-editor.is-editing{top:var(--compact-status-height,64px)}
+.game-shell .map-editor.is-editing #map-edit-status{color:#235b3e;font-weight:700}
+.game-shell .map-editor .map-edit-feedback.error{color:#982c25;font-weight:600}
+.game-shell .map-editor.is-editing ~ .map-scroll .map-cell:not(:disabled){cursor:crosshair}
+@media(max-width:450px){
+  .game-shell .map-edit-controls label[for="map-palette"]{flex-basis:100%}
+  .game-shell .map-editor #map-edit-status,.game-shell .map-editor #map-edit-feedback{font-size:.78rem}
+}

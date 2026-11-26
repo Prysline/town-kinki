@@ -385,9 +385,10 @@ const paneMap={
   hospital:["hospital-panel"],
   events:["event-panel"],
   mail:["mail-panel"],
-  games:["arcade-dice-panel"]
+  games:["arcade-dice-panel"],
+  battle:["street-fight-panel","c-league-panel"]
 };
-test("高密度主畫面：地圖摘要與十組可存取設施分頁，保留全部現有操作元件",()=>{
+test("高密度主畫面：地圖摘要與十一組可存取設施分頁，保留全部現有操作元件",()=>{
   const main=html.slice(html.indexOf('id="game"'));
   assert.ok(main.indexOf('id="town-panel"')<main.indexOf('id="player-summary"'));
   assert.ok(main.indexOf('id="player-summary"')<main.indexOf('id="facility-tabs"'));
@@ -690,14 +691,18 @@ test("表單與餘額驗證錯誤就地顯示；共用錯誤處理亦有中央�
   assert.match(script,/showResultDialog\(message,title\|\|\(error\?"操作未完成":"操作結果"\),error\)/);
   assert.match(css,/\.operation-feedback\.error/);
   assert.match(script,/source:el\("map-selection"\)/);
-  assert.match(script,/source:path==="map\/tile"\?el\("map-selection"\):undefined/);
+  assert.match(script,/setMapEditFeedback\(name\+"：儲存失敗，"\+error\.message,true\)/);
+  assert.doesNotMatch(script,/source:path==="map\/tile"\?el\("map-selection"\):undefined/);
   assert.match(script,/renderLegacyItems\(\);\s+notify\(error\.message,true\)/);
 });
 test("電車、工作維持不同結果標題；非交易訊息不強制跳出對話框",()=>{
   assert.match(script,/title:"電車移動結果"/);
   assert.match(script,/title:"工作結果"/);
   assert.match(script,/notify\(messages\.join\("\\n"\)/);
-  assert.match(script,/inline:path==="map\/tile"\|\|path==="job\/payment"/);
+  assert.match(script,/notify\(message,false,\{inline:path==="job\/payment"\}\)/);
+  const save=script.slice(script.indexOf("async function saveMapTile("),script.indexOf("function renderTownMap()"));
+  assert.match(save,/setMapEditFeedback\(name\+"："\+label\+"，已儲存。"\)/);
+  assert.doesNotMatch(save,/notify\(|showResultDialog\(|scrollIntoView\(/);
   assert.match(script,/notify\("遊戲資料已更新",false,\{inline:true\}\)/);
 });
 test("現金與普通存款同時出現在固定狀態列及銀行表單，交易回覆含最新餘額",()=>{
@@ -1049,4 +1054,34 @@ test("大阪 NPC 來源與版本：開始確認、狀態、當局、歷史各自
   assert.ok(script.includes("osakaSourceLabel(game.npcSource,game.npcSourceVersion)"));
   assert.ok(script.includes("osakaSourceLabel(battle.npcSource,battle.npcSourceVersion)"));
   assert.ok(script.includes("osakaSourceLabel(b.npcSource,b.npcSourceVersion)"));
+});
+
+test("街區編輯器緊鄰地圖、就地顯示儲存狀態；戰鬥面板移入獨立分頁",()=>{
+  const start=html.indexOf('id="map-workspace"');
+  const editor=html.indexOf('id="map-editor"',start);
+  const board=html.indexOf('id="town-map"',editor);
+  const shortcuts=html.indexOf('id="facility-shortcuts"',board);
+  const residents=html.indexOf('id="residents"',shortcuts);
+  const battle=html.indexOf('id="facility-pane-battle"',residents);
+  assert.ok(start>0&&start<editor&&editor<board&&board<shortcuts&&shortcuts<residents&&residents<battle);
+  assert.match(html.slice(start,board),/id="map-edit-feedback" role="status"/);
+  assert.match(html.slice(start,board),/id="map-editor" hidden/);
+  assert.match(html.slice(shortcuts,residents),/id="home-street-fight" data-facility="street-fight-panel"/);
+  assert.match(html.slice(shortcuts,residents),/id="home-c-league" data-facility="c-league-panel"/);
+  assert.doesNotMatch(html.slice(start,residents),/id="street-fight-panel"|id="c-league-panel"/);
+  const battleEnd=html.indexOf('id="facility-pane-mail"',battle);
+  const pane=html.slice(battle,battleEnd);
+  assert.match(pane,/role="tabpanel"[^>]*hidden/);
+  assert.match(pane,/id="street-fight-panel"/);
+  assert.match(pane,/id="c-league-panel"/);
+  assert.equal((pane.match(/<summary>玩法與限制說明<\/summary>/g)||[]).length,2);
+  assert.match(script,/editor\.hidden = !map\.editable/);
+  assert.match(script,/saveMapTile\(row,col,name\)/);
+  const save=script.slice(script.indexOf("async function saveMapTile("),script.indexOf("function renderTownMap()"));
+  assert.match(save,/await api\("map\/tile",\{row,column,symbol\}\)/);
+  assert.match(save,/if\(mapEditBusy\|\|!state\?\.map\?\.editable/);
+  assert.match(save,/setMapEditFeedback\(name\+"："\+label\+"，已儲存。"\)/);
+  assert.doesNotMatch(save,/notify\(|scrollIntoView\(/);
+  assert.match(css,/\.map-editor\.is-editing\{position:sticky;top:0/);
+  assert.match(css,/body\.compact-status-active \.game-shell \.map-editor\.is-editing\{top:var\(--compact-status-height/);
 });

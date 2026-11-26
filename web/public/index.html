@@ -199,10 +199,24 @@
           </section>
           <details class="explain"><summary>地圖操作說明</summary><p class="small">點擊已配置的建築圖示可開啟已支援設施；尚未移植的設施只顯示說明，不會產生虛構操作。</p></details>
           
-          <div class="map-scroll" tabindex="0" aria-label="城鎮街區地圖，可水平捲動">
-            <div id="town-map" class="town-map" role="grid" aria-label="12 列 16 欄街區"></div>
+          <div id="map-workspace" class="map-workspace">
+            <div class="map-editor" id="map-editor" hidden>
+              <div class="map-edit-controls">
+                <label class="map-editor-switch">
+                  <input type="checkbox" id="map-edit-toggle"> 開啟單機街區編輯模式
+                </label>
+                <label for="map-palette">選擇格子設施
+                  <select id="map-palette" disabled></select>
+                </label>
+              </div>
+              <p class="small" id="map-edit-status">瀏覽模式｜點選格子可查看設施。</p>
+              <p class="small map-edit-feedback" id="map-edit-feedback" role="status">修改只寫入 Web 資料庫，不會覆蓋原版 CGI。</p>
+            </div>
+            <div class="map-scroll" tabindex="0" aria-label="城鎮街區地圖，可水平捲動">
+              <div id="town-map" class="town-map" role="grid" aria-label="12 列 16 欄街區"></div>
+            </div>
+            <p class="small" id="map-selection" role="status"></p>
           </div>
-          <p class="small" id="map-selection" role="status"></p>
           <nav id="facility-shortcuts" class="town-shortcuts" aria-label="城鎮常用操作">
             <button type="button" id="home-work" data-facility="jobs-panel"><img src="/legacy-assets/button/go_work.png" alt="">工作</button>
             <button type="button" data-facility="inventory-panel"><img src="/legacy-assets/button/item.png" alt="">物品</button>
@@ -213,46 +227,9 @@
             <button type="button" data-facility="housing-panel"><img src="/legacy-assets/house/house_1.gif" alt="">住宅</button>
             <button type="button" data-facility="school-panel"><img src="/legacy-assets/school.gif" alt="">學校</button>
             <button type="button" data-facility="gym-panel"><img src="/legacy-assets/gym.gif" alt="">健身房</button>
+            <button type="button" id="home-street-fight" data-facility="street-fight-panel">街頭格鬥</button>
+            <button type="button" id="home-c-league" data-facility="c-league-panel">C 聯賽</button>
           </nav>
-          <section id="street-fight-panel" class="map-starter" aria-labelledby="street-fight-title">
-            <h3 id="street-fight-title">街頭格鬥 Street Fight</h3>
-            <p class="small">原版隨機與居民交戰，使用 16 種攻擊，最多 50 次。保留原版抽選：名單最後一列不參與，抽到本人則沒有對手。勝負只改本人存檔；對手不會被扣款。</p>
-            <p class="small">參戰須持有至少 15,000 元現金（銀行存款不計）；敗北按每次攻擊 300 元結算，最多損失 15,000 元，不是固定入場費。可能損失能量及 K 點。</p>
-            <p id="street-fight-status" class="small" role="status"></p>
-            <button type="button" id="street-fight-play" disabled>出發尋找對手</button>
-            <div id="street-fight-history"></div>
-          </section>
-          <section class="map-starter" id="c-league-panel">
-            <h3>C 聯賽｜角色培育</h3>
-            <p class="small">14 天一季，每季 100 場，間隔 1 分鐘。培育每點扣本人能力 1 點及 10,000 元；原版模仿者允許單機比賽。</p>
-            <p class="small">保留原版抽選：排除本人後，兩名以上候選對手的最後一列不參與；另有三分之一機率遇到模仿者，無對手時也使用模仿者。零能量可參賽；雙方能量皆零時，第一次攻擊後判本人勝利，收入為零時補發 100 元。</p>
-            <p id="c-league-status" role="status"></p>
-            <button id="c-league-open" type="button">進入／更新 C 聯賽</button>
-            <details id="c-league-training">
-              <summary>培育角色／設定攻擊台詞</summary>
-              <label>名稱 <input id="c-league-name" maxlength="30"></label>
-              <label>圖片網址（可空白） <input id="c-league-image" type="url" maxlength="2048"></label>
-              <div id="c-league-fields"></div>
-              <label>付款 <select id="c-league-payment"></select></label>
-              <p class="small">信用付款須持有本人有效信用卡，只扣普通存款；餘額不足拒絕，不挪用現金或定存。</p>
-              <p id="c-league-cost" role="status"></p>
-              <button id="c-league-train" type="button">確認培育／儲存</button>
-            </details>
-            <p id="c-league-fighter"></p>
-            <a id="c-league-image-preview" hidden target="_blank" rel="noopener noreferrer">開啟角色圖片（外部網站）</a>
-            <button id="c-league-play" type="button" disabled>進行 C 聯賽</button>
-            <p id="c-league-result" role="status"></p>
-            <details><summary>本季排名／前季／累積積分／最近賽事</summary><div id="c-league-rankings"></div></details>
-            <details><summary>本人最近 20 場戰報</summary><div id="c-league-history"></div></details>
-          </section>
-          <div class="map-editor" id="map-editor" hidden>
-            <label class="map-editor-switch">
-              <input type="checkbox" id="map-edit-toggle"> 開啟單機街區編輯模式
-            </label>
-            <label for="map-palette">選擇格子設施</label>
-            <select id="map-palette" disabled></select>
-            <p class="small">啟用後，點選地圖格子即可儲存選定設施。修改只寫入 Web 資料庫，不會覆蓋原版 CGI。</p>
-          </div>
           <div class="residents-line"><strong>同城居民</strong><p class="small" id="residents"></p></div>
         </section>
         </div>
@@ -393,6 +370,7 @@
         <button id="facility-tab-bank" type="button" role="tab" data-pane="bank" aria-controls="facility-pane-bank" aria-selected="false" tabindex="-1">銀行</button>
         <button id="facility-tab-hospital" type="button" role="tab" data-pane="hospital" aria-controls="facility-pane-hospital" aria-selected="false" tabindex="-1">醫院</button>
         <button id="facility-tab-events" type="button" role="tab" data-pane="events" aria-controls="facility-pane-events" aria-selected="false" tabindex="-1">事件</button>
+        <button id="facility-tab-battle" type="button" role="tab" data-pane="battle" aria-controls="facility-pane-battle" aria-selected="false" tabindex="-1">戰鬥</button>
         <button id="facility-tab-mail" type="button" role="tab" data-pane="mail" aria-controls="facility-pane-mail" aria-selected="false" tabindex="-1">郵件</button>
 
         </div>
@@ -987,6 +965,44 @@
           </div>
           <div id="health-event-history" class="health-event-history"></div>
         </section>
+      </div>
+
+      <div id="facility-pane-battle" class="facility-pane" role="tabpanel" aria-labelledby="facility-tab-battle" tabindex="0" hidden>
+          <section id="street-fight-panel" class="map-starter" aria-labelledby="street-fight-title">
+            <h3 id="street-fight-title">街頭格鬥 Street Fight</h3>
+            <details class="explain"><summary>玩法與限制說明</summary>
+            <p class="small">原版隨機與居民交戰，使用 16 種攻擊，最多 50 次。保留原版抽選：名單最後一列不參與，抽到本人則沒有對手。勝負只改本人存檔；對手不會被扣款。</p>
+            <p class="small">參戰須持有至少 15,000 元現金（銀行存款不計）；敗北按每次攻擊 300 元結算，最多損失 15,000 元，不是固定入場費。可能損失能量及 K 點。</p>
+            </details>
+            <p id="street-fight-status" class="small" role="status"></p>
+            <button type="button" id="street-fight-play" disabled>出發尋找對手</button>
+            <div id="street-fight-history"></div>
+          </section>
+          <section class="map-starter" id="c-league-panel">
+            <h3>C 聯賽｜角色培育</h3>
+            <details class="explain"><summary>玩法與限制說明</summary>
+            <p class="small">14 天一季，每季 100 場，間隔 1 分鐘。培育每點扣本人能力 1 點及 10,000 元；原版模仿者允許單機比賽。</p>
+            <p class="small">保留原版抽選：排除本人後，兩名以上候選對手的最後一列不參與；另有三分之一機率遇到模仿者，無對手時也使用模仿者。零能量可參賽；雙方能量皆零時，第一次攻擊後判本人勝利，收入為零時補發 100 元。</p>
+            </details>
+            <p id="c-league-status" role="status"></p>
+            <button id="c-league-open" type="button">進入／更新 C 聯賽</button>
+            <details id="c-league-training">
+              <summary>培育角色／設定攻擊台詞</summary>
+              <label>名稱 <input id="c-league-name" maxlength="30"></label>
+              <label>圖片網址（可空白） <input id="c-league-image" type="url" maxlength="2048"></label>
+              <div id="c-league-fields"></div>
+              <label>付款 <select id="c-league-payment"></select></label>
+              <p class="small">信用付款須持有本人有效信用卡，只扣普通存款；餘額不足拒絕，不挪用現金或定存。</p>
+              <p id="c-league-cost" role="status"></p>
+              <button id="c-league-train" type="button">確認培育／儲存</button>
+            </details>
+            <p id="c-league-fighter"></p>
+            <a id="c-league-image-preview" hidden target="_blank" rel="noopener noreferrer">開啟角色圖片（外部網站）</a>
+            <button id="c-league-play" type="button" disabled>進行 C 聯賽</button>
+            <p id="c-league-result" role="status"></p>
+            <details><summary>本季排名／前季／累積積分／最近賽事</summary><div id="c-league-rankings"></div></details>
+            <details><summary>本人最近 20 場戰報</summary><div id="c-league-history"></div></details>
+          </section>
       </div>
 
       <div id="facility-pane-mail" class="facility-pane" role="tabpanel" aria-labelledby="facility-tab-mail" tabindex="0" hidden>
