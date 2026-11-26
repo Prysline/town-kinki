@@ -1,6 +1,8 @@
 import { townCellAction } from "./town-home.js";
 import { displayRetailItemName,displayRetailItemCategory } from "./retail-item-translations.js";
-import { shouldShowCompactEnergy } from "./energy-visibility.js";
+import { displayBattleMonsterName } from "./battle-item-translations.js";
+import { displayOriginalItemComment } from "./item-comment-translations.js";
+import { displayEventDescription,displayGiftErrorMessage } from "./event-gift-display-translations.js";import { shouldShowCompactEnergy } from "./energy-visibility.js";
 import { townTimePhase } from "./time-theme.js";
 import { groupedStatLines } from "./shop-effects.js";
 import { displayEquipmentName,displayVendingName,displayKnownItemName,displayEquipmentCategory,displayKnownItemCategory } from "./item-translations.js";
@@ -675,7 +677,7 @@ function renderRoom() {
     note.className="small";
     const shop=view.shop;
     note.textContent=shop?
-      "住宅商店「"+shop.title+"」｜"+shop.category+
+      "住宅商店「"+shop.title+"」｜"+displayRetailItemCategory(shop.category)+
       "｜目前 "+shop.items.length+" 種上架商品；普通存款／現金結帳。":
       "屋主尚未完成這間玩家商店的分類與店名設定。";
     body.append(note);
@@ -718,7 +720,7 @@ function renderRoom() {
       for(const card of state.classroomCreditCards??[]){
         const opt=document.createElement("option");
         opt.value="card:"+card.sourceLine;
-        opt.textContent="有效信用卡："+card.name;
+        opt.textContent="有效信用卡："+displayRetailItemName(card.name);
         pay.append(opt);
       }
       payLabel.append(pay);
@@ -1166,7 +1168,7 @@ async function startRoadJourney(destination,vehicleValue){
     (byBus?"巴士車資500元從現金扣款，不會迷路、事故或鍛鍊。":
       (sourceLine===null?"步行可能增加身體能力。":
         "有 1/10 機率發生事故，事故會扣所選載具1點耐久。")+
-      "原版會判定迷路：從和歌山以外出發，持有ローラースルーゴーゴー必迷路，否則有1/5機率；事故與迷路同時發生時可能改道至其他城鎮，實際結果到站時才會公布。")))return;
+      "原版會判定迷路：從和歌山以外出發，持有三輪滑板車必迷路，否則有1/5機率；事故與迷路同時發生時可能改道至其他城鎮，實際結果到站時才會公布。")))return;
   const key=String(destination)+":"+vehicleValue;
   if(!pendingRoadStart||pendingRoadStart.key!==key)
     pendingRoadStart={key,requestId:crypto.randomUUID()};
@@ -1715,7 +1717,7 @@ function renderLegacyItems(){
       const lines=[
         "熱量："+(info?.calories??"未確認")+" kcal｜使用間隔："+(info?.intervalMinutes??"未確認")+" 分鐘",
         "身體能量消耗："+(info?.bodyCost??"未確認")+"｜頭腦能量消耗："+(info?.brainCost??"未確認"),
-        "原版備註："+(info?.comment?.trim()||"沒有提供文字備註"),
+        "原版備註（繁中顯示）："+(displayOriginalItemComment(info?.comment)||"沒有提供文字備註"),
         "來源："+(item.origin==="osakaQuarantine"?"大阪挑戰待核對獎品":item.origin==="osaka"?"大阪挑戰掉落":item.readOnly?"歷史來源封存":item.origin==="fishing"?"Web 釣魚／餌料店":item.origin==="crafting"?"Web 合成屋":item.origin==="bLeague"?"B 聯賽掉落":item.origin==="event38"?"Web 聖誕老人戰鬥獎勵":"Web 購入或轉換")+
           "（記錄位置 "+item.sourceLine+"；原始內容不在此頁修改）",
         "Web 使用狀態："+(verifiedVehicle?"已核對為本人可用公路載具，出發須於公路面板操作，事故可能扣耐久":
@@ -1740,7 +1742,7 @@ function renderLegacyItems(){
       "（"+gifts.length+" 筆）";details.append(summary);
     const note=document.createElement("p");note.className="small";
     note.textContent=giftVehicleCount?
-      "原版ギフト類別也包含交通商品。只有後端核實為本人可搭乘的項目才會顯示公路入口；其他禮品仍請於禮品店／郵件操作。公路事故可能消耗載具耐久。":
+      "原版禮品類別也包含交通商品。只有後端核實為本人可搭乘的項目才會顯示公路入口；其他禮品仍請於禮品店／郵件操作。公路事故可能消耗載具耐久。":
       "原版一般物品清單不顯示自購禮品；這些項目仍留在資料庫，請於禮品店／郵件中操作。";
     details.append(note);
     for(const gift of gifts){
@@ -1814,7 +1816,7 @@ function updateCockroachCountdown() {
   text("event-popup-title",active?"⚠ 限時事件：蟑螂！":"事件發生！");
   text("event-popup-body",active?
     "剩餘 "+(remaining/1000).toFixed(1)+" 秒，請立即處理。" :
-    recent.title+"："+recent.description);
+    recent.title+"："+displayEventDescription(recent.description));
   el("event-popup-claim").hidden=!active;
   el("event-alert").hidden=false;
   el("event-alert").textContent=active?"查看事件詳情":"查看事件紀錄";
@@ -1823,7 +1825,7 @@ let pendingCouponRedemption=null;
 async function submitCouponRedemption(reward){
   if(!reward.canRedeem)return;
   if(!window.confirm("確定使用 "+reward.requiredCoupons+" 點 Web 事件優惠券，兌換「"+
-    reward.originalName+"」嗎？此獎品會以原版 33 欄入庫；部分獎品效果仍未支援。"))return;
+    displayRetailItemName(reward.originalName)+"」嗎？此獎品會以原版 33 欄入庫；部分獎品效果仍未支援。"))return;
   if(!pendingCouponRedemption||
      pendingCouponRedemption.sourceIndex!==reward.sourceIndex||
      pendingCouponRedemption.originalName!==reward.originalName)
@@ -1839,21 +1841,21 @@ async function submitCouponRedemption(reward){
     notify(result.replayed?
       "這筆優惠券兌換已處理過，沒有再次扣券或發獎。":
       "已扣除 "+result.couponCost+" 點 Web 事件券，兌換「"+
-      result.originalName+"」，獎品已加入本人背包。");
+      displayRetailItemName(result.originalName)+"」，獎品已加入本人背包。");
   }catch(error){notify(error.message,true);}
 }
 function renderCouponShop(){
   const available=state.couponShopAvailable===true;
   text("coupon-shop-status",available?
     "目前城鎮有原版優惠券兌換所；使用 Web 事件取得的點數兌換獎品。":
-    "目前城鎮沒有「クーポン」兌換所。可在單機地圖編輯器放置該原版建築，或前往已有兌換所的城鎮。");
+    "目前城鎮沒有「優惠券兌換所」。可在單機地圖編輯器放置該原版建築，或前往已有兌換所的城鎮。");
   const target=el("coupon-rewards");
   target.replaceChildren();
   for(const reward of state.couponRewards??[]){
     const tile=document.createElement("div");
     tile.className="training-tile";
     const heading=document.createElement("strong");
-    heading.textContent=reward.originalName;
+    heading.textContent=displayRetailItemName(reward.originalName);
     const info=document.createElement("p");info.className="small";
     info.textContent="需要 "+reward.requiredCoupons+" 點｜獎品耐久 "+
       reward.rewardDurability+" "+reward.rewardDurabilityUnit+
@@ -1882,7 +1884,7 @@ function renderCouponShop(){
   for(const entry of entries){
     const li=document.createElement("li");
     li.textContent=new Date(entry.createdAt).toLocaleString("zh-TW")+"｜"+
-      entry.originalName+"（扣 "+entry.couponCost+" 點；持有物行號 "+
+      displayRetailItemName(entry.originalName)+"（扣 "+entry.couponCost+" 點；持有物行號 "+
       entry.sourceLine+"）";
     list.append(li);
   }
@@ -1925,7 +1927,7 @@ function renderDining() {
     list.className="health-event-list";
     for (const event of state.healthEvents) {
       const item=document.createElement("li");
-      item.textContent=event.day+"｜"+event.title+"："+event.description+
+      item.textContent=event.day+"｜"+event.title+"："+displayEventDescription(event.description)+
         (event.oldHealthIndex!==event.newHealthIndex?
           "（疾病指數 "+event.oldHealthIndex+" → "+event.newHealthIndex+"）":"");
       list.append(item);
@@ -2065,7 +2067,7 @@ function retailEffectDetails(item){
       "｜使用間隔："+(info.intervalMinutes??0)+" 分鐘",
     "身體能量消耗："+(info.bodyCost??0)+"（負數表示恢復）"+
       "｜頭腦能量消耗："+(info.brainCost??0)+"（負數表示恢復）",
-    "原版備註："+(info.comment?.trim()||"沒有提供文字備註"),
+    "原版備註（繁中顯示）："+(displayOriginalItemComment(info.comment)||"沒有提供文字備註"),
     "Web 生效狀態："+(
       info.usage==="automatic"?"已支援：健康保險於醫院自動計算，不需手動使用":
       info.usage==="payment"?"已支援：有效期內可於支援信用卡的商店從普通銀行付款；也可在背包依原版規則使用（部分卡片具有能力增益）":
@@ -2126,7 +2128,7 @@ function renderShopTable(target,goods,{shopName,onPurchase,emptyText}){
   for(const card of cards){
     const option=document.createElement("option");
     option.value="card:"+card.sourceLine;
-    option.textContent="信用卡："+card.name;payment.append(option);
+    option.textContent="信用卡："+displayRetailItemName(card.name);payment.append(option);
   }
   paymentLabel.append(payment);
   if(saved?.quantity&&[...qty.options].some(x=>x.value===String(saved.quantity)))
@@ -2224,7 +2226,7 @@ let pendingTreasureOpen=null;
 let treasureBusy=false;
 async function submitTreasureOpen(box){
   if(treasureBusy)return;
-  if(!window.confirm("確認花費 "+money(box.price)+" 開啟"+box.name+
+  if(!window.confirm("確認花費 "+money(box.price)+" 開啟"+displayRetailItemCategory(box.name)+
     "？伺服器會從原版獎池抽出一項，可能立即變更角色能力／現金或真正存入背包。"))return;
   if(!pendingTreasureOpen||pendingTreasureOpen.boxKey!==box.key)
     pendingTreasureOpen={boxKey:box.key,requestId:crypto.randomUUID()};
@@ -2238,7 +2240,7 @@ async function submitTreasureOpen(box){
     pendingTreasureOpen=null;
     render();
     notify(result.replayed?"這筆寶箱紀錄已結算，不會再次扣款或開獎。":
-      "寶箱抽中「"+result.itemName+"」！"+
+      "寶箱抽中「"+displayRetailItemName(result.itemName)+"」！"+
       (result.kind==="inventory"?"已真正加入本人背包。":
         "原版立即生效，能力／疾病／現金已結算。")+
       (result.rewardCash>0?" 另獲得 "+money(result.rewardCash)+" 元。":""));
@@ -2264,11 +2266,11 @@ function renderTreasure(){
   const full=slots>=25||gifts>=10||giftGoods>=11;
   const enough=state.character.money>=box.price;
   text("arcade-treasure-status",!available?
-    "目前城鎮沒有「ゲーセン」遊樂中心。":
+    "目前城鎮沒有遊樂中心。":
     seconds>0?"距下一次原版寶箱抽獎還需 "+seconds+" 秒（單機可快轉）。":
     "可以開箱：目前一般物品 "+slots+"/25格、禮品 "+gifts+
     "/10格、禮品商品 "+giftGoods+"/11格。");
-  text("arcade-treasure-quote",box.name+"｜開箱費 "+money(box.price)+
+  text("arcade-treasure-quote",displayRetailItemCategory(box.name)+"｜開箱費 "+money(box.price)+
     "｜原版獎池 "+box.poolSize+" 筆，實際可抽 "+box.selectable+
     " 筆（原碼排除最後一筆）｜身上現金 "+money(state.character.money)+
     (full?"｜背包容量已達上限":"")+
@@ -2283,7 +2285,7 @@ function renderTreasure(){
   history.replaceChildren();
   const rounds=info.history??[],last=rounds[0];
   text("arcade-treasure-result",last?
-    "最近一次："+last.itemName+"（"+
+    "最近一次："+displayRetailItemName(last.itemName)+"（"+
       (last.kind==="inventory"?"已收入背包":"已立即生效")+
       (last.rewardCash>0?"，取得 "+money(last.rewardCash)+"元":"")+"）":
     "尚無本人寶箱紀錄。");
@@ -2296,9 +2298,9 @@ function renderTreasure(){
   for(const round of rounds){
     const li=document.createElement("li");
     li.textContent=new Date(round.playedAt).toLocaleString("zh-TW")+
-      "｜"+boxes.find(b=>b.key===round.boxKey)?.name+
+      "｜"+displayRetailItemCategory(boxes.find(b=>b.key===round.boxKey)?.name??round.boxKey)+
       "｜費用 "+money(round.price)+
-      "｜"+round.itemName+
+      "｜"+displayRetailItemName(round.itemName)+
       (round.kind==="inventory"?"（入庫）":"（立即效果）")+
       (round.rewardCash>0?"，現金獎品 "+money(round.rewardCash):"");
     list.append(li);
@@ -2354,7 +2356,7 @@ function renderMultiCard(){
   const blocked=info.multiplayerAdjacentRepeatBlocked===true;
   const enough=course.safe&&state.character.money>=course.stake;
   text("arcade-cardw-status",!available?
-    "目前城鎮沒有「ゲーセン」遊樂中心。":
+    "目前城鎮沒有遊樂中心。":
     blocked?"原版禁止同一位玩家連續抽卡；請等待其他玩家抽卡。":
     seconds>0?"單機多卡尚需等待 "+seconds+" 秒（可使用單機快轉）。":
     "可抽卡。所有玩家共用目前倍率 "+info.cardCount+"。");
@@ -2464,7 +2466,7 @@ function renderLoto6(){
   const current=selectors.map(x=>Number(x.value));
   const bank=state.character.bank;
   text("arcade-loto6-status",!available?
-    "目前所在城鎮沒有「ゲーセン」遊樂中心。":
+    "目前所在城鎮沒有遊樂中心。":
     "目前輪次：全服待開獎 "+info.pendingCount+"/"+info.drawCap+
     " 注；本人 "+info.myPendingCount+"/"+info.perUserLimit+
     " 注；當地時鐘 "+String(info.hour).padStart(2,"0")+
@@ -2564,7 +2566,7 @@ function renderInstantLoto(){
   const available=info.available===true;
   const remain=Math.max(0,(info.readyAt??0)-browserGameNow());
   text("arcade-loto-status",!available?
-    "目前城鎮沒有「ゲーセン」遊樂中心；可在單機編輯地圖放置。":
+    "目前城鎮沒有遊樂中心；可在單機編輯地圖放置。":
     remain>0?"原版最後一位玩樂透的仍是本人，需再等 "+
       Math.ceil(remain/1000)+" 秒（單機可快轉）。":
       "可立即開獎；僅當最後遊玩者仍是本人時，才有3分鐘限制。");
@@ -2697,7 +2699,7 @@ function renderArcadeDonuts(){
   const affordable=Number.isSafeInteger(selected.risk)&&
     state.character.money>=selected.risk;
   text("arcade-donuts-status",!available?
-    "所在城鎮沒有「ゲーセン」遊樂中心；須先建立原版建築。":
+    "所在城鎮沒有遊樂中心；須先建立原版建築。":
     wait>0?"目前模式冷卻中，還需 "+Math.ceil(wait/1000)+" 秒（單機可快轉時間）。":
       "這個模式已可抽牌。三個模式牌桌獨立，帳戶本人交易記錄隔離。");
   const initialReference=selected.rule==="same"?1:0;
@@ -2783,7 +2785,7 @@ function renderArcadeHighLow(){
   const stake=info.stake??0;
   const enough=Number.isSafeInteger(stake)&&stake>0&&state.character.money>=stake;
   text("arcade-highlow-status",!available?
-    "目前城鎮沒有「ゲーセン」遊樂中心；可使用單機地圖編輯器放置。":
+    "目前城鎮沒有遊樂中心；可使用單機地圖編輯器放置。":
     wait>0?"High／Low 冷卻中，還有 "+Math.ceil(wait/1000)+" 秒（單機可快轉時間）。":
       "High／Low 可進行下一局，牌桌與其他帳號共用。");
   const previous=info.previousCard;
@@ -2983,8 +2985,8 @@ function renderOsaka(){
     append(result,"p","初始玩家 頭腦 "+battle.initial.player.brainEnergy+"／身體 "+battle.initial.player.bodyEnergy+
       "｜對手 頭腦 "+battle.initial.npc.brainEnergy+"／身體 "+battle.initial.npc.bodyEnergy);
     append(result,"p","結束玩家 頭腦 "+battle.player.brainEnergy+"／身體 "+battle.player.bodyEnergy);
-    if(battle.reward)append(result,"p",!battle.reward.granted?"背包已滿，未取得 "+battle.reward.name:
-      "取得 "+battle.reward.name+(battle.reward.blocked?"（原始欄位異常，待核對）":""));
+    if(battle.reward)append(result,"p",!battle.reward.granted?"背包已滿，未取得 "+displayRetailItemName(battle.reward.name):
+      "取得 "+displayRetailItemName(battle.reward.name)+(battle.reward.blocked?"（原始欄位異常，待核對）":""));
     const details=document.createElement("details");details.open=true;
     append(details,"summary","逐次攻擊紀錄");
     const list=document.createElement("ol");
@@ -3011,7 +3013,7 @@ function renderArcadeDice(){
   const available=info.available===true;
   const remain=Math.max(0,(info.readyAt??0)-browserGameNow());
   text("arcade-dice-status",!available?
-    "目前城鎮沒有「ゲーセン」遊樂中心；可使用單機地圖編輯器放置。":
+    "目前城鎮沒有遊樂中心；可使用單機地圖編輯器放置。":
     remain>0?"骰子遊戲冷卻中，還需 "+Math.ceil(remain/1000)+" 秒（單機可快轉遊戲時間）。":
       "遊樂中心已開放，現在可以擲骰。");
   const stake=el("arcade-dice-stake"),previous=stake.value;
@@ -3078,12 +3080,12 @@ async function submitFishingAction(actionName,payload,description){
     render();
     if(result.replayed){notify("這筆釣魚交易已完成，沒有重複扣款、扣餌或領獎。");return;}
     notify(actionName==="bait/buy"?
-      "已購入「"+result.name+"」魚餌，支付 "+money(result.price)+"；商品已入本人背包。":
+      "已購入「"+displayRetailItemName(result.name)+"」魚餌，支付 "+money(result.price)+"；商品已入本人背包。":
       actionName==="cast"?
-        "已消耗「"+result.baitName+"」一回。"+
-        (result.caught?"釣到「"+result.catchName+"」，漁獲已入庫！":"這次沒有釣到魚。")+
+        "已消耗「"+displayRetailItemName(result.baitName)+"」一回。"+
+        (result.caught?"釣到「"+displayRetailItemName(result.catchName)+"」，漁獲已入庫！":"這次沒有釣到魚。")+
         "釣魚冷卻 100 秒。":
-        "已出售「"+result.name+"」一回，競價收入 "+money(result.paid)+"。");
+        "已出售「"+displayRetailItemName(result.name)+"」一回，競價收入 "+money(result.paid)+"。");
   }catch(error){notify(error.message,true);}
 }
 function renderFishing(){
@@ -3093,15 +3095,15 @@ function renderFishing(){
   const shop=info.baitShopAvailable===true;
   text("fishing-status",available?
     "釣場已開放。魚可重新作餌，也可於此出售；每次都消耗一回耐久。":
-    "目前城鎮尚無「釣り」釣場；可在單機地圖編輯器放置原版建築。");
+    "目前城鎮尚無「釣魚場」；可在單機地圖編輯器放置原版建築。");
   text("fishing-shop-status",shop?
     "原版餌料商店已開放：依原始標價，庫存每日依原版商品數據補充。":
-    "這座城鎮尚無「販売1」餌料商店；無法購買新的魚餌。");
+    "這座城鎮尚無「魚餌商店」；無法購買新的魚餌。");
   const goods=el("fishing-bait-goods");
   goods.replaceChildren();
   for(const bait of info.baitGoods??[]){
     const tile=document.createElement("div");tile.className="training-tile";
-    const name=document.createElement("strong");name.textContent=bait.name;
+    const name=document.createElement("strong");name.textContent=displayRetailItemName(bait.name);
     const details=document.createElement("p");details.className="small";
     details.textContent="售價："+money(bait.price)+"｜耐久 "+bait.durability+" 回｜尚餘 "+bait.stock+" 件";
     const buy=document.createElement("button");buy.type="button";
@@ -3110,7 +3112,7 @@ function renderFishing(){
     buy.disabled=!canBuy;
     buy.addEventListener("click",()=>submitFishingAction("bait/buy",{
       sku:bait.sku
-    },"確定依原版標價以現金 "+money(bait.price)+" 購買「"+bait.name+"」嗎？"));
+    },"確定依原版標價以現金 "+money(bait.price)+" 購買「"+displayRetailItemName(bait.name)+"」嗎？"));
     tile.append(name,details,buy);goods.append(tile);
   }
   function fillOptions(id,list){
@@ -3119,7 +3121,7 @@ function renderFishing(){
     for(const item of list){
       const option=document.createElement("option");
       option.value=String(item.sourceLine);
-      option.textContent=item.name+"（可用 "+item.remaining+" 回）";
+      option.textContent=displayRetailItemName(item.name)+"（可用 "+item.remaining+" 回）";
       select.append(option);
     }
     if(list.some(x=>String(x.sourceLine)===previous))select.value=previous;
@@ -3139,13 +3141,13 @@ function renderFishing(){
     const line=Number(el("fishing-bait-select").value);
     const bait=info.baitOptions?.find(x=>x.sourceLine===line);
     if(bait)submitFishingAction("cast",{sourceLine:line},
-      "使用「"+bait.name+"」釣魚一次？不論有沒有釣到魚，都會消耗一回耐久。");
+      "使用「"+displayRetailItemName(bait.name)+"」釣魚一次？不論有沒有釣到魚，都會消耗一回耐久。");
   };
   sell.onclick=()=>{
     const line=Number(el("fishing-sell-select").value);
     const catchItem=info.sellOptions?.find(x=>x.sourceLine===line);
     if(catchItem)submitFishingAction("sell",{sourceLine:line},
-      "確定在原版競價市場出售「"+catchItem.name+"」一回？成交價格依原版範圍隨機決定。");
+      "確定在原版競價市場出售「"+displayRetailItemName(catchItem.name)+"」一回？成交價格依原版範圍隨機決定。");
   };
   const history=el("fishing-history");history.replaceChildren();
   const items=info.history??[];
@@ -3157,10 +3159,10 @@ function renderFishing(){
     for(const item of items){
       const li=document.createElement("li");
       const label=item.action==="buy"?
-        "買餌："+item.name+"（"+money(item.price)+"）":
+        "買餌："+displayRetailItemName(item.name)+"（"+money(item.price)+"）":
         item.action==="cast"?
-          "釣魚："+item.baitName+" → "+(item.caught?"釣到 "+item.catchName:"未中魚"):
-          "賣魚："+item.name+"（收入 "+money(item.paid)+"）";
+          "釣魚："+displayRetailItemName(item.baitName)+" → "+(item.caught?"釣到 "+displayRetailItemName(item.catchName):"未中魚"):
+          "賣魚："+displayRetailItemName(item.name)+"（收入 "+money(item.paid)+"）";
       li.textContent=new Date(item.createdAt).toLocaleString("zh-TW")+"｜"+label;
       list.append(li);
     }
@@ -3170,7 +3172,7 @@ function renderFishing(){
 
 let pendingCraftingAction=null;
 async function submitCrafting(recipe,quantity){
-  if(!window.confirm("使用本人實際材料合成「"+recipe.name+"」共 "+quantity+
+  if(!window.confirm("使用本人實際材料合成「"+displayRetailItemName(recipe.name)+"」共 "+quantity+
     " 組？材料會扣除，成品將增加 "+(recipe.durability*quantity)+" 回耐久；手續費 0 元。"))return;
   const key=recipe.key+":"+quantity;
   if(!pendingCraftingAction||pendingCraftingAction.key!==key)
@@ -3184,7 +3186,7 @@ async function submitCrafting(recipe,quantity){
     render();
     notify(result.replayed?
       "這筆合成已經完成，不會重複扣材料或增加成品。":
-      "合成完成：「"+result.name+"」"+result.quantity+" 組，共增加 "+
+      "合成完成：「"+displayRetailItemName(result.name)+"」"+result.quantity+" 組，共增加 "+
         result.addedDurability+" 回耐久，已入本人背包。");
   }catch(error){notify(error.message,true);}
 }
@@ -3199,9 +3201,9 @@ function renderCrafting(){
   for(const recipe of recipes){
     const tile=document.createElement("article");tile.className="training-tile";
     const title=document.createElement("strong");
-    title.textContent=recipe.name+"（"+recipe.category+"，每組 "+recipe.durability+" 回）";
+    title.textContent=displayRetailItemName(recipe.name)+"（"+displayRetailItemCategory(recipe.category)+"，每組 "+recipe.durability+" 回）";
     const materials=document.createElement("p");materials.className="small";
-    materials.textContent="需要："+recipe.ingredients.map(i=>i.name+" "+i.quantity+
+    materials.textContent="需要："+recipe.ingredients.map(i=>displayRetailItemName(i.name)+" "+i.quantity+
       " 回（持有 "+i.owned+" 回）").join("＋");
     const count=document.createElement("p");count.className="small";
     count.textContent="最多可製作 "+recipe.maxBatches+" 組"+
@@ -3213,7 +3215,7 @@ function renderCrafting(){
   for(const recipe of recipes){
     const option=document.createElement("option");
     option.value=recipe.key;
-    option.textContent=recipe.name+"（可製作 "+recipe.maxBatches+" 組）";
+    option.textContent=displayRetailItemName(recipe.name)+"（可製作 "+recipe.maxBatches+" 組）";
     option.disabled=recipe.maxBatches===0;
     select.append(option);
   }
@@ -3251,7 +3253,7 @@ function renderCrafting(){
     for(const item of info.history){
       const li=document.createElement("li");
       li.textContent=new Date(item.createdAt).toLocaleString("zh-TW")+
-        "｜"+item.name+" × "+item.quantity+"（新增 "+item.addedDurability+" 回）";
+        "｜"+displayRetailItemName(item.name)+" × "+item.quantity+"（新增 "+item.addedDurability+" 回）";
       ordered.append(li);
     }
     history.append(ordered);
@@ -3415,7 +3417,7 @@ function renderBLeague(){
   if(bLeagueOwner!==owner){pendingBLeague=null;bLeagueOwner=owner;}
   const arena=state.bLeague;
   const available=arena?.available===true;
-  text("b-league-status",available?"所在城鎮有 B 聯賽鬥技場。":"所在城鎮沒有「Ｂリーグ」建築；單機可自行配置地圖。");
+  text("b-league-status",available?"所在城鎮有 B 聯賽鬥技場。":"所在城鎮沒有「B 聯賽」建築；單機可自行配置地圖。");
   const ranks=el("b-league-ranks");ranks.replaceChildren();
   for(const rank of arena?.ranks??[]){
     const button=document.createElement("button");button.type="button";
@@ -3434,29 +3436,29 @@ function renderBLeague(){
     append(gear,"summary","目前裝備／預設裝備");
     for(const fallback of arena.defaults){
       const item=(state.equipmentItems??[]).find(x=>x.status==="equipped"&&x.category===fallback.type)??fallback;
-      append(gear,"p",item.name+"｜威力 "+item.power+"｜命中／閃避 "+item.accuracy+"%｜Lv."+item.level+"｜經驗 "+item.experience+"｜剩餘 "+(item.uses??"∞"));
+      append(gear,"p",displayRetailItemName(item.name)+"｜威力 "+item.power+"｜命中／閃避 "+item.accuracy+"%｜Lv."+item.level+"｜經驗 "+item.experience+"｜剩餘 "+(item.uses??"∞"));
     }
     result.append(gear);
   }
   if(battle){
-    append(result,"h4",battle.monster.rank.toUpperCase()+" 級｜"+battle.monster.name+"｜"+names[battle.outcome]);
+    append(result,"h4",battle.monster.rank.toUpperCase()+" 級｜"+displayBattleMonsterName(battle.monster.name)+"｜"+names[battle.outcome]);
     append(result,"p","初始能量：玩家 頭腦 "+battle.initial.player.brainEnergy+"／身體 "+battle.initial.player.bodyEnergy+
       "；怪物 頭腦 "+battle.initial.monster.brainEnergy+"／身體 "+battle.initial.monster.bodyEnergy);
     append(result,"p","現金變化 "+money(battle.moneyDelta)+"；K 點 "+(battle.kpointDelta>=0?"+":"")+battle.kpointDelta+
       "；玩家剩餘頭腦 "+battle.player.brainEnergy+"／身體 "+battle.player.bodyEnergy);
-    if(battle.reward)append(result,"p",battle.reward.granted?"取得 "+battle.reward.name:"背包已滿，未取得 "+battle.reward.name);
+    if(battle.reward)append(result,"p",battle.reward.granted?"取得 "+displayRetailItemName(battle.reward.name):"背包已滿，未取得 "+displayRetailItemName(battle.reward.name));
     const details=document.createElement("details");details.open=true;
     append(details,"summary","逐次攻擊（"+battle.rounds.length+" 次）");
     const list=document.createElement("ol");
     for(const r of battle.rounds){
-      append(list,"li",(r.actor==="player"?"玩家":"怪物")+"："+energy[r.energy]+"攻擊，"+r.gear+
+      append(list,"li",(r.actor==="player"?"玩家":"怪物")+"："+energy[r.energy]+"攻擊，"+displayRetailItemName(r.gear)+
         "，傷害 "+r.damage+(r.leveled?"，裝備升級":"")+(r.broken?"，裝備損壞退回倉庫":"")+
         "｜玩家 頭腦 "+Math.max(0,r.player.brainEnergy)+"／身體 "+Math.max(0,r.player.bodyEnergy)+
         "｜怪物 頭腦 "+Math.max(0,r.monster.brainEnergy)+"／身體 "+Math.max(0,r.monster.bodyEnergy));
     }
     details.append(list);result.append(details);
   }else append(result,"p","尚無戰鬥紀錄。");
-  for(const item of arena?.history??[])append(history,"p",item.rank.toUpperCase()+" 級｜"+item.name+"｜"+names[item.outcome]+"｜"+money(item.moneyDelta)+"｜K 點 +"+item.kpointDelta);
+  for(const item of arena?.history??[])append(history,"p",item.rank.toUpperCase()+" 級｜"+displayBattleMonsterName(item.name)+"｜"+names[item.outcome]+"｜"+money(item.moneyDelta)+"｜K 點 +"+item.kpointDelta);
 }
 function renderEquipment(){
   if(!state?.character)return;
@@ -3464,7 +3466,7 @@ function renderEquipment(){
   text("equipment-status",available?
     "目前城鎮裝備屋營業中｜獨立原價商品 "+(state.equipmentGoods??[]).length+
     " 種；可購買、換裝、出售及按原版費用鍛造，B 聯賽中可實際參戰。" :
-    "目前城鎮沒有原版「装備屋」。請在地圖中找到該建築，單機模式可先配置。");
+    "目前城鎮沒有裝備商店。請在地圖中找到該建築，單機模式可先配置。");
   const goodsTarget=el("equipment-goods");
   goodsTarget.replaceChildren();
   const owned=state.equipmentItems??[];
@@ -3620,14 +3622,14 @@ async function submitGiftAction(action,{sourceLine,quantity,recipientName,name,m
     notify(result.replayed?"禮品操作已完成，未重複改變持有物或扣款。":
       converted?"「"+displayRetailItemName(result.name)+"」已轉換成禮品，手續費 "+money(result.fee)+"。":
       "已將「"+displayRetailItemName(result.name)+"」×"+quantity+" 送給「"+recipientName+"」。");
-  }catch(error){notify(error.message,true);}
+  }catch(error){notify(displayGiftErrorMessage(error.message),true);}
 }
 function renderGiftShop(){
   if(!state?.character)return;
   const available=state.giftShopAvailable===true;
   text("gift-status",available?
     "目前城鎮設有禮品店，轉換每次現金 50,000 元；本人未寄送禮品及收件方收到的禮品各有 10 格限制。":
-    "所在城鎮沒有原版「ギフト屋」；不能在此轉換物品，但已持有的禮品仍可寄送給其他角色。");
+    "所在城鎮沒有禮品店；不能在此轉換物品，但已持有的禮品仍可寄送給其他角色。");
   const target=el("gift-sources");
   target.replaceChildren();
   for(const item of state.giftSources??[]){
@@ -3708,7 +3710,7 @@ function renderGiftShop(){
     const line=document.createElement("li");
     line.textContent=new Date(event.createdAt).toLocaleString("zh-TW")+"｜"+
       (event.action==="convert"?"轉換禮品":"寄送給 "+(event.recipientName??"收件人"))+
-      "｜"+event.name+" ×"+(event.quantity||"全部")+
+      "｜"+displayRetailItemName(event.name)+" ×"+(event.quantity||"全部")+
       (event.fee?"｜手續費 "+money(event.fee):"");
     list.append(line);
   }
@@ -3762,7 +3764,7 @@ function renderMailbox(){
       item.append(heading,body);
       if(mail.type==="gift"&&mail.giftName){
         const gift=document.createElement("p");gift.className="small";
-        gift.textContent="禮品：「"+mail.giftName+"」×"+mail.quantity+" 回（日）";
+        gift.textContent="禮品：「"+displayRetailItemName(mail.giftName)+"」×"+mail.quantity+" 回（日）";
         item.append(gift);
       }
       const remove=document.createElement("button");
@@ -3808,7 +3810,7 @@ function renderRecycle(){
   const available=state.recycleAvailable===true;
   text("recycle-status",available?
     "目前城鎮設有回收商店｜貨架最多 50 筆、上架 7 天；所有玩家共用。":
-    "目前城鎮沒有原版「リサイ」，只能查看本人已持有物品，不可買賣回收品。");
+    "目前城鎮沒有回收商店，只能查看本人已持有物品，不可買賣回收品。");
   const market=el("recycle-market");
   market.replaceChildren();
   for(const item of state.recycleListings??[]){
@@ -4202,7 +4204,7 @@ function renderTraining() {
       for(const card of cards){
         const opt=document.createElement("option");
         opt.value="credit:"+card.sourceLine;
-        opt.textContent=card.name+"（普通存款扣款）";
+        opt.textContent=displayRetailItemName(card.name)+"（普通存款扣款）";
         paymentSelect.append(opt);
       }
       const previous=oldChoices.get(lesson.key);
