@@ -296,6 +296,9 @@ test("J-5：#137 歷史事件、街頭獲券、同碼跨模組收據及 HTTP 兌
       assert.equal(settleDailyIllnessEvent(source,id,t.today,now-10000,rng(.99),"multi").event,null);
     }
     const beforeFight=joint(source),oldActor=char(source,1);
+    const reward=catalog[13];
+    assert.equal(reward.originalName,"メダル 国");assert.equal(reward.requiredCoupons,5);
+    assert.equal(beforeFight.character_coupons.find(x=>x.user_id===1).quantity,4,"歷史戰鬥前不足以兌換五券獎品");
     const draws=[1,8,0,4,0];
     const receipt=playStreetFight(source,1,{mode:"multi",requestId:coupon.requestId,now:now-10000,today:t.today,randomIndex:n=>{
       assert.ok(draws.length,"unexpected battle RNG");const v=draws.shift();assert.ok(v>=0&&v<n);return v;
@@ -340,15 +343,18 @@ test("J-5：#137 歷史事件、街頭獲券、同碼跨模組收據及 HTTP 兌
     assert.deepEqual(stableFields(ready),stableFields(before));
     // 兌換的收據是最後一筆寫入，故注入失敗須回滾已扣券與已入庫獎品。
     const sql=statement=>{const db=new DatabaseSync(target);try{db.exec(statement);}finally{db.close();}};
-    const next={...coupon,requestId:"j5_joint_coupon_retry"};
+    const next={sourceIndex:reward.sourceIndex,originalName:reward.originalName,requestId:"j5_joint_coupon_retry"};
+    const insufficient=await api(web.url,"coupon/redeem",next,cookie(2));
+    assert.equal(insufficient.status,400);assert.match(insufficient.result.error,/優惠券點數不足/);
+    assert.deepEqual(read(target,joint),ready);
     sql("CREATE TRIGGER j5_coupon_fault BEFORE INSERT ON coupon_redemptions BEGIN SELECT RAISE(ABORT,'j5 receipt fault'); END;");
     const failed=await api(web.url,"coupon/redeem",next,cookie(1));
     assert.equal(failed.status,400);assert.match(failed.result.error,/j5 receipt fault/);
     assert.deepEqual(read(target,joint),ready);
     sql("DROP TRIGGER j5_coupon_fault;");
     const used=await ok(web,"coupon/redeem",next,1);
-    assert.equal(used.couponResult.replayed,false);assert.equal(used.couponResult.couponCost,1);
-    assert.equal(used.couponResult.sourceLine,6000001);assert.equal(used.couponBalance,8);
+    assert.equal(used.couponResult.replayed,false);assert.equal(used.couponResult.couponCost,5);
+    assert.equal(used.couponResult.sourceLine,6000001);assert.equal(used.couponBalance,4);
     const after=read(target,joint);
     assert.deepEqual(after.street_fights,before.street_fights);
     assert.deepEqual(after.character_events,before.character_events);
@@ -356,12 +362,15 @@ test("J-5：#137 歷史事件、街頭獲券、同碼跨模組收據及 HTTP 兌
     assert.deepEqual(after.bank_tax_state,before.bank_tax_state);
     assert.deepEqual(actor(after,2),actor(ready,2));assert.deepEqual(actor(after,3),actor(ready,3));
     preserve(before,after);
-    assert.equal(after.legacy_inventory_items.filter(x=>x.user_id===1&&x.source_line===6000001).length,1);
+    const items=after.legacy_inventory_items.filter(x=>x.user_id===1&&x.source_line===6000001);
+    assert.equal(items.length,1);assert.equal(items[0].original_name,reward.originalName);
+    const fields=JSON.parse(items[0].raw_fields_json);
+    assert.equal(fields.length,33);assert.deepEqual(fields.map((v,i)=>i===30?reward.rawFields[30]:v),reward.rawFields);
     assert.equal(after.coupon_redemptions.filter(x=>x.user_id===1&&x.request_id===next.requestId).length,1);
     await web.stop();web=null;
     web=await serve(targetDir,join(work,"missing-npc"),"auto",timezone);
     const replay=await ok(web,"coupon/redeem",next,1);
-    assert.deepEqual(replay.couponResult,{...used.couponResult,replayed:true});assert.equal(replay.couponBalance,8);
+    assert.deepEqual(replay.couponResult,{...used.couponResult,replayed:true});assert.equal(replay.couponBalance,4);
     await replayOld();
     await web.stop();web=null;
     read(target,x=>{integrity(x);assert.deepEqual(stableFields(joint(x)),stableFields(after));});
