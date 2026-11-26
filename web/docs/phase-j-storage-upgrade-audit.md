@@ -66,6 +66,16 @@
 - I 前 #128 `27d8ed7864e58bbb3d81bab526f8295acee542a8`、I 結案 #137 `008c4556519a97f1d4d20721dc1d3213e55b82b8` 均已有完整事件欄位、券、蟑螂挑戰與兌換表；其既有領獎／兌換收據、耐久、多人及跨 I 資產事件另切 J-4b 等，不以本切片宣稱 J-4 完成。
 - 本機 GitHub DNS 不通，未執行完整儲存庫；待同 HEAD Push/PR CI、完整 diff 與合成 tree 審查及合併後雙 CI。未改正式玩法、schema 或備份 CLI。
 
+## J-4a 正式驗收
+
+- #143 已合併 `32aa6d070b504d1d1b1c1cecfe7ce31c799d63f6`，tree `e4fd2d534a24ff92d987e9ccbb0997038eaa1a1d`；合併前 [Push](https://github.com/Prysline/town-kinki/actions/runs/45840184845)／[PR](https://github.com/Prysline/town-kinki/actions/runs/45840215989)，合併後 [Push](https://github.com/Prysline/town-kinki/actions/runs/45843890966)／[長期 PR #1](https://github.com/Prysline/town-kinki/actions/runs/45843904080)，四份完整日誌皆 966/966、fail/cancelled/skipped/todo=0、server/app 語法成功；正式與 #1 合成 tree 一致，master 未變、#1 Draft。J-4a 正式驗收，不重做。
+
+## J-4b｜I 前歷史券、領獎、耐久收據（候選）
+
+- 取 #128 `27d8ed7864e58bbb3d81bab526f8295acee542a8` 的實際 server/core、banking、events、cockroach、legacy-inventory、legacy-item-use、coupon-redemption、solo-clock、town-storage 初始化 DDL 及歷史蟑螂領獎核心；兌換及使用核心在目前與 #128 的 blob 分別一致為 `7a7138e659827bfbda5a7d834286ecb989b115ed`、`d574c365625aa943de4cfd83f450e815b05e13b4`。歷史事件及 33 欄道具為合成 fixture，不是完整歷史 DB，無 CGI 私人檔。
+- tests/sqlite-pr128-event-receipts-upgrade.test.mjs：真正單機 backup/verify/restore、WAL 雜湊、拒絕覆寫、新目錄 server、caught/escaped/pending、指定事件 ID、原券兌換與使用收據重送、來源行號/原始欄位及剩餘耐久、CHECK/UNIQUE、注入三種 SQL 錯誤回滾、HTTP 重試、重啟。未改玩法、資料表或 CLI；多人及跨 I 金流另切 J-4c。
+- 本機未執行完整儲存庫測試，待同 HEAD 四組 CI；不提前宣布 J-4b 完成。
+
 ## 後續驗收切片（待逐項查證）
 
 1. 【J-2 已完成】#103 真實舊稅表、負 K 點、索引及歷史資料的實體 WAL 升級與失敗回滾；保留 #104/#105 已驗證情境。
