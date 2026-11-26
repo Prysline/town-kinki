@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { resolveNonItemEvent } from "../src/event-effects.mjs";
+import { initBankTables, refreshBankTaxSnapshot } from "../src/banking.mjs";
 import { initCharacterEvents, settleDailyIllnessEvent, listCharacterEvents } from "../src/events.mjs";
 import {
   COCKROACH_WINDOW_MS, getCockroachChallenge, claimCockroach
@@ -215,5 +216,79 @@ test("街頭格鬥負 K 點仍可正常取得蟑螂獎勵",()=>{
     db.prepare("UPDATE characters SET kpoint=-6 WHERE user_id=1").run();
     assert.equal(claimCockroach(db,1,START+1,numbers(0)).status,"caught");
     assert.equal(row(db).kpoint,-3);
+  }finally{db.close();}
+});
+
+function setupBanked(){
+  const db=setup();
+  db.exec("ALTER TABLE characters ADD COLUMN bank INTEGER NOT NULL DEFAULT 0;");
+  initBankTables(db);
+  for(const id of [1,2])refreshBankTaxSnapshot(db,id,"2026-11-19");
+  return db;
+}
+function taxRow(db,id=1){
+  return db.prepare("SELECT assessment_base,snapshot_day FROM bank_tax_state WHERE user_id=?").get(id);
+}
+function spawnShared(db,originalId){
+  initialize(db);
+  return settleDailyIllnessEvent(db,1,"2026-11-19",START,
+    originalId===34?numbers(0,(34-.5)/44,0):numbers(0,event44));
+}
+
+test("I：#34/#44 共用蟑螂領獎將現金、K點、外貌、歷史及稅基一起更新，重送與他帳號不變",()=>{
+  for(const originalId of [34,44]){
+    const db=setupBanked();
+    try{
+      spawnShared(db,originalId);
+      const other=taxRow(db,2);
+      assert.deepEqual({...taxRow(db)},{assessment_base:100000,snapshot_day:"2026-11-19"});
+      assert.equal(claimCockroach(db,1,START+1,numbers(0),"2026-11-20").reward,1);
+      assert.deepEqual({...taxRow(db)},{assessment_base:100001,snapshot_day:"2026-11-20"});
+      assert.deepEqual(taxRow(db,2),other);
+      assert.equal(row(db).money,100001);
+      assert.equal(row(db).kpoint,3);
+      assert.equal(row(db).stats.looks,17);
+      assert.equal(listCharacterEvents(db,1)[0].originalId,originalId);
+      assert.throws(()=>claimCockroach(db,1,START+2,()=>{throw Error("不重抽");},"2026-11-20"),/沒有待處理/);
+      assert.equal(taxRow(db).assessment_base,100001);
+    }finally{db.close();}
+  }
+});
+
+test("I：#34/#44 共用領獎的稅基寫入及歷史更新失敗均回滾所有獎勵",()=>{
+  for(const originalId of [34,44]){
+    for(const [table,triggerName] of [["bank_tax_state","tax_fault"],["character_events","history_fault"]]){
+      const db=setupBanked();
+      try{
+        spawnShared(db,originalId);
+        const before=row(db),tax=taxRow(db),history=listCharacterEvents(db,1);
+        db.exec("CREATE TRIGGER "+triggerName+" BEFORE UPDATE ON "+table+" BEGIN SELECT RAISE(ABORT,'I injected fault'); END;");
+        assert.throws(()=>claimCockroach(db,1,START+1,numbers(0),"2026-11-19"),/I injected fault/);
+        assert.deepEqual(row(db),before);
+        assert.deepEqual(taxRow(db),tax);
+        assert.deepEqual(listCharacterEvents(db,1),history);
+        assert.equal(getCockroachChallenge(db,1,START+1).status,"active");
+        db.exec("DROP TRIGGER "+triggerName);
+        assert.equal(claimCockroach(db,1,START+2,numbers(0),"2026-11-19").reward,1);
+        assert.equal(taxRow(db).assessment_base,100001);
+      }finally{db.close();}
+    }
+  }
+});
+
+test("I：現金本身合法但合計稅基溢位，蟑螂領獎完全回滾；逾時不更新資產",()=>{
+  const db=setupBanked();
+  try{
+    spawnShared(db,44);
+    db.prepare("UPDATE characters SET bank=? WHERE user_id=1").run(Number.MAX_SAFE_INTEGER-100000);
+    refreshBankTaxSnapshot(db,1,"2026-11-19");
+    const before=row(db),tax=taxRow(db);
+    assert.throws(()=>claimCockroach(db,1,START+1,numbers(0),"2026-11-19"),/稅基資產超出安全範圍/);
+    assert.deepEqual(row(db),before);
+    assert.deepEqual(taxRow(db),tax);
+    assert.equal(getCockroachChallenge(db,1,START+1).status,"active");
+    assert.equal(claimCockroach(db,1,START+20000,()=>{throw Error("逾時不抽");},"2026-11-19").status,"escaped");
+    assert.deepEqual(row(db),before);
+    assert.deepEqual(taxRow(db),tax);
   }finally{db.close();}
 });

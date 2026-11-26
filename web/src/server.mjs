@@ -746,7 +746,7 @@ async function handle(req, res) {
 
     if (path === "/api/events/cockroach/claim") {
       let result;
-      try { result=claimCockroach(db,user.id,gameNow()); }
+      try { const now=gameNow(); result=claimCockroach(db,user.id,now,Math.random,calendarDay(now,GAME_TIMEZONE)); }
       catch(error){throw new HttpError(400,error.message);}
       return sendJson(res,200,{...snapshot(user),cockroachResult:result});
     }
