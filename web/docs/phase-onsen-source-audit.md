@@ -50,3 +50,7 @@
 ## 第三批：使用者決策一 A、二 B 已確認
 
 2026-11-27：使用者明確授權全站依原版上下文核對能量上限，以及銀／金浴三處最小筆誤修復。進一步查得 basic.cgi::do_work L2881–2891 的工作上限正是現行 engine.mjs 的 25/35 公式；先前把 Web 公式全部稱為非原版不精確。一般狀態 town_maker.cgi L663–664 為 21/23；入浴 basic.cgi L1037–1038 為 22/24（每項20例）。WK-01 必須保留工作、一般狀態、入浴三種情境，不能統一成一種。原始模型保留作差分證據，新增 projectApprovedOnsenAbilityRolls 僅將 tairyku_up→tairyoku_up、spped_up→speed_up、$$kyakuryoku/$$kyakuryoku_up→單 $；銅浴不變，銀七次及金十七次抽選的次序與門檻維持。測試以記憶體中的最小修正 Perl 區段做差分，並保留既有未修復原版差分測試。尚未接正式交易；最新 CI 待驗。
+
+## 第四批：獨立 SQLite 入浴／出浴候選
+
+新增 onsen.mjs 及 onsen.test.mjs：真實角色與地圖查核、八浴池、來源費用、核准能力抽選與原版背景抽選順序、入浴/離開同一 SQLite 交易、本人請求碼與單次有效入浴、重送原收據、跨人拒絕、現金不足、旅程及限時事件拒絕、原子故障回滾、實體 SQLite 關閉重開、外鍵清理。出浴依已保存的浴池鍵與伺服器時間，不信任客戶端倍率；即使地圖設施移除，已付費玩家可離開。現行 Web 單一 recovered_at 對應原版兩時計，後續整合須防一般 snapshot 重複回復；尚未接正式 server/HTTP/UI，未完成 Web 備份還原與跨系統行為。確認原版十張背景 img/onsen/1.jpg–10.jpg 存在，能力 RNG 後另抽一次。kakidashino 在已核對的 basic.cgi、town_ini.cgi、town_lib.pl、game.cgi、town_maker.cgi 未找到賦值，候選不新增浴中換池。#149 為 WK-01 共用上限候選，後續同步整合，無需重新作使用者決策一或二。CI 待確認。

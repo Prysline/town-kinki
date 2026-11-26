@@ -115,8 +115,8 @@ function projectAbilityRolls(stats,key,random,correctTypos){
   const sides=key==="special_dou"?10:20;
   const next={...stats};
   for(const stat of keys){
-    if(!Number.isSafeInteger(stats?.[stat])||stats[stat]<=0)
-      throw Error("能力來源模型限正整數："+stat);
+    if(!Number.isSafeInteger(stats?.[stat])||stats[stat]<(correctTypos?0:1))
+      throw Error("能力來源模型數值不正確："+stat);
   }
   const rolls=keys.map(stat=>{
     const value=random();
