@@ -93,24 +93,26 @@ test("新基底玩家靜態介面沒有假名，大阪阿姨／B聯賽提示已�
     "原始商店分類仍由同一判定流程處理");
 });
 
-test("B 聯賽幽靈系列五筆定稿，來源怪物名稱與數值保留，未定稿龍系列回退原文",()=>{
+test("B 聯賽十筆怪物名稱全部定稿，來源名稱與數值保留，未知名稱回退原文",()=>{
   const raw=source("../../dat_dir/battle.cgi");
   const monsters=parseArenaCatalog(raw);
-  const expected=[["ドロン","幽靈"],["ベスドロン","貝斯幽靈"],["ボスドロン","幽靈首領"],["ドロンシドー","幽靈席德"],["ドロンエビル","邪惡幽靈"]];
+  const expected=[["ドロン","幽靈"],["べビードラゴン","幼龍"],["ドラゴン","龍"],["ベスドロン","貝斯幽靈"],["ゴットドラゴンの影","神龍之影"],["ボスドロン","幽靈首領"],["ゴットドラゴン","神龍"],["ドロンシドー","幽靈席德"],["ドロンエビル","邪惡幽靈"],["ゴットエビルドラゴン","邪神龍"]];
   assert.equal(monsters.length,10);
   assert.deepEqual(Object.entries(BATTLE_MONSTER_ZH_TW),expected);
   const before=JSON.stringify(monsters);
   for(const m of monsters){
-    const fields=raw.split(/\\r?\\n/)[m.sourceLine-1].split("<>");
+    const fields=raw.split(/\r?\n/)[m.sourceLine-1].split("<>");
     assert.equal(m.name,fields[2]);
     assert.equal(m.originalId,fields[1]);
     assert.equal(m.money,Number(fields[4]));
     assert.deepEqual(m.drops,[Number(fields[5]),Number(fields[6])]);
     assert.equal(m.brainEnergy,Number(fields[9]));
     assert.equal(m.bodyEnergy,Number(fields[10]));
-    assert.equal(displayBattleMonsterName(m.name),expected.find(([name])=>name===m.name)?.[1]??m.name);
+    assert.ok(Object.hasOwn(BATTLE_MONSTER_ZH_TW,m.name),m.name);
+    assert.equal(displayBattleMonsterName(m.name),expected.find(([name])=>name===m.name)?.[1]);
+    assert.doesNotMatch(displayBattleMonsterName(m.name),kana,m.name);
   }
-  assert.deepEqual(monsters.filter(m=>Object.hasOwn(BATTLE_MONSTER_ZH_TW,m.name)).map(m=>m.name),expected.map(([name])=>name));
+  assert.deepEqual(monsters.map(m=>m.name),expected.map(([name])=>name));
   assert.equal(JSON.stringify(monsters),before);
   assert.equal(displayBattleMonsterName("未知怪物"),"未知怪物");
   assert.equal(displayBattleMonsterName("toString"),"toString");

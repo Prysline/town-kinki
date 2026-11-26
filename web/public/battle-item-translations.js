@@ -37,13 +37,18 @@ export const displayBattleItemName=name=>
 export const displayBattleItemCategory=category=>
   Object.hasOwn(BATTLE_CATEGORY_ZH_TW,category)?BATTLE_CATEGORY_ZH_TW[category]:category;
 
-// dat_dir/battle.cgi：使用者確認幽靈系列；僅顯示，不修改來源怪物鍵。
+// dat_dir/battle.cgi：十筆怪物名稱已由使用者確認；僅顯示，不修改來源怪物鍵。
 export const BATTLE_MONSTER_ZH_TW=Object.freeze({
   "ドロン":"幽靈",
+  "べビードラゴン":"幼龍",
+  "ドラゴン":"龍",
   "ベスドロン":"貝斯幽靈",
+  "ゴットドラゴンの影":"神龍之影",
   "ボスドロン":"幽靈首領",
+  "ゴットドラゴン":"神龍",
   "ドロンシドー":"幽靈席德",
-  "ドロンエビル":"邪惡幽靈"
+  "ドロンエビル":"邪惡幽靈",
+  "ゴットエビルドラゴン":"邪神龍"
 });
 export const displayBattleMonsterName=name=>
   Object.hasOwn(BATTLE_MONSTER_ZH_TW,name)?BATTLE_MONSTER_ZH_TW[name]:name;
