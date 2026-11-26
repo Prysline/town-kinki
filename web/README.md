@@ -48,7 +48,7 @@ node scripts/solo-save.mjs restore --file ./backups/solo-2026-11-22.sqlite --dat
 DATA_DIR=./restored-solo npm start
 ```
 
-這是 **Web 新單機存檔**的 SQLite WAL 一致快照、完整性／外鍵／SHA-256 檢查，以及不覆寫還原。**不能直接複製正在執行的 `solo.sqlite` 充當完整 WAL 備份**；`verify` 不等於已在真實另一台設備完成演練。若目標資料夾已有單機資料庫或 WAL／SHM 旁檔，還原會拒絕。備份檔含玩家資產，需保管權限，建議複製到安全的離線位置。詳細步驟與失敗限制：[第67階段備份與還原](docs/phase67-solo-save-backup-restore.md)。
+這是 **Web 新單機存檔**的 SQLite WAL 一致快照、完整性／外鍵／SHA-256 檢查，以及不覆寫還原。**不能直接複製正在執行的 `solo.sqlite` 充當完整 WAL 備份**；`verify`／`restore` 拒絕含非空 WAL 旁檔的來源，請先用 `backup` 取得固定快照；若已遺失 WAL，僅憑主檔無法證明沒有遺漏交易；`verify` 不等於已在真實另一台設備完成演練。若目標資料夾已有單機資料庫或 WAL／SHM 旁檔，還原會拒絕。備份檔含玩家資產，需保管權限，建議複製到安全的離線位置。詳細步驟與失敗限制：[第67階段備份與還原](docs/phase67-solo-save-backup-restore.md)。
 
 **跨 Web 版本的完整 SQLite 升級矩陣、不同 OS／設備還原、排程輪替與公開部署備份管理尚未驗收**；不應把它們與已完成的 CLI 混為一談。升級前應先使用此工具製作並驗證備份，任何 schema 變更必須保留原有角色資產。
 

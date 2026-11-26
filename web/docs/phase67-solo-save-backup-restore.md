@@ -38,6 +38,8 @@ npm start
 
 `restore` 再次驗證備份 SQLite `integrity_check`、`foreign_key_check`、`users`、`characters`、`solo_clock`（含 `id=1`），複製到新資料夾的暫存檔後計算完整檔案 SHA-256，比對原備份後才原子發佈 `solo.sqlite`。若目的地已有 `solo.sqlite`、`solo.sqlite-wal` 或 `solo.sqlite-shm`，**必須拒絕還原，沒有 `--force` 開關**。請使用全新的資料夾測試確認角色、金錢、背包、工作冷卻及遊戲時間後，再自行決定要不要把該資料夾當作往後遊玩的 `DATA_DIR`。原本 `data/` 始終不改動。
 
+J 階段來源防護：`verify`／`restore` 只接受固定的單檔快照，來源含非空 WAL 時拒絕（先使用 `backup`），不自行 checkpoint 或刪除旁檔。還原發佈前再次檢查來源 WAL 與 SHA-256；已被分離／遺失的 WAL 不能由主檔雜湊推知，也不保證持續被外部修改的來源安全。詳 [J 階段稽核](phase-j-storage-upgrade-audit.md)。
+
 備份檔包含本機角色資訊與資產，請勿上傳公開儲存庫或分享給不信任的人。工具不備份 Web 以外的檔案、原版 CGI 玩家資料、部署環境或外部附加素材；這是**單機 Web 存檔保全工具**，並非所有系統資料的災難復原解決方案。
 
 ## 測試
