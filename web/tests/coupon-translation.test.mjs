@@ -143,7 +143,7 @@ test("17 款能力獎牌根據來源 33 欄唯一非零能力與 UI 的既有中
 
 test("優惠券兌換、通知、商店、歷史與背包只變更顯示，序號及原始名稱傳給 API",()=>{
   const app=readFileSync(new URL("../public/app.js",import.meta.url),"utf8");
-  const head=app.indexOf("let pendingCouponRedemption=null;");
+  const head=app.indexOf("const couponPendingMemory=new Map();");
   const tail=app.indexOf("function renderDining()",head);
   assert.ok(head>=0&&tail>head);
   const ui=app.slice(head,tail);
@@ -153,7 +153,8 @@ test("優惠券兌換、通知、商店、歷史與背包只變更顯示，序�
     "displayRetailItemName(entry.originalName)"
   ])assert.ok(ui.includes(name),name);
   assert.match(ui,/sourceIndex:reward\.sourceIndex,originalName:reward\.originalName/);
-  assert.match(ui,/pendingCouponRedemption\.originalName!==reward\.originalName/);
+  assert.match(ui,/value\.sourceIndex===reward\.sourceIndex&&value\.originalName===reward\.originalName/);
+  assert.match(ui,/result\.sourceIndex!==reward\.sourceIndex\|\|result\.originalName!==reward\.originalName/);
   assert.match(ui,/api\("coupon\/redeem",pendingCouponRedemption\)/);
   assert.doesNotMatch(ui,/「クーポン」/);
   assert.match(app,/name\.textContent=displayRetailItemName\(item\.name\)/);
