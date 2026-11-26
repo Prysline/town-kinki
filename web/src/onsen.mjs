@@ -1,5 +1,5 @@
 // AP-05 transaction candidate: server-owned visit/receipt, never trust client bath clock/exit multiplier.
-// HTTP/state/other-action guards are integrated in a subsequent shared-server change.
+// The shared HTTP layer isolates the active bathing screen from resident settlement.
 import {STAT_KEYS} from "./engine.mjs";
 import {publicTownMap} from "./town-storage.mjs";
 import {calendarDay} from "./training.mjs";
@@ -72,8 +72,14 @@ function readyAt(now,offset){
 }
 export function onsenOverview(db,userId,config,now){
   safeInt(userId,"玩家",1);safeInt(now,"時間");
-  const {row,source}=character(db,userId,now);
   const active=activeOnsenVisit(db,userId);
+  const location=db.prepare("SELECT town_id,recovered_at FROM characters WHERE user_id=?").get(userId);
+  if(!location)throw Error("請先建立角色");
+  const available=building(db,location.town_id);
+  if(!active&&!available)return {available:false,active:null,options:[]};
+  // A future clock is not a valid entry, but must not make the resident page unreadable.
+  if(!active&&location.recovered_at>now)return {available:true,active:null,options:[],reason:"溫泉恢復時計尚未到達"};
+  const {row,source}=character(db,userId,now);
   if(active){
     if(row.town_id!==active.townId)throw Error("角色所在地與入浴紀錄不一致");
     const preview=projectOriginalOnsenExitEnergy(source,config,active.entry.exitKey,Math.floor(now/1000));
@@ -82,7 +88,6 @@ export function onsenOverview(db,userId,config,now){
       bodyRemainingMs:Math.max(0,active.entry.bodyReadyAt-now),
       brainRemainingMs:Math.max(0,active.entry.brainReadyAt-now)};
   }
-  const available=building(db,row.town_id);
   return {available,active:null,options:available?quoteOriginalOnsen(source,config,Math.floor(now/1000))
     .map(bath=>({...bath,reason:row.money<bath.fee?"現金不足":null})):[]};
 }
