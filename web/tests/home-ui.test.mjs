@@ -575,7 +575,10 @@ test("原版右上角事件通知：可關閉，限時事件直接拍打，不�
   assert.match(html,/id="event-popup-claim"/);
   assert.match(script,/function dismissEventPopup\(/);
   assert.match(script,/el\("event-popup-close"\)\.addEventListener\("click",dismissEventPopup\)/);
-  assert.match(script,/action\("events\/cockroach\/claim",\{\}\)/);
+  assert.match(script,/action\("events\/cockroach\/claim",\{eventId:challenge\.eventId\}\)/);
+  assert.match(script,/el\("event-popup-claim"\)\.addEventListener\("click",claimCurrentCockroach\)/);
+  assert.match(script,/el\("cockroach-claim"\)\.addEventListener\("click",claimCurrentCockroach\)/);
+  assert.doesNotMatch(script,/action\("events\/cockroach\/claim",\{\}\)/);
   assert.match(script,/event\?\.day===state\?\.character\?\.lastEventDay/);
   assert.doesNotMatch(script,/selectFacilityTab\("events",\{scroll:true\}\)/);
   assert.match(css,/\.event-popup\{position:fixed;z-index:22;top:4\.8rem/);

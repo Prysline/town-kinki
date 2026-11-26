@@ -31,7 +31,7 @@ import {parseOriginalMultiCard,initMultiCardTables,multiCardOverview,playMultiCa
 import {parseOriginalTreasure,initTreasureTables,treasureOverview,openTreasure} from "./arcade-treasure.mjs";
 import {parseOriginalRoadTransport,initRoadTravelTables,roadOverview,beginRoadTrip,arriveRoadTrip} from "./road-travel.mjs";
 import {initCouponRedemptionTables,listCouponRewards,listCouponRedemptions,redeemEventCoupon,COUPON_SHOP_SYMBOL} from "./coupon-redemption.mjs";
-import { getCockroachChallenge,claimCockroach } from "./event-cockroach.mjs";
+import { getCockroachChallenge,claimCockroachForEvent } from "./event-cockroach.mjs";
 import { parseLegacyInsurance, initInventoryTables, inventoryOverview, hasActiveHealthInsurance, listInsurancePurchases, buyHealthInsurance } from "./inventory.mjs";
 import { listLegacyInventoryItems } from "./legacy-inventory.mjs";
 import { inventorySlotUsage } from "./inventory-life.mjs";
@@ -746,7 +746,7 @@ async function handle(req, res) {
 
     if (path === "/api/events/cockroach/claim") {
       let result;
-      try { const now=gameNow(); result=claimCockroach(db,user.id,now,Math.random,calendarDay(now,GAME_TIMEZONE)); }
+      try { const now=gameNow(); result=claimCockroachForEvent(db,user.id,data.eventId,now,Math.random,calendarDay(now,GAME_TIMEZONE)); }
       catch(error){throw new HttpError(400,error.message);}
       return sendJson(res,200,{...snapshot(user),cockroachResult:result});
     }

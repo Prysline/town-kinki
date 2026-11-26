@@ -4660,7 +4660,12 @@ el("insurance-buy-form").addEventListener("submit",async event=>{
   }catch(error){notify(error.message,true);}
   finally{renderInsurance();}
 });
-el("cockroach-claim").addEventListener("click",()=>action("events/cockroach/claim",{}));
+function claimCurrentCockroach(){
+  const challenge=state?.cockroachChallenge;
+  if(challenge?.status==="active"&&Number.isSafeInteger(challenge.eventId)&&challenge.eventId>0)
+    action("events/cockroach/claim",{eventId:challenge.eventId});
+}
+el("cockroach-claim").addEventListener("click",claimCurrentCockroach);
 setInterval(updateCockroachCountdown,250);
 el("hospital-treat").addEventListener("click",()=>{
   const quote=state?.hospital;
@@ -4837,10 +4842,7 @@ el("event-alert").addEventListener("click",()=>{
   dismissEventPopup();
   goToFacility("event-panel");
 });
-el("event-popup-claim").addEventListener("click",()=>{
-  if(state?.cockroachChallenge?.status==="active")
-    action("events/cockroach/claim",{});
-});
+el("event-popup-claim").addEventListener("click",claimCurrentCockroach);
 el("event-popup-close").addEventListener("click",dismissEventPopup);
 el("profile-view-tabs").addEventListener("click",event=>{
   const button=event.target.closest("button[data-profile-view]");

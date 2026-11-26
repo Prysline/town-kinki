@@ -66,7 +66,13 @@ function updateHistory(db,eventId,userId,description,effects){
   ).run(description,JSON.stringify(effects),eventId,userId);
   if(result.changes!==1)throw new Error("蟑螂事件歷史不正確");
 }
-export function claimCockroach(db,userId,now=Date.now(),random=Math.random,today=undefined){
+// HTTP 呼叫必須綁定畫面上的事件編號；不能以「最新待領」替代舊請求。
+export function claimCockroachForEvent(db,userId,eventId,now=Date.now(),random=Math.random,today=undefined){
+  if(!Number.isSafeInteger(eventId)||eventId<1)throw new Error("蟑螂事件編號不正確");
+  return claimCockroach(db,userId,now,random,today,eventId);
+}
+// 未帶事件編號僅保留給既有受信任的核心呼叫（例如經濟模擬）；HTTP 不走此路徑。
+export function claimCockroach(db,userId,now=Date.now(),random=Math.random,today=undefined,eventId=undefined){
   validateUser(userId);validateNow(now);
   db.exec("BEGIN IMMEDIATE");
   try{
@@ -74,9 +80,9 @@ export function claimCockroach(db,userId,now=Date.now(),random=Math.random,today
       "SELECT c.event_id,c.started_at,c.expires_at,e.original_id",
       "FROM character_cockroach_challenges c",
       "JOIN character_events e ON e.id=c.event_id AND e.user_id=c.user_id",
-      "WHERE c.user_id=? AND c.status='pending'",
+      "WHERE c.user_id=? AND c.status='pending' AND (? IS NULL OR c.event_id=?)",
       "ORDER BY c.event_id DESC LIMIT 1"
-    ].join(" ")).get(userId);
+    ].join(" ")).get(userId,eventId??null,eventId??null);
     if(!row||!COCKROACH_EVENT_IDS.includes(row.original_id))throw new Error("沒有待處理的蟑螂事件");
     if(!Number.isSafeInteger(row.started_at)||!Number.isSafeInteger(row.expires_at)||
         row.expires_at-row.started_at!==COCKROACH_WINDOW_MS)

@@ -6,7 +6,7 @@ import { resolveNonItemEvent } from "../src/event-effects.mjs";
 import { initBankTables, refreshBankTaxSnapshot } from "../src/banking.mjs";
 import { initCharacterEvents, settleDailyIllnessEvent, listCharacterEvents } from "../src/events.mjs";
 import {
-  COCKROACH_WINDOW_MS, getCockroachChallenge, claimCockroach
+  COCKROACH_WINDOW_MS, getCockroachChallenge, claimCockroach, claimCockroachForEvent
 } from "../src/event-cockroach.mjs";
 
 const STATS={kokugo:20,suugaku:20,rika:20,syakai:20,eigo:20,ongaku:20,bijutu:20,
@@ -290,5 +290,58 @@ test("I：現金本身合法但合計稅基溢位，蟑螂領獎完全回滾；�
     assert.equal(claimCockroach(db,1,START+20000,()=>{throw Error("逾時不抽");},"2026-11-19").status,"escaped");
     assert.deepEqual(row(db),before);
     assert.deepEqual(taxRow(db),tax);
+  }finally{db.close();}
+});
+
+test("I：跨台北午夜的兩個有效蟑螂事件分別結算；舊ID重送不能領新事件",()=>{
+  const db=setupBanked();
+  try{
+    initialize(db);initialize(db,2);
+    const midnight=Date.UTC(2026,10,19,16);
+    spawn(db,1,"2026-11-19",midnight-10000);
+    const first=getCockroachChallenge(db,1,midnight-10000).eventId;
+    settleDailyIllnessEvent(db,1,"2026-11-20",midnight,numbers(0,(34-.5)/44,0));
+    const second=getCockroachChallenge(db,1,midnight).eventId;
+    assert.notEqual(first,second);
+    const noRoll=()=>{throw Error("拒絕或重送不得抽獎");};
+    for(const bad of [undefined,null,0,-1,1.5,"1",Number.MAX_SAFE_INTEGER+1])
+      assert.throws(()=>claimCockroachForEvent(db,1,bad,midnight+1,noRoll,"2026-11-20"),/事件編號/);
+    assert.throws(()=>claimCockroachForEvent(db,2,first,midnight+1,noRoll,"2026-11-20"),/沒有待處理/);
+    assert.equal(claimCockroachForEvent(db,1,first,midnight+1,numbers(0),"2026-11-20").reward,1);
+    assert.equal(getCockroachChallenge(db,1,midnight+2).eventId,second);
+    assert.throws(()=>claimCockroachForEvent(db,1,first,midnight+2,noRoll,"2026-11-20"),/沒有待處理/);
+    assert.equal(row(db).money,100001);
+    assert.equal(row(db).kpoint,3);
+    assert.equal(taxRow(db).assessment_base,100001);
+    assert.equal(claimCockroachForEvent(db,1,second,midnight+3,numbers(.999999),"2026-11-20").reward,20000);
+    assert.equal(row(db).money,120001);
+    assert.equal(row(db).kpoint,6);
+    assert.equal(row(db).stats.looks,14);
+    assert.equal(taxRow(db).assessment_base,120001);
+    assert.equal(row(db,2).money,100000);
+    assert.equal(row(db,2).kpoint,0);
+    assert.deepEqual(listCharacterEvents(db,1).map(e=>[e.id,e.originalId,e.effects.money]),[[second,34,20000],[first,44,1]]);
+  }finally{db.close();}
+});
+
+test("I：過期舊蟑螂請求只結束自己的舊事件，不消耗新挑戰或修改資產",()=>{
+  const db=setupBanked();
+  try{
+    initialize(db);
+    const midnight=Date.UTC(2026,10,19,16);
+    settleDailyIllnessEvent(db,1,"2026-11-19",midnight-30000,numbers(0,(34-.5)/44,0));
+    const oldId=getCockroachChallenge(db,1,midnight-30000).eventId;
+    spawn(db,1,"2026-11-20",midnight);
+    const newId=getCockroachChallenge(db,1,midnight).eventId;
+    const before=row(db),tax=taxRow(db);
+    const noRoll=()=>{throw Error("逾期不抽獎");};
+    assert.equal(claimCockroachForEvent(db,1,oldId,midnight+1,noRoll,"2026-11-20").status,"escaped");
+    assert.deepEqual(row(db),before);
+    assert.deepEqual(taxRow(db),tax);
+    assert.equal(getCockroachChallenge(db,1,midnight+2).eventId,newId);
+    assert.throws(()=>claimCockroachForEvent(db,1,oldId,midnight+2,noRoll,"2026-11-20"),/沒有待處理/);
+    assert.equal(listCharacterEvents(db,1).find(e=>e.id===oldId).effects.cockroach,"escaped");
+    assert.equal(claimCockroachForEvent(db,1,newId,midnight+3,numbers(0),"2026-11-20").reward,1);
+    assert.equal(getCockroachChallenge(db,1,midnight+4),null);
   }finally{db.close();}
 });
