@@ -145,6 +145,7 @@ function addRow(parent, key, value) {
 let selectedMapCell = null;
 let selectedHouseSpot = null;
 let selectedMapTown = null;
+let mapEditBusy = false;
 let activeRoom = null;
 // 單機不需要帳號，所謂「離開遊戲」只回到首頁，不移除存檔。
 let soloAtHome=false;
@@ -188,7 +189,7 @@ function renderSoloTime() {
 let publicPreview=null;
 let previewLoading=false;
 // 方案 B：一次顯示一組設施。原本的表單留在 DOM，既有事件和資料更新不受影響。
-const FACILITY_TAB_NAMES = Object.freeze(["house","dining","shops","games","training","jobs","bank","hospital","events","mail"]);
+const FACILITY_TAB_NAMES = Object.freeze(["house","dining","shops","games","training","jobs","bank","hospital","events","battle","mail"]);
 const PROFILE_VIEWS = Object.freeze(["status","inventory","attributes"]);
 let activeProfileView="status";
 function selectProfileView(name,{focus=false}={}) {
@@ -372,6 +373,66 @@ async function loadPublicPreview(townId=0){
   }catch(error){text("preview-map-status","無法讀取城鎮預覽："+error.message);}
   finally{previewLoading=false;}
 }
+// 街區編輯使用自己的狀態與提示，不呼叫會捲動頁面的共用通知。
+function setMapEditFeedback(message,error=false){
+  const feedback=el("map-edit-feedback");
+  feedback.classList.toggle("error",error);
+  feedback.setAttribute("role",error?"alert":"status");
+  feedback.textContent=message;
+}
+function syncMapEditor(){
+  const toggle=el("map-edit-toggle"),palette=el("map-palette"),board=el("town-map");
+  const active=Boolean(state?.map?.editable&&toggle.checked);
+  el("map-editor").classList.toggle("is-editing",active);
+  toggle.disabled=mapEditBusy;
+  palette.disabled=!active||mapEditBusy;
+  board.setAttribute("aria-busy",String(mapEditBusy));
+  for(const button of board.querySelectorAll(".map-cell"))button.disabled=mapEditBusy;
+  const label=palette.selectedOptions[0]?.textContent??"";
+  text("map-edit-status",active?"編輯中｜"+label+"｜點選格子儲存":"瀏覽模式｜點選格子可查看設施。");
+}
+async function saveMapTile(row,column,name){
+  if(mapEditBusy||!state?.map?.editable||!el("map-edit-toggle").checked)return;
+  const palette=el("map-palette");
+  if(palette.selectedIndex<0)return;
+  const symbol=palette.value,label=palette.selectedOptions[0].textContent;
+  const board=el("town-map"),scroll=board.parentElement,index=row*16+column;
+  const townId=state.map.townId;
+  const restoreFocus=document.activeElement===board.querySelectorAll(".map-cell")[index];
+  mapEditBusy=true;
+  syncMapEditor();
+  setMapEditFeedback(name+"：儲存中…");
+  let anchor=null;
+  try{
+    const next=await api("map/tile",{row,column,symbol});
+    // 首次編輯可能使上方新手說明消失。只在原格仍可見時保留它在視窗內的位置；
+    // 不把使用者強制拉往提示、地圖底部或其他設施。
+    const rect=board.querySelectorAll(".map-cell")[index]?.getBoundingClientRect();
+    if(next.map?.townId===townId&&state.map?.townId===townId&&rect&&rect.bottom>0&&rect.top<innerHeight)
+      anchor={top:rect.top,left:scroll.scrollLeft};
+    state=next;
+    render();
+    if(state.map?.townId===townId){
+      text("map-selection",name+"："+(state.map.cells[index]?.label??label));
+      setMapEditFeedback(name+"："+label+"，已儲存。");
+    }
+  }catch(error){
+    setMapEditFeedback(name+"：儲存失敗，"+error.message,true);
+  }finally{
+    mapEditBusy=false;
+    syncMapEditor();
+    if(anchor&&state?.map?.townId===townId){
+      scroll.scrollLeft=anchor.left;
+      const cell=board.querySelectorAll(".map-cell")[index];
+      if(cell){
+        const delta=cell.getBoundingClientRect().top-anchor.top;
+        if(Math.abs(delta)>1)window.scrollBy({top:delta,behavior:"instant"});
+      }
+    }
+    if(restoreFocus&&document.activeElement===document.body&&state?.map?.townId===townId)
+      board.querySelectorAll(".map-cell")[index]?.focus({preventScroll:true});
+  }
+}
 function renderTownMap() {
   const map = state.map;
   const board = el("town-map");
@@ -381,9 +442,11 @@ function renderTownMap() {
     selectedMapCell = null;
     selectedHouseSpot = null;
     selectedMapTown = map.townId;
+    setMapEditFeedback("修改只寫入 Web 資料庫，不會覆蓋原版 CGI。");
   }
   const editor = el("map-editor");
   editor.hidden = !map.editable;
+  if(!map.editable)el("map-edit-toggle").checked=false;
   el("solo-starter-town").hidden=!(state.mode==="solo"&&!map.configured);
   // 只在玩家親自啟用的 Web 試玩街區呈現，不替原版／自訂地圖虛構設施。
   el("solo-play-guide").hidden=!(state.mode==="solo"&&map.source==="web-solo-starter");
@@ -397,7 +460,7 @@ function renderTownMap() {
     palette.append(option);
   }
   if (map.palette?.some(item => item.key === previousSymbol)) palette.value = previousSymbol;
-  palette.disabled = !el("map-edit-toggle").checked;
+  syncMapEditor();
   const sourceText = !map.configured
     ? "這個城鎮目前沒有原始街區資料，顯示未配置的空白地圖。"
     : map.source === "legacy" || map.source === "legacy-import"
@@ -430,6 +493,7 @@ function renderTownMap() {
       const button = document.createElement("button");
       button.type = "button";
       button.className = "map-cell map-" + cell.category;
+      button.disabled=mapEditBusy;
       if (selectedMapCell === name) button.classList.add("selected");
       button.title = name + "：" + cell.label;
       button.setAttribute("aria-label", name + "：" + cell.label);
@@ -456,8 +520,7 @@ function renderTownMap() {
         text("map-selection",name+"："+cell.label+
           (cell.raw&&cell.category==="unknown"?"（"+cell.raw+"）":""));
         if(editing){
-          action("map/tile",{row,column:col,symbol:el("map-palette").value},
-            name+" 的街區內容已儲存。");
+          saveMapTile(row,col,name);
         }else{
           board.querySelectorAll(".map-cell.selected").forEach(node=>node.classList.remove("selected"));
           button.classList.add("selected");
@@ -4548,8 +4611,7 @@ async function action(path, data, message) {
       notify((result.action==="deposit"?"存款":"提款")+"完成："+money(data.amount)+
         "\n目前現金："+money(result.money)+"\n普通銀行存款："+money(result.bank)+"。",
         false,{title:result.action==="deposit"?"存款完成":"提款完成"});
-    } else if (message) notify(message,false,{inline:path==="map/tile"||path==="job/payment",
-      source:path==="map/tile"?el("map-selection"):undefined});
+    } else if (message) notify(message,false,{inline:path==="job/payment"});
     if (path === "login" || path === "register") closeRoom();
     render();
   } catch (error) { notify(error.message, true); }
@@ -4879,11 +4941,15 @@ el("solo-starter-create").addEventListener("click",()=>{
   action("solo/map/starter",{},"已建立單機試玩街區，可點選百貨、住宅用空地與其他設施開始遊玩。");
 });
 el("map-edit-toggle").addEventListener("change", () => {
-  el("map-palette").disabled = !el("map-edit-toggle").checked;
+  syncMapEditor();
+  setMapEditFeedback(el("map-edit-toggle").checked
+    ? "選擇設施後直接點選格子；每次儲存完成後即可繼續。"
+    : "修改只寫入 Web 資料庫，不會覆蓋原版 CGI。");
   text("map-selection", el("map-edit-toggle").checked
     ? "編輯模式已啟用。點選街區格子即可設定為選單中的設施。"
     : "編輯模式已關閉。點選格子可查看位置與設施。");
 });
+el("map-palette").addEventListener("change",syncMapEditor);
 el("legacy-icon-toggle").addEventListener("click", () => {
   const icon = state?.legacyPlayerIcon;
   if (!state?.character || icon?.status !== "available") return;
