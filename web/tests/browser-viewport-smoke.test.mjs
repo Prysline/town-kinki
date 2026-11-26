@@ -205,6 +205,29 @@ async function fill(cdp,selector,value){
     "e.dispatchEvent(new Event('change',{bubbles:true}));return true;})()");
   assert.ok(result,"無法填入表單："+selector);
 }
+// The real server commits before the test simulates a lost response. Record the
+// actual UI-generated request payloads; do not synthesize a replay through HTTP.
+async function loseBattleResponse(cdp,path){
+  await evaluate(cdp,`(()=>{const real=window.fetch.bind(window);
+    window.hRetry={lost:false,requests:[]};
+    window.fetch=async(input,init)=>{
+      const matches=String(input)===${JSON.stringify("/api/"+path)};
+      if(matches)window.hRetry.requests.push(JSON.parse(init.body));
+      const response=await real(input,init);
+      if(matches&&response.ok&&!window.hRetry.lost){window.hRetry.lost=true;throw Error("H測試：交易已完成但回應遺失");}
+      return response;
+    };return true;})()`);
+}
+async function verifyBattleRetry(cdp){
+  const record=await evaluate(cdp,"window.hRetry");
+  assert.equal(record.lost,true);assert.equal(record.requests.length,2);
+  assert.ok(record.requests[0].requestId);
+  assert.deepEqual(record.requests[1],record.requests[0],"UI 重試必須沿用同一請求及參數");
+}
+async function browserBattleState(cdp,kind){
+  return evaluate(cdp,`(async()=>{const s=await(await fetch('/api/state')).json();
+    return {name:s.character.name,money:s.character.money,bank:s.character.bank,kpoint:s.character.kpoint,coupons:s.couponBalance,history:s[${JSON.stringify(kind)}].history};})()`);
+}
 async function viewport(cdp,width,height){
   await cdp.send("Emulation.setDeviceMetricsOverride",{
     width,height,deviceScaleFactor:1,mobile:width<=768,
@@ -739,8 +762,15 @@ test("Chrome 多人街頭格鬥：真實按鈕送出戰鬥、展開戰報、手�
     await chrome.send("Page.reload");
     await until(chrome,"!document.querySelector('#game')?.hidden && document.querySelector('#street-fight-play')?.disabled===false","恰好 15,000 元格鬥入口可使用");
     await evaluate(chrome,"window.confirm=()=>true");
+    await loseBattleResponse(chrome,"street-fight/play");
+    await click(chrome,"#street-fight-play");
+    await until(chrome,"window.hRetry.lost && !document.querySelector('#street-fight-play').disabled","街頭已提交，失去回應後可重試");
+    const streetCommitted=await browserBattleState(chrome,"streetFight");
+    assert.equal(streetCommitted.history.length,1);
     await click(chrome,"#street-fight-play");
     await until(chrome,"document.querySelector('#street-fight-history summary')?.textContent?.includes('平手')","顯示實際格鬥結果");
+    await verifyBattleRetry(chrome);
+    assert.deepEqual(await browserBattleState(chrome,"streetFight"),streetCommitted);
     await click(chrome,"#street-fight-history summary");
     await until(chrome,"document.querySelector('#street-fight-history details')?.open===true","戰報可展開");
     assert.equal(await evaluate(chrome,"document.querySelectorAll('#street-fight-history details ol li').length"),50);
@@ -756,6 +786,21 @@ test("Chrome 多人街頭格鬥：真實按鈕送出戰鬥、展開戰報、手�
     }
     const saved=await evaluate(chrome,"(async()=>{const s=await(await fetch('/api/state')).json();return s.streetFight.history.length})()");
     assert.equal(saved,1);
+    await web.stop();web=await startWeb(join(workspace,"sqlite"),"multi");
+    await chrome.send("Page.navigate",{url:web.url});
+    await until(chrome,"!document.querySelector('#game')?.hidden&&document.querySelector('#character-name')?.textContent==='格鬥居民乙'","多人重啟保留登入與本人資料");
+    assert.deepEqual(await browserBattleState(chrome,"streetFight"),streetCommitted);
+    await click(chrome,"#logout");
+    await until(chrome,"!document.querySelector('#auth')?.hidden","真正登出");
+    await fill(chrome,'#login-form [name="username"]',"chrome_street_a");
+    await fill(chrome,'#login-form [name="password"]',"chrome-street-pass");
+    await click(chrome,"#login-form button[type=submit]");
+    await until(chrome,"!document.querySelector('#game')?.hidden&&document.querySelector('#character-name')?.textContent==='格鬥居民甲'","另一帳號實際登入");
+    const other=await browserBattleState(chrome,"streetFight");
+    assert.equal(other.history.length,0);
+    assert.equal(other.money,100000);
+    assert.equal(await evaluate(chrome,"document.querySelectorAll('#street-fight-history details').length"),0);
+    console.log("H_STREET "+JSON.stringify({retry:true,restart:true,otherHistory:other.history.length,widths:[1440,768,375]}));
   }finally{
     await chrome?.stop();await web?.stop();
     rmSync(workspace,{force:true,recursive:true,maxRetries:50,retryDelay:200});
@@ -771,10 +816,31 @@ test("Chrome C 聯賽：實際培育、模仿者比賽、戰報與手機視窗",
     await evaluate(chrome,"window.confirm=()=>true");await fill(chrome,'#create-form [name="name"]',"聯賽測試居民");await click(chrome,"#create-submit");
     await until(chrome,"!document.querySelector('#game')?.hidden","主畫面");
     await click(chrome,"#c-league-open");await until(chrome,"document.querySelector('#c-league-result')?.textContent?.includes('已進入第 1 季')","明確進入聯賽");
-    await click(chrome,"#c-league-training summary");await fill(chrome,"#c-league-name","模仿測試");await fill(chrome,'#c-league-fields input[data-stat="kenkou"]',1);
+    await click(chrome,"#c-league-training summary");
+    // The actual form submits an empty name; verify server rejection leaves no fighter or cash change.
+    const beforeInvalid=await browserBattleState(chrome,"cLeague");
+    await fill(chrome,"#c-league-name","");
+    await evaluate(chrome,`(()=>{const real=window.fetch.bind(window);window.hInvalid=null;
+      window.fetch=async(input,init)=>{const response=await real(input,init);
+        if(String(input)==="/api/c-league/train")window.hInvalid={status:response.status,body:await response.clone().json()};
+        return response;
+      };return true;})()`);
+    await click(chrome,"#c-league-train");
+    await until(chrome,"window.hInvalid?.status===400&&!document.querySelector('#c-league-train').disabled","無效名稱由正式後端拒絕");
+    assert.match(await evaluate(chrome,"window.hInvalid.body.error"),/名稱/);
+    assert.deepEqual(await browserBattleState(chrome,"cLeague"),beforeInvalid);
+    assert.equal(await evaluate(chrome,"(async()=>Boolean((await(await fetch('/api/state')).json()).cLeague.character))()"),false);
+    await fill(chrome,"#c-league-name","模仿測試");await fill(chrome,'#c-league-fields input[data-stat="kenkou"]',1);
     await click(chrome,"#c-league-train");await until(chrome,"document.querySelector('#c-league-result')?.textContent?.includes('培育已儲存')","實際培育完成");
-    await until(chrome,"document.querySelector('#c-league-play')?.disabled===false","比賽可用");await click(chrome,"#c-league-play");
+    await until(chrome,"document.querySelector('#c-league-play')?.disabled===false","比賽可用");
+    await loseBattleResponse(chrome,"c-league/play");
+    await click(chrome,"#c-league-play");
+    await until(chrome,"window.hRetry.lost&&!document.querySelector('#c-league-play').disabled","C聯賽已提交但回應遺失");
+    const cCommitted=await browserBattleState(chrome,"cLeague");assert.equal(cCommitted.history.length,1);
+    await click(chrome,"#c-league-play");
     await until(chrome,"document.querySelector('#c-league-history summary')?.textContent?.includes('模仿者')","模仿者戰報");
+    await verifyBattleRetry(chrome);
+    assert.deepEqual(await browserBattleState(chrome,"cLeague"),cCommitted);
     assert.equal(await evaluate(chrome,"document.querySelector('#c-league-play').disabled"),true);
     const saved=await evaluate(chrome,"(async()=>{const s=await(await fetch('/api/state')).json();return {n:s.cLeague.history.length,kenkou:s.cLeague.character.stats.kenkou,mimic:s.cLeague.history[0].mimic}})()");
     assert.deepEqual(saved,{n:1,kenkou:1,mimic:true});
@@ -790,6 +856,14 @@ test("Chrome C 聯賽：實際培育、模仿者比賽、戰報與手機視窗",
       await until(chrome,"document.querySelector('#c-league-history details')?.open===true","C聯賽 "+width+"px 戰報");
       assert.ok(await evaluate(chrome,"document.querySelectorAll('#c-league-history ol li').length>0"));
     }
+    await web.stop();web=await startWeb(join(workspace,"sqlite"));
+    await chrome.send("Page.navigate",{url:web.url});
+    await until(chrome,"!document.querySelector('#game')?.hidden||!document.querySelector('#solo-lobby')?.hidden","C重啟保留居民");
+    if(await evaluate(chrome,"!document.querySelector('#solo-lobby')?.hidden"))await click(chrome,"#solo-continue");
+    await until(chrome,"!document.querySelector('#game')?.hidden","C重啟主畫面");
+    assert.deepEqual(await browserBattleState(chrome,"cLeague"),cCommitted);
+    assert.match(await evaluate(chrome,"document.querySelector('#c-league-history summary').textContent"),/模仿者/);
+    console.log("H_C_LEAGUE "+JSON.stringify({retry:true,restart:true,invalidRejected:true,widths:[1440,768,375]}));
   }finally{await chrome?.stop();await web?.stop();rmSync(workspace,{force:true,recursive:true,maxRetries:50,retryDelay:200});}
 });
 
@@ -916,8 +990,15 @@ test("階段H Chrome B聯賽與大阪：1440/768/375真實地圖點擊、回應�
     await viewport(chrome,768,1024);
     await enter("A2","osaka-panel","games");
     assert.match(await evaluate(chrome,"document.querySelector('#osaka-status').textContent"),/Web 重建版 NPC（非原版/);
+    await loseBattleResponse(chrome,"osaka/play");
+    await click(chrome,'#osaka-modes button[data-osaka-mode="week"]');
+    await until(chrome,"window.hRetry.lost&&!document.querySelector('#osaka-modes button[data-osaka-mode=week]').disabled","弱大阪已提交但回應遺失");
+    const weakCommitted=await browserBattleState(chrome,"osaka");
+    assert.equal(weakCommitted.history.length,1);
     await click(chrome,'#osaka-modes button[data-osaka-mode="week"]');
     await until(chrome,"document.querySelector('#osaka-result h4')?.textContent?.includes('弱｜')","弱大阪戰報");
+    await verifyBattleRetry(chrome);
+    assert.deepEqual(await browserBattleState(chrome,"osaka"),weakCommitted);
     const weak=savedReceipt("osaka_battles");assert.equal(weak.length,1);
     assert.equal(weak[0].result.outcome,"win");
     assert.equal(weak[0].result.reward.granted,true);
@@ -930,7 +1011,41 @@ test("階段H Chrome B聯賽與大阪：1440/768/375真實地圖點擊、回應�
     await until(chrome,"document.querySelector('#osaka-result h4')?.textContent?.includes('強｜')","手機強大阪戰報");
     const battles=savedReceipt("osaka_battles");assert.equal(battles.length,2);
     assert.equal(battles[1].result.outcome,"win");assert.equal(battles[1].result.reward.granted,true);
+    // Same resident, same actual save: from B to Osaka to C and the existing #38 event.
+    await click(chrome,"#c-league-open");
+    await until(chrome,"document.querySelector('#c-league-result')?.textContent?.includes('已進入第 1 季')","跨玩法進入C聯賽");
+    if(!await evaluate(chrome,"document.querySelector('#c-league-training').open"))await click(chrome,"#c-league-training summary");
+    await fill(chrome,"#c-league-name","聯合測試培育");
+    await click(chrome,"#c-league-train");
+    await until(chrome,"document.querySelector('#c-league-result')?.textContent?.includes('培育已儲存')","跨玩法培育");
+    await click(chrome,"#c-league-play");
+    await until(chrome,"document.querySelector('#c-league-history summary')?.textContent?.includes('模仿者')","跨玩法C戰報");
+    const crossC=await browserBattleState(chrome,"cLeague");assert.equal(crossC.history.length,1);
+    assert.deepEqual(savedReceipt("b_league_battles"),first);
+    assert.deepEqual(savedReceipt("osaka_battles"),battles);
+    const eventBefore=await state();
+    const eventDb=new DatabaseSync(join(dataDir,"solo.sqlite"));
+    try{
+      const actor=eventDb.prepare("SELECT user_id,last_event_day FROM characters").get();
+      const previousDay=actor.last_event_day;
+      eventDb.prepare("UPDATE characters SET last_event_day='2000-01-01' WHERE user_id=?").run(actor.user_id);
+      const rolls=[0,(38-.5)/44,0,.55];
+      const event=settleDailyIllnessEvent(eventDb,actor.user_id,previousDay,eventBefore.gameTimeMs,()=>rolls.shift());
+      assert.equal(event.originalId,38);
+      const again=settleDailyIllnessEvent(eventDb,actor.user_id,previousDay,eventBefore.gameTimeMs,()=>{throw Error("同日不應重抽")});
+      assert.equal(again.checked,false);
+    }finally{eventDb.close();}
+    await chrome.send("Page.reload");
+    await until(chrome,"!document.querySelector('#game')?.hidden||!document.querySelector('#solo-lobby')?.hidden","事件重載");
+    if(await evaluate(chrome,"!document.querySelector('#solo-lobby')?.hidden"))await click(chrome,"#solo-continue");
+    await until(chrome,"!document.querySelector('#event-popup').hidden&&document.querySelector('#event-popup-body').textContent.includes('聖誕老人戰鬥')","同角色戰鬥後事件通知");
+    await click(chrome,"#event-popup-close");
+    await click(chrome,"#profile-tab-inventory");
+    assert.match(await evaluate(chrome,"document.querySelector('#legacy-inventory-list').textContent"),/Web 聖誕老人戰鬥獎勵/);
     const beforeRestart=await state();
+    const eventHistory=beforeRestart.healthEvents.filter(x=>x.originalId===38);
+    assert.equal(eventHistory.length,1);
+    assert.deepEqual(beforeRestart.cLeague.history,crossC.history);
     const award=battles[1].result.reward;
     assert.ok(beforeRestart.legacyItemActions.some(x=>x.sourceLine===award.sourceLine&&x.remaining>0));
     await click(chrome,"#profile-tab-inventory");
@@ -947,6 +1062,9 @@ test("階段H Chrome B聯賽與大阪：1440/768/375真實地圖點擊、回應�
     assert.deepEqual(savedReceipt("b_league_battles"),first);
     assert.deepEqual(savedReceipt("osaka_battles"),battles);
     assert.deepEqual(restored.equipmentItems,beforeRestart.equipmentItems);
+    assert.deepEqual(restored.cLeague.history,crossC.history);
+    assert.deepEqual(restored.healthEvents.filter(x=>x.originalId===38),eventHistory);
+    assert.deepEqual(restored.legacyItemActions,beforeRestart.legacyItemActions);
     assert.equal(restored.legacyItemActions.find(x=>x.sourceLine===award.sourceLine).remaining,beforeRestart.legacyItemActions.find(x=>x.sourceLine===award.sourceLine).remaining);
     for(const width of [1440,768,375]){
       await viewport(chrome,width,width===375?812:width===768?1024:900);
@@ -965,6 +1083,6 @@ test("階段H Chrome B聯賽與大阪：1440/768/375真實地圖點擊、回應�
       await until(chrome,"document.querySelector('#osaka-result details').open","大阪戰報展開 "+width);
       assert.equal(await evaluate(chrome,"document.querySelectorAll('#osaka-result ol li').length"),battles[1].result.rounds.length);
     }
-    console.log("H_BROWSER "+JSON.stringify({widths:[1440,768,375],arenaReceipts:first.length,osakaReceipts:battles.length,retry:true,restart:true,npc:battles[1].result.npcSource}));
+    console.log("H_BROWSER "+JSON.stringify({widths:[1440,768,375],arenaReceipts:first.length,osakaReceipts:battles.length,retry:true,restart:true,npc:battles[1].result.npcSource,cLeagueReceipts:crossC.history.length,event38:eventHistory.length,osakaRetry:true}));
   }finally{await chrome?.stop();await web?.stop();rmSync(workspace,{force:true,recursive:true,maxRetries:50,retryDelay:200});}
 });
