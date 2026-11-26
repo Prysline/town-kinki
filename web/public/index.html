@@ -123,6 +123,22 @@
       </div>
     </div>
 
+    <section id="onsen-active-screen" class="card onsen-active" aria-labelledby="onsen-active-title" hidden>
+      <div class="eyebrow">溫泉</div>
+      <h2 id="onsen-active-title"></h2>
+      <img id="onsen-background" alt="原版溫泉場景" hidden>
+      <p id="onsen-active-receipt"></p>
+      <p id="onsen-active-gains" class="small"></p>
+      <dl class="onsen-countdowns">
+        <div><dt>身體能量恢復倒數</dt><dd id="onsen-body-countdown"></dd></div>
+        <div><dt>頭腦能量恢復倒數</dt><dd id="onsen-brain-countdown"></dd></div>
+      </dl>
+      <p class="small">可以提前離開；出浴時才依伺服器時間結算能量。</p>
+      <div id="onsen-time-advance" hidden>
+        <button type="button" class="secondary" data-onsen-advance="5m">快轉 5 分鐘（單機）</button>
+      </div>
+      <button id="onsen-leave" type="button">離開浴池</button>
+    </section>
     <div id="game" class="layout game-shell" hidden>
       <div id="compact-status" class="compact-status" hidden aria-label="固定角色能量資訊">
         <strong id="compact-character-name" class="compact-name"></strong>
@@ -369,6 +385,7 @@
         <button id="facility-tab-jobs" type="button" role="tab" data-pane="jobs" aria-controls="facility-pane-jobs" aria-selected="true" tabindex="0">工作</button>
         <button id="facility-tab-bank" type="button" role="tab" data-pane="bank" aria-controls="facility-pane-bank" aria-selected="false" tabindex="-1">銀行</button>
         <button id="facility-tab-hospital" type="button" role="tab" data-pane="hospital" aria-controls="facility-pane-hospital" aria-selected="false" tabindex="-1">醫院</button>
+        <button id="facility-tab-onsen" type="button" role="tab" data-pane="onsen" aria-controls="facility-pane-onsen" aria-selected="false" tabindex="-1">溫泉</button>
         <button id="facility-tab-events" type="button" role="tab" data-pane="events" aria-controls="facility-pane-events" aria-selected="false" tabindex="-1">事件</button>
         <button id="facility-tab-battle" type="button" role="tab" data-pane="battle" aria-controls="facility-pane-battle" aria-selected="false" tabindex="-1">戰鬥</button>
         <button id="facility-tab-mail" type="button" role="tab" data-pane="mail" aria-controls="facility-pane-mail" aria-selected="false" tabindex="-1">郵件</button>
@@ -961,6 +978,15 @@
           <p id="hospital-cost" class="small"></p>
           <button id="hospital-treat" type="button">接受治療</button>
           <details class="explain"><summary>玩法與限制說明</summary><p class="small">治療會將疾病指數恢復為 50。有效的健康保險可將醫療費降為三分之一，折抵金額由伺服器依持有物判定。</p></details>
+        </section>
+      </div>
+      <div id="facility-pane-onsen" class="facility-pane" role="tabpanel" aria-labelledby="facility-tab-onsen" tabindex="0" hidden>
+        <section class="card" id="onsen-panel">
+          <div class="eyebrow">能量恢復</div>
+          <h3>溫泉</h3>
+          <p class="small" id="onsen-status"></p>
+          <div id="onsen-options" class="onsen-options"></div>
+          <details class="explain"><summary>玩法與限制說明</summary><p class="small">原版八種浴池依不同倍率恢復身體及頭腦能量。特別浴池的費用與倍率依能力計算；銅、銀、金浴池有原版能力抽選。入浴後先離開浴池，才可返回街區操作。</p></details>
         </section>
       </div>
       <div id="facility-pane-events" class="facility-pane" role="tabpanel" aria-labelledby="facility-tab-events" tabindex="0" hidden>

@@ -2,6 +2,7 @@
 export const FACILITY_PANELS=Object.freeze({
   "銀行":"bank-panel",
   "病院":"hospital-panel",
+  "温泉":"onsen-panel",
   "職安":"jobs-panel",
   "教室":"classroom-panel",
   "食堂":"dining-panel",
