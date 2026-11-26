@@ -7,7 +7,7 @@ export function displayLoto6DrawReason(reason){
 
 // 通知用完整原因；最近開獎紀錄保留已確認的精簡用詞。
 export function formatLoto6DrawNotice(result,formatMoney){
-  if(!result.drawn)return "目前尚未到達六號樂透的 06:00 開獎時間，彩券也未累計售出 200 注。";
+  if(!result.drawn)return "目前尚未滿足新一輪開獎條件，請等候下次每日 06:00 開獎，或待彩券累計售出 200 注。";
   const reason=result.reason==="06:00"?"每日 06:00 定時開獎":
     result.reason==="200 tickets"?"彩券已累計售出 200 注":displayLoto6DrawReason(result.reason);
   return "六號樂透已開獎（"+reason+"），中獎號碼 "+

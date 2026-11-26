@@ -76,13 +76,14 @@ test("靜態首頁及場景說明無日文假名，地圖代碼仍由原始符�
   assert.ok(html.includes("專賣店限定商品"));
 });
 
-test("住宅商店分類和三處付款信用卡名稱只翻玩家顯示，不改業務識別",()=>{
+test("住宅商店分類和四處付款信用卡名稱只翻玩家顯示，不改業務識別",()=>{
   const app=read("../public/app.js");
   for(const expected of [
     '"住宅商店「"+shop.title+"」｜"+displayRetailItemCategory(shop.category)',
     'opt.textContent="有效信用卡："+displayRetailItemName(card.name);',
     'option.textContent="信用卡："+displayRetailItemName(card.name);payment.append(option);',
-    'new Option(displayRetailItemName(card.name)+"（普通存款扣款）","credit:"+card.sourceLine)'
+    'new Option(displayRetailItemName(card.name)+"（普通存款扣款）","credit:"+card.sourceLine)',
+    '["credit:"+c.sourceLine,displayRetailItemName(c.name)+"（銀行付款）"]'
   ])assert.ok(app.includes(expected),expected);
   assert.equal(displayRetailItemName("クレジットカード"),"信用卡");
   assert.equal(displayRetailItemName("ゴールドクレジットカード"),"黃金信用卡");

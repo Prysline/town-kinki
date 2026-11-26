@@ -387,3 +387,28 @@ test("I：攝影機現金謝禮與會員卡獎金更新稅基；無資產異動�
     assert.equal(listCharacterEvents(db,1).length,3);
   }finally{db.close();}
 });
+
+test("#40 河中物品與現金扣款、稅基、歷史和日標記同交易；無扣款分支不刷新稅基",()=>{
+  const db=setup();try{
+    first(db);first(db,2);
+    refreshBankTaxSnapshot(db,1,"2026-11-18");refreshBankTaxSnapshot(db,2,"2026-11-18");
+    const before=state(db),tax=bankTaxOverview(db,1),other=state(db,2),otherTax=bankTaxOverview(db,2);
+    const items=()=>db.prepare("SELECT * FROM legacy_inventory_items WHERE user_id=1").all();
+    for(const [op,table] of [["UPDATE","bank_tax_state"],["INSERT","character_events"]]){
+      db.exec("CREATE TRIGGER i40_fail BEFORE "+op+" ON "+table+" BEGIN SELECT RAISE(ABORT,'river blocked'); END;");
+      assert.throws(()=>trigger(db,40,{choices:[0,.99]}),/river blocked/);
+      assert.deepEqual(state(db),before);assert.deepEqual(bankTaxOverview(db,1),tax);
+      assert.equal(items().length,0);assert.equal(listCharacterEvents(db,1).length,0);
+      assert.deepEqual(state(db,2),other);assert.deepEqual(bankTaxOverview(db,2),otherTax);
+      db.exec("DROP TRIGGER i40_fail");
+    }
+    trigger(db,40,{choices:[0,.99]});assert.equal(state(db).money,99500);
+    assert.equal(bankTaxOverview(db,1).assessmentBase,199500);assert.equal(items().length,1);
+    const afterTax=bankTaxOverview(db,1);
+    db.exec("CREATE TRIGGER i40_no_tax BEFORE UPDATE ON bank_tax_state BEGIN SELECT RAISE(ABORT,'unexpected tax update'); END;");
+    trigger(db,40,{choices:[.99,0],day:"2026-11-20",now:86500000});
+    assert.equal(items().length,2);assert.deepEqual(bankTaxOverview(db,1),afterTax);
+    assert.equal(listCharacterEvents(db,1).length,2);assert.deepEqual(state(db,2),other);
+    assert.deepEqual(bankTaxOverview(db,2),otherTax);assert.equal(bankLedger(db,1).length,0);
+  }finally{db.close();}
+});

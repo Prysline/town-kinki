@@ -4,7 +4,7 @@
 import { resolveNonItemEvent } from "./event-effects.mjs";
 import { initCockroachChallenges,openCockroachChallenge } from "./event-cockroach.mjs";
 import { recordBankEntry,refreshBankTaxSnapshot } from "./banking.mjs";
-import { grantSantaFightItem } from "./event-santa-fight.mjs";
+import { grantSantaFightItem,grantRiverItem } from "./event-santa-fight.mjs";
 import { EVENT_BONUS_ITEMS,EVENT_REQUIRED_SETS,findEventBonusItem,consumeEventBonusItem } from "./event-item-bonus.mjs";
 
 export const ORIGINAL_EVENT_COUNT = 44;
@@ -144,6 +144,15 @@ export function settleDailyIllnessEvent(db,userId,day,now=Date.now(),random=Math
         "擊敗聖誕老人，但持有物已達 25 格，未取得"+item.label+"。":
         "擊敗聖誕老人，獲得"+item.label+"（"+item.name+"），耐久增加 "+item.amount+" 次。";
     }
+    // #40 的書籍在兩個結果分支都嘗試入庫；扣款、容量及歷史同事件交易。
+    if(effect?.riverItemIndex!=null){
+      const item=grantRiverItem(db,userId,effect.riverItemIndex,now);
+      effect.effects.riverItem=item;
+      const receipt=item.status==="full"?
+        "持有物已達 25 格，未取得《"+item.name+"》。":
+        "取得《"+item.name+"》，耐久增加 "+item.amount+" 次。";
+      effect.event.description=effect.event.description+receipt;
+    }
     // 原版 coupon_get 將新券數加到既有數量；與抽選日、事件歷史一併提交。
     if(effect?.couponAward!=null)
       creditEventCoupons(db,userId,effect.couponAward);
@@ -217,6 +226,7 @@ export function listCharacterEvents(db,userId,limit=15) {
         row.event_key==="fourDimensionalBag"?"四次元福袋":
         row.event_key==="santaEncounter"?"聖誕老人事件":
         row.event_key==="santaFight"?"聖誕老人戰鬥":
+        row.event_key==="riverItem"?"河中物品":
         row.event_key==="bookRoyalty"?"書籍版稅":
         row.event_key==="hulaHoopLuck"?"呼拉圈幸運事件":
         row.event_key==="trafficAccident"?"交通意外":

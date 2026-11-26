@@ -89,7 +89,7 @@ test("職業名稱緊貼原版等級，只有本級 100 XP 進度與 15 級精�
   assert.match(script,/el\("job-level-bar"\)\.value=currentLevelXp/);
   assert.match(script,/jobLevel>=15\?"已達 Lv\.15 精通門檻"/);
   assert.match(script,/1500-jobExperience/);
-  assert.match(script,/text\("mastered-job", c\.masteredJob \|\| "無"\)/);
+  assert.ok(script.includes('text("mastered-job", displayJobName(c.masteredJob,state.jobs) || "無");'));
   assert.match(html,/<dt>最近精通職業<\/dt><dd id="mastered-job"/);
   assert.doesNotMatch(html,/id="jobs-mastery-status"/);
   assert.doesNotMatch(html,/id="job-mastery-bar"/);
@@ -1165,7 +1165,7 @@ test("六號樂透三種通知及最近開獎紀錄顯示確認文案，保留�
   assert.equal(formatLoto6DrawNotice({...draw,reason:"200 tickets",ticketCount:200},money),
     "六號樂透已開獎（彩券已累計售出 200 注），中獎號碼 1、6、12、18、24、36。共結算 200 注，獎金合計 5000 匯入各玩家的普通銀行。");
   assert.equal(formatLoto6DrawNotice({drawn:false},money),
-    "目前尚未到達六號樂透的 06:00 開獎時間，彩券也未累計售出 200 注。");
+    "目前尚未滿足新一輪開獎條件，請等候下次每日 06:00 開獎，或待彩券累計售出 200 注。");
   assert.ok(formatLoto6DrawNotice({...draw,reason:"unknown"},money).includes("開獎原因未記錄"));
   assert.equal(draw.reason,"06:00");
   assert.ok(script.includes("notify(formatLoto6DrawNotice(result,money));"));

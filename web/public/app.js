@@ -1,5 +1,6 @@
 import { townCellAction } from "./town-home.js";
 import { displayLoto6DrawReason,formatLoto6DrawNotice } from "./loto6-display.js";
+import { displayJobName,displayGameError,displayBankLedgerAction } from "./game-display-translations.js";
 import { displayRetailItemName,displayRetailItemCategory } from "./retail-item-translations.js";
 import { displayBattleMonsterName } from "./battle-item-translations.js";
 import { displayOriginalItemComment } from "./item-comment-translations.js";
@@ -123,6 +124,7 @@ function showResultDialog(message,title,error){
   }
 }
 function notify(message,error=false,{title,inline=false,source}={}){
+  if(error)message=displayGameError(message,state?.jobs);
   if((error||inline)&&showInlineFeedback(message,error,source))return;
   showResultDialog(message,title||(error?"操作未完成":"操作結果"),error);
 }
@@ -1392,7 +1394,7 @@ function jobRequirementsPanel(job) {
     status.push(["性別",job.gender==="male"?"男":"女",
       state.character.gender!==job.gender]);
   if(job.previousJob)
-    status.push(["前置精通",job.previousJob,
+    status.push(["前置精通",displayJobName(job.previousJob,state.jobs),
       state.character.masteredJob!==job.previousJob]);
   for(const [label,required,missing] of status){
     const row=document.createElement("div");
@@ -1454,7 +1456,7 @@ function renderJobs() {
     eligibility.className="job-eligibility"+(job.reason?" locked":"");
     eligibility.textContent=job.key===state.character.jobId?"目前任職中":
       job.reason?(job.previousJob&&job.reason.startsWith("需先精通")?
-        "尚未解鎖："+job.reason:"目前未達就職條件："+job.reason):"可應徵";
+        "尚未解鎖："+displayGameError(job.reason,state.jobs):"目前未達就職條件："+displayGameError(job.reason,state.jobs)):"可應徵";
     desc.textContent = "薪資 " + money(job.salary) + "／每 " + job.payEvery +
       " 次工作 · 體力 " + job.bodyCost + " · 頭腦 " + job.brainCost;
     const requirements=jobRequirementsPanel(job);
@@ -1719,7 +1721,7 @@ function renderLegacyItems(){
         "熱量："+(info?.calories??"未確認")+" kcal｜使用間隔："+(info?.intervalMinutes??"未確認")+" 分鐘",
         "身體能量消耗："+(info?.bodyCost??"未確認")+"｜頭腦能量消耗："+(info?.brainCost??"未確認"),
         "原版備註（繁中顯示）："+(displayOriginalItemComment(info?.comment)||"沒有提供文字備註"),
-        "來源："+(item.origin==="osakaQuarantine"?"大阪挑戰待核對獎品":item.origin==="osaka"?"大阪挑戰掉落":item.readOnly?"歷史來源封存":item.origin==="fishing"?"Web 釣魚／餌料店":item.origin==="crafting"?"Web 合成屋":item.origin==="bLeague"?"B 聯賽掉落":item.origin==="event38"?"Web 聖誕老人戰鬥獎勵":"Web 購入或轉換")+
+        "來源："+(item.origin==="osakaQuarantine"?"大阪挑戰待核對獎品":item.origin==="osaka"?"大阪挑戰掉落":item.readOnly?"歷史來源封存":item.origin==="fishing"?"Web 釣魚／餌料店":item.origin==="crafting"?"Web 合成屋":item.origin==="bLeague"?"B 聯賽掉落":item.origin==="event38"?"Web 聖誕老人戰鬥獎勵":item.origin==="event40"?"Web 河中物品事件獎勵":"Web 購入或轉換")+
           "（記錄位置 "+item.sourceLine+"；原始內容不在此頁修改）",
         "Web 使用狀態："+(verifiedVehicle?"已核對為本人可用公路載具，出發須於公路面板操作，事故可能扣耐久":
           actionInfo?"已核對可使用規則，受冷卻與角色條件限制":
@@ -2074,6 +2076,9 @@ function describeOriginalRetailEffect(code){
     "結核":"結核時改善疾病指數","ウエイトアップ":"增加體重",
     "ダイエット":"減少體重","身長":"增加身高","縮み":"減少身高"
   };
+  const categories={"ギフト":"禮品","ファ":"速食","食料品":"食品"};
+  if(Object.hasOwn(categories,code))return "原版分類標記："+categories[code];
+  if(code==="クレジット")return "信用卡付款功能（須符合有效期與本人持有條件）";
   if(code==="無")return "原版標記「無」；仍須查看下方能力增減值";
   if(code==="万能,")
     return "原版沒有填寫治療幅度；不會推定治病加成，一般能力與熱量需依原版欄位及 Web 支援狀態核對";
@@ -2081,19 +2086,19 @@ function describeOriginalRetailEffect(code){
     return "依原版能力增減和能量消耗欄位生效；原版沒有額外特殊分支";
   if(code==="効果")
     return "原版沒有額外特殊分支；已核對的牛奶與聖代透過負能量消耗恢復能量";
-  const compound=/^([^,]+),(\d+),(食料品|ファ)$/.exec(code);
-  if(compound&&names[compound[1]]){
+  const compound=/^([^,]+),(\d+),(食料品|ファ|ギフト)$/.exec(code);
+  if(compound&&Object.hasOwn(names,compound[1])){
     const unit=["身長","縮み"].includes(compound[1])?" cm":
       ["ウエイトアップ","ダイエット"].includes(compound[1])?" kg":"";
     return names[compound[1]]+" "+compound[2]+unit+
-      "｜原版分類標記："+(compound[3]==="ファ"?"速食":"食品")+
+      "｜原版分類標記："+categories[compound[3]]+
       "（第三段不是額外能力數值）";
   }
   const match=/^([^,]+),(\d+)$/.exec(code);
-  if(match&&names[match[1]]){
+  if(match&&Object.hasOwn(names,match[1])){
     const unit=["身長","縮み"].includes(match[1])?" cm":
       ["ウエイトアップ","ダイエット"].includes(match[1])?" kg":"";
-    return names[match[1]]+" "+match[2]+unit+"（原版："+code+"）";
+    return names[match[1]]+" "+match[2]+unit;
   }
   return "原版特殊代碼："+code+"（尚未將此代碼解讀成確定效果）";
 }
@@ -4446,7 +4451,7 @@ function renderBank() {
     const date = new Date(item.occurredAt).toLocaleString("zh-TW");
     const amount = item.credit > 0 ? "入帳 " + money(item.credit) :
       item.debit > 0 ? "支出 " + money(item.debit) : "金額未變動";
-    li.textContent = date + "｜" + who + "｜" + item.action + "｜" +
+    li.textContent = date + "｜" + who + "｜" + displayBankLedgerAction(item.action) + "｜" +
       amount + "｜餘額 " + money(item.balance);
     list.append(li);
   }
@@ -4491,7 +4496,7 @@ function renderCLeague(){
   }
   for(const input of fields.querySelectorAll("input[data-stat]")){const k=input.dataset.stat;input.max=String(Math.max(0,state.character.stats[k]-1));input.title="本人 "+state.character.stats[k]+"／培育 "+(info.character?.stats[k]??0);}
   const payment=el("c-league-payment"),oldPayment=payment.value;payment.replaceChildren();
-  for(const [value,label] of [["cash","現金"],...(state.classroomCreditCards??[]).map(c=>["credit:"+c.sourceLine,c.name+"（銀行付款）"])]){
+  for(const [value,label] of [["cash","現金"],...(state.classroomCreditCards??[]).map(c=>["credit:"+c.sourceLine,displayRetailItemName(c.name)+"（銀行付款）"])]){
     const opt=document.createElement("option");opt.value=value;opt.textContent=label;payment.append(opt);
   }
   if([...payment.options].some(o=>o.value===oldPayment))payment.value=oldPayment;
@@ -4591,7 +4596,7 @@ function render() {
   text("work-count", c.workCount + " 次（目前職業 " + c.jobWorkCount + " 次）");
   text("job-experience", jobExperience + " XP");
   // masteredJob 是原版單一前置職業欄位，並非完整履歷。
-  text("mastered-job", c.masteredJob || "無");
+  text("mastered-job", displayJobName(c.masteredJob,state.jobs) || "無");
   text("measurements", c.height + " 公分／" + c.weight + " 公斤");
   renderDining();
   renderRetail();
