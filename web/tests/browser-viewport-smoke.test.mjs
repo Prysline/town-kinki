@@ -239,6 +239,23 @@ async function viewport(cdp,width,height){
   assert.ok(actual.scroll<=actual.client+8,
     width+"px 文件寬度溢出："+JSON.stringify(actual));
 }
+async function assertResidentEnergyBars(chrome){
+  const readings=await evaluate(chrome,`["body","brain"].map(kind=>{
+    const number=document.querySelector("#"+kind+"-energy");
+    const bar=document.querySelector("#"+kind+"-energy-bar");
+    const compact=document.querySelector("#compact-"+kind+"-bar");
+    const [current,max]=number.textContent.split("/").map(Number);
+    const rect=bar.getBoundingClientRect(),row=number.closest("div").getBoundingClientRect();
+    return {kind,current,max,value:bar.value,compact:compact.value,width:rect.width,height:rect.height,
+      fits:rect.left>=row.left-1&&rect.right<=row.right+1};
+  })`);
+  for(const r of readings){
+    assert.ok(Number.isFinite(r.current)&&r.max>0,r.kind+" 能量數字與上限");
+    assert.equal(r.value,Math.max(0,Math.min(100,r.current/r.max*100)));
+    assert.equal(r.value,r.compact,r.kind+" 居民與固定能量條同步");
+    assert.ok(r.width>0&&r.height>0&&r.fits,r.kind+" 能量條可見且不超出居民列");
+  }
+}
 test("Chrome：桌面→768px平板→375px手機，操作真實建角／工作／銀行／百貨／背包",{
   timeout:180000
 },async()=>{
@@ -268,6 +285,7 @@ test("Chrome：桌面→768px平板→375px手機，操作真實建角／工作�
       "document.querySelector('#current-job')?.textContent?.length>0","工作已可操作");
     await click(chrome,"#work");
     await until(chrome,"parseInt(document.querySelector('#work-count')?.textContent||'0',10)>=1","實際工作完成");
+    await assertResidentEnergyBars(chrome);
     await click(chrome,"#solo-starter-create");
     await until(chrome,"document.querySelector('#solo-starter-town')?.hidden===true","試玩街區完成");
     await until(chrome,"document.querySelector('#solo-play-guide')?.hidden===false",
@@ -343,6 +361,7 @@ test("Chrome：桌面→768px平板→375px手機，操作真實建角／工作�
       await viewport(chrome,width,width===375?812:1024);
       await click(chrome,"#profile-tab-status");
       assert.equal(await evaluate(chrome,"document.querySelector('#player-summary')?.hidden"),false);
+      await assertResidentEnergyBars(chrome);
       await click(chrome,"#profile-tab-inventory");
       assert.equal(await evaluate(chrome,"document.querySelector('#inventory-panel')?.hidden"),false);
       await click(chrome,"#facility-tab-bank");

@@ -277,10 +277,12 @@ function renderCompactStatus(character){
   text("compact-brain-energy",character.brainEnergy+" / "+state.maxBrainEnergy);
   text("compact-money",money(character.money));
   text("compact-bank",money(character.bank));
-  el("compact-body-bar").value=state.maxBodyEnergy>0?
+  const bodyPercent=state.maxBodyEnergy>0?
     Math.max(0,Math.min(100,character.bodyEnergy/state.maxBodyEnergy*100)):0;
-  el("compact-brain-bar").value=state.maxBrainEnergy>0?
+  const brainPercent=state.maxBrainEnergy>0?
     Math.max(0,Math.min(100,character.brainEnergy/state.maxBrainEnergy*100)):0;
+  el("body-energy-bar").value=el("compact-body-bar").value=bodyPercent;
+  el("brain-energy-bar").value=el("compact-brain-bar").value=brainPercent;
   updateCompactVisibility();
 }
 window.addEventListener("scroll",updateCompactVisibility,{passive:true});

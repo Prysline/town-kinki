@@ -251,8 +251,10 @@
             <div><dt>所在地</dt><dd id="current-town"></dd></div>
             <div><dt>現金</dt><dd id="money"></dd></div>
             <div><dt>銀行存款</dt><dd id="bank"></dd></div>
-            <div><dt>身體能量</dt><dd id="body-energy"></dd></div>
-            <div><dt>頭腦能量</dt><dd id="brain-energy"></dd></div>
+            <div class="status-energy-row"><dt>身體能量</dt><dd id="body-energy"></dd>
+              <dd class="status-energy-track"><progress id="body-energy-bar" max="100" value="0" aria-label="身體能量比例"></progress></dd></div>
+            <div class="status-energy-row"><dt>頭腦能量</dt><dd id="brain-energy"></dd>
+              <dd class="status-energy-track"><progress id="brain-energy-bar" max="100" value="0" aria-label="頭腦能量比例"></progress></dd></div>
             <div><dt>目前職業</dt><dd id="current-job"></dd></div>
           </dl>
           <div id="job-level-progress" class="job-level-progress" role="group" aria-label="目前職業經驗與精通進度">
