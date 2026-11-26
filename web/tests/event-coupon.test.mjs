@@ -52,7 +52,7 @@ test("第 30 號五個等機率亂數結果皆為正整數，且不憑空改變�
     assert.match(result.event.description,new RegExp((i+1)+" 張"));
   }
   assert.throws(()=>resolveNonItemEvent(30,{},numbers(1)),/亂數/);
-  assert.equal(resolveNonItemEvent(28,{},numbers(0)),null);
+  assert.equal(resolveNonItemEvent(45,{},numbers(0)),null);
 });
 
 test("發券數量保留跨日累加，事件歷史、同日防重與不同玩家隔離",()=>{
@@ -83,16 +83,17 @@ test("發券數量保留跨日累加，事件歷史、同日防重與不同玩�
   }finally{db.close();}
 });
 
-test("未抽中事件或抽到其他未移植項目時，不會產生優惠券或虛構事件",()=>{
+test("未抽中事件或抽到單機捐款本人時，不會產生優惠券",()=>{
   const db=setup();
   try{
     initial(db,1);
     const none=settleDailyIllnessEvent(db,1,"2026-11-19",2000,numbers(.8));
-    const other=settleDailyIllnessEvent(db,1,"2026-11-20",3000,numbers(0,(28-.5)/44));
+    const other=settleDailyIllnessEvent(db,1,"2026-11-20",3000,numbers(0,(28-.5)/44,0));
     assert.equal(none.event,null);
-    assert.equal(other.event,null);
+    assert.equal(other.event.key,"donation");
     assert.equal(getCouponBalance(db,1),0);
-    assert.equal(listCharacterEvents(db,1).length,0);
+    assert.equal(listCharacterEvents(db,1).length,1);
+    assert.equal(listCharacterEvents(db,1)[0].effects.transfer.status,"self");
   }finally{db.close();}
 });
 

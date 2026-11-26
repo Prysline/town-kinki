@@ -274,7 +274,7 @@ function grow(mode,pace,seed,{duration=14,skipB=false,savings=false}={}){
       const before=recoverEnergy(load(),morning);
       save(settleDailyHealth(before,today,maxBodyEnergy(before.stats),maxBrainEnergy(before.stats),morning).character);
       const cashBefore=row(db).money,bankBefore=row(db).bank;
-      const evt=settleDailyIllnessEvent(db,actor,today,morning,unit);
+      const evt=settleDailyIllnessEvent(db,actor,today,morning,unit,mode);
       if(evt.event)report.eventIds.push(evt.originalId);
       if(getCockroachChallenge(db,actor,morning)?.status==="active"){
         claimCockroach(db,actor,morning+1000,unit);report.cockroachClaims++;

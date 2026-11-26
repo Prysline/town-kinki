@@ -334,7 +334,7 @@ function snapshot(user) {
         updated.healthIndex !== character.healthIndex) saveCharacter(user.id,updated);
     // 原版 event_happen 會在主畫面隨機抽取，Web 每日只抽一次。
     if ((updated.lastEventDay??"")<today) {
-      settleDailyIllnessEvent(db,user.id,today,now);
+      settleDailyIllnessEvent(db,user.id,today,now,Math.random,MODE);
       updated = getCharacter(user.id);
     }
   }

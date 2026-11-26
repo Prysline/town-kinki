@@ -896,12 +896,16 @@ test("Chrome 戰鬥事件 #38：真實事件結算後的彈窗與375px背包",{t
     await chrome.send("Page.reload");await until(chrome,"!document.querySelector('#game')?.hidden||!document.querySelector('#solo-lobby')?.hidden","重載角色");
     if(await evaluate(chrome,"!document.querySelector('#solo-lobby')?.hidden"))await click(chrome,"#solo-continue");
     await until(chrome,"!document.querySelector('#event-popup')?.hidden&&document.querySelector('#event-popup-body').textContent.includes('聖誕老人戰鬥')","原版戰鬥事件彈窗");
-    assert.match(await evaluate(chrome,"document.querySelector('#event-popup-body').textContent"),/等身大聖誕老人偶/);
+    const eventText=await evaluate(chrome,"document.querySelector('#event-popup-body').textContent");
+    assert.equal(eventText,"聖誕老人戰鬥：擊敗聖誕老人，獲得真人大小聖誕老人玩偶，耐久增加 10 次。");
+    assert.doesNotMatch(eventText,/[\u3040-\u30ff]/);
     await click(chrome,"#event-popup-close");
     for(const width of [1440,768,375]){
       await viewport(chrome,width,width===375?812:width===768?1024:900);
       await click(chrome,"#profile-tab-inventory");
-      assert.match(await evaluate(chrome,"document.querySelector('#legacy-inventory-list').textContent"),/Web 聖誕老人戰鬥獎勵/);
+      const inventoryText=await evaluate(chrome,"document.querySelector('#legacy-inventory-list').textContent");
+      assert.match(inventoryText,/Web 聖誕老人戰鬥獎勵/);
+      assert.match(inventoryText,/真人大小聖誕老人玩偶/);
     }
   }finally{await chrome?.stop();await web?.stop();rmSync(workspace,{force:true,recursive:true,maxRetries:50,retryDelay:200});}
 });

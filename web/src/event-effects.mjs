@@ -15,7 +15,7 @@ const STAT_EVENTS = Object.freeze({
     positive:"對藝術產生興趣",negative:"在美術課睡著了"}
 });
 export const NON_ITEM_EVENT_IDS = Object.freeze([
-  1,2,3,5,6,7,8,9,10,11,12,13,14,16,17,18,19,20,21,22,23,24,25,26,27,29,30,31,32,33,34,35,38,39,40,41,42,43,44
+  1,2,3,5,6,7,8,9,10,11,12,13,14,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44
 ]);
 
 function draw(random,n) {
@@ -67,6 +67,7 @@ export function resolveNonItemEvent(originalId,character,random=Math.random,bonu
   let cockroachChallenge=false;
   let santaFightItemIndex=null;
   let riverItemIndex=null;
+  let residentTransfer=null;
   function addMoney(delta) {
     const computed=changeMoney(character.money,delta);
     changes.money=computed.money;
@@ -386,6 +387,11 @@ export function resolveNonItemEvent(originalId,character,random=Math.random,bonu
       event.description="收到溫泉招待券，身體與頭腦能量分別恢復 "+gained.body+"、"+gained.brain+" 點。";
       break;
     }
+    case 28:{
+      event.key="donation";event.title="捐款";event.description="隨機捐款事件。";
+      residentTransfer={amount:10000,kind:"gift"};
+      break;
+    }
     case 29:{
       event.key="luckyStarSand";event.title="幸運星砂";
       if(bonusItem==="幸せの星砂"){
@@ -503,6 +509,30 @@ export function resolveNonItemEvent(originalId,character,random=Math.random,bonu
       }
       break;
     }
+    case 36:{
+      event.key="devilFlute";event.title="惡魔之笛";
+      const amount=draw(random,50000);
+      if(bonusItem==="悪魔の笛"){
+        usedItemName=bonusItem;
+        if(draw(random,2)===1){
+          residentTransfer={amount:amount*2,kind:"take"};
+          event.description="惡魔之笛強奪事件。";
+        }else event.description="惡魔之笛反噬，損失現金 "+(-addMoney(-amount*2))+" 元。";
+      }else event.description="被惡魔偷走現金 "+(-addMoney(-amount))+" 元。";
+      break;
+    }
+    case 37:{
+      event.key="angelFlute";event.title="天使之笛";
+      const amount=draw(random,10000);
+      if(bonusItem==="天使の笛"){
+        usedItemName=bonusItem;
+        if(draw(random,2)===1){
+          residentTransfer={amount:amount*2,kind:"gift"};
+          event.description="天使之笛贈款事件。";
+        }else event.description="天使之笛使現金增加 "+addMoney(amount*2)+" 元。";
+      }else event.description="天使贈送現金 "+addMoney(amount)+" 元。";
+      break;
+    }
     case 38:{
       event.key="santaFight";event.title="聖誕老人戰鬥";
       const stats=JSON.parse(character.stats_json);
@@ -596,5 +626,5 @@ export function resolveNonItemEvent(originalId,character,random=Math.random,bonu
       break;
     }
   }
-  return {event,changes,effects,usedItemName,usedItemNames,extraItemUseName,couponAward,cockroachChallenge,santaFightItemIndex,...(riverItemIndex!==null?{riverItemIndex}:{})};
+  return {event,changes,effects,usedItemName,usedItemNames,extraItemUseName,couponAward,cockroachChallenge,santaFightItemIndex,...(riverItemIndex!==null?{riverItemIndex}:{}),...(residentTransfer?{residentTransfer}:{})};
 }

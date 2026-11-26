@@ -90,19 +90,21 @@ test("事件 4 設成 -15，事件 15 設成 -8，覆蓋當下疾病指數並寫
   }finally{db.close();}
 });
 
-test("抽到未移植的其他事件時不變更疾病，不創造無來源的事件紀錄",()=>{
+test("單機捐款抽到本人不改變疾病或金錢，未抽中事件不新增紀錄",()=>{
   const db=createDb();
   try{
     settleDailyIllnessEvent(db,1,"2026-11-18",1000);
-    const first=settleDailyIllnessEvent(db,1,"2026-11-19",2000,numbers(0,(28-.5)/44));
+    const first=settleDailyIllnessEvent(db,1,"2026-11-19",2000,numbers(0,(28-.5)/44,0));
     assert.equal(first.checked,true);
-    assert.equal(first.event,null);
+    assert.equal(first.event.key,"donation");
     const noEvent=settleDailyIllnessEvent(db,1,"2026-11-20",3000,numbers(0.8));
     assert.equal(noEvent.checked,true);
     assert.equal(noEvent.event,null);
     assert.equal(db.prepare("SELECT health_index,last_event_day FROM characters WHERE user_id=1").get().health_index,50);
     assert.equal(db.prepare("SELECT last_event_day FROM characters WHERE user_id=1").get().last_event_day,"2026-11-20");
-    assert.equal(listCharacterEvents(db,1).length,0);
+    assert.equal(listCharacterEvents(db,1).length,1);
+    assert.equal(listCharacterEvents(db,1)[0].effects.transfer.status,"self");
+    assert.equal(db.prepare("SELECT money FROM characters WHERE user_id=1").get().money,100000);
   }finally{db.close();}
 });
 
