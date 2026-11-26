@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, existsSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, existsSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -130,6 +130,32 @@ test("J：拒絕帶有已提交 WAL 交易的主檔作單檔還原；正確快�
     const snapshot=await backUpSolo({dataDir:fixture.dataDir,file:join(dir,"safe.sqlite")});
     const restored=restoreSolo({file:snapshot.file,dataDir:join(dir,"safe-restore")});
     assert.equal(restored.sha256,snapshot.sha256);
+    const saved=new DatabaseSync(restored.file,{readOnly:true});
+    try{assert.equal(saved.prepare("SELECT money FROM characters WHERE id=1").get().money,202000);}
+    finally{saved.close();}
+    assert.deepEqual(readFileSync(source),main);assert.deepEqual(readFileSync(source+"-wal"),wal);
+  }finally{db?.close();rmSync(dir,{recursive:true,force:true});}
+});
+
+test("J：符號連結指向 WAL 來源不能繞過單檔驗證；合法快照連結可還原",async()=>{
+  const dir=mkdtempSync(join(tmpdir(),"town-j-wal-alias-"));
+  let db;
+  try{
+    const fixture=makeFixture(dir);db=fixture.db;
+    const source=join(fixture.dataDir,"solo.sqlite"), alias=join(dir,"alias.sqlite");
+    db.exec("PRAGMA wal_autocheckpoint=0; PRAGMA wal_checkpoint(TRUNCATE); UPDATE characters SET money=202000 WHERE id=1;");
+    const main=readFileSync(source),wal=readFileSync(source+"-wal");
+    assert.ok(wal.length>32);
+    symlinkSync(source,alias,"file");
+    assert.equal(existsSync(alias+"-wal"),false);
+    assert.throws(()=>verifySoloDatabase(alias),/WAL/);
+    const destination=join(dir,"alias-restore");
+    assert.throws(()=>restoreSolo({file:alias,dataDir:destination}),/WAL/);
+    assert.equal(existsSync(join(destination,"solo.sqlite")),false);
+    const snapshot=await backUpSolo({dataDir:fixture.dataDir,file:join(dir,"safe.sqlite")});
+    const safeAlias=join(dir,"safe-alias.sqlite");symlinkSync(snapshot.file,safeAlias,"file");
+    assert.equal(verifySoloDatabase(safeAlias).sha256,snapshot.sha256);
+    const restored=restoreSolo({file:safeAlias,dataDir:destination});
     const saved=new DatabaseSync(restored.file,{readOnly:true});
     try{assert.equal(saved.prepare("SELECT money FROM characters WHERE id=1").get().money,202000);}
     finally{saved.close();}

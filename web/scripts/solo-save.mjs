@@ -3,7 +3,7 @@
 // backup 使用 SQLite 線上快照（含 WAL 中已提交交易），不可直接複製使用中的 .sqlite。
 // restore 只還原到沒有 solo.sqlite 的新資料夾，不覆寫目前單機存檔。
 import { DatabaseSync, backup } from "node:sqlite";
-import { chmodSync, copyFileSync, existsSync, linkSync, mkdirSync, rmSync, statSync, openSync, readSync, closeSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, linkSync, mkdirSync, rmSync, statSync, openSync, readSync, closeSync, realpathSync } from "node:fs";
 import { createHash, randomBytes } from "node:crypto";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -51,10 +51,14 @@ function fileSha256(file){
     return hash.digest("hex");
   }finally{closeSync(fd);}
 }
-function sourceDatabase(file){
+function sourcePath(file){
   if(!existsSync(file)||!statSync(file).isFile())
     throw new Error("找不到單機 SQLite 存檔／備份檔："+file);
-  return new DatabaseSync(file,{readOnly:true});
+  // SQLite 會依真實檔案路徑開啟 WAL，不能只檢查符號連結名稱的旁檔。
+  return realpathSync(file);
+}
+function sourceDatabase(file){
+  return new DatabaseSync(sourcePath(file),{readOnly:true});
 }
 
 // 單檔備份的 SHA-256 不包含旁檔；有 WAL 內容時不得宣稱可單檔還原。
@@ -67,6 +71,7 @@ function assertStandaloneSnapshot(file,hadWal=false){
 }
 
 export function verifySoloDatabase(file){
+  file=sourcePath(file);
   const hadWal=hasWalData(file);
   const db=sourceDatabase(file);
   try{
@@ -126,6 +131,7 @@ export function restoreSolo({dataDir,file}){
   // 不支援覆寫：必須停用原伺服器，改以全新 DATA_DIR 啟動還原結果。
   if([destination,destination+"-wal",destination+"-shm"].some(existsSync))
     throw new Error("目標已有單機存檔／SQLite WAL，拒絕覆寫；請改用全新 DATA_DIR");
+  file=sourcePath(file);
   const original=verifySoloDatabase(file);
   mkdirSync(dataDir,{recursive:true});
   const temp=temporaryPath(destination);

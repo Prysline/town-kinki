@@ -17,6 +17,7 @@
 - 真實缺口：直接將仍有 WAL 交易的主檔傳給舊 restore，verify 讀到 WAL 中的資料，而 copyFileSync 只複製主檔。完整性、外鍵、SHA-256 都通過卻遺失已提交金額。Node 22.16.0 本機以正式來源 blob `0e7238eb7ec85605c5456f1ecbc30e445630f832` 重現：源現金 101000、還原現金 100、WAL 4152 bytes、SHA-256 相同。
 - 保留原有 SQLite backup()；拒絕有非空 WAL 的 verify/restore 來源，還原發佈前重查來源 WAL 與雜湊；不刪除或 checkpoint 來源。空 WAL 旁檔不阻擋正常快照。來源必須是固定備份；若 WAL 已被外部移除，僅憑主檔無法找回或辨認遺漏的交易。
 - 本機 Node 22.16.0：以正式 blob 原始三項 solo-save 測試 3/3；新增回歸在修正前 3/4（Missing expected exception）；修正後 4/4，腳本語法成功。測試證明合法 WAL 快照能保留最新金額、錯誤來源拒絕發佈且來源主檔與 WAL bytes 不改。未執行完整儲存庫 HTTP／SQLite 回歸，待同 HEAD push/PR CI。
+- 同一 Draft PR 追加審查：第一版可經符號連結繞過 WAL 防護，已於本機重現；追加 realpathSync 真實路徑解析，驗證／還原共用真實來源，合法快照的符號連結仍可使用。新增回歸在第一版 4/5，修正後 5/5，語法成功。符號連結測試在 Linux 執行，Windows 權限／設備演練尚未驗證。
 - 既有 CLI 不是新功能；不更動資料表或遊戲 API。J-1 未合併前不宣稱完成，合併後須核對正式 HEAD/tree/雙 CI。
 
 ## 後續驗收切片（待逐項查證）
