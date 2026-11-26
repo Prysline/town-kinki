@@ -55,9 +55,20 @@
 - 另一還原副本直接使用正式銀行核心結算下週一，驗證街頭真正產生的負 K 點、歷史已繳／未繳稅、索引外鍵、重複結算與隔離；#121 本來就是有號稅表，#103 非負約束的遷移已由 J-2 實測，不混成未存在的歷史版本。多人時鐘仍是真實時間。
 - J-3b 待同 HEAD 雙 CI 及合併後雙 CI，完成後 J-3 結案；J-4 另窗接續，不先做。
 
+## J-3b 正式驗收
+
+- #142 已合併 `9c53829ba76bc4cb539844f260d035ed9453d9f7`，tree `cb53b3fd47ee46eec5a4e9899a0df02cdc0c4086`；合併前 [Push](https://github.com/Prysline/town-kinki/actions/runs/45832487149)／[PR](https://github.com/Prysline/town-kinki/actions/runs/45832499741)，合併後 [Push](https://github.com/Prysline/town-kinki/actions/runs/45833156131)／[長期 PR #1](https://github.com/Prysline/town-kinki/actions/runs/45833166687) 四份完整日誌皆 965/965、fail/cancelled/skipped/todo=0、server/app 語法成功；正式與 #1 合成 tree 一致，master 未變、#1 Draft。J-3a／J-3b 指定範圍正式驗收，不重做。
+
+## J-4a｜早期歷史事件欄位升級（候選）
+
+- 正式分支祖先 `6859a66427bd1ce45e4a987d11ef245e0b8ea31a` 的 server 已初始化舊疾病事件表；events 尚無 description、effects_json，下一個 `1ae4134b4a462d3b990d688cd6ccaa8254943da8` 才有兩欄遷移。歷史 server/events/banking blob 分別為 `be6d97fa50daaa93c1a49aef7226b52c2477d165`、`18fd468008efaacdbc768ade30e4813439d88a1e`、`801950ea5227e430f685c337b22e6003180c93fb`。以代表性歷史 DDL 與歷史疾病核心、合成 Web 角色建立 #4/#15 事件，不假裝是完整舊版 DB。
+- `tests/sqlite-historical-event-columns-upgrade.test.mjs`：原版 Web 尚無 solo_clock，現行備份 CLI 要求該表；以測試 SQLite backup() 建立一致 WAL 快照並 COPYFILE_EXCL 到獨立新目錄，不放寬產品 CLI。正式 server 初始化、歷史欄位預設與顯示、索引外鍵、單機無其他居民、銀行續玩、#30 發券歷史故障回滾與重試、同日防重、重啟與來源/快照 SHA-256。僅合成 fixture，未讀 CGI 私人資料。
+- I 前 #128 `27d8ed7864e58bbb3d81bab526f8295acee542a8`、I 結案 #137 `008c4556519a97f1d4d20721dc1d3213e55b82b8` 均已有完整事件欄位、券、蟑螂挑戰與兌換表；其既有領獎／兌換收據、耐久、多人及跨 I 資產事件另切 J-4b 等，不以本切片宣稱 J-4 完成。
+- 本機 GitHub DNS 不通，未執行完整儲存庫；待同 HEAD Push/PR CI、完整 diff 與合成 tree 審查及合併後雙 CI。未改正式玩法、schema 或備份 CLI。
+
 ## 後續驗收切片（待逐項查證）
 
-1. #103 真實舊稅表、負 K 點、索引及歷史資料的實體 WAL 升級與失敗回滾；保留 #104/#105 已驗證情境。
-2. 以歷史公開 Web 戰鬥模組／正式 #121 代表性 schema 核對收據、NPC 來源、重送及帳號隔離，連同舊稅表交叉驗證。
-3. 以歷史 Web 事件與券 schema 及 I 前後的正式版本測試歷史、道具耐久、領獎／兌換收據、銀行帳簿與稅基不丟失；保留核准兩笛規則。
+1. 【J-2 已完成】#103 真實舊稅表、負 K 點、索引及歷史資料的實體 WAL 升級與失敗回滾；保留 #104/#105 已驗證情境。
+2. 【J-3a／J-3b 已完成】以歷史公開 Web 戰鬥模組／正式 #121 代表性 schema 核對收據、NPC 來源、重送及帳號隔離，連同舊稅表交叉驗證。
+3. 【J-4 進行中】以歷史 Web 事件與券 schema 及 I 前後的正式版本測試歷史、道具耐久、領獎／兌換收據、銀行帳簿與稅基不丟失；保留核准兩笛規則。
 4. 聯合回歸與故障復原（新目錄、來源及快照保留、integrity_check、foreign_key_check、HTTP 續玩與重啟、帳號隔離）；整理同 HEAD 四組 CI 及完成界線。真人、跨設備、正式部署演練另列，不能由 CI 取代。
