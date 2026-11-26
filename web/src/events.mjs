@@ -4,6 +4,7 @@
 import { resolveNonItemEvent } from "./event-effects.mjs";
 import { initCockroachChallenges,openCockroachChallenge } from "./event-cockroach.mjs";
 import { recordBankEntry,refreshBankTaxSnapshot } from "./banking.mjs";
+import { settleResidentEventTransfer } from "./event-resident-transfer.mjs";
 import { grantSantaFightItem,grantRiverItem } from "./event-santa-fight.mjs";
 import { EVENT_BONUS_ITEMS,EVENT_REQUIRED_SETS,findEventBonusItem,consumeEventBonusItem } from "./event-item-bonus.mjs";
 
@@ -87,10 +88,11 @@ function creditEventCoupons(db,userId,quantity){
 function validDay(day) {
   return typeof day==="string"&&/^\d{4}-\d{2}-\d{2}$/.test(day);
 }
-export function settleDailyIllnessEvent(db,userId,day,now=Date.now(),random=Math.random) {
+export function settleDailyIllnessEvent(db,userId,day,now=Date.now(),random=Math.random,mode="solo") {
   if(!Number.isSafeInteger(userId)||userId<1) throw new Error("無效的角色帳號");
   if(!validDay(day)||!Number.isSafeInteger(now)||now<0)
     throw new Error("無效的事件日期或時間");
+  if(!["solo","multi"].includes(mode))throw new Error("無效的事件模式");
   db.exec("BEGIN IMMEDIATE");
   try {
     const old=db.prepare("SELECT * FROM characters WHERE user_id=?").get(userId);
@@ -119,6 +121,12 @@ export function settleDailyIllnessEvent(db,userId,day,now=Date.now(),random=Math
         effects:{healthIndex:{from:old.health_index,to:result.event.healthIndex}}}:
       (result.drawn ? resolveNonItemEvent(result.originalId,old,random,
         requiredNames?(completeSet?.map(item=>item.name)??null):(bonusItem?.name??null)):null);
+    // 核准：不足額取消轉帳時不耗笛，但仍保存當日事件；自抽照常耗笛。
+    if(effect?.residentTransfer){
+      const transfer=settleResidentEventTransfer(db,userId,old,effect.residentTransfer,mode,day,now,random,effect.event);
+      effect.effects.transfer=transfer;
+      if(transfer.status==="insufficient")effect.usedItemName=null;
+    }
     // 基礎事件先計算，再於同一筆交易內扣除確實觸發加成的原版物品耐久。
     if(effect?.usedItemName){
       if(!bonusItem||bonusItem.name!==effect.usedItemName)
@@ -227,6 +235,9 @@ export function listCharacterEvents(db,userId,limit=15) {
         row.event_key==="santaEncounter"?"聖誕老人事件":
         row.event_key==="santaFight"?"聖誕老人戰鬥":
         row.event_key==="riverItem"?"河中物品":
+        row.event_key==="donation"?"捐款":
+        row.event_key==="devilFlute"?"惡魔之笛":
+        row.event_key==="angelFlute"?"天使之笛":
         row.event_key==="bookRoyalty"?"書籍版稅":
         row.event_key==="hulaHoopLuck"?"呼拉圈幸運事件":
         row.event_key==="trafficAccident"?"交通意外":
