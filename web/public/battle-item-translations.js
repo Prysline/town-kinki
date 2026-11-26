@@ -36,3 +36,14 @@ export const displayBattleItemName=name=>
   Object.hasOwn(BATTLE_ITEM_ZH_TW,name)?BATTLE_ITEM_ZH_TW[name]:name;
 export const displayBattleItemCategory=category=>
   Object.hasOwn(BATTLE_CATEGORY_ZH_TW,category)?BATTLE_CATEGORY_ZH_TW[category]:category;
+
+// dat_dir/battle.cgi：使用者確認幽靈系列；僅顯示，不修改來源怪物鍵。
+export const BATTLE_MONSTER_ZH_TW=Object.freeze({
+  "ドロン":"幽靈",
+  "ベスドロン":"貝斯幽靈",
+  "ボスドロン":"幽靈首領",
+  "ドロンシドー":"幽靈席德",
+  "ドロンエビル":"邪惡幽靈"
+});
+export const displayBattleMonsterName=name=>
+  Object.hasOwn(BATTLE_MONSTER_ZH_TW,name)?BATTLE_MONSTER_ZH_TW[name]:name;

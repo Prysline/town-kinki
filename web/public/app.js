@@ -1,5 +1,6 @@
 import { townCellAction } from "./town-home.js";
 import { displayRetailItemName,displayRetailItemCategory } from "./retail-item-translations.js";
+import { displayBattleMonsterName } from "./battle-item-translations.js";
 import { displayOriginalItemComment } from "./item-comment-translations.js";
 import { displayEventDescription,displayGiftErrorMessage } from "./event-gift-display-translations.js";import { shouldShowCompactEnergy } from "./energy-visibility.js";
 import { townTimePhase } from "./time-theme.js";
@@ -3377,7 +3378,7 @@ function renderBLeague(){
     result.append(gear);
   }
   if(battle){
-    append(result,"h4",battle.monster.rank.toUpperCase()+" 級｜"+battle.monster.name+"｜"+names[battle.outcome]);
+    append(result,"h4",battle.monster.rank.toUpperCase()+" 級｜"+displayBattleMonsterName(battle.monster.name)+"｜"+names[battle.outcome]);
     append(result,"p","初始能量：玩家 頭腦 "+battle.initial.player.brainEnergy+"／身體 "+battle.initial.player.bodyEnergy+
       "；怪物 頭腦 "+battle.initial.monster.brainEnergy+"／身體 "+battle.initial.monster.bodyEnergy);
     append(result,"p","現金變化 "+money(battle.moneyDelta)+"；K 點 "+(battle.kpointDelta>=0?"+":"")+battle.kpointDelta+
@@ -3394,7 +3395,7 @@ function renderBLeague(){
     }
     details.append(list);result.append(details);
   }else append(result,"p","尚無戰鬥紀錄。");
-  for(const item of arena?.history??[])append(history,"p",item.rank.toUpperCase()+" 級｜"+item.name+"｜"+names[item.outcome]+"｜"+money(item.moneyDelta)+"｜K 點 +"+item.kpointDelta);
+  for(const item of arena?.history??[])append(history,"p",item.rank.toUpperCase()+" 級｜"+displayBattleMonsterName(item.name)+"｜"+names[item.outcome]+"｜"+money(item.moneyDelta)+"｜K 點 +"+item.kpointDelta);
 }
 function renderEquipment(){
   if(!state?.character)return;

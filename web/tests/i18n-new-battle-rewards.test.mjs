@@ -4,13 +4,13 @@ import {readFileSync} from "node:fs";
 import {decodeLegacyText} from "../src/engine.mjs";
 import {parseOsakaRules} from "../src/osaka-challenge-core.mjs";
 import {parseArenaDrops} from "../src/b-league.mjs";
-import {DROP_NAMES,DEFAULT_NAMES} from "../src/b-league-core.mjs";
+import {DROP_NAMES,DEFAULT_NAMES,parseArenaCatalog} from "../src/b-league-core.mjs";
 import {SANTA_FIGHT_ITEMS,SANTA_FIGHT_NAMES}
   from "../src/event-santa-fight.mjs";
 import {displayRetailItemName,displayRetailItemCategory}
   from "../public/retail-item-translations.js";
 import {displayOriginalItemComment} from "../public/item-comment-translations.js";
-import {BATTLE_ITEM_ZH_TW,BATTLE_CATEGORY_ZH_TW}
+import {BATTLE_ITEM_ZH_TW,BATTLE_CATEGORY_ZH_TW,BATTLE_MONSTER_ZH_TW,displayBattleMonsterName}
   from "../public/battle-item-translations.js";
 
 const source=path=>decodeLegacyText(readFileSync(new URL(path,import.meta.url)));
@@ -91,4 +91,30 @@ test("新基底玩家靜態介面沒有假名，大阪阿姨／B聯賽提示已�
   assert.ok(app.includes('!battle.reward.granted?"背包已滿，未取得 "+displayRetailItemName(battle.reward.name)'));
   assert.ok(app.includes('const category=el("wholesale-category")'),
     "原始商店分類仍由同一判定流程處理");
+});
+
+test("B 聯賽幽靈系列五筆定稿，來源怪物名稱與數值保留，未定稿龍系列回退原文",()=>{
+  const raw=source("../../dat_dir/battle.cgi");
+  const monsters=parseArenaCatalog(raw);
+  const expected=[["ドロン","幽靈"],["ベスドロン","貝斯幽靈"],["ボスドロン","幽靈首領"],["ドロンシドー","幽靈席德"],["ドロンエビル","邪惡幽靈"]];
+  assert.equal(monsters.length,10);
+  assert.deepEqual(Object.entries(BATTLE_MONSTER_ZH_TW),expected);
+  const before=JSON.stringify(monsters);
+  for(const m of monsters){
+    const fields=raw.split(/\\r?\\n/)[m.sourceLine-1].split("<>");
+    assert.equal(m.name,fields[2]);
+    assert.equal(m.originalId,fields[1]);
+    assert.equal(m.money,Number(fields[4]));
+    assert.deepEqual(m.drops,[Number(fields[5]),Number(fields[6])]);
+    assert.equal(m.brainEnergy,Number(fields[9]));
+    assert.equal(m.bodyEnergy,Number(fields[10]));
+    assert.equal(displayBattleMonsterName(m.name),expected.find(([name])=>name===m.name)?.[1]??m.name);
+  }
+  assert.deepEqual(monsters.filter(m=>Object.hasOwn(BATTLE_MONSTER_ZH_TW,m.name)).map(m=>m.name),expected.map(([name])=>name));
+  assert.equal(JSON.stringify(monsters),before);
+  assert.equal(displayBattleMonsterName("未知怪物"),"未知怪物");
+  assert.equal(displayBattleMonsterName("toString"),"toString");
+  const app=read("../public/app.js");
+  assert.ok(app.includes('battle.monster.rank.toUpperCase()+" 級｜"+displayBattleMonsterName(battle.monster.name)'));
+  assert.ok(app.includes('item.rank.toUpperCase()+" 級｜"+displayBattleMonsterName(item.name)'));
 });
