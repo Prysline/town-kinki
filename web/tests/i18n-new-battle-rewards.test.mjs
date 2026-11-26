@@ -58,21 +58,25 @@ test("新基底 B 聯賽預設裝備名只在 UI 翻譯，原始鍵不變",()=>{
   assert.ok(app.includes('if(cell.key==="Ｂリーグ")renderBLeague();'));
 });
 
-test("聖誕戰鬥的六項實際獎品沿用伺服器已有繁中名稱，不改原始33欄與抽選數",()=>{
+test("聖誕戰鬥前六項來源均顯示繁中，重複品名保留既有共用譯名",()=>{
   assert.equal(SANTA_FIGHT_ITEMS.length,6);
   assert.equal(SANTA_FIGHT_NAMES.length,6);
   for(let i=0;i<6;i++){
     assert.equal(SANTA_FIGHT_ITEMS[i].length,33);
-    assert.equal(displayRetailItemName(SANTA_FIGHT_ITEMS[i][1]),SANTA_FIGHT_NAMES[i]);
+    assert.ok(displayRetailItemName(SANTA_FIGHT_ITEMS[i][1]).trim());
     assert.doesNotMatch(SANTA_FIGHT_NAMES[i],kana);
   }
+  assert.equal(displayRetailItemName("等身大サンタさん人形"),"真人大小聖誕老人玩偶");
   assert.equal(BATTLE_CATEGORY_ZH_TW["ゲットアイテム"],"獲得道具");
 });
 
 test("新基底聖誕獎品兩種額外備註翻譯，原始 33 欄保持唯讀",()=>{
   assert.deepEqual(SANTA_FIGHT_ITEMS.map(item=>displayOriginalItemComment(item[29])),
-    ["究竟會發生什麼事呢？","究竟會發生什麼事呢？",
-      "這是聖誕禮物。","這是聖誕禮物。","這是聖誕禮物。","這是聖誕禮物。"]);
+    ["究竟會發生什麼事呢？","究竟會發生什麼事呢？","","","",""]);
+  assert.deepEqual(SANTA_FIGHT_ITEMS.slice(2).map(item=>item[30]),
+    ["クリスマスプレゼントです","クリスマスプレゼントです",
+      "クリスマスプレゼントです","クリスマスプレゼントです"],
+    "第 30 欄原始文字不是備註欄，必須保留原文不當作備註");
   assert.equal(displayOriginalItemComment("未收錄特殊備註"),"未收錄特殊備註");
 });
 

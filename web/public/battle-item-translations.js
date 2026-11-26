@@ -28,10 +28,9 @@ export const BATTLE_CATEGORY_ZH_TW=Object.freeze({
   "ゲットアイテム":"獲得道具",
   "MB":"B 聯賽獎品"
 });
-// event.pl::get_itm2 中前六筆真正可抽到的兩種原始備註。
+// event.pl::get_itm2：第 29 欄真正有文字的備註僅前兩筆共有此一種類。
 export const BATTLE_ITEM_COMMENTS_ZH_TW=Object.freeze({
-  "何が起こるのだろう？":"究竟會發生什麼事呢？",
-  "クリスマスプレゼントです":"這是聖誕禮物。"
+  "何が起こるのだろう？":"究竟會發生什麼事呢？"
 });
 export const displayBattleItemName=name=>
   Object.hasOwn(BATTLE_ITEM_ZH_TW,name)?BATTLE_ITEM_ZH_TW[name]:name;

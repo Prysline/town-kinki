@@ -3372,7 +3372,7 @@ function renderBLeague(){
     append(gear,"summary","目前裝備／預設裝備");
     for(const fallback of arena.defaults){
       const item=(state.equipmentItems??[]).find(x=>x.status==="equipped"&&x.category===fallback.type)??fallback;
-      append(gear,"p",displayRetailItemName(item.name)+"｜威力 +item.power+"｜命中／閃避 "+item.accuracy+"%｜Lv."+item.level+"｜經驗 "+item.experience+"｜剩餘 "+(item.uses??"∞"));
+      append(gear,"p",displayRetailItemName(item.name)+"｜威力 "+item.power+"｜命中／閃避 "+item.accuracy+"%｜Lv."+item.level+"｜經驗 "+item.experience+"｜剩餘 "+(item.uses??"∞"));
     }
     result.append(gear);
   }

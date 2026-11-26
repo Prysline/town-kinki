@@ -406,7 +406,8 @@ test("Chrome：原版優惠券獎車實際兌換→手機背包可辨識→公�
     await click(chrome,"#facility-tab-events");
     await until(chrome,"document.querySelectorAll('#coupon-rewards .training-tile').length===30",
       "真正 30 款原版優惠券兌換選項");
-    // 原始鍵仍經 API 驗證，僅 UI 比對改為已確認的繁中顯示。    const prizes=[
+    // 原始鍵仍經 API 驗證，僅 UI 比對改為已確認的繁中顯示。
+    const prizes=[
       ["福引券","抽獎券",1],["ポルシェ","保時捷",9]
     ];
     for(const [name,displayName,nth] of prizes){
@@ -438,7 +439,8 @@ test("Chrome：原版優惠券獎車實際兌換→手機背包可辨識→公�
     assert.match(vehicleText,/可用於公路旅行/);
     const otherSelector='#legacy-inventory-list .inventory-item[data-source-line="'+before.other.sourceLine+'"]';
     assert.match(await evaluate(chrome,
-      "document.querySelector("+JSON.stringify(otherSelector)+")?.textContent"),/抽獎券/);    assert.equal(await evaluate(chrome,
+      "document.querySelector("+JSON.stringify(otherSelector)+")?.textContent"),/抽獎券/);
+    assert.equal(await evaluate(chrome,
       "document.querySelector("+JSON.stringify(otherSelector+" .inventory-road-link")+")===null"),
       true,"非載具福引券不可誤顯示公路捷徑");
     await click(chrome,vehicleSelector+" .inventory-road-link");
