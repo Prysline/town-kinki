@@ -1,5 +1,6 @@
 // 從原版 event.pl::event_happen 移植不需完整商店的事件分支。
 import { TOWNS, maxBodyEnergy, maxBrainEnergy } from "./engine.mjs";
+import { SANTA_FIGHT_NAMES,SANTA_FIGHT_ITEMS } from "./event-santa-fight.mjs";
 // 原 CGI 可產生負數金錢／能力；Web 版為保持既有非負值模型將扣除量限制在當前持有量。
 const STAT_EVENTS = Object.freeze({
   7:{key:"literature",title:"國語事件",stat:"kokugo",label:"國語",
@@ -14,7 +15,7 @@ const STAT_EVENTS = Object.freeze({
     positive:"對藝術產生興趣",negative:"在美術課睡著了"}
 });
 export const NON_ITEM_EVENT_IDS = Object.freeze([
-  1,2,3,5,6,7,8,9,10,11,12,13,14,16,17,18,19,20,21,22,23,24,25,26,27,29,30,31,32,33,34,35,39,41,42,43,44
+  1,2,3,5,6,7,8,9,10,11,12,13,14,16,17,18,19,20,21,22,23,24,25,26,27,29,30,31,32,33,34,35,38,39,41,42,43,44
 ]);
 
 function draw(random,n) {
@@ -64,6 +65,7 @@ export function resolveNonItemEvent(originalId,character,random=Math.random,bonu
   let extraItemUseName=null;
   let couponAward=null;
   let cockroachChallenge=false;
+  let santaFightItemIndex=null;
   function addMoney(delta) {
     const computed=changeMoney(character.money,delta);
     changes.money=computed.money;
@@ -500,6 +502,25 @@ export function resolveNonItemEvent(originalId,character,random=Math.random,bonu
       }
       break;
     }
+    case 38:{
+      event.key="santaFight";event.title="聖誕老人戰鬥";
+      const stats=JSON.parse(character.stats_json);
+      if(int(stats?.power,"力量")<1000){
+        adjustEnergy("body_energy",-int(character.body_energy,"身體能量"));
+        effects.battle="loss";
+        event.description="與聖誕老人戰鬥落敗，身體能量歸零。";
+      }else{
+        effects.battle="win";
+        if(draw(random,5)===1){
+          santaFightItemIndex=draw(random,SANTA_FIGHT_ITEMS.length)-1;
+          event.description="擊敗聖誕老人，抽中"+SANTA_FIGHT_NAMES[santaFightItemIndex]+"。";
+        }else{
+          const amount=addMoney(10000);
+          event.description="擊敗聖誕老人，獲得 "+amount+" 元。";
+        }
+      }
+      break;
+    }
     case 39:{
       event.key="workFocus";event.title="工作專注度";
       const fullEnergy=int(character.body_energy,"身體能量")>=500 &&
@@ -563,5 +584,5 @@ export function resolveNonItemEvent(originalId,character,random=Math.random,bonu
       break;
     }
   }
-  return {event,changes,effects,usedItemName,usedItemNames,extraItemUseName,couponAward,cockroachChallenge};
+  return {event,changes,effects,usedItemName,usedItemNames,extraItemUseName,couponAward,cockroachChallenge,santaFightItemIndex};
 }

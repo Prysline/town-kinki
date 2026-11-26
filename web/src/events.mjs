@@ -3,7 +3,8 @@
 // 原 CGI 在進入主畫面時抽取，Web 版改為每個遊戲日最多抽取一次。
 import { resolveNonItemEvent } from "./event-effects.mjs";
 import { initCockroachChallenges,openCockroachChallenge } from "./event-cockroach.mjs";
-import { recordBankEntry } from "./banking.mjs";
+import { recordBankEntry,refreshBankTaxSnapshot } from "./banking.mjs";
+import { grantSantaFightItem } from "./event-santa-fight.mjs";
 import { EVENT_BONUS_ITEMS,EVENT_REQUIRED_SETS,findEventBonusItem,consumeEventBonusItem } from "./event-item-bonus.mjs";
 
 export const ORIGINAL_EVENT_COUNT = 44;
@@ -135,6 +136,14 @@ export function settleDailyIllnessEvent(db,userId,day,now=Date.now(),random=Math
         throw new Error("事件收藏套組與原始物品資料不一致");
       effect.effects.items=completeSet.map(item=>consumeEventBonusItem(db,userId,item));
     }
+    // #38 原版獎品分支：獎品、容量判定、每日抽選日與歷史皆同一寫入交易。
+    if(effect?.santaFightItemIndex!=null){
+      const item=grantSantaFightItem(db,userId,effect.santaFightItemIndex,now);
+      effect.effects.santaFightItem=item;
+      effect.event.description=item.status==="full"?
+        "擊敗聖誕老人，但持有物已達 25 格，未取得"+item.label+"。":
+        "擊敗聖誕老人，獲得"+item.label+"（"+item.name+"），耐久增加 "+item.amount+" 次。";
+    }
     // 原版 coupon_get 將新券數加到既有數量；與抽選日、事件歷史一併提交。
     if(effect?.couponAward!=null)
       creditEventCoupons(db,userId,effect.couponAward);
@@ -158,6 +167,9 @@ export function settleDailyIllnessEvent(db,userId,day,now=Date.now(),random=Math
         if(!Number.isSafeInteger(loss)||loss<0)throw new Error("事件銀行扣款不正確");
         if(loss>0)recordBankEntry(db,userId,"ordinary","空屋竊盜",loss,0,effect.changes.bank,now);
       }
+      // #34/#38 現金分支與稅基同筆寫入；早期獨立事件測試未初始化銀行表時維持原契約。
+      if([34,38].includes(result.originalId)&&effect.changes.money!==undefined&&db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='bank_tax_state'").get())
+        refreshBankTaxSnapshot(db,userId,day);
       const history=db.prepare(
         "INSERT INTO character_events(user_id,day,event_key,original_id,old_health_index,new_health_index,created_at,description,effects_json) VALUES(?,?,?,?,?,?,?,?,?)"
       ).run(userId,day,effect.event.key,result.originalId,
@@ -203,6 +215,7 @@ export function listCharacterEvents(db,userId,limit=15) {
         row.event_key==="couponGift"?"獲得優惠券":
         row.event_key==="fourDimensionalBag"?"四次元福袋":
         row.event_key==="santaEncounter"?"聖誕老人事件":
+        row.event_key==="santaFight"?"聖誕老人戰鬥":
         row.event_key==="bookRoyalty"?"書籍版稅":
         row.event_key==="hulaHoopLuck"?"呼拉圈幸運事件":
         row.event_key==="trafficAccident"?"交通意外":

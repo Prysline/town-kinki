@@ -19,7 +19,7 @@
 
 ## 範圍與證據界線
 
-- 本次 [Draft PR #113](https://github.com/Prysline/town-kinki/pull/113) 僅修改 Web 測試與狀態文件；測試／文件 SHA `ba58629c20fce722fa8854ea4a3c2c0702252caa` 的 [push CI](https://github.com/Prysline/town-kinki/actions/runs/45315268903) 與 [pull_request CI](https://github.com/Prysline/town-kinki/actions/runs/45315275294) **均 success，808/808 通過**（另有 `node --check` 伺服器與前端語法檢查成功）。最終文檔證據提交仍須核對最新 HEAD 的兩組 CI，未通過不得合併。
+- [PR #113](https://github.com/Prysline/town-kinki/pull/113) 已於 2026-11-24 合併到 `feature/web-dual-mode-phase1`（合併 SHA `9db33c96faace21f4f3ada3fb533a701b44dcc3f`），僅涉及 Web 測試與文件。最終 PR HEAD `ed15ce8730823ef2eff5155c320b66e07183c4cc` 的 [push CI](https://github.com/Prysline/town-kinki/actions/runs/45315508269) 與 [pull_request CI](https://github.com/Prysline/town-kinki/actions/runs/45315512412) **均 success，808/808 通過**；合併後 Web [push CI](https://github.com/Prysline/town-kinki/actions/runs/45318197428) 與長期 PR #1 [回歸 CI](https://github.com/Prysline/town-kinki/actions/runs/45318206229) 也均 success。
 - 不改動任何正式玩家資產、SQLite 正式 schema、遊戲規則、原始 Perl/CGI 或 `master`。
 - Node HTTP／SQLite 自動化不是跨實體 OS／設備還原演練，也不是真人桌面／375px／768px 遊玩驗收。
 - 第70階段只驗**第62階段公路 schema 的代表性切片**；其他 Web 歷史版本、複雜事故車輛耗損、跨設備演練仍需另外有明確證據的工作。

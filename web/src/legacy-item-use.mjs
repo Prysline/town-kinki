@@ -154,6 +154,17 @@ function signedNumber(input,label,min=-1000000,max=1000000){
 function nonnegative(input,label,max=1000000){
   return signedNumber(input,label,0,max);
 }
+// battle.cgi::otosi_item: verified four reachable MB drops only.
+// basic.cgi::item_do decrements only 回; the blank unit is intentionally reusable.
+const VERIFIED_ARENA_HERBS=new Map([["薬草",["MB","薬草","0","0","0","0","0","0","0","万能,5","0","3","3","0","0","0","0","100","0","0","0","1","","5","5","0","","0","0","","ロー","",""]],["上薬草",["MB","上薬草","0","0","0","0","0","0","0","万能,10","0","5","5","0","0","0","0","500","0","0","0","1","","10","5","0","","0","0","","ロー","",""]],["特薬草",["MB","特薬草","0","0","0","0","0","0","0","万能,15","0","10","10","0","0","0","0","5000","0","0","0","1","","15","5","0","","0","0","","ロー","",""]],["秘伝薬草",["MB","秘伝薬草","0","0","0","0","0","0","0","万能,20","0","50","50","0","0","0","0","50000","0","0","0","1","","20","5","0","","0","0","","ロー","",""]]]);
+function isVerifiedArenaHerb(row,raw){
+  const source=VERIFIED_ARENA_HERBS.get(row.original_name);
+  return Boolean(source&&row.original_id==="__web_b_league__"&&row.category==="MB"&&
+    row.durability_unit===""&&row.effect===raw[9]&&
+    Number.isSafeInteger(row.durability)&&row.durability>0&&raw[21]===String(row.durability)&&
+    Number.isSafeInteger(row.purchased_at)&&row.purchased_at>0&&raw[30]===String(row.purchased_at)&&
+    source.every((v,i)=>[21,26,30].includes(i)||raw[i]===v));
+}
 function parseArchivedItem(row){
   let raw;
   try{raw=JSON.parse(row.raw_fields_json);}catch{}
@@ -163,7 +174,7 @@ function parseArchivedItem(row){
     throw new Error("封存物品資料不完整或與索引不一致");
   const unit=row.durability_unit;
   const verifiedRandom=isVerifiedRandomItem(row,raw);
-  if(!["回","日"].includes(unit)||raw[22]!==unit||
+  if((!["回","日"].includes(unit)&&!isVerifiedArenaHerb(row,raw))||raw[22]!==unit||
      NON_CONSUMABLE.has(row.category)||
      (row.original_name==="ランダム品"&&!verifiedRandom))
     return null;

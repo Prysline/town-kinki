@@ -2,6 +2,7 @@
 // 源頭：dat_dir/syouhin.cgi 187 筆有備註、96 種；dat_dir/otakara.cgi 110 筆、10 種。
 // 共 105 種不重複備註（※移動手段です。兩池共用）。本映射不變更原始 CGI、SKU、效果及後端禁購判定。
 // 「ウエイトアップ1」按原始標記保留數字 1，不臆測單位或增加新效果。
+import {BATTLE_ITEM_COMMENTS_ZH_TW} from "./battle-item-translations.js";
 export const ORIGINAL_ITEM_COMMENTS_ZH_TW=Object.freeze({
   "ギフト":"禮品",
   "食料品":"食品",
@@ -120,5 +121,6 @@ export const displayOriginalItemComment=comment=>{
     return (note?note+"｜":"")+"來自「"+received[2]+"」的禮物。";
   }
   return Object.hasOwn(ORIGINAL_ITEM_COMMENTS_ZH_TW,original)?
-    ORIGINAL_ITEM_COMMENTS_ZH_TW[original]:original;
+    ORIGINAL_ITEM_COMMENTS_ZH_TW[original]:
+    Object.hasOwn(BATTLE_ITEM_COMMENTS_ZH_TW,original)?BATTLE_ITEM_COMMENTS_ZH_TW[original]:original;
 };

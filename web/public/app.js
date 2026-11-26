@@ -1,8 +1,7 @@
 import { townCellAction } from "./town-home.js";
 import { displayRetailItemName,displayRetailItemCategory } from "./retail-item-translations.js";
 import { displayOriginalItemComment } from "./item-comment-translations.js";
-import { displayEventDescription,displayGiftErrorMessage } from "./event-gift-display-translations.js";
-import { shouldShowCompactEnergy } from "./energy-visibility.js";
+import { displayEventDescription,displayGiftErrorMessage } from "./event-gift-display-translations.js";import { shouldShowCompactEnergy } from "./energy-visibility.js";
 import { townTimePhase } from "./time-theme.js";
 import { groupedStatLines } from "./shop-effects.js";
 import { displayEquipmentName,displayVendingName,displayKnownItemName,displayEquipmentCategory,displayKnownItemCategory } from "./item-translations.js";
@@ -65,7 +64,7 @@ async function api(path, data) {
     credentials: "same-origin"
   });
   const result = await response.json();
-  if (!response.ok) throw new Error(result.error || "操作失敗");
+  if (!response.ok) throw Object.assign(new Error(result.error || "操作失敗"),{status:response.status});
   return result;
 }
 
@@ -471,6 +470,7 @@ function renderTownMap() {
             if(cell.key==="デパ"||cell.key==="デパ2")renderRetail();
             if(cell.key==="自販機")renderVending();
             if(cell.key==="装備屋")renderEquipment();
+            if(cell.key==="Ｂリーグ")renderBLeague();
             if(cell.key==="ギフト屋")renderGiftShop();
             if(cell.key==="リサイ")renderRecycle();
             if(cell.key==="問屋")renderWholesale();
@@ -1593,10 +1593,10 @@ function renderLegacyItems(){
       const name=document.createElement("strong");name.textContent=displayRetailItemName(item.name);
       const durability=document.createElement("span");durability.className="inventory-item-remaining";
       const amount=itemRemainingDurability(item,actionInfo,browserGameNow());
-      durability.textContent="剩餘 "+amount+(item.unit??"");
+      durability.textContent=item.blocked?"待核對獎品 "+amount+" 筆（不可使用）":item.origin==="bLeague"&&item.unit===""?"持有 "+amount+" 份（可重複使用）":"剩餘 "+amount+(item.unit??"");
       head.append(name,durability);card.append(head);
       const preview=document.createElement("div");preview.className="inventory-effects";
-      for(const effect of itemInventoryEffects(info)){
+      for(const effect of (item.blocked?["原始效果尚未核對，不套用推測能力"]:itemInventoryEffects(info))){
         const line=document.createElement("p");line.className="small";line.textContent=effect;
         preview.append(line);
       }
@@ -1629,6 +1629,7 @@ function renderLegacyItems(){
           "可用於公路旅行（"+verifiedVehicle.seconds+" 秒）；不是背包直接使用道具":
           item.name==="健康保険"&&state.insurance?.active?
           "醫院自動生效，不需手動使用":"目前尚未支援直接使用";
+        if(item.blocked)status.textContent="原始欄位異常，已保留獎品，不可使用";
         controls.append(status);
       }
       if(verifiedVehicle){
@@ -1653,7 +1654,7 @@ function renderLegacyItems(){
         "熱量："+(info?.calories??"未確認")+" kcal｜使用間隔："+(info?.intervalMinutes??"未確認")+" 分鐘",
         "身體能量消耗："+(info?.bodyCost??"未確認")+"｜頭腦能量消耗："+(info?.brainCost??"未確認"),
         "原版備註（繁中顯示）："+(displayOriginalItemComment(info?.comment)||"沒有提供文字備註"),
-        "來源："+(item.readOnly?"歷史來源封存":item.origin==="fishing"?"Web 釣魚／餌料店":item.origin==="crafting"?"Web 合成屋":"Web 購入或轉換")+
+        "來源："+(item.origin==="osakaQuarantine"?"大阪挑戰待核對獎品":item.origin==="osaka"?"大阪挑戰掉落":item.readOnly?"歷史來源封存":item.origin==="fishing"?"Web 釣魚／餌料店":item.origin==="crafting"?"Web 合成屋":item.origin==="bLeague"?"B 聯賽掉落":item.origin==="event38"?"Web 聖誕老人戰鬥獎勵":"Web 購入或轉換")+
           "（記錄位置 "+item.sourceLine+"；原始內容不在此頁修改）",
         "Web 使用狀態："+(verifiedVehicle?"已核對為本人可用公路載具，出發須於公路面板操作，事故可能扣耐久":
           actionInfo?"已核對可使用規則，受冷卻與角色條件限制":
@@ -2768,6 +2769,76 @@ function renderArcadeHighLow(){
   }
 }
 
+let streetFightPending=null;
+let streetFightBusy=false;
+function updateStreetFightCountdown(){
+  if(!state?.character)return;
+  const info=state.streetFight;
+  if(!info)return;
+  const remain=Math.max(0,(info.readyAt??0)-browserGameNow());
+  const enough=state.character.money>=info.minCash;
+  text("street-fight-status",state.mode==="solo"?"單機沒有已確認的原版街頭格鬥 NPC，不提供虛構對手。":
+    !info.available?"沒有其他已建立角色的居民。":
+    !enough?"參戰現金不足：至少需持有 "+money(info.minCash)+"（銀行存款不計）。":
+    remain>0?"行動間隔剩餘 "+Math.ceil(remain/1000)+" 秒。":"可隨機遇見其他居民。");
+  el("street-fight-play").disabled=streetFightBusy||!info.available||!enough||remain>0;
+}
+function renderStreetFight(){
+  updateStreetFightCountdown();
+  const target=el("street-fight-history");
+  target.replaceChildren();
+  for(const battle of state.streetFight?.history??[]){
+    const detail=document.createElement("details");
+    const heading=document.createElement("summary");
+    const time=new Date(battle.playedAt).toLocaleString("zh-TW");
+    const outcome={win:"勝利",loss:"敗北",draw:"平手",noOpponent:"未遇見對手"}[battle.outcome];
+    heading.textContent=time+"｜"+outcome+(battle.opponentName?"｜"+battle.opponentName+"｜現金 "+(battle.delta>=0?"+":"")+money(battle.delta):"");
+    detail.append(heading);
+    if(battle.rounds){
+      const summary=document.createElement("p");
+      summary.textContent="優惠券 +"+battle.coupons+"｜K 點 "+battle.kpointDelta+
+        "｜剩餘身體 "+battle.bodyEnergy+"、頭腦 "+battle.brainEnergy+
+        "｜起始能量（身體／頭腦）：本人 "+battle.initial.player.body+"/"+battle.initial.player.brain+
+        "、對手 "+battle.initial.opponent.body+"/"+battle.initial.opponent.brain;
+      detail.append(summary);
+      const stats=document.createElement("dl");
+      for(const key of Object.keys(labels))
+        addRow(stats,labels[key],battle.playerStats[key]+" / "+battle.opponentStats[key]);
+      detail.append(stats);
+      const list=document.createElement("ol");
+      for(const round of battle.rounds){
+        const li=document.createElement("li");
+        li.textContent=(round.attacker==="player"?battle.playerName:battle.opponentName)+"："+
+          round.label+"，"+(round.target==="brain"?"精神":"身體")+"傷害 "+round.damage+
+          "｜本人 "+round.player.body+"/"+round.player.brain+"；對手 "+round.opponent.body+"/"+round.opponent.brain;
+        list.append(li);
+      }
+      detail.append(list);
+    }
+    target.append(detail);
+  }
+}
+el("street-fight-play").onclick=async()=>{
+  if(streetFightBusy||!state?.streetFight?.available)return;
+  const owner=state.user?.username;
+  if(!window.confirm("隨機遇見居民並自動交戰，最多 50 次攻擊。可能損失現金、能量與 K 點，確定開始？"))return;
+  if(!streetFightPending||streetFightPending.owner!==owner)
+    streetFightPending={owner,requestId:crypto.randomUUID()};
+  streetFightBusy=true;
+  updateStreetFightCountdown();
+  try{
+    const next=await api("street-fight/play",{requestId:streetFightPending.requestId});
+    streetFightPending=null;
+    if(state?.user?.username!==owner)return;
+    state=next;render();
+    const result=state.streetFightResult;
+    notify(result.outcome==="noOpponent"?"這次沒有遇見可戰鬥的居民。":
+      ({win:"勝利",loss:"敗北",draw:"平手"}[result.outcome])+"：現金 "+money(result.delta)+
+      "，優惠券 "+result.coupons+"，K 點 "+result.kpointDelta+"。");
+  }catch(error){notify(error.message,true);}
+  finally{streetFightBusy=false;updateStreetFightCountdown();}
+};
+
 let pendingArcadeDice=null;
 let arcadeDiceSubmitting=false;
 async function submitArcadeDice(guess,stake){
@@ -2797,6 +2868,81 @@ async function submitArcadeDice(guess,stake){
     if(state?.character)renderArcadeDice();
   }
 }
+let osakaPending=null,osakaBusy=false,osakaOwner=null;
+async function submitOsaka(mode){
+  if(osakaBusy)return;
+  if(osakaPending&&osakaPending.mode!==mode){notify("請先重試上一筆大阪挑戰",true);return;}
+  if(!osakaPending){
+    if(!window.confirm("開始"+(mode==="week"?"弱":"強")+"大阪挑戰（"+osakaSourceLabel(state.osaka?.npcSource,state.osaka?.npcSourceVersion)+"）？失敗可能損失現金。"))return;
+    osakaPending={mode,requestId:crypto.randomUUID()};
+  }
+  osakaBusy=true;renderOsaka();
+  try{
+    state=await api("osaka/play",osakaPending);osakaPending=null;render();
+  }catch(error){
+    if(error.status===400||error.status===401)osakaPending=null;
+    notify(error.message,true);
+  }finally{osakaBusy=false;renderOsaka();}
+}
+function osakaSourceLabel(source,version){
+  if(source==="reconstructed")return "Web 重建版 NPC（非原版，"+(version??"版本未記錄")+"）";
+  if(source==="original-file")return "原版檔案 NPC";
+  return "NPC 來源未記錄";
+}
+function renderOsaka(){
+  if(!state?.character)return;
+  const owner=JSON.stringify([state.user?.username,state.character.name]);
+  if(osakaOwner!==owner){osakaPending=null;osakaOwner=owner;}
+  const game=state.osaka;
+  const label={week:"弱",strong:"強"};
+  const names={win:"勝利",loss:"敗北",draw:"平手"};
+  text("osaka-status",!game?.catalogReady?
+    (game?.sourceInvalid?"原版 NPC 資料格式無效，挑戰未開放。":"原版 NPC 資料尚未齊備（缺 "+(game?.missingCount??10)+" 筆），挑戰未開放。"):
+    osakaSourceLabel(game.npcSource,game.npcSourceVersion)+"。"+(game.npcSource==="reconstructed"?"原版缺 "+game.missingCount+" 筆，未混入部分原版資料。":"")+(Object.values(game.locations).some(Boolean)?"所在城鎮可挑戰。":"所在城鎮沒有大阪挑戰或遊樂中心入口。"));
+  const modes=el("osaka-modes");modes.replaceChildren();
+  for(const mode of ["week","strong"]){
+    const button=document.createElement("button");button.type="button";
+    button.textContent=(osakaPending?.mode===mode?"重試 ":"挑戰 ")+label[mode]+"大阪阿姨";
+    const cooling=game?.readyAt>browserGameNow();
+    button.disabled=osakaBusy||Boolean(osakaPending&&osakaPending.mode!==mode)||(!osakaPending&&(!game?.catalogReady||!game?.locations?.[mode]||cooling));
+    button.dataset.osakaReadyAt=String(game?.readyAt??0);
+    button.dataset.osakaMode=mode;
+    if(cooling&&!osakaPending)button.title="大阪挑戰間隔尚未結束";
+    button.addEventListener("click",()=>submitOsaka(mode));modes.append(button);
+  }
+  const result=el("osaka-result");result.replaceChildren();
+  const history=el("osaka-history");history.replaceChildren();
+  const append=(parent,tag,content)=>{const node=document.createElement(tag);node.textContent=content;parent.append(node);return node;};
+  const battle=state.osakaResult??game?.latest;
+  if(battle){
+    append(result,"h4",label[battle.mode]+"｜"+battle.npc.name+"｜"+names[battle.outcome]);
+    append(result,"p",osakaSourceLabel(battle.npcSource,battle.npcSourceVersion));
+    append(result,"p","攻擊 "+battle.rounds.length+" 次｜現金變化 "+money(battle.moneyDelta));
+    append(result,"p","初始玩家 頭腦 "+battle.initial.player.brainEnergy+"／身體 "+battle.initial.player.bodyEnergy+
+      "｜對手 頭腦 "+battle.initial.npc.brainEnergy+"／身體 "+battle.initial.npc.bodyEnergy);
+    append(result,"p","結束玩家 頭腦 "+battle.player.brainEnergy+"／身體 "+battle.player.bodyEnergy);
+    if(battle.reward)append(result,"p",!battle.reward.granted?"背包已滿，未取得 "+displayRetailItemName(battle.reward.name):
+      "取得 "+displayRetailItemName(battle.reward.name)+(battle.reward.blocked?"（原始欄位異常，待核對）":""));
+    const details=document.createElement("details");details.open=true;
+    append(details,"summary","逐次攻擊紀錄");
+    const list=document.createElement("ol");
+    for(const r of battle.rounds)append(list,"li",(r.actor==="player"?"玩家":battle.npc.name)+"："+(labels[r.stat]??r.stat)+
+      "｜"+(r.energy==="brainEnergy"?"頭腦":"身體")+"傷害 "+r.damage+
+      "｜玩家 "+Math.max(0,r.player.brainEnergy)+"/"+Math.max(0,r.player.bodyEnergy)+
+      "｜對手 "+Math.max(0,r.npc.brainEnergy)+"/"+Math.max(0,r.npc.bodyEnergy));
+    details.append(list);result.append(details);
+  }else append(result,"p","尚無挑戰紀錄。");
+  for(const b of game?.history??[])append(history,"p",label[b.mode]+"｜"+b.name+"｜"+names[b.outcome]+"｜"+money(b.moneyDelta)+"｜"+osakaSourceLabel(b.npcSource,b.npcSourceVersion));
+}
+setInterval(()=>{
+  if(!state?.character||osakaBusy||osakaPending)return;
+  const game=state.osaka;
+  for(const button of el("osaka-modes")?.querySelectorAll("button")??[]){
+    const cooling=(game?.readyAt??0)>browserGameNow();
+    button.disabled=!game?.catalogReady||!game?.locations?.[button.dataset.osakaMode]||cooling;
+    button.title=cooling?"大阪挑戰間隔尚未結束":"";
+  }
+},250);
 function renderArcadeDice(){
   if(!state?.character)return;
   const info=state.arcadeDice??{};
@@ -3183,13 +3329,80 @@ async function submitEquipmentAction(action,{sku,itemId,name,amount,powerUp=0,us
         action==="sell"?"現金增加 "+money(result.amount):"同類原裝備已退回倉庫。"));
   }catch(error){notify(error.message,true);}
 }
+let pendingBLeague=null,bLeagueBusy=false,bLeagueOwner=null;
+async function submitBLeague(rank){
+  if(bLeagueBusy)return;
+  if(pendingBLeague&&pendingBLeague.rank!==rank){
+    notify("請先重試前一筆戰鬥請求，避免重複結算。",true);return;
+  }
+  if(!pendingBLeague){
+    if(!window.confirm("開始 "+rank.toUpperCase()+" 級怪物戰鬥？失敗可能損失現金與裝備。"))return;
+    pendingBLeague={rank,requestId:crypto.randomUUID()};
+  }
+  bLeagueBusy=true;renderBLeague();
+  try{
+    state=await api("b-league/play",pendingBLeague);
+    pendingBLeague=null;
+    render();
+  }catch(error){if(error.status===400||error.status===401)pendingBLeague=null;notify(error.message,true);}
+  finally{bLeagueBusy=false;renderBLeague();}
+}
+function renderBLeague(){
+  if(!state?.character)return;
+  const owner=JSON.stringify([state.user?.username,state.character.name]);
+  if(bLeagueOwner!==owner){pendingBLeague=null;bLeagueOwner=owner;}
+  const arena=state.bLeague;
+  const available=arena?.available===true;
+  text("b-league-status",available?"所在城鎮有 B 聯賽鬥技場。":"所在城鎮沒有「B 聯賽」建築；單機可自行配置地圖。");
+  const ranks=el("b-league-ranks");ranks.replaceChildren();
+  for(const rank of arena?.ranks??[]){
+    const button=document.createElement("button");button.type="button";
+    button.textContent=rank.toUpperCase()+" 級挑戰";
+    button.disabled=!available||bLeagueBusy||Boolean(pendingBLeague&&pendingBLeague.rank!==rank);
+    button.addEventListener("click",()=>submitBLeague(rank));ranks.append(button);
+  }
+  const result=el("b-league-result");result.replaceChildren();
+  const history=el("b-league-history");history.replaceChildren();
+  const battle=state.bLeagueResult??arena?.latest;
+  const names={win:"勝利",loss:"失敗",draw:"未分勝負"};
+  const energy={brainEnergy:"頭腦",bodyEnergy:"身體"};
+  const append=(parent,tag,value)=>{const node=document.createElement(tag);node.textContent=value;parent.append(node);return node;};
+  if(arena?.defaults?.length){
+    const gear=document.createElement("details");
+    append(gear,"summary","目前裝備／預設裝備");
+    for(const fallback of arena.defaults){
+      const item=(state.equipmentItems??[]).find(x=>x.status==="equipped"&&x.category===fallback.type)??fallback;
+      append(gear,"p",displayRetailItemName(item.name)+"｜威力 +item.power+"｜命中／閃避 "+item.accuracy+"%｜Lv."+item.level+"｜經驗 "+item.experience+"｜剩餘 "+(item.uses??"∞"));
+    }
+    result.append(gear);
+  }
+  if(battle){
+    append(result,"h4",battle.monster.rank.toUpperCase()+" 級｜"+battle.monster.name+"｜"+names[battle.outcome]);
+    append(result,"p","初始能量：玩家 頭腦 "+battle.initial.player.brainEnergy+"／身體 "+battle.initial.player.bodyEnergy+
+      "；怪物 頭腦 "+battle.initial.monster.brainEnergy+"／身體 "+battle.initial.monster.bodyEnergy);
+    append(result,"p","現金變化 "+money(battle.moneyDelta)+"；K 點 "+(battle.kpointDelta>=0?"+":"")+battle.kpointDelta+
+      "；玩家剩餘頭腦 "+battle.player.brainEnergy+"／身體 "+battle.player.bodyEnergy);
+    if(battle.reward)append(result,"p",battle.reward.granted?"取得 "+displayRetailItemName(battle.reward.name):"背包已滿，未取得 "+displayRetailItemName(battle.reward.name));
+    const details=document.createElement("details");details.open=true;
+    append(details,"summary","逐次攻擊（"+battle.rounds.length+" 次）");
+    const list=document.createElement("ol");
+    for(const r of battle.rounds){
+      append(list,"li",(r.actor==="player"?"玩家":"怪物")+"："+energy[r.energy]+"攻擊，"+displayRetailItemName(r.gear)+
+        "，傷害 "+r.damage+(r.leveled?"，裝備升級":"")+(r.broken?"，裝備損壞退回倉庫":"")+
+        "｜玩家 頭腦 "+Math.max(0,r.player.brainEnergy)+"／身體 "+Math.max(0,r.player.bodyEnergy)+
+        "｜怪物 頭腦 "+Math.max(0,r.monster.brainEnergy)+"／身體 "+Math.max(0,r.monster.bodyEnergy));
+    }
+    details.append(list);result.append(details);
+  }else append(result,"p","尚無戰鬥紀錄。");
+  for(const item of arena?.history??[])append(history,"p",item.rank.toUpperCase()+" 級｜"+item.name+"｜"+names[item.outcome]+"｜"+money(item.moneyDelta)+"｜K 點 +"+item.kpointDelta);
+}
 function renderEquipment(){
   if(!state?.character)return;
   const available=state.equipmentAvailable===true;
   text("equipment-status",available?
     "目前城鎮裝備屋營業中｜獨立原價商品 "+(state.equipmentGoods??[]).length+
-    " 種；可購買、換裝、出售及按原版費用鍛造，暫不提供戰鬥效果。" :
-    "目前城鎮沒有原版「装備屋」。請在地圖中找到該建築，單機模式可先配置。");
+    " 種；可購買、換裝、出售及按原版費用鍛造，B 聯賽中可實際參戰。" :
+    "目前城鎮沒有裝備商店。請在地圖中找到該建築，單機模式可先配置。");
   const goodsTarget=el("equipment-goods");
   goodsTarget.replaceChildren();
   const owned=state.equipmentItems??[];
@@ -4081,6 +4294,92 @@ function renderBank() {
   target.append(list);
 }
 
+
+let cLeagueOwner=null,cLeagueBusy=false,cLeaguePending=null;
+function updateCLeagueCountdown(){
+  const info=state?.cLeague;if(!info||!state.character)return;
+  const record=info.record,played=(record?.wins??0)+(record?.losses??0)+(record?.draws??0);
+  const wait=Math.max(0,info.readyAt-browserGameNow()),expired=info.started&&browserGameNow()>=info.endsAt;
+  text("c-league-status",!info.started?"賽季尚未開始，進入聯賽後起算。":"第 "+info.season+" 季・第 "+info.day+" 天・"+played+" / "+info.matchLimit+" 場"+
+    (expired?"・賽季已到期，請更新聯賽":wait?"・冷卻 "+Math.ceil(wait/1000)+" 秒":""));
+  el("c-league-play").disabled=cLeagueBusy||!info.character||!info.started||expired||played>=info.matchLimit||wait>0;
+  el("c-league-open").disabled=cLeagueBusy;
+  el("c-league-train").disabled=cLeagueBusy;
+}
+function cLeagueCost(){
+  const amount=Array.from(el("c-league-fields").querySelectorAll("input[data-stat]")).reduce((n,input)=>n+Number(input.value||0),0);
+  const cost=amount*10000,credit=el("c-league-payment").value.startsWith("credit:");
+  const balance=credit?state?.character?.bank:state?.character?.money;
+  text("c-league-cost","預計支付："+money(cost)+(Number.isSafeInteger(balance)?"｜"+(credit?"普通存款":"現金")+" "+money(balance)+(cost>balance?"・付款餘額不足":""):""));
+}
+function cLeagueLine(parent,value){const p=document.createElement("p");p.textContent=value;parent.append(p);}
+function renderCLeague(){
+  const info=state.cLeague;if(!info)return;
+  const owner=state.mode+":"+state.user?.username+":"+state.character.name;
+  const fields=el("c-league-fields");
+  if(cLeagueOwner!==owner||!fields.childElementCount){
+    cLeagueOwner=owner;cLeaguePending=null;text("c-league-result","");
+    el("c-league-name").value=info.character?.name??"";el("c-league-image").value=info.character?.imageUrl??"";
+    fields.replaceChildren();
+    for(const [key,label] of Object.entries(labels)){
+      const row=document.createElement("div");row.className="small";row.style.display="flex";row.style.flexWrap="wrap";row.style.gap="4px";
+      const title=document.createElement("label");title.textContent=label+" 移轉 ";
+      const input=document.createElement("input");input.type="number";input.min="0";input.step="1";input.value="0";input.dataset.stat=key;input.style.width="6em";title.append(input);
+      const comment=document.createElement("label");comment.textContent=" 台詞 ";
+      const field=document.createElement("input");field.maxLength=40;field.dataset.comment=key;field.value=info.character?.comments?.[key]??"";comment.append(field);
+      row.append(title,comment);fields.append(row);input.addEventListener("input",cLeagueCost);
+    }
+  }
+  for(const input of fields.querySelectorAll("input[data-stat]")){const k=input.dataset.stat;input.max=String(Math.max(0,state.character.stats[k]-1));input.title="本人 "+state.character.stats[k]+"／培育 "+(info.character?.stats[k]??0);}
+  const payment=el("c-league-payment"),oldPayment=payment.value;payment.replaceChildren();
+  for(const [value,label] of [["cash","現金"],...(state.classroomCreditCards??[]).map(c=>["credit:"+c.sourceLine,c.name+"（銀行付款）"])]){
+    const opt=document.createElement("option");opt.value=value;opt.textContent=label;payment.append(opt);
+  }
+  if([...payment.options].some(o=>o.value===oldPayment))payment.value=oldPayment;
+  const f=info.character;
+  const sum=keys=>Math.floor(keys.reduce((n,k)=>n+(f?.stats[k]??0),0)/10);
+  const body=sum(["looks","tairyoku","kenkou","speed","power","wanryoku","kyakuryoku","etti"]),brain=sum(["kokugo","suugaku","rika","syakai","eigo","ongaku","bijutu","love","unique"]);
+  text("c-league-fighter",f?f.name+"｜身體 "+body+"・頭腦 "+brain+"・總能量 "+(body+brain)+"｜"+Object.entries(labels).map(([k,v])=>v+" "+f.stats[k]).join("・"):"尚未建立培育角色");
+  const image=el("c-league-image-preview");image.hidden=!f?.imageUrl;image.removeAttribute("href");if(f?.imageUrl)image.href=f.imageUrl;
+  const root=el("c-league-rankings");root.replaceChildren();
+  for(const [heading,rows,previous,overall] of [["本季前十名",info.rankings,false,false],["前季前五名",info.previous,true,false],["累積前十名",info.overall,false,true]]){
+    const h=document.createElement("h4");h.textContent=heading;root.append(h);
+    rows.forEach((r,i)=>cLeagueLine(root,(i+1)+". "+r.name+"（"+r.owner+"） "+(overall?r.points+" 點":(previous?r.previousWins:r.wins)+" 勝／"+(previous?r.previousLosses:r.losses)+" 敗／"+(previous?r.previousDraws:r.draws)+" 和")+"・冠軍 "+r.champions));
+  }
+  const h=document.createElement("h4");h.textContent="最近對戰";root.append(h);
+  info.recent.forEach(r=>cLeagueLine(root,r.playerName+" vs "+r.opponentName+"｜"+({win:"勝利",loss:"敗北",draw:"平手"}[r.outcome])+" "+r.comment));
+  const history=el("c-league-history");history.replaceChildren();
+  for(const r of info.history){
+    const d=document.createElement("details"),summary=document.createElement("summary");
+    summary.textContent="第 "+r.season+" 季｜"+r.playerName+" vs "+r.opponentName+"｜"+({win:"勝利",loss:"敗北",draw:"平手"}[r.outcome])+"｜+"+money(r.reward);d.append(summary);
+    cLeagueLine(d,"初始能量："+r.initial.player.total+" / "+r.initial.opponent.total+"；本人累計傷害 "+r.damageDealt);
+    const list=document.createElement("ol");for(const turn of r.rounds){const li=document.createElement("li");li.textContent=(turn.attacker==="player"?r.playerName:r.opponentName)+"："+turn.comment+"（"+turn.label+"；傷害 "+turn.damage+"；能量 "+turn.playerEnergy+" / "+turn.opponentEnergy+"）";list.append(li);}d.append(list);history.append(d);
+  }
+  cLeagueCost();updateCLeagueCountdown();
+}
+async function submitCLeague(kind,data){
+  if(cLeagueBusy)return;
+  const owner=cLeagueOwner,key=JSON.stringify([kind,data]);
+  if(!cLeaguePending||cLeaguePending.owner!==owner||cLeaguePending.key!==key)cLeaguePending={owner,key,requestId:crypto.randomUUID()};
+  cLeagueBusy=true;updateCLeagueCountdown();
+  try{
+    const next=await api("c-league/"+kind,{...data,requestId:cLeaguePending.requestId});cLeaguePending=null;
+    if(cLeagueOwner!==owner||!state?.character)return;
+    state=next;if(kind==="train"){cLeagueOwner=null;el("c-league-fields").replaceChildren();}
+    render();const r=next.cLeagueResult;text("c-league-result",kind==="open"?"已進入第 "+r.season+" 季":kind==="train"?"培育已儲存，支付 "+money(r.cost):({win:"勝利",loss:"敗北",draw:"平手"}[r.outcome])+"："+r.opponentName+"，獲得 "+money(r.reward));
+  }catch(e){notify(e.message,true);}finally{cLeagueBusy=false;updateCLeagueCountdown();}
+}
+el("c-league-train").onclick=()=>{
+  const transfers={},comments={};for(const input of el("c-league-fields").querySelectorAll("input[data-stat]"))transfers[input.dataset.stat]=Number(input.value||0);
+  for(const input of el("c-league-fields").querySelectorAll("input[data-comment]"))comments[input.dataset.comment]=input.value;
+  const payment=el("c-league-payment").value;
+  if(!window.confirm("確認培育？能力移轉不可退回。"))return;
+  submitCLeague("train",{name:el("c-league-name").value,imageUrl:el("c-league-image").value,transfers,comments,payment:payment==="cash"?"cash":"credit",...(payment==="cash"?{}:{cardSourceLine:Number(payment.split(":")[1])})});
+};
+el("c-league-payment").addEventListener("change",cLeagueCost);
+el("c-league-play").onclick=()=>submitCLeague("play",{});
+el("c-league-open").onclick=()=>submitCLeague("open",{});
+
 function render() {
   if (!state) return;
   const solo = state.mode === "solo";
@@ -4099,6 +4398,7 @@ function render() {
   el("logout").textContent=solo?"離開遊戲":"登出";
   renderLegacyIcon();
   if (!state.character || lobby) {
+    if(!state.character){cLeagueOwner=null;cLeaguePending=null;el("c-league-fields").replaceChildren();}
     if(!publicPreview&&!previewLoading)loadPublicPreview();
     updateCompactVisibility();
     el("event-popup").hidden=true;
@@ -4139,6 +4439,9 @@ function render() {
   renderVending();
   renderFishing();
   renderCrafting();
+  renderOsaka();
+  renderStreetFight();
+  renderCLeague();
   renderArcadeDice();
   renderArcadeHighLow();
   renderArcadeDonuts();
@@ -4146,6 +4449,7 @@ function render() {
   renderLoto6();
   renderMultiCard();
   renderTreasure();
+  renderBLeague();
   renderEquipment();
   renderGiftShop();
   renderMailbox();
@@ -4357,7 +4661,12 @@ el("insurance-buy-form").addEventListener("submit",async event=>{
   }catch(error){notify(error.message,true);}
   finally{renderInsurance();}
 });
-el("cockroach-claim").addEventListener("click",()=>action("events/cockroach/claim",{}));
+function claimCurrentCockroach(){
+  const challenge=state?.cockroachChallenge;
+  if(challenge?.status==="active"&&Number.isSafeInteger(challenge.eventId)&&challenge.eventId>0)
+    action("events/cockroach/claim",{eventId:challenge.eventId});
+}
+el("cockroach-claim").addEventListener("click",claimCurrentCockroach);
 setInterval(updateCockroachCountdown,250);
 el("hospital-treat").addEventListener("click",()=>{
   const quote=state?.hospital;
@@ -4485,6 +4794,8 @@ setInterval(()=>{
     renderSoloTime(); // 同步顯示遊戲時鐘，限時事件結束後也恢復快轉按鈕
   updateTrainingCountdowns(); // 每秒刷新課程灰階和剩餘時間，不重建卡片。
   updateRoadCountdown(); // 公路旅程到時間才開啟抵達按鈕。
+  updateStreetFightCountdown();
+  updateCLeagueCountdown();
 },1000);
 el("room-close").addEventListener("click", closeRoom);
 el("room-config-form").addEventListener("submit", event => {
@@ -4532,10 +4843,7 @@ el("event-alert").addEventListener("click",()=>{
   dismissEventPopup();
   goToFacility("event-panel");
 });
-el("event-popup-claim").addEventListener("click",()=>{
-  if(state?.cockroachChallenge?.status==="active")
-    action("events/cockroach/claim",{});
-});
+el("event-popup-claim").addEventListener("click",claimCurrentCockroach);
 el("event-popup-close").addEventListener("click",dismissEventPopup);
 el("profile-view-tabs").addEventListener("click",event=>{
   const button=event.target.closest("button[data-profile-view]");

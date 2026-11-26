@@ -1,0 +1,90 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {readFileSync} from "node:fs";
+import {decodeLegacyText} from "../src/engine.mjs";
+import {parseOsakaRules} from "../src/osaka-challenge-core.mjs";
+import {parseArenaDrops} from "../src/b-league.mjs";
+import {DROP_NAMES,DEFAULT_NAMES} from "../src/b-league-core.mjs";
+import {SANTA_FIGHT_ITEMS,SANTA_FIGHT_NAMES}
+  from "../src/event-santa-fight.mjs";
+import {displayRetailItemName,displayRetailItemCategory}
+  from "../public/retail-item-translations.js";
+import {displayOriginalItemComment} from "../public/item-comment-translations.js";
+import {BATTLE_ITEM_ZH_TW,BATTLE_CATEGORY_ZH_TW}
+  from "../public/battle-item-translations.js";
+
+const source=path=>decodeLegacyText(readFileSync(new URL(path,import.meta.url)));
+const read=path=>readFileSync(new URL(path,import.meta.url),"utf8");
+const kana=/[\u3040-\u30ff\u31f0-\u31ff]/;
+
+test("新基底大阪挑戰：八筆原版來源／六種名稱，全部在顯示層有繁中譯名",()=>{
+  const rules=parseOsakaRules(source("../../obatyan.cgi"));
+  const prizes=[...rules.week.prizes,...rules.strong.prizes];
+  assert.equal(prizes.length,8);
+  assert.equal(new Set(prizes.map(x=>x.name)).size,6);
+  for(const item of prizes){
+    assert.doesNotMatch(displayRetailItemName(item.name),kana,item.name);
+    assert.equal(item.rawFields[1],item.name);
+    assert.equal(item.rawFields.length,33);
+  }
+  assert.equal(displayRetailItemName("おばちゃんの力"),"阿姨的力量");
+  assert.equal(displayRetailItemName("おばちゃんの知恵袋"),"阿姨的生活智慧");
+  assert.equal(displayRetailItemName("おばちゃんの知恵薬（スーパー）"),"阿姨的智慧藥（超級版）");
+  assert.equal(Object.keys(BATTLE_ITEM_ZH_TW).filter(k=>k.startsWith("おばちゃん")||k==="関西弁翻訳機").length,5);
+  assert.equal(displayRetailItemCategory("ゲットアイテム"),"獲得道具");
+});
+
+test("新基底 B 聯賽：四種實際掉落名稱翻譯，不將第5筆未抽中獎品當成可獲得物",()=>{
+  const drops=parseArenaDrops(source("../../battle.cgi"));
+  assert.equal(drops.length,4);
+  assert.deepEqual(drops.map(row=>row[1]),DROP_NAMES);
+  assert.deepEqual(drops.map(row=>displayRetailItemName(row[1])),
+    ["藥草","上等藥草","特級藥草","秘傳藥草"]);
+  assert.ok(drops.every(row=>row.length===33&&row[0]==="MB"));
+  assert.equal(displayRetailItemCategory("MB"),"B 聯賽獎品");
+  assert.equal(displayRetailItemName("ドラゴンの角"),"ドラゴンの角",
+    "第5筆僅用於驗證來源，不當作已實作獎品");
+});
+
+test("新基底 B 聯賽預設裝備名只在 UI 翻譯，原始鍵不變",()=>{
+  assert.deepEqual(Object.values(DEFAULT_NAMES),["素手","洋服","念力","先祖の霊"]);
+  for(const raw of Object.values(DEFAULT_NAMES))
+    assert.doesNotMatch(displayRetailItemName(raw),kana,raw);
+  assert.equal(displayRetailItemName("先祖の霊"),"祖先之靈");
+  const app=read("../public/app.js");
+  assert.ok(app.includes('displayRetailItemName(item.name)+"｜威力 "'));
+  assert.ok(app.includes('displayRetailItemName(r.gear)'));
+  assert.ok(app.includes('displayRetailItemName(battle.reward.name)'));
+  assert.ok(app.includes('if(cell.key==="Ｂリーグ")renderBLeague();'));
+});
+
+test("聖誕戰鬥的六項實際獎品沿用伺服器已有繁中名稱，不改原始33欄與抽選數",()=>{
+  assert.equal(SANTA_FIGHT_ITEMS.length,6);
+  assert.equal(SANTA_FIGHT_NAMES.length,6);
+  for(let i=0;i<6;i++){
+    assert.equal(SANTA_FIGHT_ITEMS[i].length,33);
+    assert.equal(displayRetailItemName(SANTA_FIGHT_ITEMS[i][1]),SANTA_FIGHT_NAMES[i]);
+    assert.doesNotMatch(SANTA_FIGHT_NAMES[i],kana);
+  }
+  assert.equal(BATTLE_CATEGORY_ZH_TW["ゲットアイテム"],"獲得道具");
+});
+
+test("新基底聖誕獎品兩種額外備註翻譯，原始 33 欄保持唯讀",()=>{
+  assert.deepEqual(SANTA_FIGHT_ITEMS.map(item=>displayOriginalItemComment(item[29])),
+    ["究竟會發生什麼事呢？","究竟會發生什麼事呢？",
+      "這是聖誕禮物。","這是聖誕禮物。","這是聖誕禮物。","這是聖誕禮物。"]);
+  assert.equal(displayOriginalItemComment("未收錄特殊備註"),"未收錄特殊備註");
+});
+
+test("新基底玩家靜態介面沒有假名，大阪阿姨／B聯賽提示已改成繁中",()=>{
+  const html=read("../public/index.html");
+  const app=read("../public/app.js");
+  assert.doesNotMatch(html,kana);
+  assert.ok(html.includes("大阪阿姨挑戰"));
+  assert.ok(html.includes("阿姨的力量"));
+  assert.ok(app.includes("所在城鎮沒有「B 聯賽」建築"));
+  assert.ok(app.includes("目前城鎮沒有裝備商店。"));
+  assert.ok(app.includes('!battle.reward.granted?"背包已滿，未取得 "+displayRetailItemName(battle.reward.name)'));
+  assert.ok(app.includes('const category=el("wholesale-category")'),
+    "原始商店分類仍由同一判定流程處理");
+});
