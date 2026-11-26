@@ -57,7 +57,17 @@ function sourceDatabase(file){
   return new DatabaseSync(file,{readOnly:true});
 }
 
+// 單檔備份的 SHA-256 不包含旁檔；有 WAL 內容時不得宣稱可單檔還原。
+function hasWalData(file){
+  return (statSync(file+"-wal",{throwIfNoEntry:false})?.size??0)>0;
+}
+function assertStandaloneSnapshot(file,hadWal=false){
+  if(hadWal||hasWalData(file))
+    throw new Error("來源含有 WAL 內容，不能驗證／還原為單檔備份；請先用 backup 建立一致快照");
+}
+
 export function verifySoloDatabase(file){
+  const hadWal=hasWalData(file);
   const db=sourceDatabase(file);
   try{
     const integrity=db.prepare("PRAGMA integrity_check").all();
@@ -73,7 +83,10 @@ export function verifySoloDatabase(file){
     const clock=db.prepare("SELECT COUNT(*) AS n FROM solo_clock WHERE id=1").get().n;
     if(users<1||clock!==1||characters>users)
       throw new Error("單機角色或遊戲時間資料缺失");
-    return {users,characters,bytes:statSync(file).size,sha256:fileSha256(file)};
+    assertStandaloneSnapshot(file,hadWal);
+    const summary={users,characters,bytes:statSync(file).size,sha256:fileSha256(file)};
+    assertStandaloneSnapshot(file);
+    return summary;
   }finally{db.close();}
 }
 
@@ -122,6 +135,10 @@ export function restoreSolo({dataDir,file}){
     const copied=verifySoloDatabase(temp);
     if(original.sha256!==copied.sha256)
       throw new Error("複製後的備份雜湊與來源不一致");
+    assertStandaloneSnapshot(file);
+    if(fileSha256(file)!==original.sha256)
+      throw new Error("還原期間來源備份已變動，請使用固定快照");
+    assertStandaloneSnapshot(file);
     publishNewFile(temp,destination);
     return {file:destination,...copied};
   }finally{rmSync(temp,{force:true});}
