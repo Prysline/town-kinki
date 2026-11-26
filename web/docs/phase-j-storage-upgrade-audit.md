@@ -42,6 +42,19 @@
 - 來源政策切換（auto 缺檔→original-only 缺檔→完整合成專用檔→auto 缺檔）與重送、拒絕改難度／操作種類、實際續玩新戰鬥、重啟、原收據 JSON／資產不變、來源主檔/WAL及快照 SHA-256、完整性與外鍵。只讀公開遊戲規則/商品來源，合成 NPC 檔不是真實原版 NPC 或玩家檔。
 - 單機只建立一個角色，街頭拒絕挑戰；多人街頭歷史收據、真正多帳號隔離、負 K 點與整合稅表交叉驗收留 J-3b。J-3a 新測試待同 HEAD CI，不宣稱已通過。
 
+## J-3a 正式驗收
+
+- #141 已合併 `cbbfbe2e6a4cf05f81c6c14c66d43986dbcb1884`，tree `5b5bd4e95f086187c529d9673c1b14f25111b3b3`；合併前 [Push](https://github.com/Prysline/town-kinki/actions/runs/45826004413)／[PR](https://github.com/Prysline/town-kinki/actions/runs/45826016226)，合併後 [Push](https://github.com/Prysline/town-kinki/actions/runs/45830714882)／[長期 PR #1](https://github.com/Prysline/town-kinki/actions/runs/45830725846)，四份完整日誌 964/964、fail/cancelled/skipped/todo=0、server/app 語法成功；合併與 PR 測試 tree 一致。master 未變、#1 Draft。J-3a 正式驗收。
+- 在該正式 HEAD 分批掃描 web/** 共 282 檔案，以四戰鬥表名、模組初始化器、HTTP route/result、NPC 標記及相關文字定位來源、前端、測試、文件及工具；直接程式相依仍為四戰鬥模組、server、前端 app。無需改正式玩法。
+
+## J-3b｜#121 多人歷史戰鬥收據（候選）
+
+- `tests/sqlite-pr121-multi-battle-upgrade.test.mjs`：與 J-3a 同一歷史正式 #121 schema 子集，去除單機時鐘，採同版 character_coupons DDL 及實際兩個合成 Web 帳號／歷史 session、正式戰鬥核心產生街頭無對手／勝利／負 K 點／券、B、大阪、C 收據。非私有 CGI 存檔、非完整歷史 DB。
+- 使用 SQLite backup()、SHA-256、完整性／FK、COPYFILE_EXCL 到獨立 multi.sqlite 測試目錄；只測歷史多人 DB 升級及續玩，不新增多人產品備份 CLI。來源主檔/WAL/快照保持不變。本機 Node 22.16.0 獨立合成 SQLite 快照冒煙 1/1，候選測試主體語法通過；不冒稱完整 HTTP CI。
+- 真正歷史 session 與登入、拒絕未登入及冒用 userId、兩帳號跨玩法同請求碼與原收據防重；不同玩家可以使用相同請求碼產生自己的收據，對方資產、戰績和歷史不得改動（C 聯賽全域排序可合法更新）。以 SQLite trigger 注入街頭收據寫入失敗，現金、能量、K 點、券、帳簿、稅基及歷史回滾，原請求重試後重啟。
+- 另一還原副本直接使用正式銀行核心結算下週一，驗證街頭真正產生的負 K 點、歷史已繳／未繳稅、索引外鍵、重複結算與隔離；#121 本來就是有號稅表，#103 非負約束的遷移已由 J-2 實測，不混成未存在的歷史版本。多人時鐘仍是真實時間。
+- J-3b 待同 HEAD 雙 CI 及合併後雙 CI，完成後 J-3 結案；J-4 另窗接續，不先做。
+
 ## 後續驗收切片（待逐項查證）
 
 1. #103 真實舊稅表、負 K 點、索引及歷史資料的實體 WAL 升級與失敗回滾；保留 #104/#105 已驗證情境。
