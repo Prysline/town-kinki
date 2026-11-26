@@ -93,14 +93,14 @@ BEGIN {
 }
 @draws=@{decode_json($ARGV[0])};
 my $stats=decode_json($ARGV[1]);
-for my $key (keys %$stats){${$key}=$stats->{$key};}
+for my $key (keys %$stats){$$key=$stats->{$key};}
 local $/;
 my $source=<STDIN>;
 eval $source;
 my $failure=$@;
-print encode_json({error=>$failure,stats=>{map {$_=>0+${$_}} keys %$stats},
-  sizes=>\\@sizes,remaining=>scalar @draws});
-`.replace("\\\\@sizes","\\@sizes");
+print encode_json({error=>$failure,stats=>{map {$_=>0+$$_} keys %$stats},
+  sizes=>\@sizes,remaining=>scalar @draws});
+`;
 function originalAbilityBlock(key){
   const branch=basic.indexOf("}elsif ($in{'onsensyurui'} eq \""+key+"\"){");
   assert.ok(branch>=0,"原始浴池分支");
