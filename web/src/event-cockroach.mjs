@@ -1,6 +1,8 @@
 // 原始 event.pl 的第 34 號（無聖誕人偶且現金>0）與第 44 號共用 20 秒蟑螂。
 // 20 秒內拍死蟑螂可獲得 1～20000 元、K 點數 +3、外貌 -3。
 // Web 採伺服器時間與每帳號獨立的 SQLite 挑戰，不接受前端回傳開始時間或角色 ID。
+import {refreshBankTaxSnapshot} from "./banking.mjs";
+import {calendarDay} from "./training.mjs";
 export const COCKROACH_WINDOW_MS=20000;
 export const COCKROACH_EVENT_IDS=Object.freeze([34,44]);
 function validateUser(userId){
@@ -64,7 +66,7 @@ function updateHistory(db,eventId,userId,description,effects){
   ).run(description,JSON.stringify(effects),eventId,userId);
   if(result.changes!==1)throw new Error("蟑螂事件歷史不正確");
 }
-export function claimCockroach(db,userId,now=Date.now(),random=Math.random){
+export function claimCockroach(db,userId,now=Date.now(),random=Math.random,today=undefined){
   validateUser(userId);validateNow(now);
   db.exec("BEGIN IMMEDIATE");
   try{
@@ -111,6 +113,10 @@ export function claimCockroach(db,userId,now=Date.now(),random=Math.random){
       "UPDATE characters SET money=?,kpoint=?,stats_json=? WHERE user_id=?"
     ).run(Number(nextMoney),Number(nextKpoint),nextStats,userId);
     if(updated.changes!==1)throw new Error("角色資料更新失敗");
+    // 與 #34/#38 現金分支一致：正式 DB 的稅基必須在領獎交易內刷新，
+    // 不依賴提交後的 snapshot。獨立核心測試未初始化銀行表時維持原契約。
+    if(db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='bank_tax_state'").get())
+      refreshBankTaxSnapshot(db,userId,today??calendarDay(now));
     const resolved=db.prepare(
       "UPDATE character_cockroach_challenges SET status='caught',resolved_at=? WHERE event_id=? AND user_id=? AND status='pending'"
     ).run(now,row.event_id,userId);

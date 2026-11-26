@@ -4,7 +4,12 @@
 >
 > 產品範圍與禁止事項以 [已確認的專案政策](project-scope-no-legacy-player-import.md) 為準；本文件只統一**現行狀態與排序**，不可推翻使用者確認的範圍。原始 CGI 決定可核對的原版行為；實際 Web 程式及測試決定已實作與自動驗證的事實；[技術差異矩陣](migration-audit.md) 保留原始功能 ID／CGI 來源；各 `phaseXX-*.md` 是當時技術證據與決策，**不是目前待辦**。文件與程式矛盾時，必須回到實際程式、測試、PR、CI 與必要的 CGI 查證，不得只挑較新的文字。
 
-## 2026-11-26｜A～H 正式整合完成，下一項 I
+## 2026-11-26｜I 開始：來源與蟑螂領獎原子性
+
+- #128 已合併，正式稽核 HEAD `27d8ed7864e58bbb3d81bab526f8295acee542a8`，tree `185c1196a9c9a33c6ab9d921e7104d60ccc6c264`；正式 Push 45729194939 / 長期 PR #1 45729203423 均891/891、fail/cancelled/skipped/todo=0，server/app 語法檢查成功。
+- I 第一切片：[#36/#37 來源與事件資產原子性](phase-i-event-reward-audit.md)。兩笛已可由 #38 取得；跨玩家轉帳資金不足及負現金/負存款的 Web 適配尚待核准，不新增 #36/#37 功能。本切片只修 #34/#44 共用蟑螂領獎的稅基交易邊界，保持已核准的獎金、K點、20秒、外貌及每日抽選。其餘事件風險、跨日舊請求、實際重啟等仍需逐項驗證。新 CI 未核對之前不得稱此切片驗收或合併。
+
+## 2026-11-26｜A～H 正式整合完成，下一項 I（歷史）
 
 - 正式 Web 稽核基準 `203f18e08712dbf7d8862d6dbfbdb0f1ad493335`，tree `132517233b320f75f9e8e5e49d3a6c62bac67dac` 與 #127 驗收 HEAD `be208450b512a0d85db55c127ae06c774f480ccf` 相同；master `f74e077780ed96f9b271f66e5afe63037c7c7403` 未修改。
 - H #125/#127 均已合併。#127 合併前 [push](https://github.com/Prysline/town-kinki/actions/runs/45725617838) / [PR](https://github.com/Prysline/town-kinki/actions/runs/45725641661)，合併後 [push](https://github.com/Prysline/town-kinki/actions/runs/45727618214) / [PR #1](https://github.com/Prysline/town-kinki/actions/runs/45727625348)，四組皆891/891，失敗/跳過/取消/todo皆0、server/app語法通過。真實Chrome三視埠、四戰鬥回應遺失重試、帳號隔離、重啟及B→大阪→C→#38串接通過；真人、實體裝置、其他瀏覽器另外驗收。詳見 [H 完成證據](phase-h-battle-browser.md)。
