@@ -31,6 +31,17 @@
 - 驗收設計：一致備份、兩個新目錄還原、來源 bytes/SHA-256 不變；在正式遷移複製後注入真實 SQL 錯誤、DDL 回滾、關閉重啟重試、索引及其他約束保留；稅務 INSERT 失敗時利息／銀行餘額／帳簿／稅基整筆回滾。另一未升級副本走實際 server 啟動順序，負 K 點星期一結算、歷史欠稅、HTTP 存款、同日重送、重啟及帳號隔離。
 - 本切片不修改正式遊戲程式或 schema。測試的負 K 點以隔離資料注入，非新增單機對手；不代表完整歷史 DB 或真人操作驗收。重建後的候選檔完整 HTTP 測試待本 PR 同 HEAD 雙 CI，不沿用上一工作環境的局部測試結果。
 
+## J-2 正式驗收
+
+- #140 已合併 `06711c4cc0bc88b5251c912ad9be0038ff73692a`，tree `01567438bd707028e5147e8d4299ecb27aef6aa5`；合併前 [Push](https://github.com/Prysline/town-kinki/actions/runs/45824388143)／[PR](https://github.com/Prysline/town-kinki/actions/runs/45824398323)，合併後 [Push](https://github.com/Prysline/town-kinki/actions/runs/45825464170)／[長期 PR #1](https://github.com/Prysline/town-kinki/actions/runs/45825475912)，四份完整日誌 963/963、fail/cancelled/skipped/todo=0、server/app 語法成功；合併與 PR 測試 tree 一致。master 未變、#1 Draft。J-2 指定範圍正式驗收。
+
+## J-3a｜#121 單機歷史戰鬥收據（候選）
+
+- #121 正式合併 `e2e3004ad9af13021c4bae540863f9ca26e34b10` 與目前基準的 B、大阪、C、街頭、戰鬥核心、NPC 來源／重建、銀行、裝備、道具使用、town-storage Git blob 一致；事件與 legacy-inventory 模組後續有變動，故以歷史核心與 legacy-inventory DDL、相同 blob 初始化器建立代表性子集，而非宣稱是完整舊版 DB。
+- `tests/sqlite-pr121-solo-battle-upgrade.test.mjs`：歷史 B／大阪／C 收據與實際產生的獎品、培育紀錄、稅基、共用請求碼，WAL 快照到新目錄後走正式 HTTP；大阪以隔離合成的專用十檔 NPC 測試 original-file，與核准 reconstructed 分開。另依歷史 Draft c38adff1 原始無標記收據形狀建立 fixture，來源 unknown/null，不將未曾正式合併的 Draft 當正式歷史版本。
+- 來源政策切換（auto 缺檔→original-only 缺檔→完整合成專用檔→auto 缺檔）與重送、拒絕改難度／操作種類、實際續玩新戰鬥、重啟、原收據 JSON／資產不變、來源主檔/WAL及快照 SHA-256、完整性與外鍵。只讀公開遊戲規則/商品來源，合成 NPC 檔不是真實原版 NPC 或玩家檔。
+- 單機只建立一個角色，街頭拒絕挑戰；多人街頭歷史收據、真正多帳號隔離、負 K 點與整合稅表交叉驗收留 J-3b。J-3a 新測試待同 HEAD CI，不宣稱已通過。
+
 ## 後續驗收切片（待逐項查證）
 
 1. #103 真實舊稅表、負 K 點、索引及歷史資料的實體 WAL 升級與失敗回滾；保留 #104/#105 已驗證情境。
