@@ -4,7 +4,7 @@ import {readFileSync} from "node:fs";
 import {spawnSync} from "node:child_process";
 import {decodeLegacyText,createCharacterData,maxBodyEnergy,maxBrainEnergy} from "../src/engine.mjs";
 import {parseOriginalOnsenConfig,originalOnsenMaxima,originalOnsenOptions,quoteOriginalOnsen,
-  projectOriginalOnsenEntryEnergy,projectOriginalOnsenExitEnergy,projectOriginalOnsenAbilityRolls} from "../src/onsen-source.mjs";
+  projectOriginalOnsenEntryEnergy,projectOriginalOnsenExitEnergy,projectOriginalOnsenAbilityRolls,projectApprovedOnsenAbilityRolls} from "../src/onsen-source.mjs";
 const read=path=>decodeLegacyText(readFileSync(new URL(path,import.meta.url)));
 const configSource=read("../../town_ini.cgi");
 const basic=read("../../basic.cgi");
@@ -165,4 +165,48 @@ test("普通至松浴無能力亂數，不將背景圖片亂數混入能力來�
     assert.deepEqual(projectOriginalOnsenAbilityRolls(stats,bath.key,()=>{throw Error("不應抽選")}),
       {status:"source-ok",rolls:[],stats,gains:{}});
   }
+});
+
+function minimallyCorrectedAbilityBlock(key){
+  const source=originalAbilityBlock(key);
+  if(key==="special_dou")return source;
+  // 僅測試記憶體中的三處核准修正；原始 basic.cgi 不變。
+  const corrected=source.replaceAll("$tairyku_up","$tairyoku_up")
+    .replaceAll("$spped_up","$speed_up")
+    .replaceAll("$$kyakuryoku","$kyakuryoku");
+  assert.notEqual(corrected,source);
+  return corrected;
+}
+function compareApprovedAbility(key,rolls,stats){
+  const sides=key==="special_dou"?10:20;
+  const fractions=rolls.map(n=>(n-0.5)/sides);
+  const perl=spawnSync("perl",["-e",PERL_ABILITY_HARNESS,JSON.stringify(fractions),JSON.stringify(stats)],
+    {input:minimallyCorrectedAbilityBlock(key),encoding:"utf8",timeout:5000});
+  assert.ifError(perl.error);
+  assert.equal(perl.status,0,perl.stderr);
+  const actual=JSON.parse(perl.stdout);
+  assert.equal(actual.error,"");
+  assert.deepEqual(actual.sizes,rolls.map(()=>sides));
+  assert.equal(actual.remaining,0);
+  let used=0;
+  const result=projectApprovedOnsenAbilityRolls(stats,key,()=>fractions[used++]);
+  assert.equal(result.status,"source-ok");
+  assert.equal(used,rolls.length);
+  assert.deepEqual(result.rolls.map(r=>r.roll),rolls);
+  assert.deepEqual(result.stats,actual.stats);
+  return result;
+}
+test("核准 B：修正銀金三處筆誤，與最小修正 Perl 區段差分",()=>{
+  for(const [key,n] of [["special_gin",7],["special_kin",17]]){
+    for(const boundary of [1,10,11,20]){
+      const result=compareApprovedAbility(key,Array(n).fill(boundary),stats);
+      assert.equal(Object.keys(result.gains).length,boundary<=10?n:0);
+      for(const roll of result.rolls)assert.equal(result.stats[roll.stat],stats[roll.stat]+(boundary<=10?boundary:0));
+    }
+    const mixed=[10,1,11,20,10,11,1,...Array(n-7).fill(11)];
+    const result=compareApprovedAbility(key,mixed,stats);
+    assert.deepEqual(result.gains,{looks:10,tairyoku:1,power:10,kyakuryoku:1});
+  }
+  assert.deepEqual(compareApprovedAbility("special_dou",[3,4],stats).gains,{tairyoku:3});
+  assert.deepEqual(compareApprovedAbility("special_dou",[4,3],stats).gains,{kenkou:3});
 });
