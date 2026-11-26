@@ -76,6 +76,21 @@
 - tests/sqlite-pr128-event-receipts-upgrade.test.mjs：真正單機 backup/verify/restore、WAL 雜湊、拒絕覆寫、新目錄 server、caught/escaped/pending、指定事件 ID、原券兌換與使用收據重送、來源行號/原始欄位及剩餘耐久、CHECK/UNIQUE、注入三種 SQL 錯誤回滾、HTTP 重試、重啟。未改玩法、資料表或 CLI；多人及跨 I 金流另切 J-4c。
 - 本機未執行完整儲存庫測試，待同 HEAD 四組 CI；不提前宣布 J-4b 完成。
 
+## J-4b 正式驗收
+
+- #144 已合併 `811b0dee15582c2958cdb54f388acc3381ffe853`，tree `2a3650420872fe3fbdbff4065cc142d6a98931d5`；合併前 [Push](https://github.com/Prysline/town-kinki/actions/runs/45851612499)／[PR](https://github.com/Prysline/town-kinki/actions/runs/45851622316)，合併後 [Push](https://github.com/Prysline/town-kinki/actions/runs/45852059416)／[長期 PR #1](https://github.com/Prysline/town-kinki/actions/runs/45852075850) 四份完整日誌皆 967/967、fail/cancelled/skipped/todo=0、server/app 語法成功；正式與 #1 合成 tree 一致，master 未變、#1 Draft。J-4b 正式驗收。
+
+## J-4c｜I 前後歷史多人事件金流（候選）
+
+- #128 `27d8ed7864e58bbb3d81bab526f8295acee542a8`、#137 `008c4556519a97f1d4d20721dc1d3213e55b82b8` 的 server 核心 DDL 完全相同；banking、town-storage、券、道具使用初始化器與目前 blob 一致。#137 的 events/event-effects/事件道具/蟑螂/居民轉帳/聖誕及河中物品模組與目前 blob 一致。以 tests/fixtures/j4c-pr128 保存五個 #128 公開 Web 歷史模組及來源 blob；只調整同 blob 相依的 import 相對路徑，非 runtime。兩個 fixture 為代表性 schema 子集、合成三帳號及合成 Web session。健康日期固定當日避免 HTTP 無關日結算。
+- tests/sqlite-pr128-pr137-multi-event-upgrade.test.mjs：真正歷史 #16 兩次攝影機耐久及銀行扣款、#128 交易後未刷新稅基與 #137 已刷新差異；#137 真實 #36/#40 收據，跨 I 保留歷史。實體 WAL 快照、新目錄非覆寫、SHA-256、FK/完整性；多人實際 HTTP session、同請求碼各自兌換、他人道具拒絕、手動笛使用重送與重啟。
+- 現行銀行日結算正常刷新後，固定 RNG 走正式事件核心驗證 #36/#37 足額及不足額、#28 轉帳、抽本人、K 點、雙方普通帳簿/稅基/歷史/耐久、不重抽；四個故障注入點驗證原子回滾再重試。非真實隨機 HTTP 抽選、非真人測試。多人快照為測試 SQLite backup() 與 COPYFILE_EXCL，不增加產品多人備份 CLI。未讀取私人 CGI 檔、未改玩法或正式 schema。本機未執行完整儲存庫，待同 HEAD 四組 CI；J-4 尚未結案。
+
+### J-4c 首輪 CI 故障與修正（候選）
+
+- #145 首輪 [PR](https://github.com/Prysline/town-kinki/actions/runs/45855464247) 969/969，兩項 J-4c 成功；[Push](https://github.com/Prysline/town-kinki/actions/runs/45855452497) 968/969，第840項既有第55階段多人骰子 HTTP 測試在啟動時 EADDRINUSE（127.0.0.1:36495），不是遊戲斷言失敗；server/app 語法步驟因 npm test 失敗未執行。保留紅燈，不以另一份成功替代。
+- 根因為 11 個 HTTP 測試啟動器先綁定空埠、關閉再啟動子程序，存在 TOCTOU。改由現有 PORT=0 讓 OS 在實際 server 綁定時原子分配，啟動日誌印出實際 server.address().port，測試等待自己的子程序日誌並保留 HTTP /api/state readiness。固定 PORT 的正式啟動方式不變，沒有新增測試 API 或改遊戲規則。原斷言、測試並行與超時保留；新增雙子程序同時啟動、不同 URL、真正建角與另一存檔隔離測試。待新 HEAD 雙 CI 完整日誌及合併後雙 CI。
+
 ## 後續驗收切片（待逐項查證）
 
 1. 【J-2 已完成】#103 真實舊稅表、負 K 點、索引及歷史資料的實體 WAL 升級與失敗回滾；保留 #104/#105 已驗證情境。

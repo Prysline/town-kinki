@@ -1,7 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { createServer } from "node:net";
 import { mkdtempSync, rmSync, writeFileSync,readFileSync,mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve, dirname } from "node:path";
@@ -16,30 +15,22 @@ import { parseLegacyRetailCatalog, ensureRetailDay, buyRetailItem } from "../src
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const delay = ms => new Promise(done => setTimeout(done, ms));
-async function freePort() {
-  const server = createServer();
-  return new Promise((ok, fail) => {
-    server.once("error", fail);
-    server.listen(0, "127.0.0.1", () => {
-      const port = server.address().port;
-      server.close(() => ok(port));
-    });
-  });
-}
 async function start(mode, seed, existingDirectory = null, extraEnv = {}) {
-  const port = await freePort();
   const directory = existingDirectory ?? mkdtempSync(join(tmpdir(), "town-web-"));
   if (seed) seed(directory);
   const child = spawn(process.execPath, ["src/server.mjs"], {
-    cwd: root, env: { ...process.env, HOST: "127.0.0.1", PORT: String(port), GAME_MODE: mode, DATA_DIR: directory, ...extraEnv }
+    cwd: root, env: { ...process.env, HOST: "127.0.0.1", GAME_MODE: mode, DATA_DIR: directory, ...extraEnv, PORT: "0" }
   });
-  let log = "";
-  child.stdout.on("data", data => { log += data; });
+  let log = "", stdout = "";
+  child.stdout.on("data", data => { stdout += data; log += data; });
   child.stderr.on("data", data => { log += data; });
-  const url = "http://127.0.0.1:" + port;
+  let url;
   let ready = false;
   for (let i = 0; i < 90; i++) {
     if (child.exitCode !== null) break;
+    // 等子程序真正完成 OS bind 才連線，不把釋放後的空埠當成保留埠。
+    url = stdout.match(/^TOWN Web \[(?:solo|multi)\] (http:\/\/127\.0\.0\.1:[1-9]\d*)\r?\n/m)?.[1];
+    if (!url) { await delay(100); continue; }
     try {
       const response = await fetch(url + "/api/state", { signal: AbortSignal.timeout(400) });
       if (response.ok) { ready = true; break; }
@@ -91,6 +82,22 @@ function anchorSoloTestAtNoon(srv){
   finally{db.close();}
 }
 
+
+test("HTTP 測試伺服器由 OS 原子分配埠：並行啟動與資料隔離",async()=>{
+  const started=await Promise.allSettled([start("solo"),start("solo")]);
+  try{
+    for(const result of started)assert.equal(result.status,"fulfilled",String(result.reason));
+    const [a,b]=started.map(x=>x.value);
+    assert.notEqual(a.url,b.url);
+    assert.notEqual(a.directory,b.directory);
+    const created=await api(a.url,"character",{name:"並行啟動甲",gender:"other",stats:defaultStats()});
+    assert.equal(created.status,200);
+    assert.equal((await api(a.url,"state")).result.character.name,"並行啟動甲");
+    assert.equal((await api(b.url,"state")).result.character,null);
+  }finally{
+    for(const result of started)if(result.status==="fulfilled")await result.value.stop();
+  }
+});
 
 test("單機：原版配點限制、建角、選職、工作、存提款與冷卻", async () => {
   const srv = await start("solo");
