@@ -1718,7 +1718,7 @@ function renderLegacyItems(){
         "熱量："+(info?.calories??"未確認")+" kcal｜使用間隔："+(info?.intervalMinutes??"未確認")+" 分鐘",
         "身體能量消耗："+(info?.bodyCost??"未確認")+"｜頭腦能量消耗："+(info?.brainCost??"未確認"),
         "原版備註（繁中顯示）："+(displayOriginalItemComment(info?.comment)||"沒有提供文字備註"),
-        "來源："+(item.origin==="osakaQuarantine"?"大阪挑戰待核對獎品":item.origin==="osaka"?"大阪挑戰掉落":item.readOnly?"歷史來源封存":item.origin==="fishing"?"Web 釣魚／餌料店":item.origin==="crafting"?"Web 合成屋":item.origin==="bLeague"?"B 聯賽掉落":item.origin==="event38"?"Web 聖誕老人戰鬥獎勵":"Web 購入或轉換")+
+        "來源："+(item.origin==="osakaQuarantine"?"大阪挑戰待核對獎品":item.origin==="osaka"?"大阪挑戰掉落":item.readOnly?"歷史來源封存":item.origin==="fishing"?"Web 釣魚／餌料店":item.origin==="crafting"?"Web 合成屋":item.origin==="bLeague"?"B 聯賽掉落":item.origin==="event38"?"Web 聖誕老人戰鬥獎勵":item.origin==="event40"?"Web 河中物品事件獎勵":"Web 購入或轉換")+
           "（記錄位置 "+item.sourceLine+"；原始內容不在此頁修改）",
         "Web 使用狀態："+(verifiedVehicle?"已核對為本人可用公路載具，出發須於公路面板操作，事故可能扣耐久":
           actionInfo?"已核對可使用規則，受冷卻與角色條件限制":

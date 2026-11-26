@@ -94,7 +94,7 @@ test("抽到未移植的其他事件時不變更疾病，不創造無來源的�
   const db=createDb();
   try{
     settleDailyIllnessEvent(db,1,"2026-11-18",1000);
-    const first=settleDailyIllnessEvent(db,1,"2026-11-19",2000,numbers(0,0.9));
+    const first=settleDailyIllnessEvent(db,1,"2026-11-19",2000,numbers(0,(28-.5)/44));
     assert.equal(first.checked,true);
     assert.equal(first.event,null);
     const noEvent=settleDailyIllnessEvent(db,1,"2026-11-20",3000,numbers(0.8));
