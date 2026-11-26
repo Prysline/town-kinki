@@ -699,7 +699,10 @@ test("電車、工作維持不同結果標題；非交易訊息不強制跳出�
   assert.match(script,/title:"電車移動結果"/);
   assert.match(script,/title:"工作結果"/);
   assert.match(script,/notify\(messages\.join\("\\n"\)/);
-  assert.match(script,/inline:path==="map\/tile"\|\|path==="job\/payment"/);
+  assert.match(script,/notify\(message,false,\{inline:path==="job\/payment"\}\)/);
+  const save=script.slice(script.indexOf("async function saveMapTile("),script.indexOf("function renderTownMap()"));
+  assert.match(save,/setMapEditFeedback\(name\+"："\+label\+"，已儲存。"\)/);
+  assert.doesNotMatch(save,/notify\(|showResultDialog\(|scrollIntoView\(/);
   assert.match(script,/notify\("遊戲資料已更新",false,\{inline:true\}\)/);
 });
 test("現金與普通存款同時出現在固定狀態列及銀行表單，交易回覆含最新餘額",()=>{
