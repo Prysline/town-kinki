@@ -17,6 +17,7 @@ import {initCouponRedemptionTables,redeemEventCoupon} from "../src/coupon-redemp
 import {parseLegacyCouponCatalog} from "../src/coupon-catalog.mjs";
 import {SANTA_FIGHT_ITEMS} from "../src/event-santa-fight.mjs";
 import {calendarDay} from "../src/training.mjs";
+import {initStreetFightTables,playStreetFight} from "../src/street-fight.mjs";
 const root=resolve(dirname(fileURLToPath(import.meta.url)),"..");
 const delay=ms=>new Promise(ok=>setTimeout(ok,ms));
 
@@ -268,4 +269,103 @@ for(const variant of ["pre","post"])test("J-4c："+variant+" I 歷史多人 WAL�
     read(target,x=>{integrity(x);const final=all(x);for(const key of tables)assert.deepEqual(final[key],afterUse[key],key);preserve(before,final);});
     assert.deepEqual(all(source),before);assert.equal(fileHash(sourceFile),mainHash);assert.equal(fileHash(sourceFile+"-wal"),walHash);assert.equal(fileHash(snapshot),snapshotHash);
   }finally{if(web)await web.stop();if(db)db.close();if(source)source.close();rmSync(work,{recursive:true,force:true});}
+});
+
+ // J-5: #137 的街頭戰鬥核心與現行 blob 相同；與既有 #137 事件／券
+ // 歷史 fixture 共用同一資料庫，避免將兩個互不相干的還原冒充聯合回歸。
+test("J-5：#137 歷史事件、街頭獲券、同碼跨模組收據及 HTTP 兌換故障復原",async()=>{
+  const work=mkdtempSync(join(tmpdir(),"town-j5-joint-"));
+  const sourceDir=join(work,"source"),targetDir=join(work,"restored"),sourceFile=join(sourceDir,"multi.sqlite"),snapshot=join(work,"snapshot.sqlite"),target=join(targetDir,"multi.sqlite");
+  const now=Date.now(),timezone=["Asia/Taipei","UTC","America/Los_Angeles"].find(timeZone=>{
+    const hour=Number(new Intl.DateTimeFormat("en-US",{timeZone,hour:"2-digit",hourCycle:"h23"}).format(now));return hour>=6&&hour<18;
+  });
+  assert.ok(timezone);
+  const t={now,timezone,today:calendarDay(now,timezone),yesterday:calendarDay(now-86400000,timezone),earlier:calendarDay(now-2*86400000,timezone),at:now-86400000,sourceFile};
+  const joint=db=>({...all(db),street_fights:rows(db,"street_fights")});
+  const stableFields=state=>({...state,characters:state.characters.map(({body_energy,brain_energy,recovered_at,...row})=>row)});
+  let source=null,web=null;
+  try{
+    mkdirSync(sourceDir);source=new DatabaseSync(sourceFile);
+    const mainHash=seed(source,"post",t);
+    initStreetFightTables(source);
+    // 合成能力及時鐘只在歷史測試資料庫內設定；不改規則、正式 API 或多人時鐘。
+    source.prepare("UPDATE characters SET stats_json=?,body_energy=1000,brain_energy=1000,recovered_at=? WHERE user_id=1")
+      .run(JSON.stringify(Object.fromEntries(STAT_KEYS.map(k=>[k,5000]))),now-10000);
+    for(const id of [1,2,3]){
+      settleBankInterest(source,id,t.today,now-10000);
+      assert.equal(settleDailyIllnessEvent(source,id,t.today,now-10000,rng(.99),"multi").event,null);
+    }
+    const beforeFight=joint(source),oldActor=char(source,1);
+    const draws=[1,8,0,4,0];
+    const receipt=playStreetFight(source,1,{mode:"multi",requestId:coupon.requestId,now:now-10000,today:t.today,randomIndex:n=>{
+      assert.ok(draws.length,"unexpected battle RNG");const v=draws.shift();assert.ok(v>=0&&v<n);return v;
+    }});
+    assert.deepEqual(draws,[]);
+    assert.equal(receipt.outcome,"win");assert.equal(receipt.delta,1500);
+    assert.equal(receipt.coupons,5);assert.equal(receipt.kpointDelta,-3);
+    assert.equal(char(source,1).money,oldActor.money+1500);
+    assert.equal(char(source,1).kpoint,oldActor.kpoint-3);
+    assert.equal(tax(source,1),char(source,1).money+char(source,1).bank);
+    const before=joint(source);
+    assert.equal(before.character_coupons.find(x=>x.user_id===1).quantity,9);
+    assert.deepEqual(actor(before,2),actor(beforeFight,2));
+    assert.deepEqual(actor(before,3),actor(beforeFight,3));
+    preserve(beforeFight,before);integrity(source);
+    assert.equal(fileHash(sourceFile),mainHash);assert.ok(statSync(sourceFile+"-wal").size>32);
+    const walHash=fileHash(sourceFile+"-wal");
+    const reader=new DatabaseSync(sourceFile,{readOnly:true});
+    try{await backup(reader,snapshot);}finally{reader.close();}
+    const snapshotHash=fileHash(snapshot);
+    mkdirSync(targetDir);copyFileSync(snapshot,target,constants.COPYFILE_EXCL);
+    assert.throws(()=>copyFileSync(snapshot,target,constants.COPYFILE_EXCL),/EEXIST/);
+    assert.equal(fileHash(target),snapshotHash);
+    read(target,x=>{integrity(x);assert.deepEqual(joint(x),before);});
+    web=await serve(targetDir,join(work,"missing-npc"),"auto",timezone);
+    async function replayOld(){
+      const battle=await ok(web,"street-fight/play",{requestId:coupon.requestId},1);
+      assert.deepEqual(battle.streetFightResult,{...receipt,replayed:true});
+      assert.equal(battle.character.money,char(source,1).money);
+      assert.equal(battle.character.kpoint,char(source,1).kpoint);
+      for(const id of [1,2]){
+        const replay=await ok(web,"coupon/redeem",coupon,id);
+        assert.equal(replay.couponResult.replayed,true);assert.equal(replay.couponResult.sourceLine,6000000);
+      }
+    }
+    await replayOld();
+    const other=await ok(web,"state",undefined,2);
+    assert.equal(other.streetFight.history.length,0);assert.equal(other.couponBalance,4);
+    assert.equal((await api(web.url,"street-fight/play",{requestId:coupon.requestId})).status,401);
+    assert.equal((await api(web.url,"street-fight/play",{requestId:coupon.requestId,userId:1},cookie(2))).status,400);
+    const ready=read(target,joint);
+    assert.deepEqual(stableFields(ready),stableFields(before));
+    // 兌換的收據是最後一筆寫入，故注入失敗須回滾已扣券與已入庫獎品。
+    const sql=statement=>{const db=new DatabaseSync(target);try{db.exec(statement);}finally{db.close();}};
+    const next={...coupon,requestId:"j5_joint_coupon_retry"};
+    sql("CREATE TRIGGER j5_coupon_fault BEFORE INSERT ON coupon_redemptions BEGIN SELECT RAISE(ABORT,'j5 receipt fault'); END;");
+    const failed=await api(web.url,"coupon/redeem",next,cookie(1));
+    assert.equal(failed.status,400);assert.match(failed.result.error,/j5 receipt fault/);
+    assert.deepEqual(read(target,joint),ready);
+    sql("DROP TRIGGER j5_coupon_fault;");
+    const used=await ok(web,"coupon/redeem",next,1);
+    assert.equal(used.couponResult.replayed,false);assert.equal(used.couponResult.couponCost,1);
+    assert.equal(used.couponResult.sourceLine,6000001);assert.equal(used.couponBalance,8);
+    const after=read(target,joint);
+    assert.deepEqual(after.street_fights,before.street_fights);
+    assert.deepEqual(after.character_events,before.character_events);
+    assert.deepEqual(after.bank_ledger,before.bank_ledger);
+    assert.deepEqual(after.bank_tax_state,before.bank_tax_state);
+    assert.deepEqual(actor(after,2),actor(ready,2));assert.deepEqual(actor(after,3),actor(ready,3));
+    preserve(before,after);
+    assert.equal(after.legacy_inventory_items.filter(x=>x.user_id===1&&x.source_line===6000001).length,1);
+    assert.equal(after.coupon_redemptions.filter(x=>x.user_id===1&&x.request_id===next.requestId).length,1);
+    await web.stop();web=null;
+    web=await serve(targetDir,join(work,"missing-npc"),"auto",timezone);
+    const replay=await ok(web,"coupon/redeem",next,1);
+    assert.deepEqual(replay.couponResult,{...used.couponResult,replayed:true});assert.equal(replay.couponBalance,8);
+    await replayOld();
+    await web.stop();web=null;
+    read(target,x=>{integrity(x);assert.deepEqual(stableFields(joint(x)),stableFields(after));});
+    assert.deepEqual(joint(source),before);
+    assert.equal(fileHash(sourceFile),mainHash);assert.equal(fileHash(sourceFile+"-wal"),walHash);assert.equal(fileHash(snapshot),snapshotHash);
+  }finally{if(web)await web.stop();if(source)source.close();rmSync(work,{recursive:true,force:true});}
 });
