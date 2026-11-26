@@ -7756,3 +7756,55 @@ test("三棟訓練信用付款 HTTP：本人卡、餘額、獨立冷卻、帳簿
     assert.deepEqual(comparable(await get()),comparable(before));
   }finally{await srv.stop();}
 });
+
+test("I-5 優惠券 HTTP：並行同編號、丟棄成功回應、重啟重送及不同編號爭用最後一券",async()=>{
+  let srv=await start("solo");
+  const directory=srv.directory;
+  try{
+    anchorSoloTestAtNoon(srv);
+    assert.equal((await api(srv.url,"character",{
+      name:"I5優惠券測試",gender:"other",stats:defaultStats()
+    })).status,200);
+    assert.equal((await api(srv.url,"solo/map/starter",{})).status,200);
+    const db=new DatabaseSync(join(directory,"solo.sqlite"));
+    let uid;
+    try{
+      uid=db.prepare("SELECT user_id FROM characters WHERE name=?").get("I5優惠券測試").user_id;
+      db.prepare("INSERT INTO character_coupons(user_id,quantity) VALUES(?,2)").run(uid);
+    }finally{db.close();}
+    const payload={sourceIndex:0,originalName:"福引券",requestId:"i5_coupon_same_request"};
+    const post=body=>fetch(srv.url+"/api/coupon/redeem",{
+      method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)
+    });
+    const responses=await Promise.all([post(payload),post(payload)]);
+    assert.deepEqual(responses.map(r=>r.status),[200,200]);
+    // 客戶端不解析兩個成功正文，模擬已提交但未收到可用結果。
+    await Promise.all(responses.map(r=>r.body.cancel()));
+    await srv.stop({preserveData:true});
+    srv=await start("solo",undefined,directory);
+    const replay=await api(srv.url,"coupon/redeem",payload);
+    assert.equal(replay.status,200);
+    assert.equal(replay.result.couponResult.replayed,true);
+    assert.equal(replay.result.couponBalance,1);
+    assert.equal(replay.result.couponRedemptions.length,1);
+    const firstLine=replay.result.couponResult.sourceLine;
+    const contenders=await Promise.all(["i5_coupon_last_1","i5_coupon_last_2"].map(requestId=>
+      api(srv.url,"coupon/redeem",{...payload,requestId})));
+    assert.deepEqual(contenders.map(r=>r.status).sort(),[200,400]);
+    const final=(await api(srv.url,"state")).result;
+    assert.equal(final.couponBalance,0);
+    assert.equal(final.couponRedemptions.length,2);
+    assert.equal(final.legacyInventory.filter(x=>x.origin==="coupon").length,2);
+    const finalReplay=await api(srv.url,"coupon/redeem",payload);
+    assert.equal(finalReplay.status,200);
+    assert.equal(finalReplay.result.couponResult.sourceLine,firstLine);
+    assert.equal(finalReplay.result.couponBalance,0);
+    const saved=new DatabaseSync(join(directory,"solo.sqlite"));
+    try{
+      assert.equal(saved.prepare("SELECT quantity FROM character_coupons WHERE user_id=?").get(uid).quantity,0);
+      assert.equal(saved.prepare("SELECT COUNT(*) n FROM coupon_redemptions WHERE user_id=?").get(uid).n,2);
+      assert.equal(saved.prepare("SELECT COUNT(*) n FROM legacy_inventory_items WHERE user_id=? AND original_id='__web_coupon__'").get(uid).n,2);
+      assert.equal(saved.prepare("PRAGMA foreign_key_check").all().length,0);
+    }finally{saved.close();}
+  }finally{await srv.stop();}
+});
