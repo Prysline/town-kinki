@@ -167,8 +167,9 @@ export function settleDailyIllnessEvent(db,userId,day,now=Date.now(),random=Math
         if(!Number.isSafeInteger(loss)||loss<0)throw new Error("事件銀行扣款不正確");
         if(loss>0)recordBankEntry(db,userId,"ordinary","空屋竊盜",loss,0,effect.changes.bank,now);
       }
-      // #34/#38 現金分支與稅基同筆寫入；早期獨立事件測試未初始化銀行表時維持原契約。
-      if([34,38].includes(result.originalId)&&effect.changes.money!==undefined&&db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='bank_tax_state'").get())
+      // 所有直接變更現金或銀行存款的事件均與稅基同筆寫入。
+      // 早期獨立事件測試未初始化銀行表時維持原契約；正式伺服器已初始化。
+      if((effect.changes.money!==undefined||effect.changes.bank!==undefined)&&db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='bank_tax_state'").get())
         refreshBankTaxSnapshot(db,userId,day);
       const history=db.prepare(
         "INSERT INTO character_events(user_id,day,event_key,original_id,old_health_index,new_health_index,created_at,description,effects_json) VALUES(?,?,?,?,?,?,?,?,?)"
