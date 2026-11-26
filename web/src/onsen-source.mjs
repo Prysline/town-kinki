@@ -1,5 +1,5 @@
-// AP-05 原版來源計算層，尚未接入 Web 玩家交易／HTTP。
-// 不修改 engine.mjs 現有一般能量公式；這些是 CGI 的獨立來源語義。
+// AP-05 原版來源計算層，與 WK-01 共用情境公式。
+import {originalBodyEnergyMaximum,originalBrainEnergyMaximum} from "./energy-maxima.mjs";
 const BATHS=Object.freeze([
   ["futuu","one","普通浴池","onsen_times","nyuuyokuryou"],
   ["koukyuu","two","特別浴池",null,null],
@@ -37,10 +37,9 @@ export function parseOriginalOnsenConfig(source){
 // basic.cgi::onsen L1036–1037：入浴/選單 +1；town_maker.cgi::loged_gamen L663–664：出浴無 +1。
 export function originalOnsenMaxima(stats,phase="entry"){
   if(phase!=="entry"&&phase!=="exit")throw Error("未知的原版溫泉階段");
-  const extra=phase==="entry"?1:0;
-  const body=Math.trunc(Object.entries(BODY_WEIGHTS).reduce((sum,[key,divisor])=>sum+number(stats?.[key],key)/divisor,0))+extra;
-  const brain=Math.trunc(BRAIN_KEYS.reduce((sum,key)=>sum+number(stats?.[key],key)/6,0))+extra;
-  return {body,brain};
+  for(const key of [...Object.keys(BODY_WEIGHTS),...BRAIN_KEYS])number(stats?.[key],key);
+  const context=phase==="entry"?"onsen-entry":"resident";
+  return {body:originalBodyEnergyMaximum(stats,context),brain:originalBrainEnergyMaximum(stats,context)};
 }
 export function originalOnsenOptions(config,stats,phase="entry"){
   const maxima=originalOnsenMaxima(stats,phase);

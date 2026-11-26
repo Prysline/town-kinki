@@ -31,11 +31,13 @@ test("原版八種浴池實際設定、表單鍵與出浴鍵完整對照",()=>{
   assert.throws(()=>parseOriginalOnsenConfig(configSource.replace("$onsen_times","$missing_times")),/設定缺失/);
   assert.throws(()=>parseOriginalOnsenConfig(configSource+"\n$onsen_times = '10';"),/重複/);
 });
-test("原版入浴與出浴上限有 +1 差異，保留現有 Web 上限不更改",()=>{
+test("原版入浴與出浴上限有 +1 差異，與 WK-01 明確工作上限一致",()=>{
   assert.deepEqual(originalOnsenMaxima(stats),{body:22,brain:24});
   assert.deepEqual(originalOnsenMaxima(stats,"exit"),{body:21,brain:23});
-  assert.equal(maxBodyEnergy(stats),25);
-  assert.equal(maxBrainEnergy(stats),35);
+  assert.equal(maxBodyEnergy(stats),21);
+  assert.equal(maxBodyEnergy(stats,"work"),25);
+  assert.equal(maxBrainEnergy(stats),23);
+  assert.equal(maxBrainEnergy(stats,"work"),35);
   const high=Object.fromEntries(Object.keys(stats).map(key=>[key,600]));
   const maxima=originalOnsenMaxima(high);
   const rate=Math.max(2,Math.trunc(Math.max(maxima.body,maxima.brain)/50));

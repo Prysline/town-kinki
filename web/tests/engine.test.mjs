@@ -64,14 +64,28 @@ test("原版初始金錢、初始日薪打工與身高體重範圍", () => {
 
 test("能量依照原版能力值計算上限並以十秒一點恢復", () => {
   const initial = createCharacterData("玩家", "other", 100000);
-  assert.equal(maxBodyEnergy(initial.stats), 25);
-  assert.equal(maxBrainEnergy(initial.stats), 35);
+  assert.equal(maxBodyEnergy(initial.stats), 21);
+  assert.equal(maxBrainEnergy(initial.stats), 23);
+  assert.equal(maxBodyEnergy(initial.stats,"work"),25);
+  assert.equal(maxBrainEnergy(initial.stats,"work"),35);
+  assert.equal(maxBodyEnergy(initial.stats,"onsen-entry"),22);
+  assert.equal(maxBrainEnergy(initial.stats,"onsen-entry"),24);
+  assert.equal(initial.bodyEnergy,21);
+  assert.equal(initial.brainEnergy,23);
   const damaged = { ...initial, bodyEnergy: 10, brainEnergy: 10 };
   const recovered = recoverEnergy(damaged, 100000 + 30000);
   assert.equal(recovered.bodyEnergy, 13);
   assert.equal(recovered.brainEnergy, 13);
-  assert.equal(recoverEnergy(damaged, 100000 + 1000000).bodyEnergy, 25);
-  assert.equal(recoverEnergy(damaged, 100000 + 1000000).brainEnergy, 35);
+  assert.equal(recoverEnergy(damaged, 100000 + 1000000).bodyEnergy, 21);
+  assert.equal(recoverEnergy(damaged, 100000 + 1000000).brainEnergy, 23);
+  assert.equal(recoverEnergy(damaged, 100000 + 1000000,"work").bodyEnergy,25);
+  assert.equal(recoverEnergy(damaged, 100000 + 1000000,"work").brainEnergy,35);
+  const oldWeb={...initial,bodyEnergy:25,brainEnergy:35};
+  const clamped=recoverEnergy(oldWeb,100001);
+  assert.equal(clamped.bodyEnergy,21);
+  assert.equal(clamped.brainEnergy,23);
+  assert.equal(clamped.recoveredAt,100000);
+  assert.throws(()=>maxBodyEnergy(initial.stats,"unknown"),/未知/);
 });
 
 test("工作冷卻、薪資及等級初次獲取", () => {

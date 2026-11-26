@@ -304,12 +304,12 @@ function addCharacter(userId, c) {
       c.healthIndex ?? 50,c.lastHealthDay ?? "",c.lastEventDay ?? "");
 }
 
-function mutateCharacter(userId, callback, afterSave) {
+function mutateCharacter(userId, callback, afterSave, energyContext="resident") {
   db.exec("BEGIN IMMEDIATE");
   try {
     const old = getCharacter(userId);
     if (!old) throw new HttpError(409, "請先建立角色");
-    const result = callback(recoverEnergy(old,gameNow()));
+    const result = callback(recoverEnergy(old,gameNow(),energyContext));
     saveCharacter(userId, result.character);
     afterSave?.();
     db.exec("COMMIT");
@@ -329,7 +329,9 @@ function snapshot(user) {
   if (updated) {
     updated = settleDailyHealth(updated,today,maxBodyEnergy(updated.stats),
       maxBrainEnergy(updated.stats),now).character;
-    if (updated.recoveredAt !== character.recoveredAt ||
+    // 舊 Web 存檔可能高於更正後的一般上限，即使未滿十秒也須保存夾限結果。
+    if (updated.bodyEnergy !== character.bodyEnergy || updated.brainEnergy !== character.brainEnergy ||
+        updated.recoveredAt !== character.recoveredAt ||
         updated.lastHealthDay !== character.lastHealthDay ||
         updated.healthIndex !== character.healthIndex) saveCharacter(user.id,updated);
     // 原版 event_happen 會在主畫面隨機抽取，Web 每日只抽一次。
@@ -789,7 +791,7 @@ async function handle(req, res) {
                 result.paid,result.character.bank,now);
           }
           return result;
-        });
+        },undefined,"work");
       } catch(error){throw new HttpError(400,error.message);}
       return sendJson(res, 200, { ...snapshot(user), result: {
         paid: result.paid, pending: result.pending,

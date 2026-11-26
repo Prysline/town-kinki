@@ -1,4 +1,5 @@
 import { JOB_ZH_TW } from "./i18n/jobs.zh-TW.mjs";
+import {originalBodyEnergyMaximum,originalBrainEnergyMaximum} from "./energy-maxima.mjs";
 export { JOB_ZH_TW };
 // TOWN Web 共用遊戲規則。單機與多人模式共用此模組。
 export const TOWNS = Object.freeze([
@@ -94,15 +95,14 @@ export function validateStartingStats(input) {
   return stats;
 }
 
-export function maxBodyEnergy(stats) {
-  return Math.floor(
-    stats.tairyoku / 2 + stats.kenkou / 3 + stats.power / 5 +
-    stats.wanryoku / 8 + stats.kyakuryoku / 8
-  );
+// Web common reads use the original resident/status maximum by default.
+// Work uses its own verified CGI maximum; bath entry has a separate +1 context.
+export function maxBodyEnergy(stats,context="resident") {
+  return Math.max(0,originalBodyEnergyMaximum(stats,context));
 }
 
-export function maxBrainEnergy(stats) {
-  return Math.floor(STARTING_BUDGETS[0].keys.reduce((sum, key) => sum + stats[key] / 4, 0));
+export function maxBrainEnergy(stats,context="resident") {
+  return Math.max(0,originalBrainEnergyMaximum(stats,context));
 }
 
 export function bodyMassIndex(height, weight) {
@@ -132,12 +132,12 @@ export function createCharacterData(
   };
 }
 
-export function recoverEnergy(character, now = Date.now()) {
+export function recoverEnergy(character, now = Date.now(), context="resident") {
   const ticks = Math.max(0, Math.floor((now - character.recoveredAt) / ENERGY_RECOVERY_MS));
-  const maxBody = maxBodyEnergy(character.stats);
-  const maxBrain = maxBrainEnergy(character.stats);
-  const bodyEnergy = Math.min(maxBody, character.bodyEnergy + ticks);
-  const brainEnergy = Math.min(maxBrain, character.brainEnergy + ticks);
+  const maxBody = maxBodyEnergy(character.stats,context);
+  const maxBrain = maxBrainEnergy(character.stats,context);
+  const bodyEnergy = Math.max(0,Math.min(maxBody, character.bodyEnergy + ticks));
+  const brainEnergy = Math.max(0,Math.min(maxBrain, character.brainEnergy + ticks));
   return {
     ...character, bodyEnergy, brainEnergy,
     recoveredAt: !ticks ? character.recoveredAt :
@@ -177,14 +177,17 @@ export function performWork(character, job, now = Date.now(), random = Math.rand
   if (!job || character.jobId !== job.key) throw new Error("請先選擇職業");
   const remaining = character.lastWorkAt === 0 ? 0 : Math.max(0, WORK_COOLDOWN_MS - (now - character.lastWorkAt));
   if (remaining > 0) throw new Error("還需要等待 " + Math.ceil(remaining / 1000) + " 秒才能工作");
-  const current = recoverEnergy(character, now);
+  const current = recoverEnergy(character, now,"work");
   // basic.cgi::do_work 實際只重新確認能力與 BMI（能量另行檢查）。
   const reason = eligibility(current, job, false, false);
   if (reason) throw new Error(reason);
   if (current.bodyEnergy < job.bodyCost || current.brainEnergy < job.brainCost)
     throw new Error("身體或頭腦能量不足");
-  const condition = conditionWithIllness(deriveCondition(current,maxBodyEnergy(current.stats),
-    maxBrainEnergy(current.stats),now),current);
+  // 原版工作接受街道狀態的 cond；Web 仍由伺服器推導，不信任客戶端。
+  // 用一般狀態上限投影，不把工作專用上限誤用於居民狀態百分比。
+  const resident= recoverEnergy(current,now,"resident");
+  const condition = conditionWithIllness(deriveCondition(resident,maxBodyEnergy(resident.stats),
+    maxBrainEnergy(resident.stats),now),resident);
   if (condition.baseExperience===null)
     throw new Error("目前疾病或身體狀態過差，無法工作");
   // 原版依一般狀態或疾病類別決定經驗基數，再加 1 至 5 的亂數。
