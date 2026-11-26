@@ -4127,6 +4127,7 @@ function updateTrainingCountdowns(){
     "距離下次訓練 "+formatTrainingWait(waits.gym):"現在可以訓練");
   text("classroom-status",waits.classroom>0?
     "距離下次教室課程 "+formatTrainingWait(waits.classroom):"目前可以上課");
+  for(const type of TRAINING_TYPES)updateTrainingPaymentNote(type);
   for(const update of trainingTileUpdates)update(waits);
   // 到期後重新取得後端資格判斷，避免舊快照殘留冷卻錯誤。
   const character=state.character;
@@ -4146,17 +4147,77 @@ function updateTrainingCountdowns(){
       .finally(()=>{trainingExpiryRefreshBusy=false;});
   }
 }
+const TRAINING_TYPES=["school","gym","classroom"];
+const trainingPaymentChoices=new Map();
+function trainingChoiceKey(type){
+  return "town-training-payment:"+JSON.stringify([state.mode,state.user?.username,state.character.name,type]);
+}
+function getTrainingChoice(type){
+  const key=trainingChoiceKey(type);
+  if(trainingPaymentChoices.has(key))return trainingPaymentChoices.get(key);
+  let value="cash";
+  try{value=sessionStorage.getItem(key)??"cash";}catch{}
+  if(value!=="cash"&&!/^credit:[1-9]\d*$/.test(value)&&value!=="unavailable")value="cash";
+  trainingPaymentChoices.set(key,value);
+  return value;
+}
+function setTrainingChoice(type,value){
+  const key=trainingChoiceKey(type);
+  trainingPaymentChoices.set(key,value);
+  try{sessionStorage.setItem(key,value);}catch{}
+}
+function trainingCardValid(value){
+  return value.startsWith("credit:")&&(state.classroomCreditCards??[]).some(
+    card=>"credit:"+card.sourceLine===value&&card.expiresAt>browserGameNow());
+}
+function trainingPaymentReason(type){
+  const value=el(type+"-payment").value;
+  return value==="cash"?null:trainingCardValid(value)?null:"原選擇的信用卡已失效，請重新選擇付款方式";
+}
+function updateTrainingPaymentNote(type){
+  const value=el(type+"-payment").value;
+  const note=trainingPaymentReason(type);
+  text(type+"-payment-note",note??(value==="cash"&&!(state.classroomCreditCards??[]).some(
+    card=>card.expiresAt>browserGameNow())?"未持有有效信用卡，僅可使用現金。":
+    value==="cash"?"本棟建築所有課程使用現金。":"本棟建築所有課程使用所選信用卡，僅扣普通存款。"));
+}
+function renderTrainingPayments(){
+  const cards=(state.classroomCreditCards??[]).filter(card=>card.expiresAt>browserGameNow());
+  for(const type of TRAINING_TYPES){
+    const select=el(type+"-payment");
+    let choice=getTrainingChoice(type);
+    const options=[new Option("現金付款","cash")];
+    for(const card of cards)options.push(new Option(displayRetailItemName(card.name)+"（普通存款扣款）","credit:"+card.sourceLine));
+    // 失效卡片不能自動換成現金或另一張卡；要求使用者明確選擇。
+    if(choice!=="cash"&&!options.some(opt=>opt.value===choice)){
+      choice="unavailable";
+      setTrainingChoice(type,choice);
+      const unavailable=new Option("原付款方式已失效，請重新選擇","unavailable");
+      unavailable.disabled=true;
+      options.push(unavailable);
+    }
+    select.replaceChildren(...options);
+    select.value=choice;
+    text(type+"-payment-balance","現金 "+money(state.character.money)+"｜普通存款 "+money(state.character.bank));
+    updateTrainingPaymentNote(type);
+  }
+}
+for(const type of TRAINING_TYPES){
+  el(type+"-payment").addEventListener("change",()=>{
+    if(!state?.character)return;
+    setTrainingChoice(type,el(type+"-payment").value);
+    updateTrainingCountdowns();
+  });
+}
 function renderTraining() {
   trainingTileUpdates=[];
-  const oldChoices=new Map([...el("classroom-lessons").querySelectorAll("select[data-lesson-key]")]
-    .map(item=>[item.dataset.lessonKey,item.value]));
+  renderTrainingPayments();
   const byType = {
     school: el("school-lessons"),
     gym: el("gym-lessons"),
     classroom: el("classroom-lessons")
   };
   Object.values(byType).forEach(target => target.replaceChildren());
-  const cards=state.classroomCreditCards??[];
   for (const lesson of state.trainingLessons || []) {
     const target = byType[lesson.type];
     if (!target) continue;
@@ -4191,34 +4252,10 @@ function renderTraining() {
     countdown.className="training-countdown";
     countdown.setAttribute("role","timer");
     countdown.setAttribute("aria-live","off");
-    let paymentSelect=null;
-    if(lesson.type==="classroom"&&cards.length){
-      const label=document.createElement("label");
-      label.textContent="學費付款方式";
-      paymentSelect=document.createElement("select");
-      paymentSelect.dataset.lessonKey=lesson.key;
-      const cash=document.createElement("option");
-      cash.value="cash";
-      cash.textContent="現金付款";
-      paymentSelect.append(cash);
-      for(const card of cards){
-        const opt=document.createElement("option");
-        opt.value="credit:"+card.sourceLine;
-        opt.textContent=displayRetailItemName(card.name)+"（普通存款扣款）";
-        paymentSelect.append(opt);
-      }
-      const previous=oldChoices.get(lesson.key);
-      if(previous&&[...paymentSelect.options].some(opt=>opt.value===previous))
-        paymentSelect.value=previous;
-      else if(lesson.cashReason&&lesson.creditReason===null)
-        paymentSelect.value="credit:"+cards[0].sourceLine;
-      label.append(paymentSelect);
-      tile.append(label);
-    }
+    const paymentSelect=el(lesson.type+"-payment");
     function update(waits=trainingWaits()){
-      const usingCredit=paymentSelect?.value.startsWith("credit:")??false;
-      const originalReason=lesson.type==="classroom"?
-        (usingCredit?lesson.creditReason:lesson.cashReason):lesson.reason;
+      const usingCredit=paymentSelect.value.startsWith("credit:");
+      const originalReason=trainingPaymentReason(lesson.type)??(usingCredit?lesson.creditReason:lesson.cashReason);
       const wait=waits[lesson.type];
       const cooldownReason=lesson.type==="school"?/^今日已經上過/.test(originalReason??""):
         lesson.type==="gym"?/^健身房還需要等待/.test(originalReason??""):
@@ -4241,11 +4278,11 @@ function renderTraining() {
     // 付款方式切換時同步更新灰階與停用原因，不修改後端的付款資格。
     tile.prepend(name,cost,gains);
     tile.append(countdown,blocked,submit);
-    paymentSelect?.addEventListener("change",()=>update());
     trainingTileUpdates.push(update);
     update();
     submit.addEventListener("click",()=>{
-      const value=paymentSelect?.value??"cash";
+      if(trainingPaymentReason(lesson.type))return;
+      const value=paymentSelect.value;
       const payload=value.startsWith("credit:")?
         {payment:"credit",sourceLine:Number(value.slice(7))}:{payment:"cash"};
       actionTraining(lesson.key,payload);

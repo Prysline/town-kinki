@@ -17,10 +17,18 @@ test("原版兩間食堂每日菜單與共用庫存呈現完整且售完時不�
   assert.match(script,/meal\.reason\?"目前無法用餐":"選擇這道餐點"/);
   assert.match(script,/button\.disabled=Boolean\(meal\.reason\)/);
 });
-test("教室原版有效信用卡付款：畫面能選本人卡片、改檢查銀行餘額並送來源行號",()=>{
+test("三棟訓練建築各一份付款選單：本人卡片、餘額及來源行號",()=>{
   assert.match(html,/原版信用卡/);
   assert.match(script,/state\.classroomCreditCards/);
-  assert.match(script,/paymentSelect\.dataset\.lessonKey/);
+  for(const type of ["school","gym","classroom"]){
+    assert.equal((html.match(new RegExp('id="'+type+'-payment"',"g"))||[]).length,1);
+    assert.ok(html.indexOf('id="'+type+'-payment"')<html.indexOf('id="'+type+'-lessons"'));
+  }
+  assert.match(script,/const paymentSelect=el\(lesson\.type\+"-payment"\)/);
+  assert.doesNotMatch(script,/paymentSelect\.dataset\.lessonKey/);
+  assert.match(script,/setTrainingChoice\(type,choice\)/);
+  assert.match(script,/choice="unavailable"/);
+  assert.match(script,/sessionStorage\.setItem\(key,value\)/);
   assert.match(script,/lesson\.creditReason/);
   assert.match(script,/lesson\.cashReason/);
   assert.match(script,/sourceLine:Number\(value\.slice\(7\)\)/);
@@ -308,7 +316,8 @@ test("課程不可用時恢復整張灰階與卡片倒數，停用由真實課�
   assert.match(script,/tile\.classList\.toggle\("is-unavailable",unavailable\)/);
   assert.match(script,/submit\.disabled=unavailable/);
   assert.match(script,/blocked\.textContent=reason\?\?""/);
-  assert.match(script,/paymentSelect\?\.addEventListener\("change",\(\)=>update\(\)\)/);
+  assert.match(script,/el\(type\+"-payment"\)\.addEventListener\("change",\(\)=>\{/);
+  assert.match(script,/setTrainingChoice\(type,el\(type\+"-payment"\)\.value\)/);
   assert.match(script,/tile\.append\(countdown,blocked,submit\)/);
 });
 test("健身房課程卡片明示 Web 補完減重預估，完成後呈現後端實際減重而非誤當原版公式",()=>{

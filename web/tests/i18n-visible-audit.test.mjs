@@ -82,13 +82,16 @@ test("住宅商店分類和三處付款信用卡名稱只翻玩家顯示，不�
     '"住宅商店「"+shop.title+"」｜"+displayRetailItemCategory(shop.category)',
     'opt.textContent="有效信用卡："+displayRetailItemName(card.name);',
     'option.textContent="信用卡："+displayRetailItemName(card.name);payment.append(option);',
-    'opt.textContent=displayRetailItemName(card.name)+"（普通存款扣款）";'
+    'new Option(displayRetailItemName(card.name)+"（普通存款扣款）","credit:"+card.sourceLine)'
   ])assert.ok(app.includes(expected),expected);
   assert.equal(displayRetailItemName("クレジットカード"),"信用卡");
   assert.equal(displayRetailItemName("ゴールドクレジットカード"),"黃金信用卡");
   assert.ok(app.includes('opt.value="card:"+card.sourceLine'));
   assert.ok(app.includes('option.value="card:"+card.sourceLine'));
-  assert.ok(app.includes('paymentSelect.value="credit:"+cards[0].sourceLine'));
+  // 共用付款選單仍以原始來源行號結帳，但不得因現金不足自動改刷卡。
+  assert.ok(app.includes('sourceLine:Number(value.slice(7))'));
+  assert.ok(app.includes('choice="unavailable"'));
+  assert.ok(!app.includes('paymentSelect.value="credit:"+cards[0].sourceLine'));
   assert.ok(app.includes('shop?.category==="スーパー"'));
   assert.ok(app.includes('/専門店限定商品|秘伝商品/.test(item.note??"")'));
 });

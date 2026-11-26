@@ -816,7 +816,14 @@
             <div><div class="eyebrow">能力培養</div><h2><img class="facility-icon" src="/legacy-assets/school.gif" alt="">學校</h2></div>
             <span id="school-status" class="muted">每日一堂課</span>
           </div>
-          <details class="explain"><summary>玩法與限制說明</summary><p class="small">沿用原始課程的能力增幅、費用和頭腦能量消耗；每天最多一堂。</p></details>
+          <details class="explain"><summary>玩法與限制說明</summary><p class="small">沿用原始課程的能力增幅、費用和頭腦能量消耗；每天最多一堂。現金或本人有效信用卡付款（信用卡為核准的 Web 補完）。</p></details>
+          <div class="training-payment">
+            <label for="school-payment">共用付款方式
+              <select id="school-payment" aria-describedby="school-payment-balance school-payment-note"><option value="cash">現金付款</option></select>
+            </label>
+            <p id="school-payment-balance" class="small"></p>
+            <p id="school-payment-note" class="small" role="status"></p>
+          </div>
           <div id="school-lessons" class="training-grid"></div>
         </section>
         <section class="card" id="gym-panel">
@@ -824,7 +831,14 @@
             <div><div class="eyebrow">能力培養</div><h2><img class="facility-icon" src="/legacy-assets/gym.gif" alt="">健身房</h2></div>
             <span id="gym-status" class="muted">等待狀態</span>
           </div>
-          <details class="explain"><summary>玩法與限制說明</summary><p class="small">沿用原始訓練項目、能力增幅、費用和體力消耗。時間間隔暫依原始資料欄位計算。</p></details>
+          <details class="explain"><summary>玩法與限制說明</summary><p class="small">沿用原始訓練項目、能力增幅、費用和體力消耗。時間間隔暫依原始資料欄位計算。現金或本人有效信用卡付款（信用卡為核准的 Web 補完）。</p></details>
+          <div class="training-payment">
+            <label for="gym-payment">共用付款方式
+              <select id="gym-payment" aria-describedby="gym-payment-balance gym-payment-note"><option value="cash">現金付款</option></select>
+            </label>
+            <p id="gym-payment-balance" class="small"></p>
+            <p id="gym-payment-note" class="small" role="status"></p>
+          </div>
           <div id="gym-lessons" class="training-grid"></div>
         </section>
         <section class="card" id="classroom-panel">
@@ -833,8 +847,15 @@
             <span id="classroom-status" class="muted">訓練間隔</span>
           </div>
           <details class="explain"><summary>教室規則與付款限制</summary>
-            <p class="small">依原版 kyushitu.cgi 的四筆課程，分別消耗身體與頭腦能量、提升能力並減輕體重。訓練間隔按課程分鐘計算，與學校／健身房分開。可用現金付款；若已匯入本人持有、仍在有效天數內的原版信用卡，也可由普通銀行存款扣款並留下帳簿紀錄。尚無原版卡片的玩家不會自動獲得卡片，原版百貨購卡流程仍未移植。</p>
+            <p class="small">依原版 kyushitu.cgi 的四筆課程，分別消耗身體與頭腦能量、提升能力並減輕體重。訓練間隔按課程分鐘計算，與學校／健身房分開。可用現金付款；若持有仍在有效天數內的原版信用卡，也可由普通銀行存款扣款並留下帳簿紀錄。可在百貨購入卡片；沒有有效信用卡時不能使用銀行付款。三種訓練均不允許透支或自動改用其他資產。</p>
           </details>
+          <div class="training-payment">
+            <label for="classroom-payment">共用付款方式
+              <select id="classroom-payment" aria-describedby="classroom-payment-balance classroom-payment-note"><option value="cash">現金付款</option></select>
+            </label>
+            <p id="classroom-payment-balance" class="small"></p>
+            <p id="classroom-payment-note" class="small" role="status"></p>
+          </div>
           <div id="classroom-lessons" class="training-grid"></div>
         </section>
       </div>
