@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import {runInNewContext} from "node:vm";
 import { readFileSync } from "node:fs";
 import { describeTile } from "../src/town-map.mjs";
 import { FACILITY_PANELS,townCellAction } from "../public/town-home.js";
@@ -771,13 +772,13 @@ test("第51階段：原版優惠券兌換所地圖入口、30獎品、本人事�
   assert.match(script,/state\.couponRewards/);
   assert.match(script,/state\.couponRedemptions/);
   assert.match(script,/state\.couponShopAvailable===true/);
-  assert.match(script,/button\.disabled=!reward\.canRedeem/);
+  assert.match(script,/button\.disabled=couponRedemptionBusy\|\|\(!pending&&!reward\.canRedeem\)/);
   assert.match(script,/heading\.textContent=displayRetailItemName\(reward\.originalName\)/);
-  assert.match(script,/reason\.textContent=reward\.reason/);
-  assert.match(script,/const result=state\.couponResult/);
+  assert.match(script,/reason\.textContent=pending\?/);
+  assert.match(script,/const result=response\.couponResult/);
   assert.match(script,/await api\("coupon\/redeem",pendingCouponRedemption\)/);
-  assert.match(script,/pendingCouponRedemption\.originalName!==reward\.originalName/);
-  assert.match(script,/window\.confirm\("確定使用 "/);
+  assert.match(script,/value\.originalName===reward\.originalName/);
+  assert.match(script,/window\.confirm\(prompt\)/);
   assert.doesNotMatch(script,/heading\.innerHTML=reward\.originalName/);
 });
 
@@ -1093,4 +1094,59 @@ test("街區編輯器緊鄰地圖、就地顯示儲存狀態；戰鬥面板移�
   assert.doesNotMatch(save,/notify\(|scrollIntoView\(/);
   assert.match(css,/\.map-editor\.is-editing\{position:sticky;top:0/);
   assert.match(css,/body\.compact-status-active \.game-shell \.map-editor\.is-editing\{top:var\(--compact-status-height/);
+});
+
+test("I-5 優惠券前端：連點、交錯獎品、失敗後重新整理及角色隔離均保持原請求編號",async()=>{
+  const start=script.indexOf("const couponPendingMemory=new Map();");
+  const end=script.indexOf("function renderCouponShop(){",start);
+  assert.ok(start>=0&&end>start);
+  const code=script.slice(start,end);
+  const storage=new Map(),calls=[];
+  let serial=0;
+  const sessionStorage={
+    get length(){return storage.size;},
+    key:i=>[...storage.keys()][i]??null,
+    getItem:k=>storage.get(k)??null,
+    setItem:(k,v)=>storage.set(k,v),
+    removeItem:k=>storage.delete(k)
+  };
+  const owner=(name="甲")=>({mode:"multi",user:{username:name},character:{name:"居民"}});
+  function page(name="甲"){
+    const ctx={state:owner(name),sessionStorage,window:{confirm:()=>true},
+      crypto:{randomUUID:()=>"coupon_request_"+(++serial)},
+      displayRetailItemName:s=>s,render(){},renderCouponShop(){},notify(){},
+      api:(route,body)=>new Promise((resolve,reject)=>{
+        calls.push({route,body:{...body},resolve,reject});
+      })};
+    runInNewContext(code,ctx);
+    return ctx;
+  }
+  const a={sourceIndex:0,originalName:"福引券",requiredCoupons:1,canRedeem:true};
+  const b={sourceIndex:1,originalName:"４次元福袋",requiredCoupons:150,canRedeem:true};
+  const done=(call,name="甲")=>call.resolve({...owner(name),couponResult:{
+    sourceIndex:call.body.sourceIndex,originalName:call.body.originalName,couponCost:1,replayed:true
+  }});
+  let ctx=page();
+  const first=ctx.submitCouponRedemption(a);
+  await ctx.submitCouponRedemption(a);
+  await ctx.submitCouponRedemption(b);
+  assert.equal(calls.length,1,"處理中不得送出第二次兌換");
+  const id=calls[0].body.requestId;
+  calls[0].reject(new Error("回應遺失"));await first;
+  const second=ctx.submitCouponRedemption(b);
+  assert.notEqual(calls[1].body.requestId,id);
+  done(calls[1]);await second;
+  ctx=page(); // 同一分頁重新整理，仍使用 sessionStorage 中的原請求
+  const retry=ctx.submitCouponRedemption({...a,canRedeem:false});
+  assert.equal(calls[2].body.requestId,id,"餘額不足仍可確認已提交的請求");
+  const other=page("乙");
+  const otherRequest=other.submitCouponRedemption(a);
+  assert.notEqual(calls[3].body.requestId,id);
+  done(calls[3],"乙");await otherRequest;
+  done(calls[2]);await retry;
+  const newRequest=ctx.submitCouponRedemption(a);
+  assert.notEqual(calls[4].body.requestId,id,"已確認成功後下一次才產生新編號");
+  calls[4].reject(new Error("失敗"));await newRequest;
+  ctx.clearPendingCoupons(ctx.couponOwner());
+  assert.equal(storage.size,0,"明確刪除角色時清除該角色的待確認編號");
 });
