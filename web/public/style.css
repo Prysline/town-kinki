@@ -210,6 +210,14 @@ main{max-width:1100px;margin:.8rem auto;padding:0 .7rem;min-height:unset}
 .game-shell .legacy-icon-panel p{margin:0;flex:1 1 100%;overflow-wrap:anywhere}
 
 .game-shell .player-summary .status-main>div{padding:.24rem 0}
+/* 居民狀態與固定摘要共用能量比例、紅藍配色；保留原始數字。 */
+.game-shell .player-summary .status-main>.status-energy-row{display:grid;grid-template-columns:minmax(0,1fr) auto;
+  gap:.2rem .5rem;align-items:center}
+.game-shell .status-energy-row>dd{font-variant-numeric:tabular-nums}
+.game-shell .status-energy-row>.status-energy-track{grid-column:1/-1;min-width:0;margin:0}
+.game-shell .status-energy-track progress{display:block;width:100%;max-width:100%;height:8px;
+  appearance:none;-webkit-appearance:none;overflow:hidden;border:0;border-radius:2px;background:#e2e9e3}
+.game-shell .status-energy-track progress::-webkit-progress-bar{background:#e2e9e3}
 .game-shell .player-actions{display:grid;grid-template-columns:1fr 1fr;gap:.35rem;margin-top:.45rem}
 .game-shell .player-actions #cooldown{grid-column:1/-1;margin:.1rem 0 0}
 .game-shell .player-actions button{width:100%;padding:.4rem .3rem}
@@ -373,10 +381,10 @@ main{max-width:1100px;margin:.8rem auto;padding:0 .7rem;min-height:unset}
 .game-shell .compact-energy progress{width:100%;height:8px;appearance:none;-webkit-appearance:none;
   overflow:hidden;border:0;border-radius:2px;background:#5e7065}
 .game-shell .compact-energy progress::-webkit-progress-bar{background:#5e7065}
-.game-shell #compact-body-bar::-webkit-progress-value{background:#dd6855}
-.game-shell #compact-brain-bar::-webkit-progress-value{background:#6cabf2}
-.game-shell #compact-body-bar::-moz-progress-bar{background:#dd6855}
-.game-shell #compact-brain-bar::-moz-progress-bar{background:#6cabf2}
+.game-shell #compact-body-bar::-webkit-progress-value,.game-shell #body-energy-bar::-webkit-progress-value{background:#dd6855}
+.game-shell #compact-brain-bar::-webkit-progress-value,.game-shell #brain-energy-bar::-webkit-progress-value{background:#6cabf2}
+.game-shell #compact-body-bar::-moz-progress-bar,.game-shell #body-energy-bar::-moz-progress-bar{background:#dd6855}
+.game-shell #compact-brain-bar::-moz-progress-bar,.game-shell #brain-energy-bar::-moz-progress-bar{background:#6cabf2}
 body.compact-status-active .game-shell .facility-tabs{top:54px}
 body.compact-status-active .game-shell .facility-focused{scroll-margin-top:7rem}
 body.compact-status-active .game-shell .facility-pane{scroll-margin-top:7rem}

@@ -1172,3 +1172,31 @@ test("六號樂透三種通知及最近開獎紀錄顯示確認文案，保留�
   assert.ok(script.includes('"｜"+displayLoto6DrawReason(info.lastDraw.reason)+'));
   assert.ok(!script.includes("200注滿額"));
 });
+
+
+test("居民身體／頭腦能量條使用與固定摘要相同的比例，保留真實數值及邊界",()=>{
+  for(const [id,label] of [["body-energy-bar","身體能量比例"],["brain-energy-bar","頭腦能量比例"]]){
+    assert.ok(html.includes('id="'+id+'" max="100" value="0" aria-label="'+label+'"'));
+  }
+  const start=script.indexOf("function renderCompactStatus(character){");
+  const end=script.indexOf('window.addEventListener("scroll",updateCompactVisibility',start);
+  assert.ok(start>=0&&end>start);
+  const elements=new Map(),labels=new Map();
+  const state={maxBodyEnergy:200,maxBrainEnergy:80};
+  const render=runInNewContext(script.slice(start,end)+"\nrenderCompactStatus;",{
+    state,el:id=>{if(!elements.has(id))elements.set(id,{});return elements.get(id)},
+    text:(id,value)=>labels.set(id,value),money:String,updateCompactVisibility:()=>{}
+  });
+  for(const [body,brain,maxBody,maxBrain,expectedBody,expectedBrain] of [[100,20,200,80,50,25],[0,80,200,80,0,100],[250,-5,200,80,100,0],[10,10,0,0,0,0]]){
+    Object.assign(state,{maxBodyEnergy:maxBody,maxBrainEnergy:maxBrain});
+    render({name:"測試",bodyEnergy:body,brainEnergy:brain,money:0,bank:0});
+    assert.equal(elements.get("body-energy-bar").value,expectedBody);
+    assert.equal(elements.get("compact-body-bar").value,expectedBody);
+    assert.equal(elements.get("brain-energy-bar").value,expectedBrain);
+    assert.equal(elements.get("compact-brain-bar").value,expectedBrain);
+    assert.equal(labels.get("compact-body-energy"),body+" / "+maxBody);
+    assert.equal(labels.get("compact-brain-energy"),brain+" / "+maxBrain);
+  }
+  assert.ok(script.includes('text("body-energy", c.bodyEnergy + " / " + state.maxBodyEnergy);'));
+  assert.ok(script.includes('text("brain-energy", c.brainEnergy + " / " + state.maxBrainEnergy);'));
+});
