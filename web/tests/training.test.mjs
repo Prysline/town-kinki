@@ -60,7 +60,8 @@ test("同一天只能上一堂課，隔日可恢復上課", () => {
 
 test("健身房冷卻使用已完成的訓練間隔，不能換課程繞過", () => {
   const now = Date.UTC(2026, 10, 18, 5);
-  const player = createCharacterData("居民", "other", now);
+  // 保留游泳需24點的原版門檻；此冷卻測試需有足夠恢復上限。
+  const player = createCharacterData("居民", "other", now,{...Object.fromEntries(["kokugo","suugaku","rika","syakai","eigo","ongaku","bijutu","looks","tairyoku","kenkou","speed","power","wanryoku","kyakuryoku","love","unique","etti"].map(k=>[k,20])),tairyoku:36});
   const walk = gyms.find(g => g.originalName === "ウォーキング");
   const swim = gyms.find(g => g.originalName === "スイミング");
   const trained=performTraining(player, walk, now, "2026-11-18");
