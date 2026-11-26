@@ -8,7 +8,7 @@ import {initCharacterEvents,settleDailyIllnessEvent,listCharacterEvents} from ".
 import {initLegacyItemUseTables} from "../src/legacy-item-use.mjs";
 import {listLegacyInventoryItems} from "../src/legacy-inventory.mjs";
 import {getCockroachChallenge,claimCockroach} from "../src/event-cockroach.mjs";
-import {SANTA_FIGHT_SOURCE_ROWS,SANTA_FIGHT_ITEMS,SANTA_FIGHT_ITEM_ORIGIN} from "../src/event-santa-fight.mjs";
+import {SANTA_FIGHT_SOURCE_ROWS,SANTA_FIGHT_ITEMS,SANTA_FIGHT_ITEM_ORIGIN,RIVER_ITEM_SOURCE_ROWS,RIVER_ITEMS,RIVER_ITEM_ORIGIN} from "../src/event-santa-fight.mjs";
 const NOW=Date.UTC(2026,10,25,8),DAY="2026-11-25";
 const stats=power=>({...Object.fromEntries(STAT_KEYS.map(k=>[k,20])),power});
 const row=(power,extra={})=>({money:100000,body_energy:20,brain_energy:20,stats_json:JSON.stringify(stats(power)),...extra});
@@ -80,5 +80,66 @@ test("#38 戰勝掉落人偶可於 #34 消耗，再接 #26 與 #34 蟑螂；每�
     assert.throws(()=>claimCockroach(db,1,NOW,rng(0)),/沒有待處理/);
     const caught=claimCockroach(db,2,NOW+19999,rng(0));assert.equal(caught.reward,1);assert.equal(char(db,2).kpoint,3);
     assert.equal(char(db,1).kpoint,0);assert.equal(listCharacterEvents(db,1).length,3);
+  }finally{db.close();}
+});
+
+test("#40 原版 get_itm 先於 1/5 提示；三筆來源僅前兩筆可抽，10 個固定亂數分支",()=>{
+  const source=readFileSync(new URL("../../event.pl",import.meta.url),"utf8");
+  const branch=source.slice(source.indexOf("if ($event_rand == 40)"),source.indexOf("if ($event_rand == 41)"));
+  assert.ok(branch.indexOf("int(rand(2))")<branch.indexOf("&get_itm($my_rand)"));
+  assert.ok(branch.indexOf("&get_itm($my_rand)")<branch.indexOf("int(rand(5))"));
+  assert.ok(branch.includes("$money=$money-500"));
+  const get=source.slice(source.indexOf("sub get_itm{"),source.indexOf("sub get_itm2{"));
+  const rows=[...get.matchAll(/'(ゲットアイテム<>[^']+)'/g)].map(m=>m[1].split("<>").slice(0,33));
+  assert.deepEqual(RIVER_ITEM_SOURCE_ROWS,rows);
+  assert.equal(RIVER_ITEMS.length,2);
+  assert.deepEqual(RIVER_ITEMS.map(x=>[x[1],x[21],x[23]]),[["英文解釈教室","3","30"],["成り上がり","3","30"]]);
+  for(let i=0;i<2;i++)for(let j=0;j<5;j++){
+    const effect=resolveNonItemEvent(40,row(1000),rng((i+.5)/2,(j+.5)/5));
+    assert.equal(effect.riverItemIndex,i);
+    assert.equal(effect.changes.money,j===0?undefined:99500);
+    assert.equal(effect.effects.money,j===0?undefined:-500);
+  }
+  const poor=resolveNonItemEvent(40,row(1000,{money:17}),rng(0,.99));
+  assert.equal(poor.changes.money,0);assert.equal(poor.effects.money,-17);
+});
+test("#40 兩種書籍在五個提示分支都實際入庫；完整33欄、翻譯來源、同日防重與帳號隔離",()=>{
+  for(let i=0;i<2;i++)for(let j=0;j<5;j++){
+    const db=setup();try{
+      const other=char(db,2);
+      trigger(db,40,[(i+.5)/2,(j+.5)/5]);
+      const [item]=owned(db);assert.ok(item);assert.equal(owned(db).length,1);
+      const expected=[...RIVER_ITEMS[i]];expected[30]=String(Math.floor(NOW/1000));expected[32]="";
+      assert.deepEqual(JSON.parse(item.raw_fields_json),expected);
+      assert.equal(item.original_id,RIVER_ITEM_ORIGIN);
+      assert.equal(char(db).money,j===0?100000:99500);
+      const view=listLegacyInventoryItems(db,1,50,null,NOW)[0];
+      assert.equal(view.origin,"event40");assert.equal(view.readOnly,false);assert.equal(view.remaining,3);
+      const h=listCharacterEvents(db,1)[0];assert.equal(h.title,"河中物品");assert.equal(h.effects.riverItem.status,"awarded");
+      assert.ok(h.description.includes("《"+item.original_name+"》"));
+      assert.equal(settleDailyIllnessEvent(db,1,DAY,NOW+1,rng()).checked,false);
+      assert.equal(owned(db).length,1);assert.deepEqual(char(db,2),other);assert.equal(owned(db,2).length,0);
+      assert.equal(listCharacterEvents(db,2).length,0);
+    }finally{db.close();}
+  }
+});
+test("#40 25格先拒絕同名合併但仍可扣500；未滿時全部同名列增耐久，歷史失敗全回滾",()=>{
+  const db=setup();try{
+    const raw=RIVER_ITEMS[0];seed(db,1,1,raw);seed(db,1,2,raw);
+    const before=owned(db),c=char(db);
+    db.exec("CREATE TRIGGER fail_event40 BEFORE INSERT ON character_events BEGIN SELECT RAISE(ABORT,'forced river history'); END;");
+    assert.throws(()=>trigger(db,40,[0,.99]),/forced river history/);
+    assert.deepEqual(owned(db),before);assert.deepEqual(char(db),c);
+    assert.equal(db.prepare("SELECT COUNT(*) n FROM legacy_item_usage").get().n,0);
+    db.exec("DROP TRIGGER fail_event40");
+    trigger(db,40,[0,.99]);
+    assert.deepEqual(owned(db),before);assert.equal(char(db).money,99500);
+    assert.deepEqual(db.prepare("SELECT remaining FROM legacy_item_usage ORDER BY source_line").all().map(x=>x.remaining),[6,6]);
+    for(let i=3;i<=24;i++){const f=[...raw];f[1]="測試持有物"+i;seed(db,1,i,f);}
+    trigger(db,40,[.99,0],"2026-11-26",1,NOW+86400000);assert.equal(owned(db).length,25);
+    trigger(db,40,[0,.99],"2026-11-27",1,NOW+172800000);assert.equal(owned(db).length,25);
+    assert.equal(listCharacterEvents(db,1)[0].effects.riverItem.status,"full");assert.equal(char(db).money,99000);
+    assert.deepEqual(db.prepare("SELECT remaining FROM legacy_item_usage ORDER BY source_line").all().map(x=>x.remaining),[6,6]);
+    assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(),[]);
   }finally{db.close();}
 });

@@ -34,18 +34,18 @@ function trigger(db,id,randoms=[],day="2026-11-19",user=1) {
     rng(0,eventNumber(id),...randoms));
 }
 
-test("已移植 38 種事件分支（含聖誕老人戰鬥與四次元福袋），其他未移植事件不產生虛構效果",()=>{
-  assert.deepEqual(NON_ITEM_EVENT_IDS,[1,2,3,5,6,7,8,9,10,11,12,13,14,16,17,18,19,20,21,22,23,24,25,26,27,29,30,31,32,33,34,35,38,39,41,42,43,44]);
+test("已移植 39 種事件分支（含聖誕老人戰鬥、四次元福袋與河中物品），其他未移植事件不產生虛構效果",()=>{
+  assert.deepEqual(NON_ITEM_EVENT_IDS,[1,2,3,5,6,7,8,9,10,11,12,13,14,16,17,18,19,20,21,22,23,24,25,26,27,29,30,31,32,33,34,35,38,39,40,41,42,43,44]);
   for(const id of NON_ITEM_EVENT_IDS){
     const values={1:[.1,.9],2:[.1],3:[.1],7:[.1],8:[.1],9:[.1],
       10:[.1],11:[.1],12:[.1],13:[.1],17:[.1],18:[.1],20:[.1],21:[.1],
-      16:[.1],22:[.1],23:[.1,.1],24:[.8],26:[0],30:[.1],33:[0],34:[.1],35:[.1],42:[.1]};
+      16:[.1],22:[.1],23:[.1,.1],24:[.8],26:[0],30:[.1],33:[0],34:[.1],35:[.1],40:[0,0],42:[.1]};
     const e=resolveNonItemEvent(id,row({bank:10000,town_id:0}),rng(...values[id]??[]));
     assert.ok(e);
     assert.equal(e.event.originalId,id);
     assert.ok(e.event.description);
   }
-  for(const id of [4,15,28,36,37,40])
+  for(const id of [4,15,28,36,37])
     assert.equal(resolveNonItemEvent(id,row()),null);
 });
 

@@ -1,6 +1,6 @@
 // 從原版 event.pl::event_happen 移植不需完整商店的事件分支。
 import { TOWNS, maxBodyEnergy, maxBrainEnergy } from "./engine.mjs";
-import { SANTA_FIGHT_NAMES,SANTA_FIGHT_ITEMS } from "./event-santa-fight.mjs";
+import { SANTA_FIGHT_NAMES,SANTA_FIGHT_ITEMS,RIVER_ITEMS } from "./event-santa-fight.mjs";
 // 原 CGI 可產生負數金錢／能力；Web 版為保持既有非負值模型將扣除量限制在當前持有量。
 const STAT_EVENTS = Object.freeze({
   7:{key:"literature",title:"國語事件",stat:"kokugo",label:"國語",
@@ -15,7 +15,7 @@ const STAT_EVENTS = Object.freeze({
     positive:"對藝術產生興趣",negative:"在美術課睡著了"}
 });
 export const NON_ITEM_EVENT_IDS = Object.freeze([
-  1,2,3,5,6,7,8,9,10,11,12,13,14,16,17,18,19,20,21,22,23,24,25,26,27,29,30,31,32,33,34,35,38,39,41,42,43,44
+  1,2,3,5,6,7,8,9,10,11,12,13,14,16,17,18,19,20,21,22,23,24,25,26,27,29,30,31,32,33,34,35,38,39,40,41,42,43,44
 ]);
 
 function draw(random,n) {
@@ -66,6 +66,7 @@ export function resolveNonItemEvent(originalId,character,random=Math.random,bonu
   let couponAward=null;
   let cockroachChallenge=false;
   let santaFightItemIndex=null;
+  let riverItemIndex=null;
   function addMoney(delta) {
     const computed=changeMoney(character.money,delta);
     changes.money=computed.money;
@@ -530,6 +531,17 @@ export function resolveNonItemEvent(originalId,character,random=Math.random,bonu
         "工作時精神不濟，職業經驗減少 "+(-change)+" 點。";
       break;
     }
+    case 40:{
+      // 原版先抽書籍並呼叫 get_itm，之後才抽 1/5 提示；另 4/5 扣款不撤銷道具。
+      event.key="riverItem";event.title="河中物品";
+      riverItemIndex=draw(random,RIVER_ITEMS.length)-1;
+      if(draw(random,5)===1)event.description="在河邊發現物品。";
+      else{
+        const lost=-addMoney(-500);
+        event.description="掉了 "+lost+" 元到河裡。";
+      }
+      break;
+    }
     case 41:{
       event.key="vendingChange";event.title="自動販賣機找零";
       const amount=addMoney(1000);
@@ -584,5 +596,5 @@ export function resolveNonItemEvent(originalId,character,random=Math.random,bonu
       break;
     }
   }
-  return {event,changes,effects,usedItemName,usedItemNames,extraItemUseName,couponAward,cockroachChallenge,santaFightItemIndex};
+  return {event,changes,effects,usedItemName,usedItemNames,extraItemUseName,couponAward,cockroachChallenge,santaFightItemIndex,...(riverItemIndex!==null?{riverItemIndex}:{})};
 }
