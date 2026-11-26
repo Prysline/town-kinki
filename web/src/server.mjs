@@ -304,13 +304,14 @@ function addCharacter(userId, c) {
       c.healthIndex ?? 50,c.lastHealthDay ?? "",c.lastEventDay ?? "");
 }
 
-function mutateCharacter(userId, callback) {
+function mutateCharacter(userId, callback, afterSave) {
   db.exec("BEGIN IMMEDIATE");
   try {
     const old = getCharacter(userId);
     if (!old) throw new HttpError(409, "請先建立角色");
     const result = callback(recoverEnergy(old,gameNow()));
     saveCharacter(userId, result.character);
+    afterSave?.();
     db.exec("COMMIT");
     return result;
   } catch (error) {
@@ -536,8 +537,8 @@ function snapshot(user) {
     classroomCreditCards,
     trainingLessons: updated ? trainingLessons.map(lesson => {
       const cashReason=trainingAvailability(updated,lesson,now,today);
-      const creditReason=lesson.type==="classroom"&&classroomCreditCards.length?
-        trainingAvailability(updated,lesson,now,today,"credit"):null;
+      const creditReason=classroomCreditCards.length?
+        trainingAvailability(updated,lesson,now,today,"credit"):"沒有有效且屬於本人的原版信用卡";
       return {
         key:lesson.key,type:lesson.type,name:lesson.name,
         price:lesson.price,energyCost:lesson.energyCost,
@@ -1178,8 +1179,7 @@ async function handle(req, res) {
       const lesson=trainingByKey.get(data.key);
       if(!lesson)throw new HttpError(404,"找不到訓練課程");
       const payment=data.payment??"cash";
-      if(!["cash","credit"].includes(payment)||
-          (payment==="credit"&&lesson.type!=="classroom"))
+      if(!["cash","credit"].includes(payment))
         throw new HttpError(400,"此課程不支援指定付款方式");
       const now=gameNow();
       const today=calendarDay(now,GAME_TIMEZONE);
@@ -1196,10 +1196,11 @@ async function handle(req, res) {
           const trained=performTraining(old,lesson,now,today,payment);
           if(payment==="credit")
             // 帳簿和角色餘額一起在 mutateCharacter 的 SQLite 交易內寫入。
-            recordBankEntry(db,user.id,"ordinary","教室信用付款（受講料）",
+            recordBankEntry(db,user.id,"ordinary",
+              ({school:"學校",gym:"健身房",classroom:"教室"})[lesson.type]+"信用付款（受講料）",
               lesson.price,0,trained.character.bank,now);
           return trained;
-        });
+        },()=>refreshBankTaxSnapshot(db,user.id,today));
       }catch(error){throw new HttpError(400,error.message);}
       return sendJson(res,200,{...snapshot(user),trainingResult:{
         name:result.lesson,gained:result.gained,paid:result.paid,

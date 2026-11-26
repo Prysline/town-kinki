@@ -1167,3 +1167,72 @@ test("Chrome 街區編輯：1440/768/375 工具列緊鄰地圖、連續儲存不
     console.log("UI_MAP_EDIT "+JSON.stringify({widths:[1440,768,375],saved:edits.length,feedbackScrolls:trace.feedbackScrolls,restart:true,battleTab:true}));
   }finally{await chrome?.stop();await web?.stop();rmSync(workspace,{force:true,recursive:true,maxRetries:50,retryDelay:200});}
 });
+
+test("Chrome：三棟訓練共用付款列、各自保存選擇、信用扣款及失效不轉現金",{timeout:90000},async()=>{
+  const workspace=mkdtempSync(join(tmpdir(),"town-chrome-training-pay-"));
+  const dataDir=join(workspace,"sqlite");let web=null,chrome=null;
+  try{
+    web=await startWeb(dataDir);chrome=await openChrome(join(workspace,"chrome"));
+    await chrome.send("Page.enable");await chrome.send("Runtime.enable");await viewport(chrome,1440,900);
+    await chrome.send("Page.navigate",{url:web.url});await until(chrome,"!document.querySelector('#create')?.hidden","建角");
+    await evaluate(chrome,"window.confirm=()=>true");await fill(chrome,'#create-form [name="name"]',"訓練付款驗收");await click(chrome,"#create-submit");
+    await until(chrome,"!document.querySelector('#game')?.hidden","主畫面");
+    const state=()=>evaluate(chrome,"(async()=>await(await fetch('/api/state')).json())()");
+    const initial=await state();
+    const purchased=Math.floor(initial.gameTimeMs/1000)-60;
+    const raw=Array(33).fill("");raw[0]="日用品";raw[1]="クレジットカード";raw[9]="クレジット";raw[21]="3";raw[22]="日";raw[30]=String(purchased);
+    const db=new DatabaseSync(join(dataDir,"solo.sqlite"));
+    try{
+      const owner=db.prepare("SELECT user_id FROM characters").get().user_id;
+      db.prepare("INSERT INTO legacy_inventory_items(user_id,original_id,source_line,category,original_name,effect,durability,durability_unit,purchased_at,last_used_at,raw_fields_json) VALUES(?,?,?,?,?,?,?,?,?,?,?)")
+        .run(owner,"000001",1,"日用品","クレジットカード","クレジット",3,"日",purchased,0,JSON.stringify(raw));
+      db.prepare("UPDATE characters SET money=1000,bank=99000 WHERE user_id=?").run(owner);
+    }finally{db.close();}
+    await click(chrome,"#refresh");await click(chrome,"#facility-tab-training");
+    const select=async(type,value)=>{
+      const actual=await evaluate(chrome,`(()=>{const e=document.querySelector("#"+${JSON.stringify(type)}+"-payment");e.value=${JSON.stringify(value)};e.dispatchEvent(new Event("change",{bubbles:true}));return e.value;})()`);
+      assert.equal(actual,value);
+    };
+    const values=()=>evaluate(chrome,"['school','gym','classroom'].map(t=>document.querySelector('#'+t+'-payment').value)");
+    assert.deepEqual(await values(),["cash","cash","cash"]);
+    for(const type of ["school","gym","classroom"]){
+      assert.equal(await evaluate(chrome,`document.querySelectorAll("#"+${JSON.stringify(type)}+"-panel .training-payment select").length`),1);
+      assert.equal(await evaluate(chrome,`document.querySelectorAll("#"+${JSON.stringify(type)}+"-lessons select").length`),0);
+      assert.match(await evaluate(chrome,`document.querySelector("#"+${JSON.stringify(type)}+"-payment-balance").textContent`),/現金.*普通存款/);
+    }
+    assert.equal(await evaluate(chrome,"document.querySelector('#school-lessons button').disabled"),true);
+    await select("school","credit:1");
+    assert.deepEqual(await values(),["credit:1","cash","cash"]);
+    assert.equal(await evaluate(chrome,"document.querySelector('#school-lessons button').disabled"),false);
+    assert.equal(await evaluate(chrome,"document.querySelector('#classroom-lessons button').disabled"),true);
+    await select("gym","credit:1");await select("classroom","credit:1");
+    await chrome.send("Page.reload");await until(chrome,"!document.querySelector('#game')?.hidden||!document.querySelector('#solo-lobby')?.hidden","重新整理");
+    if(await evaluate(chrome,"!document.querySelector('#solo-lobby')?.hidden"))await click(chrome,"#solo-continue");
+    await until(chrome,"!document.querySelector('#game')?.hidden","重新整理主畫面");
+    assert.deepEqual(await values(),["credit:1","credit:1","credit:1"]);
+    await click(chrome,"#facility-tab-training");
+    for(const [type,index,key,width] of [["school",1,"school-2",1440],["gym",2,"gym-3",768],["classroom",1,"classroom-2",375]]){
+      await viewport(chrome,width,width===375?812:900);
+      const before=await state(),lesson=before.trainingLessons.find(x=>x.key===key);
+      await click(chrome,`#${type}-lessons .training-tile:nth-child(${index}) button`);
+      await until(chrome,"document.querySelector('#result-dialog')?.open&&document.querySelector('#result-dialog-message').textContent.includes('普通銀行存款扣除')",type+"信用付款");
+      const after=await state();
+      assert.equal(after.character.money,before.character.money);
+      assert.equal(after.character.bank,before.character.bank-lesson.price);
+      assert.deepEqual(await values(),["credit:1","credit:1","credit:1"]);
+    }
+    const expired=new DatabaseSync(join(dataDir,"solo.sqlite"));
+    try{
+      const old=purchased-4*86400;raw[30]=String(old);
+      expired.prepare("UPDATE legacy_inventory_items SET purchased_at=?,raw_fields_json=? WHERE source_line=1").run(old,JSON.stringify(raw));
+    }finally{expired.close();}
+    await click(chrome,"#profile-tab-status");await click(chrome,"#refresh");
+    await until(chrome,"document.querySelector('#gym-payment').value==='unavailable'","失效付款方式更新");
+    assert.deepEqual(await values(),["unavailable","unavailable","unavailable"]);
+    await click(chrome,"#facility-tab-training");
+    assert.match(await evaluate(chrome,"document.querySelector('#gym-payment-note').textContent"),/失效/);
+    await select("gym","cash");
+    assert.deepEqual(await values(),["unavailable","cash","unavailable"]);
+    console.log("UI_TRAINING_PAYMENT "+JSON.stringify({widths:[1440,768,375],buildings:3,shared:true,reload:true,expiredBlocked:true}));
+  }finally{await chrome?.stop();await web?.stop();rmSync(workspace,{force:true,recursive:true,maxRetries:50,retryDelay:200});}
+});

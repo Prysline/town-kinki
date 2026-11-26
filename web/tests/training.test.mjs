@@ -228,5 +228,21 @@ test("原版教室信用付款由普通存款扣款，仍完整執行四課能�
   assert.equal(trained.character.classroomReadyAt,now+120000);
   assert.equal(funded.bank,30000);
   assert.match(trainingAvailability({...funded,bank:9999},classrooms[0],now,calendarDay(now),"credit"),/普通銀行存款不足/);
-  assert.match(trainingAvailability(funded,schools[0],now,calendarDay(now),"credit"),/付款方式/);
+  assert.match(trainingAvailability(funded,schools[0],now,calendarDay(now),"bank"),/付款方式/);
+});
+
+test("核准 Web 補完：全部學校與健身房課程信用付款只替換扣款來源，其他結算完全相同",()=>{
+  const now=Date.UTC(2026,10,26,5),day=calendarDay(now);
+  for(const lesson of [...schools,...gyms]){
+    const player=createCharacterData("訓練付款","other",now);
+    const funded={...player,money:2000000,bank:2000000};
+    const cash=performTraining(funded,lesson,now,day,"cash");
+    const credit=performTraining(funded,lesson,now,day,"credit");
+    assert.equal(credit.payment,"credit");
+    assert.equal(credit.character.money,funded.money);
+    assert.equal(credit.character.bank,funded.bank-lesson.price);
+    assert.deepEqual({...credit.character,money:cash.character.money,bank:cash.character.bank},cash.character,lesson.key);
+    assert.match(trainingAvailability({...funded,bank:lesson.price-1},lesson,now,day,"credit"),/普通銀行存款不足/);
+    assert.match(trainingAvailability(credit.character,lesson,now+1,day,"credit"),/今日已經|等待/);
+  }
 });

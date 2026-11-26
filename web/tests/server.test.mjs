@@ -278,9 +278,8 @@ test("多人教室信用卡持有人隔離：不能用其他人的原版卡片�
     }finally{db.close();}
     const others=await api(srv.url,"state",undefined,b.cookie);
     assert.equal(others.result.classroomCreditCards.length,0);
-    assert.equal((await api(srv.url,"train",{
-      key:"classroom-2",payment:"credit",sourceLine:1
-    },b.cookie)).status,400);
+    for(const key of ["school-2","gym-3","classroom-2"])
+      assert.equal((await api(srv.url,"train",{key,payment:"credit",sourceLine:1},b.cookie)).status,400);
     const verify=await api(srv.url,"state",undefined,a.cookie);
     assert.equal(verify.result.classroomCreditCards.length,1);
     assert.equal(verify.result.character.money,100000);
@@ -7694,4 +7693,66 @@ test("I HTTP：丟棄蟑螂領獎回應、真實 Node 重啟、跨日舊ID與空
     assert.equal((await api(restarted.url,"state")).result.character.kpoint,6);
     console.log("I_COCKROACH "+JSON.stringify({discarded:true,restart:true,oldId,newId,oldRejected:true,newCaught:true}));
   }finally{await (restarted??srv).stop();}
+});
+
+test("三棟訓練信用付款 HTTP：本人卡、餘額、獨立冷卻、帳簿與交易失敗回滾",async()=>{
+  const srv=await start("solo");
+  try{
+    const created=await api(srv.url,"character",{name:"共用付款驗收",gender:"other",stats:defaultStats()});
+    assert.equal(created.status,200);
+    const purchased=Math.floor(created.result.gameTimeMs/1000)-60;
+    const raw=Array(33).fill("");raw[0]="日用品";raw[1]="クレジットカード";
+    raw[9]="クレジット";raw[21]="3";raw[22]="日";raw[30]=String(purchased);
+    const db=new DatabaseSync(join(srv.directory,"solo.sqlite"));
+    try{
+      const owner=db.prepare("SELECT user_id FROM characters").get().user_id;
+      db.prepare("INSERT INTO legacy_inventory_items(user_id,original_id,source_line,category,original_name,effect,durability,durability_unit,purchased_at,last_used_at,raw_fields_json) VALUES(?,?,?,?,?,?,?,?,?,?,?)")
+        .run(owner,"000001",1,"日用品","クレジットカード","クレジット",3,"日",purchased,0,JSON.stringify(raw));
+    }finally{db.close();}
+    assert.equal((await api(srv.url,"bank",{action:"deposit",amount:99000})).status,200);
+    const get=async()=>(await api(srv.url,"state")).result;
+    const start=await get();
+    const comparable=s=>({money:s.character.money,bank:s.character.bank,stats:s.character.stats,weight:s.character.weight,lastSchoolDay:s.character.lastSchoolDay,gymReadyAt:s.character.gymReadyAt,classroomReadyAt:s.character.classroomReadyAt,ledger:s.bankLedger,tax:s.bankTax.assessmentBase});
+    for(const key of ["school-2","gym-3","classroom-2"]){
+      const item=start.trainingLessons.find(x=>x.key===key);
+      assert.equal(item.creditReason,null);
+      assert.equal((await api(srv.url,"train",{key,payment:"credit",sourceLine:999})).status,400);
+    }
+    assert.deepEqual(comparable(await get()),comparable(start));
+    assert.match(start.trainingLessons.find(x=>x.key==="gym-9").creditReason,/普通銀行存款不足/);
+    assert.equal((await api(srv.url,"train",{key:"gym-9",payment:"credit",sourceLine:1})).status,400);
+    assert.deepEqual(comparable(await get()),comparable(start));
+    const fault=new DatabaseSync(join(srv.directory,"solo.sqlite"));
+    try{
+      fault.exec("CREATE TRIGGER training_credit_fault BEFORE UPDATE OF assessment_base ON bank_tax_state BEGIN SELECT RAISE(ABORT,'training credit fault'); END");
+      assert.equal((await api(srv.url,"train",{key:"school-2",payment:"credit",sourceLine:1})).status,400);
+    }finally{fault.exec("DROP TRIGGER training_credit_fault");fault.close();}
+    assert.deepEqual(comparable(await get()),comparable(start));
+    for(const [key,label] of [["school-2","學校"],["gym-3","健身房"],["classroom-2","教室"]]){
+      const before=await get();
+      const price=before.trainingLessons.find(x=>x.key===key).price;
+      const paid=await api(srv.url,"train",{key,payment:"credit",sourceLine:1});
+      assert.equal(paid.status,200);
+      assert.equal(paid.result.trainingResult.payment,"credit");
+      assert.equal(paid.result.character.money,before.character.money);
+      assert.equal(paid.result.character.bank,before.character.bank-price);
+      const ledger=paid.result.bankLedger.find(x=>x.action===label+"信用付款（受講料）");
+      assert.equal(ledger.debit,price);assert.equal(ledger.balance,paid.result.character.bank);
+      assert.equal(paid.result.bankTax.assessmentBase,before.bankTax.assessmentBase-price);
+      assert.equal((await api(srv.url,"train",{key,payment:"credit",sourceLine:1})).status,400);
+      assert.deepEqual(comparable(await get()),comparable(paid.result));
+    }
+    const expired=new DatabaseSync(join(srv.directory,"solo.sqlite"));
+    try{
+      const old=purchased-4*86400;raw[30]=String(old);
+      expired.prepare("UPDATE legacy_inventory_items SET purchased_at=?,raw_fields_json=? WHERE source_line=1").run(old,JSON.stringify(raw));
+    }finally{expired.close();}
+    const before=await get();
+    assert.equal(before.classroomCreditCards.length,0);
+    for(const key of ["school-2","gym-3","classroom-2"]){
+      assert.match(before.trainingLessons.find(x=>x.key===key).creditReason,/沒有有效/);
+      assert.equal((await api(srv.url,"train",{key,payment:"credit",sourceLine:1})).status,400);
+    }
+    assert.deepEqual(comparable(await get()),comparable(before));
+  }finally{await srv.stop();}
 });

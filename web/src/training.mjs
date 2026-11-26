@@ -107,7 +107,8 @@ export function calendarDay(now = Date.now(), timeZone = "Asia/Taipei") {
 
 export function trainingAvailability(character, lesson, now = Date.now(), day = calendarDay(now), payment = "cash") {
   if (!lesson || !["school", "gym", "classroom"].includes(lesson.type)) return "找不到訓練課程";
-  if(payment!=="cash"&&!(lesson.type==="classroom"&&payment==="credit"))
+  // 學校與健身房信用付款為使用者核准的 Web 補完；教室有原版執行依據。
+  if(payment!=="cash"&&payment!=="credit")
     return "不支援的課程付款方式";
   const current = recoverEnergy(character, now);
   if (lesson.type === "school" && current.lastSchoolDay === day)

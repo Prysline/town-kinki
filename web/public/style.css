@@ -682,3 +682,10 @@ body.compact-status-active .game-shell .map-editor.is-editing{top:var(--compact-
   .game-shell .map-edit-controls label[for="map-palette"]{flex-basis:100%}
   .game-shell .map-editor #map-edit-status,.game-shell .map-editor #map-edit-feedback{font-size:.78rem}
 }
+
+/* 每棟訓練設施只保留一份付款控制列，課程卡片不重複選單。 */
+.game-shell .training-payment{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);align-items:center;gap:.25rem .7rem;margin:.4rem 0 .6rem;padding:.55rem .65rem;border:1px solid #c9dbcb;background:#f2f7f2;border-radius:4px}
+.game-shell .training-payment label{min-width:0}
+.game-shell .training-payment p{margin:0;overflow-wrap:anywhere}
+.game-shell .training-payment p[role="status"]{grid-column:1/-1}
+@media(max-width:600px){.game-shell .training-payment{grid-template-columns:minmax(0,1fr)}}
