@@ -235,7 +235,9 @@ test("核准 Web 補完：全部學校與健身房課程信用付款只替換扣
   const now=Date.UTC(2026,10,26,5),day=calendarDay(now);
   for(const lesson of [...schools,...gyms]){
     const player=createCharacterData("訓練付款","other",now);
-    const funded={...player,money:2000000,bank:2000000};
+    // 高階課程需100點身體能量；僅提升測試角色能力與可用能量，不改正式規則。
+    const funded={...player,money:2000000,bank:2000000,
+      stats:Object.fromEntries(Object.keys(player.stats).map(key=>[key,100])),bodyEnergy:100,brainEnergy:100};
     const cash=performTraining(funded,lesson,now,day,"cash");
     const credit=performTraining(funded,lesson,now,day,"credit");
     assert.equal(credit.payment,"credit");
