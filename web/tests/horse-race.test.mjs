@@ -198,7 +198,9 @@ test("GM-02 decision A: forged ownership, internal RNG and SQL faults cannot com
   const db=setup();try{
     const a=quote(db),b=quote(db,2),r=start(db,a.id);
     const now=NOW+181000;
-    assert.throws(()=>start(db,b.id,1,{now}),/本人/);
+    assert.throws(()=>start(db,b.id,1,{now}),/不可變更/);
+    assert.throws(()=>start(db,b.id,1,{now,requestId:"forged_owner_001"}),/本人/);
+    assert.equal(activeHorseRace(db,1).id,r.id);
     assert.throws(()=>start(db,b.id,2,{now,rand:()=>NaN}),/亂數/);
     db.exec("CREATE TRIGGER fail_expired_receipt BEFORE INSERT ON horse_race_receipts BEGIN SELECT RAISE(ABORT,'expired receipt fault'); END;");
     assert.throws(()=>start(db,b.id,2,{now,tickets:[0,0,0,0,0,0]}),/expired receipt fault/);
