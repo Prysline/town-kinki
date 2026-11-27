@@ -10,6 +10,7 @@ import {SANTA_FIGHT_ITEMS,SANTA_FIGHT_NAMES,RIVER_ITEMS} from "../src/event-sant
 const read=path=>readFileSync(new URL(path,import.meta.url),"utf8");
 const legacy=path=>decodeLegacyText(readFileSync(new URL(path,import.meta.url)));
 const app=read("../public/app.js");
+const jobsUI=read("../public/modules/jobs.js");
 const kana=/[\u3040-\u30ff\u31f0-\u31ff]/;
 test("150 職業、99 前置條件與錯誤訊息共用譯名，仍以原名判定精通",()=>{
   const jobs=parseLegacyJobs(legacy("../../dat_dir/job.cgi"));
@@ -32,7 +33,11 @@ test("150 職業、99 前置條件與錯誤訊息共用譯名，仍以原名判�
   for(const connection of [
     'status.push(["前置精通",displayJobName(job.previousJob,state.jobs),',
     'state.character.masteredJob!==job.previousJob',
-    '"尚未解鎖："+displayGameError(job.reason,state.jobs)',
+    '"尚未解鎖："+displayGameError(job.reason,state.jobs)'
+  ])assert.ok(jobsUI.includes(connection),connection);
+  assert.ok(jobsUI.includes('import {displayJobName,displayGameError} from "../game-display-translations.js";'));
+  assert.ok(app.includes('const {renderJobs}=createJobsUI({getState:()=>state,el,text,money,labels,action});'));
+  for(const connection of [
     'text("mastered-job", displayJobName(c.masteredJob,state.jobs) || "無");',
     'if(error)message=displayGameError(message,state?.jobs);',
     '["credit:"+c.sourceLine,displayRetailItemName(c.name)+"（銀行付款）"]'
