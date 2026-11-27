@@ -6,6 +6,7 @@ import {tmpdir} from "node:os";
 import {DatabaseSync} from "node:sqlite";
 import {STAT_KEYS,decodeLegacyText} from "../src/engine.mjs";
 import {initTownMapTable,storeTownMap} from "../src/town-storage.mjs";
+import {initBankTables} from "../src/banking.mjs";
 import {initRoadTravelTables} from "../src/road-travel.mjs";
 import {initCockroachChallenges,openCockroachChallenge} from "../src/event-cockroach.mjs";
 import {parseOriginalOnsenConfig,originalOnsenOptions} from "../src/onsen-source.mjs";
@@ -149,4 +150,32 @@ test("AP-05 實體 SQLite 關閉重開、設施移除仍可離開、刪帳外鍵
     assert.ok(row(db,2));
     assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(),[]);
   }finally{db?.close();rmSync(dir,{recursive:true,force:true});}
+});
+
+test("AP-05 V02 Monday direct entry uses previous tax base, rollback and replay preserve settlement",()=>{
+  const db=setup();
+  try{
+    initBankTables(db);
+    db.exec("UPDATE characters SET money=2000000,bank=1000000 WHERE user_id=1");
+    db.prepare("INSERT INTO bank_accounts(user_id,term_balance,last_interest_day) VALUES(1,0,?)").run("2026-11-29");
+    db.prepare("INSERT INTO bank_tax_state(user_id,assessment_base,snapshot_day) VALUES(1,3000000,?)").run("2026-11-29");
+    const monday=Date.parse("2026-11-30T04:00:00Z");
+    const args={now:monday,today:"2026-11-30"};
+    const taxes=()=>db.prepare("SELECT * FROM bank_tax_assessments WHERE user_id=1").all();
+    const taxState=()=>db.prepare("SELECT * FROM bank_tax_state WHERE user_id=1").get();
+    db.exec("CREATE TRIGGER fail_bath BEFORE INSERT ON onsen_visits BEGIN SELECT RAISE(ABORT,'bath fault'); END;");
+    assert.throws(()=>buy(db,"futuu",args),/bath fault/);
+    assert.equal(row(db).bank,1000000);assert.equal(row(db).money,2000000);
+    assert.equal(taxes().length,0);assert.equal(taxState().assessment_base,3000000);
+    assert.equal(taxState().snapshot_day,"2026-11-29");
+    db.exec("DROP TRIGGER fail_bath");
+    const entered=buy(db,"futuu",args);
+    assert.equal(row(db).money,1999500);assert.equal(row(db).bank,975000);
+    assert.equal(taxes().length,1);assert.equal(taxes()[0].assessment_base,3000000);
+    assert.equal(taxes()[0].paid,30000);assert.equal(taxState().assessment_base,2974500);
+    assert.equal(buy(db,"futuu",{...args,random:()=>{throw Error("不得重抽");}}).replayed,true);
+    assert.equal(taxes().length,1);
+    leaveOnsen(db,1,config,{visitId:entered.id,now:monday+1000});
+    assert.equal(row(db).bank,975000);assert.equal(taxes().length,1);
+  }finally{db.close();}
 });

@@ -4,7 +4,7 @@ import {STAT_KEYS} from "./engine.mjs";
 import {publicTownMap} from "./town-storage.mjs";
 import {calendarDay} from "./training.mjs";
 import {getCockroachChallenge} from "./event-cockroach.mjs";
-import {refreshBankTaxSnapshot} from "./banking.mjs";
+import {refreshBankTaxSnapshot,settleBankInterestInTransaction} from "./banking.mjs";
 import {originalOnsenOptions,quoteOriginalOnsen,projectOriginalOnsenEntryEnergy,
   projectOriginalOnsenExitEnergy,projectApprovedOnsenAbilityRolls} from "./onsen-source.mjs";
 const REQUEST_ID=/^[A-Za-z0-9_-]{8,80}$/;
@@ -123,11 +123,15 @@ export function enterOnsen(db,userId,config,{bathKey,requestId,now,today,random=
       bodyReadyAt:readyAt(now,projected.sourceBodyDisplayOffset),
       brainReadyAt:readyAt(now,projected.sourceBrainDisplayOffset)};
     safeInt(entry.bodyEnergy,"入浴身體能量");safeInt(entry.brainEnergy,"入浴頭腦能量");
+    // First request on a new day must assess the previous saved tax base before entry advances it.
+    // Reuse the established bank transaction helper; failed entry/replay must not settle again.
+    const hasBank=Boolean(db.prepare("SELECT 1 FROM sqlite_master WHERE type=\'table\' AND name=\'bank_tax_state\'").get());
+    const day=today??calendarDay(now);
+    if(hasBank)settleBankInterestInTransaction(db,userId,day,now);
     const changed=db.prepare("UPDATE characters SET money=money-?,stats_json=?,body_energy=?,brain_energy=?,recovered_at=? WHERE user_id=? AND money>=?")
       .run(entry.fee,JSON.stringify(ability.stats),entry.bodyEnergy,entry.brainEnergy,now,userId,entry.fee);
     if(changed.changes!==1)throw Error("溫泉扣款或角色更新失敗");
-    if(db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='bank_tax_state'").get())
-      refreshBankTaxSnapshot(db,userId,today??calendarDay(now));
+    if(hasBank)refreshBankTaxSnapshot(db,userId,day);
     const inserted=db.prepare("INSERT INTO onsen_visits(user_id,request_id,town_id,bath_key,entered_at,entry_json) VALUES(?,?,?,?,?,?)")
       .run(userId,requestId,row.town_id,bathKey,now,JSON.stringify(entry));
     const saved=db.prepare("SELECT * FROM onsen_visits WHERE id=?").get(inserted.lastInsertRowid);
