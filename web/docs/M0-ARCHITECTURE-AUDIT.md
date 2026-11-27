@@ -89,7 +89,7 @@
 無重疊工作照常；不要求 A/V 全域停工。共享檔施工前公布 owner/區段/base SHA/預期測試、完成後交接 head/tree/diff/CI/未推送；重新讀取正式 HEAD，再從最新基線建小 Draft。
 
 ## 7. 骰子試點（待授權）
-可選骰子而非其他街道、戰鬥、樂透或溫泉。其規則模組只依 town-storage 与 node:crypto，已獨立交易；仍依賴 characters.money、城鎮、時鐘、原版來源、snapshot。
+可選骰子而非其他街道、戰鬥、樂透或溫泉。其規則模組只依 town-storage 與 node:crypto，已獨立交易；仍依賴 characters.money、城鎮、時鐘、原版來源、snapshot。
 - M1 試點：新 public/modules/arcade-dice.js 建議 factory createArcadeDiceUI({getState,replaceState,api,render,notify,el,text,money,browserGameNow})，回傳 renderArcadeDice。pendingArcadeDice/arcadeDiceSubmitting 仍單例，原 confirm/crypto.randomUUID、state 更新及 notify 順序、finally render、冷卻顯示、重送保持。僅搬 app L2969–2996、3073–3131；app L4707 改委派。HTML/樣式/導航/全局 timer 不動，不新加骰子倒數 timer（目前依 render 更新）。
 - M2 試點：新 src/routes/arcade-dice.mjs 建議 createArcadeDiceRoute({db,arcadeDiceSource,gameNow,snapshot,sendJson,HttpError})，以原 dispatch 位置 L938–947 呼叫同步 handler(res,user,data)；不另驗證身分、不改 guard、不自開 DB，原 400 error mapping；一次 playArcadeDice(db,user.id,source,{guess,stake,requestId,now:gameNow()}) 成功後一次 snapshot(user) 並回傳 {...snapshot,arcadeDiceResult}。保留 source parse、init、snapshot overview 在 server；core 完全不改。
 - 原版 gamerand.cgi→saikoro.cgi、五種下注（10000/50000/100000/500000/1000000）、一個 randomIndex(36)、五分鐘、20筆歷史；Web 非負現金、安全整數、本人 requestId 防重，BEGIN IMMEDIATE→查重→資格/現金/冷卻→RNG→UPDATE characters.money→INSERT arcade_dice_rounds→COMMIT/ROLLBACK。不要改成 mutateCharacter 或用新 banking API 調整既有行為。
@@ -103,3 +103,9 @@ M0 補核動態 SQL/跨模組副作用及測試路徑依賴、更新開放 PR �
 
 ## 9. 未核實事項與決策門檻
 本批為 M0 靜態清冊與第一試點方案，不是 M0 完全語義稽核結案。尚須逐個跨領域 SQL 動態表/外鍵、snapshot overview 副作用、每個測試的動態路徑及函式文字斷言、CSS selector 契約、前端間接 API 和翻譯鍵語義；取得各窗本機狀態與施工協調，確認 #146 是否已合併；正式基線若移動需差分補查。沒有本機執行、沒有候選 Chrome 或真人證據。任何後續重構需使用者授權；M0 補核不必等待 A/V 無衝突工作。若第一個試點只准 M1，M2 等另行授權。
+
+
+## 10. 施工期間新增工作窗交接（再次查詢正式 HEAD 未移動）
+- [A #153](https://github.com/Prysline/town-kinki/pull/153) open Draft，HEAD a87717b512a2bdb061bfc32d7eca0cc2cf906563，新增 gm02-horse-race-source.md、src/horse-race-source.mjs、tests/horse-race-source.test.mjs，沒有集中檔重疊；規則候選非已完成 GM-02。允許 A 繼續。後續正式 HTTP/SQLite/玩家入口接線時，由 M 協調 server/app/index 最小差異；不要求等待骰子試點完成。
+- [V #154](https://github.com/Prysline/town-kinki/pull/154) open Draft，HEAD 713c39a00cfaa8a0ec4967aa7c9af8c28dc0fafa，驗證專用基線與 reporter、v01-player-flow.test.mjs、4 份 validation 文件。無 M0 檔案重疊；其 PR body 所載 992 TAP、117 tests、73 API 與本窗靜態數字相符。該候選新增測試仍須獨立核對 CI，不自行合併或把自動化當真人。M1 候選可移交 V 使用其獨立基線工具。
+- #146、#152、#1 均仍 Draft；本次 M0 只新 Markdown，未取得或占用其他窗分支寫入權。
