@@ -4,7 +4,7 @@ import {drawHorseRaceCard,startHorseRace,advanceHorseRace,HORSE_LOCK_SECONDS} fr
 import {readTownMap} from "./town-storage.mjs";
 import {assertNoActiveOnsen} from "./onsen.mjs";
 import {getCockroachChallenge} from "./event-cockroach.mjs";
-import {refreshBankTaxSnapshot} from "./banking.mjs";
+import {refreshBankTaxSnapshot,settleBankInterestInTransaction} from "./banking.mjs";
 
 export const HORSE_RACE_SYMBOL="競馬";
 const REQUEST=/^[A-Za-z0-9_-]{8,80}$/;
@@ -71,8 +71,9 @@ export function horseRaceRankings(db){
 export function horseRaceOverview(db,user){
   integer(user,1);
   const c=character(db,user);
+  const latest=db.prepare("SELECT * FROM horse_races WHERE user_id=? ORDER BY id DESC LIMIT 1").get(user);
   return {available:here(db,c.town_id),active:activeHorseRace(db,user),
-    busy:Boolean(running(db)),rankings:horseRaceRankings(db)};
+    latest:latest?publicRace(latest):null,busy:Boolean(running(db)),rankings:horseRaceRankings(db)};
 }
 function transaction(db,user,action,args,requestId,now,work){
   integer(user,1);integer(now,1);
@@ -132,8 +133,12 @@ export function enterHorseRace(db,user,source,{raceId,tickets,requestId,now,toda
       // this change back with the entire Web transaction (documented difference).
       db.prepare("UPDATE horse_races SET status='forfeited',last_at=? WHERE id=?").run(now,lock.id);
     }
-    const result=startHorseRace(source,JSON.parse(race.card_json),tickets,c.money,rand);
-    moneyChange(db,user,c.money,-result.cost,today);
+    // Settle the previous tax base before any wager changes today\'s snapshot.
+    // Existing bank helper shares this transaction; rejected/replayed starts cannot commit settlement.
+    settleBankInterestInTransaction(db,user,today,now);
+    const cash=character(db,user).money;
+    const result=startHorseRace(source,JSON.parse(race.card_json),tickets,cash,rand);
+    moneyChange(db,user,cash,-result.cost,today);
     db.prepare("UPDATE horse_races SET status='running',started_at=?,last_at=?,horses_json=?,cost=? WHERE id=?")
       .run(now,now,JSON.stringify(result.horses),result.cost,raceId);
     return publicRace(owned(db,user,raceId));
@@ -152,7 +157,8 @@ export function stepHorseRace(db,user,source,{raceId,expectedTurn,requestId,now,
     const result=advanceHorseRace(source,JSON.parse(race.horses_json),rand);
     if(result.cost!==race.cost)throw Error("競馬下注保存資料不一致");
     if(result.finished){
-      moneyChange(db,user,c.money,result.payout,today);
+      settleBankInterestInTransaction(db,user,today,now);
+      moneyChange(db,user,character(db,user).money,result.payout,today);
       const rank=db.prepare("SELECT spent,won FROM horse_race_rankings WHERE user_id=?").get(user);
       const spent=integer((rank?.spent??0)+race.cost),won=integer((rank?.won??0)+result.payout);
       db.prepare("INSERT INTO horse_race_rankings(user_id,spent,won,last_played_at) VALUES(?,?,?,?) "+

@@ -32,6 +32,9 @@ import {parseOriginalTreasure,initTreasureTables,treasureOverview,openTreasure} 
 import {parseOriginalRoadTransport,initRoadTravelTables,roadOverview,beginRoadTrip,arriveRoadTrip} from "./road-travel.mjs";
 import {parseOriginalOnsenConfig} from "./onsen-source.mjs";
 import {initOnsenTables,activeOnsenVisit,onsenOverview,enterOnsen,leaveOnsen} from "./onsen.mjs";
+import {parseHorseRaceSource} from "./horse-race-source.mjs";
+import {initHorseRaceTables,horseRaceOverview} from "./horse-race.mjs";
+import {handleHorseRacePost} from "./routes/horse-race.mjs";
 import {initCouponRedemptionTables,listCouponRewards,listCouponRedemptions,redeemEventCoupon,COUPON_SHOP_SYMBOL} from "./coupon-redemption.mjs";
 import { getCockroachChallenge,claimCockroachForEvent } from "./event-cockroach.mjs";
 import { parseLegacyInsurance, initInventoryTables, inventoryOverview, hasActiveHealthInsurance, listInsurancePurchases, buyHealthInsurance } from "./inventory.mjs";
@@ -129,6 +132,7 @@ initMultiCardTables(db);
 initTreasureTables(db);
 initRoadTravelTables(db);
 initOnsenTables(db);
+initHorseRaceTables(db);
 initInventoryTables(db);
 initDiningStockTables(db);
 initLegacyItemUseTables(db);
@@ -212,6 +216,8 @@ const treasureSource=parseOriginalTreasure(
   decodeLegacyText(readFileSync(resolve(REPO_ROOT,"town_ini.cgi")))
 );
 const onsenConfig=parseOriginalOnsenConfig(decodeLegacyText(readFileSync(resolve(REPO_ROOT,"town_ini.cgi"))));
+const horseRaceSource=parseHorseRaceSource(decodeLegacyText(readFileSync(resolve(REPO_ROOT,"basic.cgi"))),
+  decodeLegacyText(readFileSync(resolve(REPO_ROOT,"town_ini.cgi"))));
 const roadSource=parseOriginalRoadTransport(
   decodeLegacyText(readFileSync(resolve(REPO_ROOT,"town_ini.cgi"))),
   decodeLegacyText(readFileSync(resolve(REPO_ROOT,"town_lib.pl"))),
@@ -488,6 +494,7 @@ function snapshot(user) {
     treasure:updated?treasureOverview(db,user.id,treasureSource,now):null,
     roadTravel:updated?roadOverview(db,user.id,roadSource,now):null,
     onsen:updated?onsenOverview(db,user.id,onsenConfig,now):null,
+    horseRace:updated?horseRaceOverview(db,user.id):null,
     cockroachChallenge: updated ? getCockroachChallenge(db,user.id,now) : null,
     hospital: updated ? getTreatmentQuote(updated,hasActiveHealthInsurance(db,user.id,insuranceItem,now)) : null,
     insurance: updated ? inventoryOverview(db,user.id,insuranceItem,now) : null,
@@ -744,6 +751,11 @@ async function handle(req, res) {
     // Permit the existing solo clock/delete operations and logout, but no resident actions during a visit.
     if(activeOnsenVisit(db,user.id)&&!["/api/solo/time/advance","/api/solo/character/delete"].includes(path))
       throw new HttpError(409,"目前正在泡溫泉，請先離開浴池");
+
+    // GM-02: independent route; authenticated POST and existing bath guard already ran.
+    const horseResponse=handleHorseRacePost(path,data,{db,user,source:horseRaceSource,gameNow,
+      todayFor:now=>calendarDay(now,GAME_TIMEZONE),snapshot,HttpError});
+    if(horseResponse!==null)return sendJson(res,200,horseResponse);
 
     if (path === "/api/solo/character/delete") {
       if (MODE !== "solo") throw new HttpError(403, "只有單人模式可以刪除角色");

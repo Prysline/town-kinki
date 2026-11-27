@@ -143,3 +143,26 @@ test("GM-02 physical SQLite reopen preserves card, lock, turns, final receipt an
     assert.equal(cash(db,2),200000);assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(),[]);
   }finally{db?.close();rmSync(dir,{recursive:true,force:true});}
 });
+
+test("GM-02 first Monday start uses Sunday tax base before refreshing, including rejected and replayed transaction",()=>{
+  const db=setup();
+  try{
+    const sunday=Date.parse("2026-11-29T00:00:00Z"),monday=sunday+86400000;
+    db.exec("UPDATE characters SET money=2000000,bank=1000000 WHERE user_id=1");
+    db.prepare("INSERT INTO bank_accounts(user_id,term_balance,last_interest_day) VALUES(1,0,?)").run("2026-11-29");
+    db.prepare("INSERT INTO bank_tax_state(user_id,assessment_base,snapshot_day) VALUES(1,3000000,?)").run("2026-11-29");
+    const q=quote(db,1,{now:sunday});
+    const args={now:monday,today:"2026-11-30"};
+    assert.throws(()=>start(db,q.id,1,{...args,tickets:[0,0,0,0,0,0]}),/尚未購買/);
+    assert.equal(tax(db),3000000);
+    assert.equal(db.prepare("SELECT COUNT(*) n FROM bank_tax_assessments").get().n,0);
+    const r=start(db,q.id,1,args);
+    assert.equal(cash(db),1950000);
+    assert.equal(db.prepare("SELECT bank FROM characters WHERE user_id=1").get().bank,975000);
+    assert.equal(db.prepare("SELECT assessment_base FROM bank_tax_assessments WHERE user_id=1").get().assessment_base,3000000);
+    assert.equal(start(db,q.id,1,{...args,rand:noRand}).replayed,true);
+    assert.equal(db.prepare("SELECT COUNT(*) n FROM bank_tax_assessments").get().n,1);
+    assert.equal(tax(db),2925000);
+    assert.equal(r.status,"running");
+  }finally{db.close();}
+});

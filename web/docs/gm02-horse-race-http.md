@@ -1,0 +1,6 @@
+# GM-02 A-03 HTTP candidate
+A-02 58f4b27e / 0c777a21 raw Push/PR 1000/1000. Add isolated routes/horse-race.mjs and minimal server composition only; no dice dispatch edits, no shared test changes. M coordination #155.
+
+POST /api/horse-race/quote, /start, /step reuse authenticated same-origin JSON gate, gameNow, local calendarDay and existing snapshot. Client-supplied clock, cash, odds, winner, RNG, user ID are ignored. State horseRace contains available, busy, own active/latest and public top10; no other player's cards. Normal snapshot retains existing settlement; no new global restriction on existing resident APIs. Bath guard applies. Existing single-player map editor can place original 競馬 symbol; multiplayer map is admin-owned. No default map overwrite.
+
+V02 #154 showed Monday first direct bath entry can advance tax base before old tax settlement. GM-02 now uses existing settleBankInterestInTransaction before cash mutations within own transaction, no nested BEGIN. Added independent Monday regression and solo/multi real HTTP tests; controlled clock/map fixtures identified. UI, original display timing and rejected stale-lock policy remain unresolved; no claim of completion or merge.
