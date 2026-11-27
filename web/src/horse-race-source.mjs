@@ -6,6 +6,8 @@ export const HORSE_TICKET_LIMIT=200;
 export const HORSE_MAX_BET_ENTRIES=2;
 export const HORSE_FINISH_DISTANCE=400;
 export const HORSE_LOCK_SECONDS=180;
+// Expected original wager rejection, distinct from corrupt data/RNG/SQL faults.
+export class HorseBetError extends Error {}
 
 export function parseHorseRaceSource(basic,ini){
   const list=(key)=>{
@@ -58,17 +60,17 @@ export function startHorseRace(source,card,tickets,cash,rand=nativeRand){
   validateCard(source,card);
   if(!Array.isArray(tickets)||tickets.length!==6||
      tickets.some(n=>!Number.isSafeInteger(n)||n<0))
-    throw new Error("馬券購買數不正確");
+    throw new HorseBetError("馬券購買數不正確");
   safeAmount(cash);
   drawHorseRaceCard(source,rand);
   const horses=card.map((h,i)=>({...h,tickets:tickets[i],
     distance:Math.trunc((draw(rand,60)+10)/(1+h.odds/70))}));
-  const total=safeAmount(tickets.reduce((a,b)=>a+b,0));
-  const cost=safeAmount(total*HORSE_TICKET_PRICE);
-  if(cost===0)throw new Error("尚未購買馬券");
-  if(cash<cost)throw new Error("現金不足");
-  if(total>HORSE_TICKET_LIMIT)throw new Error("超過馬券張數上限");
-  if(tickets.filter(n=>n>0).length>HORSE_MAX_BET_ENTRIES)throw new Error("最多投注兩匹馬");
+  const total=tickets.reduce((a,b)=>a+b,0),cost=total*HORSE_TICKET_PRICE;
+  if(!Number.isSafeInteger(total)||!Number.isSafeInteger(cost))throw new HorseBetError("競馬金額超出安全範圍");
+  if(cost===0)throw new HorseBetError("尚未購買馬券");
+  if(cash<cost)throw new HorseBetError("現金不足");
+  if(total>HORSE_TICKET_LIMIT)throw new HorseBetError("超過馬券張數上限");
+  if(tickets.filter(n=>n>0).length>HORSE_MAX_BET_ENTRIES)throw new HorseBetError("最多投注兩匹馬");
   return {horses,cost};
 }
 export function advanceHorseRace(source,horses,rand=nativeRand){

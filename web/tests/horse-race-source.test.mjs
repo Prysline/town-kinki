@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {readFileSync} from "node:fs";
+import {readFileSync,mkdtempSync,rmSync} from "node:fs";
+import {tmpdir} from "node:os";
+import {join} from "node:path";
 import {execFileSync} from "node:child_process";
 import {parseHorseRaceSource,drawHorseRaceCard,startHorseRace,advanceHorseRace,
   HORSE_LOCK_SECONDS} from "../src/horse-race-source.mjs";
@@ -75,4 +77,24 @@ test("GM-02 no finish, no bet, insufficient cash, total cap, two entries and for
   assert.throws(()=>startHorseRace(source,[{...card[0],odds:999},...card.slice(1)],
     [1,0,0,0,0,0],1000),/名單/);
   assert.throws(()=>drawHorseRaceCard(source,n=>n),/亂數/);
+});
+
+test("GM-02 decision A actual Perl lock and rejected wager order at 180 and 181 seconds",()=>{
+  const lock=basic.match(/sub keibalock \{[\s\S]*?(?=#----------病院----------#)/)[0];
+  const checks=basic.match(/if \(\$hikarerugaku == 0\)\{[^\n]+\}\r?\n[\s\S]*?(?=\s*&header;)/)[0];
+  const dir=mkdtempSync(join(tmpdir(),"horse-perl-lock-"));
+  try{
+    const script='BEGIN { *CORE::GLOBAL::time=sub(){ 1000000 }; }\n'+lock+'\n'+
+      'sub error { die "reject\\n"; } ($keibalockfile,$keiba_logfile,$age,$hikarerugaku,$money,$kounyuu_soumaisuu,$kaketaumanokazu)=@ARGV; $keiba_gendomaisuu=200; '+
+      'mkdir($keibalockfile); utime(1000000-$age,1000000-$age,$keibalockfile); open(F,">$keiba_logfile"); print F "old race"; close(F); '+
+      'eval { &keibalock; '+checks+' }; open(F,"<$keiba_logfile"); local $/; $old=<F>; close(F); print((-e $keibalockfile?"locked":"free")."<>".($old||"empty")."<>".($@?"reject":"accepted")); rmdir($keibalockfile);';
+    for(const [age,cost,money,count,horses,expected] of [
+      [180,0,200000,0,0,"locked<>old race<>reject"],
+      [181,0,200000,0,0,"free<>empty<>reject"],
+      [181,500,499,1,1,"free<>empty<>reject"],
+      [181,100500,200000,201,1,"free<>empty<>reject"],
+      [181,1500,200000,3,3,"free<>empty<>reject"],
+      [181,500,200000,1,1,"locked<>empty<>accepted"]
+    ])assert.equal(execFileSync("perl",["-e",script,join(dir,"lock"),join(dir,"race"),String(age),String(cost),String(money),String(count),String(horses)],{encoding:"utf8"}),expected);
+  }finally{rmSync(dir,{recursive:true,force:true});}
 });

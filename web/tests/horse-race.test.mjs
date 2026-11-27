@@ -59,7 +59,7 @@ test("GM-02 SQLite genuine quote/start/turn/payout, receipts and rank, bank/tax 
     assert.equal(db.prepare("SELECT bank FROM characters WHERE user_id=1").get().bank,1234);
   }finally{db.close();}
 });
-test("GM-02 one global lock, exact 180 second boundary, late go allowed, accepted takeover forfeits without refund/rank",()=>{
+test("GM-02 one global lock, exact 180 second boundary, late go allowed, rejected expired takeover forfeits without refund/rank",()=>{
   const db=setup();
   try{
     const q1=quote(db),q2=quote(db,2);
@@ -67,8 +67,10 @@ test("GM-02 one global lock, exact 180 second boundary, late go allowed, accepte
     assert.throws(()=>start(db,q2.id,2,{now:NOW+180999}),/已有競馬/);
     r=step(db,r,1,{now:NOW+181000});assert.equal(r.status,"running");
     assert.throws(()=>start(db,q2.id,2,{now:NOW+181000,tickets:[0,0,0,0,0,0]}),/尚未購買/);
-    assert.equal(activeHorseRace(db,1).id,r.id);
-    const r2=start(db,q2.id,2,{now:NOW+181000});
+    assert.equal(activeHorseRace(db,1),null);
+    assert.equal(activeHorseRace(db,2),null);
+    assert.equal(cash(db,2),200000);assert.equal(tax(db,2),undefined);
+    const r2=start(db,q2.id,2,{now:NOW+181000,requestId:"start_after_reject"});
     assert.equal(horseRaceById(db,1,r.id).status,"forfeited");
     assert.equal(cash(db),150000);assert.equal(cash(db,2),150000);
     assert.deepEqual(horseRaceRankings(db),[]);
@@ -164,5 +166,47 @@ test("GM-02 first Monday start uses Sunday tax base before refreshing, including
     assert.equal(db.prepare("SELECT COUNT(*) n FROM bank_tax_assessments").get().n,1);
     assert.equal(tax(db),2925000);
     assert.equal(r.status,"running");
+  }finally{db.close();}
+});
+
+test("GM-02 decision A: every original wager rejection clears stale lock, but no other user's cash or rank",()=>{
+  for(const [tickets,cashBefore,reason] of [
+    [[0,0,0,0,0,0],200000,/尚未購買/],[[1,0,0,0,0,0],499,/現金不足/],
+    [[201,0,0,0,0,0],200000,/上限/],[[1,1,1,0,0,0],200000,/兩匹/],
+    [[-1,0,0,0,0,0],200000,/購買數/],[null,200000,/購買數/]
+  ]){
+    const db=setup();try{
+      const a=quote(db),b=quote(db,2),r=start(db,a.id);
+      db.prepare("UPDATE characters SET money=? WHERE user_id=2").run(cashBefore);
+      const attempt={now:NOW+181000,tickets};
+      assert.throws(()=>start(db,b.id,2,{...attempt,now:NOW+180999}),/已有競馬/);
+      assert.equal(activeHorseRace(db,1).id,r.id);
+      assert.throws(()=>start(db,b.id,2,attempt),reason);
+      assert.equal(horseRaceById(db,1,r.id).status,"forfeited");
+      assert.equal(horseRaceById(db,2,b.id).status,"quoted");
+      assert.equal(activeHorseRace(db,2),null);assert.equal(cash(db,1),150000);
+      assert.equal(cash(db,2),cashBefore);assert.equal(tax(db,2),undefined);
+      assert.deepEqual(horseRaceRankings(db),[]);
+      const next=quote(db,1,{now:NOW+182000,requestId:"quote_later"});
+      const later=start(db,next.id,1,{now:NOW+182000,requestId:"start_later"});
+      assert.throws(()=>start(db,b.id,2,{...attempt,now:NOW+400000,rand:noRand}),reason);
+      assert.equal(activeHorseRace(db,1).id,later.id,"replayed rejection must not forfeit a newer stale race");
+    }finally{db.close();}
+  }
+});
+test("GM-02 decision A: forged ownership, internal RNG and SQL faults cannot commit expired lock clear",()=>{
+  const db=setup();try{
+    const a=quote(db),b=quote(db,2),r=start(db,a.id);
+    const now=NOW+181000;
+    assert.throws(()=>start(db,b.id,1,{now}),/本人/);
+    assert.throws(()=>start(db,b.id,2,{now,rand:()=>NaN}),/亂數/);
+    db.exec("CREATE TRIGGER fail_expired_receipt BEFORE INSERT ON horse_race_receipts BEGIN SELECT RAISE(ABORT,'expired receipt fault'); END;");
+    assert.throws(()=>start(db,b.id,2,{now,tickets:[0,0,0,0,0,0]}),/expired receipt fault/);
+    assert.equal(activeHorseRace(db,1).id,r.id);
+    assert.equal(cash(db,1),150000);assert.equal(cash(db,2),200000);
+    assert.equal(tax(db,2),undefined);assert.deepEqual(horseRaceRankings(db),[]);
+    db.exec("DROP TRIGGER fail_expired_receipt");
+    assert.throws(()=>start(db,b.id,2,{now,tickets:[0,0,0,0,0,0]}),/尚未購買/);
+    assert.equal(activeHorseRace(db,1),null);
   }finally{db.close();}
 });

@@ -1,6 +1,6 @@
 // GM-02: SQLite transaction layer. The existing characters.money and bank tax
 // snapshot remain authoritative. Caller supplies authenticated user and game clock.
-import {drawHorseRaceCard,startHorseRace,advanceHorseRace,HORSE_LOCK_SECONDS} from "./horse-race-source.mjs";
+import {drawHorseRaceCard,startHorseRace,advanceHorseRace,HORSE_LOCK_SECONDS,HorseBetError} from "./horse-race-source.mjs";
 import {readTownMap} from "./town-storage.mjs";
 import {assertNoActiveOnsen} from "./onsen.mjs";
 import {getCockroachChallenge} from "./event-cockroach.mjs";
@@ -80,17 +80,24 @@ function transaction(db,user,action,args,requestId,now,work){
   if(typeof requestId!=="string"||!REQUEST.test(requestId))throw Error("競馬請求識別碼不正確");
   const encoded=JSON.stringify(args);
   db.exec("BEGIN IMMEDIATE");
+  let response;
   try{
     const prior=db.prepare("SELECT * FROM horse_race_receipts WHERE user_id=? AND request_id=?").get(user,requestId);
     if(prior){
       if(prior.action!==action||prior.args_json!==encoded)throw Error("相同競馬請求碼不可變更操作或內容");
-      db.exec("COMMIT");return {...JSON.parse(prior.result_json),replayed:true};
+      response={...JSON.parse(prior.result_json),replayed:true};
+    }else{
+      const result=work();
+      db.prepare("INSERT INTO horse_race_receipts(user_id,race_id,request_id,action,args_json,result_json) VALUES(?,?,?,?,?,?)")
+        .run(user,result.id,requestId,action,encoded,JSON.stringify(result));
+      response={...result,replayed:false};
     }
-    const result=work();
-    db.prepare("INSERT INTO horse_race_receipts(user_id,race_id,request_id,action,args_json,result_json) VALUES(?,?,?,?,?,?)")
-      .run(user,result.id,requestId,action,encoded,JSON.stringify(result));
-    db.exec("COMMIT");return {...result,replayed:false};
+    db.exec("COMMIT");
   }catch(error){db.exec("ROLLBACK");throw error;}
+  // Only an approved stale-lock clear may commit with a rejected wager. Replay
+  // returns the same rejection without touching any later race.
+  if(response.rejected)throw new HorseBetError(response.rejected);
+  return response;
 }
 export function quoteHorseRace(db,user,source,{requestId,now,rand}={}){
   return transaction(db,user,"quote",[],requestId,now,()=>{
@@ -116,8 +123,6 @@ function moneyChange(db,user,current,delta,today){
 }
 export function enterHorseRace(db,user,source,{raceId,tickets,requestId,now,today,rand}={}){
   integer(raceId,1);
-  if(!Array.isArray(tickets)||tickets.length!==6||tickets.some(n=>!Number.isSafeInteger(n)||n<0))
-    throw Error("馬券購買數不正確");
   return transaction(db,user,"start",[raceId,tickets],requestId,now,()=>{
     const race=owned(db,user,raceId),c=character(db,user);
     if(race.status!=="quoted")throw Error("這張競馬名單已使用");
@@ -129,15 +134,25 @@ export function enterHorseRace(db,user,source,{raceId,tickets,requestId,now,toda
       // Perl stat()/time() use whole seconds; equality at 180 is NOT stale.
       if(Math.floor(lock.started_at/1000)>=Math.floor(now/1000)-HORSE_LOCK_SECONDS)
         throw Error("目前已有競馬賽事進行中");
-      // No refund or ranking entry for an abandoned race. A rejected start rolls
-      // this change back with the entire Web transaction (documented difference).
+      // User decision A (2026-11-28): original clears the expired lock before
+      // validating the new wager. No refund or ranking for the abandoned race.
       db.prepare("UPDATE horse_races SET status='forfeited',last_at=? WHERE id=?").run(now,lock.id);
     }
-    // Settle the previous tax base before any wager changes today\'s snapshot.
-    // Existing bank helper shares this transaction; rejected/replayed starts cannot commit settlement.
-    settleBankInterestInTransaction(db,user,today,now);
-    const cash=character(db,user).money;
-    const result=startHorseRace(source,JSON.parse(race.card_json),tickets,cash,rand);
+    // Keep the approved lock side effect outside the wager savepoint, but inside
+    // the same DB transaction. Only expected wager errors may commit that effect.
+    // Bank settlement, cash, SQL and RNG failures cannot leave partial changes.
+    db.exec("SAVEPOINT horse_wager");
+    let result,cash;
+    try{
+      settleBankInterestInTransaction(db,user,today,now);
+      cash=character(db,user).money;
+      result=startHorseRace(source,JSON.parse(race.card_json),tickets,cash,rand);
+      db.exec("RELEASE horse_wager");
+    }catch(error){
+      db.exec("ROLLBACK TO horse_wager");db.exec("RELEASE horse_wager");
+      if(lock&&error instanceof HorseBetError)return {id:raceId,rejected:error.message};
+      throw error;
+    }
     moneyChange(db,user,cash,-result.cost,today);
     db.prepare("UPDATE horse_races SET status='running',started_at=?,last_at=?,horses_json=?,cost=? WHERE id=?")
       .run(now,now,JSON.stringify(result.horses),result.cost,raceId);
