@@ -55,7 +55,7 @@ async function run(root,dir){
     const res=await fetch(s.url+"/api/"+path,{method:body===undefined?"GET":"POST",headers:{...(body===undefined?{}:{"Content-Type":"application/json"}),...(session?.cookie?{Cookie:session.cookie}:{}),...headers},body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(10000)});
     const payload=await res.json();assert.equal(res.status,status,label+" "+JSON.stringify(payload).slice(0,400));
     if(session&&res.headers.get("set-cookie"))session.cookie=res.headers.get("set-cookie").split(";")[0];
-    add(label,{status:res.status,payload});return payload;
+    add(label,{status:res.status,payload});console.log("V05_EXEC "+label);return payload;
   }
   const char=()=>dbRun(data,mode,db=>db.prepare("SELECT * FROM characters ORDER BY user_id").all());
   const ledger=()=>dbRun(data,mode,db=>db.prepare("SELECT * FROM bank_ledger ORDER BY id").all());
@@ -65,6 +65,8 @@ async function run(root,dir){
     s=await launch(root,data,mode);
     await request("solo create","character",{name:"V05工作",gender:"other",stats});
     await request("solo starter","solo/map/starter",{});
+    assert.equal(char()[0].job_id,"legacy-2","new characters have the default job");
+    sql("UPDATE characters SET job_id=NULL"); // controlled legacy/no-job fixture
     await request("solo no job","work",{},400);
     await request("solo invalid job","job",{key:"unknown-job"},404);
     await request("solo invalid payment","job/payment",{payment:"credit"},400);
