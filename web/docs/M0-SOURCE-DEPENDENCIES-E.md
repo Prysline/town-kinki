@@ -1,0 +1,9 @@
+# M0 src 靜態依賴 E
+基準 c18f56e8df68f3c8998c1ba7733500026e34424b。逐檔 SHA 核對；機械式 from/import/export、SQL 字面值抽取，非完整語義分析；註解、非 SQL 字串可能誤中；動態表名、cascade、trigger、間接呼叫需人工補核。
+| File | imports | exports | CREATE candidates | FROM/JOIN candidates | writes candidates | tx tokens | RNG tokens |
+|---|---|---|---|---|---|---:|---:|
+| web/src/town-storage.mjs | ./engine.mjs, ./town-map.mjs, node:fs, node:path | bootstrapLegacyTownMaps, editTownTile, initTownMapTable, publicTownMap, readTownMap, storeTownMap | town_maps | town_maps | set, town_maps | 3 | 0 |
+| web/src/training.mjs | ./engine.mjs | CLASSROOM_ZH_TW, GYM_ZH_TW, SCHOOL_ZH_TW, calendarDay, parseLegacyClassroom, parseLegacyGym, parseLegacySchool, performTraining, trainingAvailability |  |  |  | 0 | 0 |
+| web/src/transport.mjs |  | quoteTrainFare, trainDestinations, travelByTrain |  |  |  | 0 | 0 |
+| web/src/vending.mjs | ./legacy-inventory.mjs, node:crypto | VENDING_MAX_GOODS, VENDING_SHOP, VENDING_SYMBOL, ensureVendingRotation, initVendingTables, listVendingStock, parseLegacyVendingCatalog, vendingPeriodKey | vending_rotation, vending_stock | vending_rotation, vending_stock | set, vending_rotation, vending_stock | 0 | 6 |
+| web/src/wholesale.mjs | ./banking.mjs, ./legacy-inventory.mjs, ./rooms.mjs, node:crypto | SHOP_CATEGORIES, SHOP_ITEM_LIMIT, SHOP_KIND_LIMIT, WHOLESALE_MAX_GOODS, WHOLESALE_RETURN_RATE, WHOLESALE_STOCK_MULTIPLIER, WHOLESALE_SYMBOL, buyWholesale, configurePlayerShop, defaultStorePrice, ensureWholesaleDay, initWholesaleTables, listMyShops, listShopInventory, listWholesaleGoods, listWholesaleHistory, parseWholesaleCatalog, returnWholesale, storePriceRange, wholesaleCost | player_shop_stock, player_shops, wholesale_day, wholesale_stock, wholesale_transactions | characters, houses, player_shop_stock, player_shops, wholesale_day, wholesale_stock, wholesale_transactions | characters, player_shop_stock, player_shops, set, wholesale_day, wholesale_stock, wholesale_transactions | 7 | 6 |
