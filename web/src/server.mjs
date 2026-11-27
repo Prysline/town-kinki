@@ -22,7 +22,8 @@ import { initCharacterEvents, settleDailyIllnessEvent, listCharacterEvents, getC
 import {parseLegacyCouponCatalog} from "./coupon-catalog.mjs";
 import {parseOriginalFishing,initFishingTables,ensureFishingStock,fishingOverview,buyFishingBait,castFishing,sellFishingCatch} from "./fishing.mjs";
 import {parseOriginalCrafting,initCraftingTables,craftingOverview,craftItem} from "./crafting.mjs";
-import {parseOriginalArcadeDice,initArcadeDiceTables,arcadeDiceOverview,playArcadeDice} from "./arcade-dice.mjs";
+import {parseOriginalArcadeDice,initArcadeDiceTables,arcadeDiceOverview} from "./arcade-dice.mjs";
+import {createArcadeDiceRoute} from "./routes/arcade-dice.mjs";
 import {parseOriginalArcadeHighLow,initArcadeHighLowTables,arcadeHighLowOverview,playArcadeHighLow} from "./arcade-highlow.mjs";
 import {parseOriginalArcadeDonuts,initArcadeDonutTables,arcadeDonutsOverview,playArcadeDonut} from "./arcade-donuts.mjs";
 import {parseOriginalInstantLoto,initInstantLotoTables,instantLotoOverview,playInstantLoto} from "./arcade-loto.mjs";
@@ -636,6 +637,8 @@ function safeFile(res, dir, requestPath, prefix) {
   res.end(readFileSync(target));
 }
 
+const handleArcadeDice=createArcadeDiceRoute({db,arcadeDiceSource,gameNow,snapshot,sendJson,HttpError});
+
 async function handle(req, res) {
   try {
     const url = new URL(req.url, "http://localhost");
@@ -936,14 +939,7 @@ async function handle(req, res) {
     }
 
     if(path==="/api/arcade/dice/play"){
-      let arcadeDiceResult;
-      try{
-        arcadeDiceResult=playArcadeDice(db,user.id,arcadeDiceSource,{
-          guess:data.guess,stake:data.stake,
-          requestId:data.requestId,now:gameNow()
-        });
-      }catch(error){throw new HttpError(400,error.message);}
-      return sendJson(res,200,{...snapshot(user),arcadeDiceResult});
+      return handleArcadeDice(res,user,data);
     }
 
     if(path==="/api/arcade/highlow/play"){
