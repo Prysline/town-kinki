@@ -17,3 +17,5 @@ jobs:
           git rev-parse HEAD HEAD^{tree}
           git worktree add --detach "$RUNNER_TEMP/v04-base" c18f56e8df68f3c8998c1ba7733500026e34424b
           node web/scripts/v04-dice-differential.mjs "$RUNNER_TEMP/v04-base" "$GITHUB_WORKSPACE"
+      - name: Compare actual Chrome UI between pinned versions
+        run: node web/scripts/v04-dice-browser-differential.mjs "$RUNNER_TEMP/v04-base" "$GITHUB_WORKSPACE"

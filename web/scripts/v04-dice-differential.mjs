@@ -13,7 +13,7 @@ assert.equal(git(baseRoot,"rev-parse","HEAD^{tree}"),"d462bbd51f94066499ff3c1e08
 // Candidate runtime equals pinned M tree; this V commit only adds the script/workflow/docs.
 assert.equal(git(candidateRoot,"rev-parse",candidate+"^{tree}"),"9860b406a4d37473fe84c03ad777487b97d12561");
 const changed=git(candidateRoot,"diff","--name-only",candidate,"HEAD").split("\n").filter(Boolean);
-assert.ok(changed.every(x=>x.startsWith("web/docs/validation/")||x==="web/scripts/v04-dice-differential.mjs"||x===".github/workflows/v04-dice-differential.yml"),changed.join(","));
+assert.ok(changed.every(x=>x.startsWith("web/docs/validation/")||(x==="web/scripts/v04-dice-differential.mjs"||x==="web/scripts/v04-dice-browser-differential.mjs")||x===".github/workflows/v04-dice-differential.yml"),changed.join(","));
 const t0=Date.parse("2026-11-29T12:00:00Z");
 const stats=Object.fromEntries("kokugo suugaku rika syakai eigo ongaku bijutu looks tairyoku kenkou speed power wanryoku kyakuryoku love unique etti".split(" ").map(k=>[k,20]));
 const delay=ms=>new Promise(r=>setTimeout(r,ms));
