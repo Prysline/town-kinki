@@ -1,0 +1,2 @@
+# V03 independent AP-05 fix verification
+Exact parent c8fa1bba5a14b4ffff4d9203b27cb5f890f01866 / fdc1fa124729aa6a945caf91bffa109561808a96 (#156). Original V02 test blob bfeed5279902616a70509683326f81ea37a72cd3 reused without change; new GET state control and direct POST fault/retry/restart tests. Controlled time/RNG/wealth fixture, actual HTTP/SQLite; not human. No game code changes; do not merge. CI pending.
