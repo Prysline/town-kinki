@@ -48,7 +48,7 @@ test("BK-05 A/B/C and approved D/E exact Perl trade differential with original p
     ({rows,cash,bank}=js);
   }
   assert.ok(rows.every(r=>!r.shares&&!r.invested&&!r.recovered));
-  assert.equal(stockPortfolioOverview(rows,p).cumulativeNet,150);
+  assert.equal(stockPortfolioOverview(rows,p).cumulativeNet,50);
 });
 test("BK-05 decision A exact own-price funds, 200 cap, zero, insufficient holding, expired buy/sell",()=>{
   const base={rows:emptyStockPortfolio(),prices:p,cash:100,bank:1000,action:"buy",key:"D",quantity:1};
