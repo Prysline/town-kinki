@@ -1284,7 +1284,7 @@ test("Chrome AP-05：地圖溫泉、八種浴池、入浴重載及跨視埠出�
     assert.equal(reload.onsen.active.id,bath.onsen.active.id);
     assert.equal(reload.character.money,bath.character.money);
     await click(chrome,'#onsen-time-advance button[data-onsen-advance="5m"]');
-    await until(chrome,"document.querySelector('#onsen-body-countdown').textContent==='0 分 0 秒'&&document.querySelector('#onsen-brain-countdown').textContent==='0 分 0 秒'","單機快轉");
+    await until(chrome,"document.querySelector('#onsen-body-countdown').textContent==='0 分 0 秒'&&document.querySelector('#onsen-brain-countdown').textContent==='0 分 0 秒'&&!document.querySelector('#onsen-leave').disabled","單機快轉完成且可出浴");
     await click(chrome,"#onsen-leave");
     await until(chrome,"!document.querySelector('#game').hidden&&document.querySelector('#onsen-active-screen').hidden","出浴返回");
     const after=await evaluate(chrome,"(async()=>await(await fetch('/api/state')).json())()");

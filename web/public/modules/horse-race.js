@@ -8,6 +8,14 @@ export const HORSE_IMAGES=Object.freeze({
   "◇エアシャカール":"shakur.gif","◇ビワハイジ":"heidi.gif","◇ナリタブライアン":"brian.gif",
   "◇テイエムオーシャン":"tm_ocean.gif","◇トウカイテイオー":"tokai_teio.gif","◇ローマンエンパイア":"roman.gif"
 });
+export const HORSE_DISPLAY_NAMES=Object.freeze({
+  "◇ダンスパートナー":"◇舞伴","◇エアグルーヴ":"◇氣槽","◇ビワハヤヒデ":"◇琵琶晨光",
+  "◇イシノサンデー":"◇石野週日","◇ジャングルポケット":"◇森林寶穴","◇マンハッタンカフェ":"◇曼城茶座",
+  "◇ノーリーズン":"◇無理由","◇オグリキャップ":"◇小栗帽","◇サクラプレジデント":"◇櫻花會長",
+  "◇エアシャカール":"◇空中神宮","◇ビワハイジ":"◇琵琶海蒂","◇ナリタブライアン":"◇成田白仁",
+  "◇テイエムオーシャン":"◇TM海洋","◇トウカイテイオー":"◇東海帝皇","◇ローマンエンパイア":"◇羅馬帝國"
+});
+export const displayHorseName=name=>HORSE_DISPLAY_NAMES[name]??name;
 export function horseBetSummary(tickets,cash){
   if(!Array.isArray(tickets)||tickets.length!==6||tickets.some(n=>!Number.isSafeInteger(n)||n<0))
     return {cost:0,reason:"馬券張數須為非負整數"};
@@ -36,9 +44,9 @@ export function createHorseRaceUI({getState,request,money,applyState}){
     if(!race)return;
     race.card.forEach((horse,i)=>{
       const row=node("label");row.className="horse-race-bet-row";
-      const title=node("span",horse.name+"｜"+horse.odds+" 倍");
+      const title=node("span",displayHorseName(horse.name)+"｜"+horse.odds+" 倍");
       const input=node("input");input.type="number";input.min="0";input.max="200";input.step="1";
-      input.value="0";input.name="horse-"+i;input.setAttribute("aria-label",horse.name+" 馬券張數");
+      input.value="0";input.name="horse-"+i;input.setAttribute("aria-label",displayHorseName(horse.name)+" 馬券張數");
       input.addEventListener("input",updateBet);
       row.append(title,input);target.append(row);
     });
@@ -60,11 +68,11 @@ export function createHorseRaceUI({getState,request,money,applyState}){
     const target=el("horse-race-tracks");target.replaceChildren();
     for(const horse of race.horses){
       const row=node("div");row.className="horse-race-lane";
-      row.append(node("span",horse.name+"｜"+horse.odds+" 倍｜"+horse.tickets+" 張"));
+      row.append(node("span",displayHorseName(horse.name)+"｜"+horse.odds+" 倍｜"+horse.tickets+" 張"));
       const track=node("div");track.className="horse-race-track";
       const course=node("div");course.className="horse-race-course";
       const progress=node("progress");progress.max=400;progress.value=horse.distance;
-      progress.setAttribute("aria-label",horse.name+" 賽程");course.append(progress);
+      progress.setAttribute("aria-label",displayHorseName(horse.name)+" 賽程");course.append(progress);
       const file=HORSE_IMAGES[horse.name];
       if(file){const image=node("img");image.src="/legacy-assets/uma/"+file;image.alt="";image.width=30;image.height=30;
         image.style.left=Math.max(0,Math.min(100,horse.distance/400*100))+"%";course.append(image);}
@@ -114,7 +122,7 @@ export function createHorseRaceUI({getState,request,money,applyState}){
     el("horse-race-error").textContent=error;
     const finishers=race?.horses?.filter(h=>h.distance===400)??[];
     el("horse-race-result").textContent=race?.status==="completed"?
-      (finishers.length>1?"多匹馬同時抵達，經終點判定。":"")+race.winner+" 獲得第一名｜投入 "+money(race.cost)+"｜"+(race.payout===0?"未獲派彩":"獲得 "+money(race.payout)):
+      (finishers.length>1?"多匹馬同時抵達，經終點判定。":"")+displayHorseName(race.winner)+" 獲得第一名｜投入 "+money(race.cost)+"｜"+(race.payout===0?"未獲派彩":"獲得 "+money(race.payout)):
       race?.status==="forfeited"?"原賽事已棄權，馬券費用不退還。":"";
     renderRank(available?info.rankings:[]);
   }

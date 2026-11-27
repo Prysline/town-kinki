@@ -1,13 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {readFileSync,existsSync} from "node:fs";
-import {HORSE_IMAGES,HORSE_ROUND_MS,horseBetSummary} from "../public/modules/horse-race.js";
+import {HORSE_IMAGES,HORSE_ROUND_MS,HORSE_DISPLAY_NAMES,displayHorseName,horseBetSummary} from "../public/modules/horse-race.js";
 test("GM-02 original 15 sprite names and 3 second interval match actual CGI sources",()=>{
   const basic=readFileSync(new URL("../../basic.cgi",import.meta.url),"utf8");
   const lib=readFileSync(new URL("../../town_lib.pl",import.meta.url),"utf8");
   const line=basic.match(/%umagazou =\((.*?)\);/)[1];
   const pairs=[...line.matchAll(/"([^"]+)","([^"]+)"/g)].map(x=>[x[1],x[2]]);
   assert.deepEqual(HORSE_IMAGES,Object.fromEntries(pairs));assert.equal(pairs.length,15);
+  assert.deepEqual(Object.keys(HORSE_DISPLAY_NAMES),pairs.map(x=>x[0]));
+  for(const [name] of pairs)assert.doesNotMatch(displayHorseName(name),/[\u3040-\u30ff\u31f0-\u31ff]/);
   for(const [,file] of pairs)assert.ok(existsSync(new URL("../../img/uma/"+file,import.meta.url)));
   const interval=lib.match(/idou = setTimeout\('idousuru\(\)',(\d+)\*1000\);/);
   assert.equal(Number(interval[1])*1000,HORSE_ROUND_MS);
