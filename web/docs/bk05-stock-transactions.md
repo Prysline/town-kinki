@@ -1,2 +1,3 @@
 # BK-05 SQLite transaction candidate
 使用者已核准 A/A：五檔各25000 初始化、D/E 依自身價格檢查現金及普通存款而只扣現金。獨立 stock-market.mjs，新增5表/1 index，資料庫重開不覆蓋股價、私人投資及收據 FK 清理、公開行情歷史30/本人交易10。交易窗口全域共享，每次合法設施 access 更新計數及180秒，不從 overview 觸發。原版 buy/sell 超時只重新開交易窗；clear 即使超時仍全清算。原版商業拒絕在行情 access 保存後發生，保留此局部副作用，savepoint 回滾資產與稅務，拒絕收據重送不再延窗；非預期 SQL/權限異常整體回滾。既有資產與稅基權威不變，市場價值不納稅基。獨立 tickStockMarket 接受可信任 caller 的 guestCount/now；尚未接 scheduler/HTTP，避免將原版每次返回城鎮與 Web GET polling 混為一談。新測試待CI，不聲稱完成。
+補充 stock_guests（共6表）及 stockTownReturn：原版 town_maker.cgi L331 先行情事件、top.pl L373–447 後更新 guestlog，故抽樣採舊列總數，含本次才會清除的過期列；目前角色先刷新、其他列嚴格超過1200秒清理；首次空表 count=0。獨立受控交易 seam 及重送/故障測試已接通，未將它掛到任何正式 HTTP 或 UI 事件。待決策的是 Web 哪個操作等同原版 login_view，不是再決定原版機率。原版同時登入30人上限不是本次股票權限變更授權，不新增全站限制。

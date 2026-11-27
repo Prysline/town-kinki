@@ -20,7 +20,8 @@ export function initStockTables(db,source){
     "CREATE TABLE IF NOT EXISTS stock_market_history (id INTEGER PRIMARY KEY AUTOINCREMENT,actor_name TEXT NOT NULL,event_json TEXT NOT NULL,created_at INTEGER NOT NULL);",
     "CREATE TABLE IF NOT EXISTS stock_trade_history (id INTEGER PRIMARY KEY AUTOINCREMENT,user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,record_json TEXT NOT NULL,created_at INTEGER NOT NULL);",
     "CREATE INDEX IF NOT EXISTS stock_trade_history_owner ON stock_trade_history(user_id,id);",
-    "CREATE TABLE IF NOT EXISTS stock_receipts (user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,request_id TEXT NOT NULL,args_json TEXT NOT NULL,result_json TEXT NOT NULL,PRIMARY KEY(user_id,request_id));"
+    "CREATE TABLE IF NOT EXISTS stock_receipts (user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,request_id TEXT NOT NULL,args_json TEXT NOT NULL,result_json TEXT NOT NULL,PRIMARY KEY(user_id,request_id));",
+    "CREATE TABLE IF NOT EXISTS stock_guests (user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,last_at_sec INTEGER NOT NULL CHECK(last_at_sec>=0));"
   ].join("\n"));
   if(!source||!Array.isArray(source.bootstrapPrices)||source.bootstrapPrices.length!==5)
     throw Error("股票來源初始化缺失");
@@ -56,9 +57,7 @@ export function stockOverview(db,user){
       .map(r=>({actorName:r.actor_name,...JSON.parse(r.event_json),createdAt:r.created_at}))};
 }
 // Explicit seam for the original town return event. No random draw from GET/overview.
-export function tickStockMarket(db,user,{now,guestCount,rand}={}){
-  int(now,1);int(guestCount);
-  return transaction(db,()=>{
+function tickInTransaction(db,user,{now,guestCount,rand}){
     const c=character(db,user),next=projectStockMarketTick(readStockMarket(db),guestCount,Math.floor(now/1000),rand);
     if(next.event){
       writeMarket(db,next);
@@ -67,6 +66,34 @@ export function tickStockMarket(db,user,{now,guestCount,rand}={}){
       db.exec("DELETE FROM stock_market_history WHERE id NOT IN (SELECT id FROM stock_market_history ORDER BY id DESC LIMIT 30)");
     }
     return next;
+}
+export function tickStockMarket(db,user,{now,guestCount,rand}={}){
+  int(now,1);int(guestCount);
+  return transaction(db,()=>tickInTransaction(db,user,{now,guestCount,rand}));
+}
+// Original town_maker login_view calls event_happen BEFORE top.pl refreshes guestlog.
+// Count every persisted guest row, including rows about to expire; no user-supplied count.
+// Current actor is refreshed before pruning; strict >1200 seconds (not >=).
+export const STOCK_GUEST_TIMEOUT_SECONDS=1200;
+export function stockTownReturn(db,user,{now,requestId,rand}={}){
+  int(user,1);int(now,1);
+  if(typeof requestId!=="string"||!REQUEST.test(requestId))throw Error("股票請求識別碼不正確");
+  const args=JSON.stringify(["town-return"]);
+  return transaction(db,()=>{
+    const prior=db.prepare("SELECT * FROM stock_receipts WHERE user_id=? AND request_id=?").get(user,requestId);
+    if(prior){
+      if(prior.args_json!==args)throw Error("相同股票請求碼不可變更操作或內容");
+      return {...JSON.parse(prior.result_json),replayed:true};
+    }
+    character(db,user);assertNoActiveOnsen(db,user);
+    const guestCount=db.prepare("SELECT COUNT(*) n FROM stock_guests").get().n;
+    const next=tickInTransaction(db,user,{now,guestCount,rand});
+    const seconds=Math.floor(now/1000);
+    db.prepare("INSERT INTO stock_guests VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET last_at_sec=excluded.last_at_sec").run(user,seconds);
+    db.prepare("DELETE FROM stock_guests WHERE last_at_sec<?").run(seconds-STOCK_GUEST_TIMEOUT_SECONDS);
+    const result={guestCount,market:next};
+    db.prepare("INSERT INTO stock_receipts VALUES(?,?,?,?)").run(user,requestId,args,JSON.stringify(result));
+    return {...result,replayed:false};
   });
 }
 function guard(db,user,c,now){

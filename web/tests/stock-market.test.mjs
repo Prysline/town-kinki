@@ -5,7 +5,7 @@ import {readFileSync,mkdtempSync,rmSync} from "node:fs";
 import {join} from "node:path";
 import {tmpdir} from "node:os";
 import {parseStockSource} from "../src/stock-source.mjs";
-import {initStockTables,readStockMarket,stockOverview,accessStockMarket,tickStockMarket} from "../src/stock-market.mjs";
+import {initStockTables,readStockMarket,stockOverview,accessStockMarket,tickStockMarket,stockTownReturn,STOCK_GUEST_TIMEOUT_SECONDS} from "../src/stock-market.mjs";
 import {initTownMapTable,storeTownMap} from "../src/town-storage.mjs";
 import {initBankTables} from "../src/banking.mjs";
 import {initOnsenTables} from "../src/onsen.mjs";
@@ -78,4 +78,35 @@ test("BK-05 market ticks explicitly, 30/10 history limits, clear even expired, r
     for(const t of ["stock_portfolios","stock_trade_history","stock_receipts"])assert.equal(d.prepare("SELECT COUNT(*) n FROM "+t+" WHERE user_id=1").get().n,0);
     assert.equal(stockOverview(d,2).marketHistory.length,30);assert.deepEqual(d.prepare("PRAGMA foreign_key_check").all(),[]);
   }finally{d?.close();rmSync(dir,{recursive:true,force:true});}
+});
+
+test("BK-05 source guest row count before refresh; strict 1200s, empty first return and replay",()=>{
+  const d=setup();try{
+    const ini=readFileSync(new URL("../../town_ini.cgi",import.meta.url),"utf8");
+    const maker=readFileSync(new URL("../../town_maker.cgi",import.meta.url),"utf8");
+    const top=readFileSync(new URL("../../top.pl",import.meta.url),"utf8");
+    assert.equal(Number(ini.match(/\$logout_time\s*=\s*'(\d+)'/)[1]),STOCK_GUEST_TIMEOUT_SECONDS);
+    assert.match(maker,/&event_happen;[\s\S]*?&main_view/);
+    assert.ok(top.indexOf("$sanka_timer = $genzai_zikoku;")<top.indexOf("$genzai_zikoku - $logout_time > $sanka_timer"));
+    const r=(u,requestId,now=NOW,rand=n=>n*.99)=>stockTownReturn(d,u,{now,requestId,rand});
+    const first=r(1,"return_001");assert.equal(first.guestCount,0);assert.equal(first.market.event,null);
+    const second=r(2,"return_002",NOW+1200000);assert.equal(second.guestCount,1);
+    assert.equal(d.prepare("SELECT COUNT(*) n FROM stock_guests").get().n,2);
+    const third=r(2,"return_003",NOW+1201000);assert.equal(third.guestCount,2);
+    assert.equal(d.prepare("SELECT COUNT(*) n FROM stock_guests").get().n,1);
+    const replay=r(2,"return_003",NOW+5000000,()=>{throw Error("不得重抽");});
+    assert.deepEqual(replay,{...third,replayed:true});assert.equal(d.prepare("SELECT COUNT(*) n FROM stock_guests").get().n,1);
+    const later=r(1,"return_004",NOW+5000000);
+    assert.equal(later.guestCount,1);assert.equal(d.prepare("SELECT COUNT(*) n FROM stock_guests").get().n,1);
+  }finally{d.close();}
+});
+test("BK-05 guest and price mutation roll back together on failed receipt",()=>{
+  const d=setup();try{
+    stockTownReturn(d,1,{now:NOW,requestId:"return_001",rand:n=>n*.99});
+    const before=readStockMarket(d);
+    d.exec("CREATE TRIGGER fail_return BEFORE INSERT ON stock_receipts BEGIN SELECT RAISE(ABORT,'return fault'); END;");
+    let i=0;assert.throws(()=>stockTownReturn(d,2,{now:NOW+1000,requestId:"return_002",rand:n=>n*[.15,.99][i++]}),/return fault/);
+    assert.deepEqual(readStockMarket(d),before);assert.equal(stockOverview(d,1).marketHistory.length,0);
+    assert.equal(d.prepare("SELECT COUNT(*) n FROM stock_guests").get().n,1);
+  }finally{d.close();}
 });
