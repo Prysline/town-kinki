@@ -10,6 +10,7 @@ const html=readFileSync(new URL("../public/index.html",import.meta.url),"utf8");
 const css=readFileSync(new URL("../public/style.css",import.meta.url),"utf8");
 const script=readFileSync(new URL("../public/app.js",import.meta.url),"utf8");
 const shopEffects=readFileSync(new URL("../public/shop-effects.js",import.meta.url),"utf8");
+const jobScript=readFileSync(new URL("../public/modules/jobs.js",import.meta.url),"utf8");
 
 test("原版兩間食堂每日菜單與共用庫存呈現完整且售完時不可下單",()=>{
   assert.match(html,/id="meal-menu-day"/);
@@ -56,25 +57,32 @@ test("原版薪資收款方式可從工作面板儲存，銀行與現金有實�
   assert.match(html,/<option value="bank">轉入普通銀行存款<\/option>/);
   assert.match(script,/salary-payment"\)\.addEventListener\("change"/);
   assert.match(script,/action\("job\/payment",\{payment\}/);
-  assert.match(script,/state\.character\.salaryPayment/);
+  assert.match(jobScript,/state\.character\.salaryPayment/);
 });
 
 test("職業條件只列真正大於零的需求，保留非零體格條件與後端資格限制",()=>{
   assert.match(html,/id="job-filter"><option value="all">全部職業/);
-  assert.match(script,/JOB_REQUIREMENT_KEYS/);
-  assert.match(script,/function jobRequirementsPanel\(job\)/);
-  assert.match(script,/JOB_REQUIREMENT_KEYS\.filter\(key=>Number\(job\.requirements\?\.\[key\]\?\?0\)>0\)/);
-  assert.match(script,/for\(const key of demanded\)/);
-  assert.match(script,/row\.textContent=labels\[key\]\+"｜目前 "\+current\+" ／ 要求 "\+required/);
-  assert.match(script,/required-current/);
-  assert.match(script,/job-condition-met/);
-  assert.match(script,/能力已達 /);
+  assert.match(script,/import \{ createJobsUI \} from "\.\/modules\/jobs\.js"/);
+  assert.ok(script.includes("const {renderJobs}=createJobsUI({getState:()=>state,el,text,money,labels,action});"));
+  assert.ok(script.includes('el("job-search").addEventListener("input", renderJobs)'));
+  assert.ok(script.includes('el("job-filter").addEventListener("change", renderJobs)'));
+  assert.ok(script.includes("renderJobs();"));
+  assert.ok(jobScript.includes("return {renderJobs};"));
+  assert.ok(jobScript.includes('button.addEventListener("click", () => action("job", { key:job.key }, "已選擇職業：" + job.name))'));
+  assert.match(jobScript,/JOB_REQUIREMENT_KEYS/);
+  assert.match(jobScript,/function jobRequirementsPanel\(job\)/);
+  assert.match(jobScript,/JOB_REQUIREMENT_KEYS\.filter\(key=>Number\(job\.requirements\?\.\[key\]\?\?0\)>0\)/);
+  assert.match(jobScript,/for\(const key of demanded\)/);
+  assert.match(jobScript,/row\.textContent=labels\[key\]\+"｜目前 "\+current\+" ／ 要求 "\+required/);
+  assert.match(jobScript,/required-current/);
+  assert.match(jobScript,/job-condition-met/);
+  assert.match(jobScript,/能力已達 /);
   assert.match(css,/\.job-condition-met/);
-  assert.match(script,/if\(job\.bmiMin\|\|job\.bmiMax\)/);
-  assert.match(script,/if\(job\.minHeight>0\)/);
-  assert.match(script,/if\(job\.previousJob\)/);
-  assert.match(script,/details\.append\(finance\)/);
-  assert.match(script,/button\.disabled = Boolean\(job\.reason\)/);
+  assert.match(jobScript,/if\(job\.bmiMin\|\|job\.bmiMax\)/);
+  assert.match(jobScript,/if\(job\.minHeight>0\)/);
+  assert.match(jobScript,/if\(job\.previousJob\)/);
+  assert.match(jobScript,/details\.append\(finance\)/);
+  assert.match(jobScript,/button\.disabled = Boolean\(job\.reason\)/);
 });
 test("職業名稱緊貼原版等級，只有本級 100 XP 進度與 15 級精通文字，不再重複 1500 XP 長條",()=>{
   assert.match(html,/<dt>目前職業<\/dt><dd id="current-job"><\/dd>/);
@@ -100,13 +108,13 @@ test("職業名稱緊貼原版等級，只有本級 100 XP 進度與 15 級精�
 test("職業介紹所還原原版階級星號與就職資格，不混用個人等級",()=>{
   assert.match(html,/id="jobs-panel"/);
   assert.match(html,/職業名稱後的 \* 代表原版職業階級/);
-  assert.match(script,/const rankStars=job\.rank>1\?"\*"\.repeat\(job\.rank-1\):""/);
-  assert.match(script,/title\.textContent = job\.name \+ rankStars/);
-  assert.match(script,/job\.reason\?\(job\.previousJob/);
-  assert.match(script,/尚未解鎖：/);
-  assert.match(script,/目前未達就職條件：/);
-  assert.match(script,/meta\.append\(title,eligibility,desc,requirements\)/);
-  assert.match(script,/button\.disabled = Boolean\(job\.reason\)/);
+  assert.match(jobScript,/const rankStars=job\.rank>1\?"\*"\.repeat\(job\.rank-1\):""/);
+  assert.match(jobScript,/title\.textContent = job\.name \+ rankStars/);
+  assert.match(jobScript,/job\.reason\?\(job\.previousJob/);
+  assert.match(jobScript,/尚未解鎖：/);
+  assert.match(jobScript,/目前未達就職條件：/);
+  assert.match(jobScript,/meta\.append\(title,eligibility,desc,requirements\)/);
+  assert.match(jobScript,/button\.disabled = Boolean\(job\.reason\)/);
   assert.match(css,/\.job \.job-eligibility\.locked/);
 });
 test("工作能量需求與發薪週期保留在操作區，和職業經驗進度分離",()=>{
