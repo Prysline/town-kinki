@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import {spawn,execFileSync} from "node:child_process";
 import {once} from "node:events";
-import {mkdtempSync,rmSync,mkdirSync} from "node:fs";
+import {mkdtempSync,rmSync,mkdirSync,writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join,resolve} from "node:path";
 import {DatabaseSync} from "node:sqlite";
@@ -20,11 +20,11 @@ const delay=ms=>new Promise(r=>setTimeout(r,ms));
 async function launch(root,dir,mode,now=t0){
   // Controlled test process only: deterministic clock, Math.random and crypto calls.
   // Trace the exact randomInt calls; never run this preload in a product process.
-  const preload="import crypto from 'node:crypto';import {syncBuiltinESMExports} from 'node:module';"+
+  const preload="import crypto from 'node:crypto';import {syncBuiltinESMExports} from 'node:module';import {existsSync,readFileSync,unlinkSync} from 'node:fs';"+
     "const NativeDate=Date;globalThis.Date=class extends NativeDate{constructor(...a){super(...(a.length?a:["+now+"]));}static now(){return "+now+";}};"+
     "Math.random=()=>0.5;let bytes=0,roll=0;const seq=[0,1,35,7,16,23];"+
     "crypto.randomBytes=(n)=>{const b=Buffer.alloc(n);for(let i=0;i<n;i++)b[i]=(++bytes)&255;return b;};"+
-    "crypto.randomInt=(a,b)=>{const lo=b===undefined?0:a,hi=b===undefined?a:b;const v=lo+seq[roll++%seq.length]%(hi-lo);console.log('V04_RNG '+JSON.stringify([lo,hi,v]));return v;};"+
+    "crypto.randomInt=(a,b)=>{const lo=b===undefined?0:a,hi=b===undefined?a:b;let v=lo+seq[roll++%seq.length]%(hi-lo);const file="+JSON.stringify(join(dir,"v04-next-die"))+";if(lo===0&&hi===36&&existsSync(file)){v=Number(readFileSync(file,'utf8'));unlinkSync(file);}console.log('V04_RNG '+JSON.stringify([lo,hi,v]));return v;};"+
     "syncBuiltinESMExports();";
   const child=spawn(process.execPath,["--import","data:text/javascript,"+encodeURIComponent(preload),"src/server.mjs"],{cwd:join(root,"web"),env:{...process.env,HOST:"127.0.0.1",PORT:"0",GAME_MODE:mode,GAME_TIMEZONE:"UTC",DATA_DIR:dir}});
   let output="",errors="";
@@ -54,7 +54,7 @@ async function run(root,dir){
     const res=await fetch(s.url+"/api/"+path,{method:body===undefined?"GET":"POST",headers:{...(body===undefined?{}:{"Content-Type":"application/json"}),...(session?.cookie?{Cookie:session.cookie}:{}),...headers},body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(10000)});
     const payload=await res.json();assert.equal(res.status,status,label+" "+JSON.stringify(payload).slice(0,400));
     if(session&&res.headers.get("set-cookie"))session.cookie=res.headers.get("set-cookie").split(";")[0];
-    add(label,{status:res.status,payload});return payload;
+    add(label,{status:res.status,payload});console.log("V04_EXEC "+label);return payload;
   }
   const first={guess:"even",stake:10000,requestId:"v04_dice_round_01"};
   const second={guess:"odd",stake:10000,requestId:"v04_dice_round_02"};
@@ -74,6 +74,7 @@ async function run(root,dir){
     await request("solo invalid stake","arcade/dice/play",{...first,stake:123},400);
     await request("solo insufficient","arcade/dice/play",{...first,stake:1000000},400);
     assert.equal(rounds().length,0);
+    writeFileSync(join(data,"v04-next-die"),"0");
     const a=await request("solo win","arcade/dice/play",first);
     assert.equal(a.arcadeDiceResult.won,true);assert.equal(a.character.money,210000);
     assert.equal(a.arcadeDiceResult.dieOne,1);assert.equal(a.arcadeDiceResult.dieTwo,1);
@@ -83,13 +84,16 @@ async function run(root,dir){
     await request("solo cooldown","arcade/dice/play",second,400);
     assert.deepEqual(cash(),saved);assert.equal(rounds().length,1);
     await request("solo advance exact boundary","solo/time/advance",{preset:"5m"});
+    writeFileSync(join(data,"v04-next-die"),"1");
     const b=await request("solo second","arcade/dice/play",{...second,guess:"even"});
-    assert.equal(b.arcadeDiceResult.won,false);assert.equal(b.character.money,200000);
+    assert.equal(b.arcadeDiceResult.dieOne,1);assert.equal(b.arcadeDiceResult.dieTwo,2);assert.equal(b.arcadeDiceResult.won,false);assert.equal(b.character.money,200000);
     await request("solo advance for fault","solo/time/advance",{preset:"5m"});
     const pre=dbRead(data,mode);
     sql("CREATE TRIGGER v04_fault BEFORE INSERT ON arcade_dice_rounds BEGIN SELECT RAISE(ABORT,'v04 rollback'); END;");
+    writeFileSync(join(data,"v04-next-die"),"35");
     await request("solo SQL fault","arcade/dice/play",{...first,requestId:"v04_dice_fault_03"},400);
     sql("DROP TRIGGER v04_fault");assert.deepEqual(dbRead(data,mode),pre);
+    writeFileSync(join(data,"v04-next-die"),"7");
     await request("solo retry after fault","arcade/dice/play",{...first,requestId:"v04_dice_fault_03"});
     assert.equal(rounds().length,3);
     await s.stop();s=undefined;s=await launch(root,data,mode);
