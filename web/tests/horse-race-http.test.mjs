@@ -132,5 +132,30 @@ test("GM-02 real multi HTTP: anonymous requests, account ownership, shared lock"
     const bs=(await api(srv.url,"state",undefined,b.cookie)).result;
     assert.equal(bs.horseRace.active,null);assert.equal(bs.horseRace.busy,true);
     assert.equal(bs.horseRace.latest.id,qb.result.horseRaceResult.id);
+    // Controlled expiry fixture: no need to wait 181 seconds in real time.
+    // The rest, including the invalid bet, is the actual authenticated HTTP route.
+    const expire=()=>{
+      const d=new DatabaseSync(join(srv.directory,"multi.sqlite"));
+      try{d.prepare("UPDATE horse_races SET started_at=? WHERE status='running'").run(Date.now()-181000);}
+      finally{d.close();}
+    };
+    expire();
+    const invalid={raceId:qb.result.horseRaceResult.id,tickets:[0,0,0,0,0,0],requestId:"multi_invalid_01"};
+    const rejected=await api(srv.url,"horse-race/start",invalid,b.cookie);
+    assert.equal(rejected.status,400);assert.match(rejected.result.error,/尚未購買/);
+    const afterA=(await api(srv.url,"state",undefined,a.cookie)).result;
+    const afterB=(await api(srv.url,"state",undefined,b.cookie)).result;
+    assert.equal(afterA.horseRace.latest.status,"forfeited");assert.equal(afterA.horseRace.active,null);
+    assert.equal(afterB.horseRace.latest.status,"quoted");assert.equal(afterB.horseRace.active,null);
+    assert.equal(afterB.horseRace.busy,false);assert.equal(afterB.character.money,bs.character.money);
+    assert.equal(afterA.character.money,qa.result.character.money-500);
+    assert.deepEqual(afterA.horseRace.rankings,[]);
+    const laterQuote=await api(srv.url,"horse-race/quote",{requestId:"multi_quote_later"},a.cookie);
+    const later=await api(srv.url,"horse-race/start",{...args,raceId:laterQuote.result.horseRaceResult.id,requestId:"multi_start_later"},a.cookie);
+    assert.equal(later.status,200);expire();
+    const replay=await api(srv.url,"horse-race/start",invalid,b.cookie);
+    assert.equal(replay.status,400);assert.equal(replay.result.error,rejected.result.error);
+    assert.equal((await api(srv.url,"state",undefined,a.cookie)).result.horseRace.active.id,later.result.horseRaceResult.id);
+
   }finally{await srv.stop();}
 });
