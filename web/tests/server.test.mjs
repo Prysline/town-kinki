@@ -339,6 +339,121 @@ test("薪資去向：偏好存檔、實際銀行入帳與帳簿、重送冷卻�
   }finally{await srv.stop();}
 });
 
+
+test("M2 工作 HTTP：同交易升級獎金與薪資、第二帳簿寫入故障全回滾、重送冷卻與重啟",async()=>{
+  let srv=await start("solo");
+  const dir=srv.directory;
+  anchorSoloTestAtNoon(srv);
+  const read=()=>{
+    const db=new DatabaseSync(join(dir,"solo.sqlite"));
+    try{return {
+      character:db.prepare("SELECT * FROM characters").get(),
+      ledger:db.prepare("SELECT * FROM bank_ledger ORDER BY id").all(),
+      account:db.prepare("SELECT * FROM bank_accounts").get(),
+      tax:db.prepare("SELECT * FROM bank_tax_state").get()
+    };}finally{db.close();}
+  };
+  try{
+    const created=await api(srv.url,"character",{name:"工作交易模組",gender:"other",stats:defaultStats()});
+    assert.equal(created.status,200);
+    assert.equal((await api(srv.url,"job",{key:"unknown-job"})).status,404);
+    assert.equal((await api(srv.url,"job/payment",{payment:"credit"})).status,400);
+    assert.equal((await api(srv.url,"job/payment",{payment:"bank"})).status,200);
+    const seed=new DatabaseSync(join(dir,"solo.sqlite"));
+    try{
+      // 受控第五次出勤、99XP：使用現有便利商店原版規則，確定同次達發薪及升級。
+      const stats=Object.fromEntries(Object.keys(defaultStats()).map(k=>[k,200]));
+      seed.prepare("UPDATE characters SET job_id='legacy-3',job_work_count=4,work_progress=4,job_experience=99,stats_json=?,body_energy=120,brain_energy=120,last_work_at=0,health_index=50").run(JSON.stringify(stats));
+    }finally{seed.close();}
+    assert.equal((await api(srv.url,"state")).status,200);
+    const before=read();
+    const trigger=new DatabaseSync(join(dir,"solo.sqlite"));
+    try{trigger.exec("CREATE TRIGGER m2_work_fail_salary BEFORE INSERT ON bank_ledger WHEN NEW.action='工作薪資' BEGIN SELECT RAISE(ABORT,'m2 salary ledger fault'); END;");}
+    finally{trigger.close();}
+    const failed=await api(srv.url,"work",{});
+    assert.equal(failed.status,400);assert.match(failed.result.error,/m2 salary ledger fault/);
+    assert.deepEqual(read(),before,"升級獎金先寫入亦必須和薪資、角色、冷卻一起回滾");
+    const cleanup=new DatabaseSync(join(dir,"solo.sqlite"));
+    try{cleanup.exec("DROP TRIGGER m2_work_fail_salary");}finally{cleanup.close();}
+    const ok=await api(srv.url,"work",{});
+    assert.equal(ok.status,200);
+    const result=ok.result.result;
+    assert.equal(result.payment,"bank");assert.equal(result.leveledUp,true);assert.equal(result.jobLevel,1);
+    assert.ok(result.bonus>0);assert.ok(result.paid>0);assert.equal(result.pending,0);
+    const after=read();
+    const entries=after.ledger.slice(before.ledger.length);
+    assert.deepEqual(entries.map(x=>x.action),["升級獎金","工作薪資"]);
+    assert.deepEqual(entries.map(x=>x.credit),[result.bonus,result.paid]);
+    assert.deepEqual(entries.map(x=>x.balance),[before.character.bank+result.bonus,before.character.bank+result.bonus+result.paid]);
+    assert.equal(after.character.bank,entries[1].balance);assert.equal(after.character.money,before.character.money);
+    assert.equal(after.character.work_count,before.character.work_count+1);
+    assert.equal(after.character.job_work_count,5);
+    assert.equal(after.character.job_experience,99+result.experienceGain);
+    assert.equal((await api(srv.url,"work",{})).status,400);
+    assert.deepEqual(read(),after);
+    await srv.stop({preserveData:true});srv=await start("solo",undefined,dir);
+    const restored=await api(srv.url,"state");
+    assert.equal(restored.status,200);assert.equal(restored.result.character.bank,after.character.bank);
+    assert.equal(restored.result.character.jobWorkCount,5);assert.equal(restored.result.character.salaryPayment,"bank");
+    assert.deepEqual(read().ledger,after.ledger);
+  }finally{await srv.stop();}
+});
+
+
+test("M2 工作 HTTP：週一首請求冷卻拒絕仍保留既有獨立結息與前次稅基",async()=>{
+  const srv=await start("solo",undefined,null,{GAME_TIMEZONE:"UTC"});
+  const dir=srv.directory;
+  // 隔離持久化虛擬時鐘：取下一個未到的星期日23:58，避免依賴 CI 真實星期。
+  const sunday=new Date(Date.now());
+  sunday.setUTCHours(23,58,0,0);
+  sunday.setUTCDate(sunday.getUTCDate()+(7-sunday.getUTCDay())%7);
+  if(sunday.getTime()<=Date.now())sunday.setUTCDate(sunday.getUTCDate()+7);
+  const prior=sunday.getTime(),monday=prior+125000;
+  const sundayDay=sunday.toISOString().slice(0,10),mondayDay=new Date(monday).toISOString().slice(0,10);
+  const dbAction=fn=>{const db=new DatabaseSync(join(dir,"solo.sqlite"));try{return fn(db);}finally{db.close();}};
+  const clock=ms=>dbAction(db=>db.prepare("UPDATE solo_clock SET offset_ms=? WHERE id=1").run(ms-Date.now()));
+  const read=()=>dbAction(db=>({
+    character:db.prepare("SELECT * FROM characters").get(),
+    account:db.prepare("SELECT * FROM bank_accounts").get(),
+    tax:db.prepare("SELECT * FROM bank_tax_state").get(),
+    assessments:db.prepare("SELECT * FROM bank_tax_assessments ORDER BY tax_day").all(),
+    ledger:db.prepare("SELECT * FROM bank_ledger ORDER BY id").all()
+  }));
+  try{
+    clock(prior);
+    const created=await api(srv.url,"character",{name:"跨日工作交易",gender:"other",stats:defaultStats()});
+    assert.equal(created.status,200);
+    dbAction(db=>db.prepare("UPDATE characters SET money=2000000,bank=1000000,kpoint=0,salary_payment='bank',last_work_at=?").run(prior));
+    assert.equal((await api(srv.url,"state")).status,200);
+    const before=read();
+    assert.equal(before.tax.snapshot_day,sundayDay);
+    assert.equal(before.tax.assessment_base,3000000);
+    assert.equal(before.account.last_interest_day,sundayDay);
+    assert.equal(before.assessments.length,0);
+    clock(monday);
+    // 不先 GET state；原 work handler 會先獨立結息，再由角色交易拒絕冷卻。
+    const rejected=await api(srv.url,"work",{});
+    assert.equal(rejected.status,400);
+    assert.match(rejected.result.error,/還需要等待/);
+    const after=read();
+    assert.deepEqual(after.character,{...before.character,bank:975000});
+    assert.equal(after.account.last_interest_day,mondayDay);
+    assert.equal(after.assessments.length,1);
+    assert.equal(after.assessments[0].tax_day,mondayDay);
+    assert.equal(after.assessments[0].assessment_base,3000000);
+    assert.equal(after.assessments[0].paid,30000);
+    assert.equal(after.tax.snapshot_day,mondayDay);
+    assert.equal(after.tax.assessment_base,2975000);
+    const entries=after.ledger.slice(before.ledger.length);
+    assert.deepEqual(entries.map(x=>[x.action,x.debit,x.credit,x.balance]),[
+      ["普通存款利息",0,5000,1005000],["每週納稅",30000,0,975000]
+    ]);
+    assert.equal((await api(srv.url,"work",{})).status,400);
+    assert.deepEqual(read(),after,"重送冷卻拒絕不能重複計息、納稅或出勤");
+    console.log("M2_WORK_MONDAY "+JSON.stringify({tax:30000,bank:975000,workRejected:true,settlementCommitted:true}));
+  }finally{await srv.stop();}
+});
+
 test("便利商店五次結薪：前四次兩種帳戶皆不增加，第五次銀行正確入帳，再五次現金正確入帳",async()=>{
   const srv=await start("solo");
   anchorSoloTestAtNoon(srv);
