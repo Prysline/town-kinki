@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import {spawn,execFileSync} from "node:child_process";
 import {once} from "node:events";
-import {mkdtempSync,rmSync,mkdirSync,writeFileSync} from "node:fs";
+import {mkdtempSync,rmSync,mkdirSync,writeFileSync,readFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join,resolve} from "node:path";
 import {DatabaseSync} from "node:sqlite";
@@ -20,11 +20,12 @@ const delay=ms=>new Promise(r=>setTimeout(r,ms));
 async function launch(root,dir,mode,now=t0){
   // Controlled test process only: deterministic clock, Math.random and crypto calls.
   // Trace the exact randomInt calls; never run this preload in a product process.
-  const preload="import crypto from 'node:crypto';import {syncBuiltinESMExports} from 'node:module';import {existsSync,readFileSync,unlinkSync} from 'node:fs';"+
+  const traceFile=join(dir,"v04-rng.jsonl");writeFileSync(traceFile,"");
+  const preload="import crypto from 'node:crypto';import {syncBuiltinESMExports} from 'node:module';import {existsSync,readFileSync,unlinkSync,appendFileSync} from 'node:fs';"+
     "const NativeDate=Date;globalThis.Date=class extends NativeDate{constructor(...a){super(...(a.length?a:["+now+"]));}static now(){return "+now+";}};"+
-    "Math.random=()=>0.5;let bytes=0,roll=0;const seq=[0,1,35,7,16,23];"+
-    "crypto.randomBytes=(n)=>{const b=Buffer.alloc(n);for(let i=0;i<n;i++)b[i]=(++bytes)&255;return b;};"+
-    "crypto.randomInt=(a,b)=>{const lo=b===undefined?0:a,hi=b===undefined?a:b;let v=lo+seq[roll++%seq.length]%(hi-lo);const file="+JSON.stringify(join(dir,"v04-next-die"))+";if(lo===0&&hi===36&&existsSync(file)){v=Number(readFileSync(file,'utf8'));unlinkSync(file);}console.log('V04_RNG '+JSON.stringify([lo,hi,v]));return v;};"+
+    "const trace=(v)=>appendFileSync("+JSON.stringify(traceFile)+",JSON.stringify(v)+String.fromCharCode(10));Math.random=()=>{trace(['Math.random',0.5]);return 0.5;};let bytes=0,roll=0;const seq=[0,1,35,7,16,23];"+
+    "crypto.randomBytes=(n)=>{const b=Buffer.alloc(n);for(let i=0;i<n;i++)b[i]=(++bytes)&255;trace(['randomBytes',n]);return b;};"+
+    "crypto.randomInt=(a,b)=>{const lo=b===undefined?0:a,hi=b===undefined?a:b;let v=lo+seq[roll++%seq.length]%(hi-lo);const file="+JSON.stringify(join(dir,"v04-next-die"))+";if(lo===0&&hi===36&&existsSync(file)){v=Number(readFileSync(file,'utf8'));unlinkSync(file);}trace(['randomInt',lo,hi,v]);return v;};"+
     "syncBuiltinESMExports();";
   const child=spawn(process.execPath,["--import","data:text/javascript,"+encodeURIComponent(preload),"src/server.mjs"],{cwd:join(root,"web"),env:{...process.env,HOST:"127.0.0.1",PORT:"0",GAME_MODE:mode,GAME_TIMEZONE:"UTC",DATA_DIR:dir}});
   let output="",errors="";
@@ -33,7 +34,7 @@ async function launch(root,dir,mode,now=t0){
   try{
     for(let i=0;i<120;i++){
       const url=output.match(/^TOWN Web \[(?:solo|multi)\] (http:\/\/127\.0\.0\.1:[1-9]\d*)/m)?.[1];
-      if(url)return {url,stop,rng:()=>output.split("\n").filter(l=>l.startsWith("V04_RNG ")).map(l=>JSON.parse(l.slice(8)))};
+      if(url)return {url,stop,rng:()=>readFileSync(traceFile,"utf8").split("\n").filter(Boolean).map(JSON.parse)};
       if(child.exitCode!==null)break;await delay(100);
     }
     throw Error("startup "+output+errors);
