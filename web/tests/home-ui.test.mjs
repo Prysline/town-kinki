@@ -9,6 +9,7 @@ import { displayLoto6DrawReason,formatLoto6DrawNotice } from "../public/loto6-di
 const html=readFileSync(new URL("../public/index.html",import.meta.url),"utf8");
 const css=readFileSync(new URL("../public/style.css",import.meta.url),"utf8");
 const script=readFileSync(new URL("../public/app.js",import.meta.url),"utf8");
+const diceScript=readFileSync(new URL("../public/modules/arcade-dice.js",import.meta.url),"utf8");
 const shopEffects=readFileSync(new URL("../public/shop-effects.js",import.meta.url),"utf8");
 
 test("原版兩間食堂每日菜單與共用庫存呈現完整且售完時不可下單",()=>{
@@ -809,13 +810,18 @@ test("第55階段：原版遊樂中心地圖入口與安全下注面板已接真
     "arcade-dice-quote","arcade-dice-submit","arcade-dice-result","arcade-dice-history"])
     assert.ok(html.includes('id="'+id+'"'));
   assert.ok(html.includes("gamerand.cgi／saikoro.cgi"));
-  assert.ok(script.includes("function renderArcadeDice(){"));
+  assert.ok(diceScript.includes("function renderArcadeDice(){"));
   assert.ok(script.includes("renderArcadeDice();"));
-  assert.ok(script.includes('await api("arcade/dice/play"'));
-  assert.ok(script.includes("pendingArcadeDice"));
-  assert.ok(script.includes("arcadeDiceSubmitting"));
-  assert.ok(script.includes("document.createElement"));
+  assert.ok(script.includes('import { createArcadeDiceUI } from "./modules/arcade-dice.js";'));
+  assert.ok(script.includes("const {renderArcadeDice}=createArcadeDiceUI({"));
+  assert.ok(script.includes("getState:()=>state,replaceState:next=>{state=next;}"));
+  assert.ok(diceScript.includes("return {renderArcadeDice};"));
+  assert.ok(diceScript.includes('await api("arcade/dice/play"'));
+  assert.ok(diceScript.includes("pendingArcadeDice"));
+  assert.ok(diceScript.includes("arcadeDiceSubmitting"));
+  assert.ok(diceScript.includes("document.createElement"));
   assert.ok(!script.includes("innerHTML=round.guess"));
+  assert.ok(!diceScript.includes("innerHTML=round.guess"));
 });
 
 test("第56階段：遊樂中心新增HighLow真實下注、牌桌與本人紀錄，安全DOM呈現",()=>{

@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
 import {DatabaseSync} from "node:sqlite";
+import {createArcadeDiceRoute} from "../src/routes/arcade-dice.mjs";
 import {decodeLegacyText} from "../src/engine.mjs";
 import {initTownMapTable,storeTownMap} from "../src/town-storage.mjs";
 import {
@@ -194,5 +195,80 @@ test("刪除玩家時只有本人的骰子交易刪除，其他玩家戰績完�
     assert.equal(count(db),1);
     assert.equal(db.prepare("SELECT user_id FROM arcade_dice_rounds").get().user_id,2);
     assert.equal(arcadeDiceOverview(db,2,source,now).history.length,1);
+  }finally{db.close();}
+});
+
+test("M2 骰子 HTTP adapter：單次時鐘→真實交易提交→snapshot→response，重送不重複扣款",()=>{
+  const db=setup(),trace=[];
+  class HttpError extends Error{constructor(status,message){super(message);this.status=status;}}
+  const user={id:1,username:"骰子受控玩家"},res={};
+  const payload={guess:"even",stake:10000,requestId:"m2_dice_route_once"};
+  const route=createArcadeDiceRoute({
+    db,arcadeDiceSource:source,
+    gameNow:()=>{trace.push("clock");return now;},
+    snapshot:received=>{
+      assert.equal(received,user);
+      // 此時核心交易已結束；可重新開交易而不是巢狀 BEGIN。
+      db.exec("BEGIN IMMEDIATE");db.exec("ROLLBACK");
+      trace.push("snapshot");
+      return {character:{money:cash(db),bank:bank(db)},arcadeDice:arcadeDiceOverview(db,1,source,now)};
+    },
+    sendJson:(received,status,body)=>{
+      assert.equal(received,res);trace.push("send");return {status,body};
+    },
+    HttpError
+  });
+  try{
+    const first=route(res,user,payload);
+    assert.deepEqual(trace,["clock","snapshot","send"]);
+    assert.equal(first.status,200);
+    const result=first.body.arcadeDiceResult;
+    assert.equal(result.replayed,false);
+    assert.equal(result.total,result.dieOne+result.dieTwo);
+    assert.equal(result.won,result.total%2===0);
+    assert.equal(result.delta,result.won?10000:-10000);
+    assert.equal(first.body.character.money,2000000+result.delta);
+    assert.equal(first.body.character.bank,123456);
+    assert.equal(count(db),1);
+    assert.equal(first.body.arcadeDice.history.length,1);
+    trace.length=0;
+    const replay=route(res,user,payload);
+    assert.deepEqual(trace,["clock","snapshot","send"]);
+    assert.deepEqual(replay.body.arcadeDiceResult,{...result,replayed:true});
+    assert.deepEqual(replay.body.character,first.body.character);
+    assert.equal(count(db),1);
+    trace.length=0;
+    assert.throws(()=>route(res,user,{...payload,guess:"odd"}),e=>e.status===400&&/相同骰子遊戲請求碼/.test(e.message));
+    assert.deepEqual(trace,["clock"]);
+    assert.equal(count(db),1);
+    assert.equal(cash(db),first.body.character.money);
+  }finally{db.close();}
+});
+
+test("M2 骰子 HTTP adapter：核心失敗原子回滾且不 snapshot，提交後 snapshot 失敗保留重送語義",()=>{
+  const db=setup(),trace=[];
+  class HttpError extends Error{constructor(status,message){super(message);this.status=status;}}
+  const error=new Error("snapshot fixture unavailable");
+  let failSnapshot=true;
+  const payload={guess:"odd",stake:10000,requestId:"m2_dice_route_failure"};
+  const route=createArcadeDiceRoute({
+    db,arcadeDiceSource:source,gameNow:()=>now,
+    snapshot:()=>{trace.push("snapshot");if(failSnapshot)throw error;return {money:cash(db)};},
+    sendJson:(res,status,body)=>{trace.push("send");return {status,body};},HttpError
+  });
+  try{
+    db.exec("CREATE TRIGGER m2_reject_dice BEFORE INSERT ON arcade_dice_rounds BEGIN SELECT RAISE(ABORT,'m2 dice log rejected'); END;");
+    assert.throws(()=>route({}, {id:1},payload),e=>e.status===400&&/m2 dice log rejected/.test(e.message));
+    assert.deepEqual(trace,[]);assert.equal(count(db),0);assert.equal(cash(db),2000000);
+    db.exec("DROP TRIGGER m2_reject_dice");
+    assert.throws(()=>route({}, {id:1},payload),e=>e===error);
+    assert.deepEqual(trace,["snapshot"]);assert.equal(count(db),1);
+    const committed=cash(db);
+    failSnapshot=false;
+    trace.length=0;
+    const replay=route({}, {id:1},payload);
+    assert.deepEqual(trace,["snapshot","send"]);
+    assert.equal(replay.status,200);assert.equal(replay.body.arcadeDiceResult.replayed,true);
+    assert.equal(replay.body.money,committed);assert.equal(cash(db),committed);assert.equal(count(db),1);
   }finally{db.close();}
 });

@@ -1,0 +1,2 @@
+# V04｜M1/M2 骰子獨立行為差分候選
+固定正式 c18f56e8df68f3c8998c1ba7733500026e34424b / d462bbd51f94066499ff3c1e084d6fa4532ed47e，M #159 eda610cc63ef07eb32bce331a8dda3d3c1d2492b / 9860b406a4d37473fe84c03ad777487b97d12561。V 獨立分支僅增加腳本、workflow、文件；不可合併，不是 runtime。雙 worktree 隔離執行真 HTTP/SQLite，固定 UTC 時鐘、Math.random、crypto.randomInt/randomBytes；後者僅用於測試帳號與可重現亂數，不用於正式。比較完整 JSON payload、所有 SQLite schema/rows、randomInt 序列；不比較臨時 localhost port/HTTP cookie headers（session DB rows仍比對）。富裕現金、多人地圖為受控 fixture，非真人。成功/拒絕、五分鐘邊界、重送、衝突、故障注入、重啟、多人同碼隔離、浴中 guard；未實跑不得標通過。Chrome 另核 M 原始 CI；本腳本不宣稱瀏覽器差分。
