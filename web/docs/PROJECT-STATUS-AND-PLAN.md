@@ -1,17 +1,48 @@
 # TOWN Web｜現行功能狀態與下一步計畫
 
-> **現行狀態唯一入口**：本文件統一維護 Web 長期分支的功能完成度、證據界線、驗收與下一步優先序。歷史校正基準（最新戰鬥接續基準見下節）：2026-11-22、重新查得 `feature/web-dual-mode-phase1` 的 `78cb041da5865e856c81bb2a2951165f2f28a203`（PR #96 合併後、本次文件修正前）；[Web push CI](https://github.com/Prysline/town-kinki/actions/runs/45024849335) 與 [長期 PR #1 回歸 CI](https://github.com/Prysline/town-kinki/actions/runs/45024853651) 均 success（715/715）。**下一次使用時必須先確認最新 HEAD；本文 SHA 是稽核時間點，不是永久最新版。**
+> **現行狀態唯一入口**：本文件統一維護 Web 長期分支的功能完成度、證據界線、驗收與下一步優先序。歷史校正基準（現行 A～J 清冊見下節）：2026-11-22、重新查得 `feature/web-dual-mode-phase1` 的 `78cb041da5865e856c81bb2a2951165f2f28a203`（PR #96 合併後、本次文件修正前）；[Web push CI](https://github.com/Prysline/town-kinki/actions/runs/45024849335) 與 [長期 PR #1 回歸 CI](https://github.com/Prysline/town-kinki/actions/runs/45024853651) 均 success（715/715）。**下一次使用時必須先確認最新 HEAD；本文 SHA 是稽核時間點，不是永久最新版。**
 >
 > 產品範圍與禁止事項以 [已確認的專案政策](project-scope-no-legacy-player-import.md) 為準；本文件只統一**現行狀態與排序**，不可推翻使用者確認的範圍。原始 CGI 決定可核對的原版行為；實際 Web 程式及測試決定已實作與自動驗證的事實；[技術差異矩陣](migration-audit.md) 保留原始功能 ID／CGI 來源；各 `phaseXX-*.md` 是當時技術證據與決策，**不是目前待辦**。文件與程式矛盾時，必須回到實際程式、測試、PR、CI 與必要的 CGI 查證，不得只挑較新的文字。
 
-## 2026-11-26｜I 正式結案：下一階段 J（尚未開始）
+## 2026-11-27｜A～J 指定範圍完成清冊（J-6 文件驗收候選）
+
+- 正式程式稽核基準為 [#150](https://github.com/Prysline/town-kinki/pull/150) 合併後 `5f1179ad192ddf685da08c72dd7a0d21a9922db5`，tree `25c1b7bfa89c64b9ded5b7c87947e20099e6aeb7`。正式 [Push](https://github.com/Prysline/town-kinki/actions/runs/45892933426)／[長期 PR #1](https://github.com/Prysline/town-kinki/actions/runs/45892939716) 重新下載完整日誌，各 972/972、fail/cancelled/skipped/todo=0、server/app 語法成功；checkout 正式 HEAD／合成 `ae4272a775899c7cec4c1a80af6d5388b2e6a23e` 同 tree。J-5 [正式結案](https://github.com/Prysline/town-kinki/pull/150#issuecomment-7203060793)。此 SHA 是文件 PR 的程式基準，不是未來最新 HEAD。
+- A～E、F 審查／現況測試、G 指定模擬、H Chrome 自動化、I 指定事件、J-1～J-5 均正式整合。J-6 僅完成清冊與狀態校正，不新增玩法、不重做既有施工；本文件候選須經同 HEAD Push/PR、完整 diff/tree、正式合併及合併後 Push/#1 才正式結案。J-6 結果以其正式 PR 與完整 CI 結案留言為準（不預寫尚未產生的 SHA 或 CI）。
+- 最新遠端 master `f74e077780ed96f9b271f66e5afe63037c7c7403` 唯讀、#1 Draft。#146 居民能量條、#148 AP-05 溫泉、#149 WK-01 能量上限皆獨立 Draft，未進正式程式基準；其候選進度不可算本清冊已合併成果，也不阻擋 J-6 文件驗收。
+
+### A～J 完成清冊與不可擴張的界線
+
+| 階段 | 已正式整合的指定工作 | 證據與限制 |
+|---|---|---|
+| A | B 聯賽五級、裝備耐久／成長、獎賞與 MB 藥草 | #115 由 [#121](https://github.com/Prysline/town-kinki/pull/121) 整合取代；[B 來源](b-league-arena.md)。保留非負現金、安全交易與各自冷卻；J-5 已驗歷史藥草實際使用。 |
+| B | 大阪弱強、八獎品、來源優先及版本收據 | #116→#121；[大阪來源](osaka-challenge-source.md)。原版十筆專用 NPC 缺檔；使用者核准的 `web-osaka-npc-v1` 是重建而非史料，完整原版優先、缺檔時整池重建、異常停用，歷史無標記維持 unknown/null。 |
+| C | Street Fight 原版末列排除／本人無對手、15000 元現金門檻、勝敗、券與負 K 點 | #117→#121；[街頭](phase71-street-fight.md)。單機不造對手；J-3b/J-5 已驗真核心獲券、稅基與隔離。 |
+| D | C 聯賽培育、模仿者、14日／100場／60秒、原版零能量判定 | #118→#121；[C 聯賽](phase72-c-league.md)。圖片採 HTTP(S) 外部連結而非自動嵌入，真人另驗。 |
+| E | 保留 #26/#34，#38 力量1000、六種可達獎品／25格容量 | #119→#121；[戰鬥事件](phase73-battle-events.md)。#36/#37 後由 I 完成核准規則，不重開 E。 |
+| F | 原版 access gate 與跨玩法行動間隔來源審查、現況精確時間矩陣 | [#122](https://github.com/Prysline/town-kinki/pull/122)、[F 稽核](phase-f-action-cooldown-audit.md)。原版城鎮 access gate 不能等同所有 Web POST；未核准全域冷卻新規則，維持既有各模組間隔，非待施工前置。 |
+| G | 固定種子正式核心三輪 184 案（80＋72＋16＋16）、14／42遊戲日基線 | [#126](https://github.com/Prysline/town-kinki/pull/126) 整合 #123/#124；[G 基線](phase-g-economic-baseline.md)。模擬不是真人勝率、全裝備窮盡、正式營運平衡或調參授權。 |
+| H | Chrome CDP 1440／768／375px、四戰鬥、回應遺失模擬、重啟隔離、B→大阪→C→#38 | [#125](https://github.com/Prysline/town-kinki/pull/125)／[#127](https://github.com/Prysline/town-kinki/pull/127)、[H 稽核](phase-h-battle-browser.md)。真實引擎自動操作，不等於真人、實體手機或真實網路事故。 |
+| I | 44 個事件 ID（42 非疾病＋2 疾病）、原子性、蟑螂 eventId、券防重、河中物品、核准捐款與兩笛 | [#137](https://github.com/Prysline/town-kinki/pull/137)、[I 稽核](phase-i-event-reward-audit.md)。#45/#46 原版不可達；44 ID 非全子分支、21 ID 金流矩陣非窮盡。核准足額移轉、不足額取消且不耗笛不改 K、仍記當日事件；自抽仍耗笛；不更動規則。 |
+| J | 新版 Web SQLite WAL／歷史升級／聯合故障復原 J-1～J-5；J-6 文件清冊 | [J 稽核](phase-j-storage-upgrade-audit.md) 列逐切片正式 PR、四組 CI、真實缺陷與來源界線；不是所有舊 Web 版本或真人／跨設備／正式部署驗收。 |
+
+A～E #121 合併前兩組 885/885，合併後 Push **884/885（IT-02 食物快轉409）**、#1 885/885；#122 修正測試時鐘及 F 矩陣，未放寬正式限制。#122 [候選 Push](https://github.com/Prysline/town-kinki/actions/runs/45620831689)／[PR](https://github.com/Prysline/town-kinki/actions/runs/45620868770)、[合併後 Push](https://github.com/Prysline/town-kinki/actions/runs/45698684562)／[#1](https://github.com/Prysline/town-kinki/actions/runs/45698697834) 狀態均 success；F 原有候選 886/886。G #126 四組 890/890；H #127 四組 891/891；I #137 四組 955/955；J-5 #147 四組 971/971、#150 四組 972/972。歷史失敗與修正依各稽核原文保留，本輪只重讀 J-5 最終正式雙 CI 完整日誌，較早證據沿用當時正式紀錄及重新查得的 PR 狀態，不冒稱全數重跑。
+
+### 範圍之外與後續分流
+
+- **不再列為待施工**：A～I 指定範圍、J-1～J-5、既有單機 CLI、#94/#96/#113/#114 歷史切片、#103～#105 稅務；不將原版私人存檔 DB-01～DB-03 重新列入待辦。
+- **真正剩餘功能／等價性缺口**：IT-02 已確認可取得且有原版執行證據的未接通效果、競馬 GM-02、住宅進階商業 HS-03、股票 BK-05、拍賣 IT-06、戀愛／婚姻／社交／投稿／公開檔案及企業等矩陣未實作部分；先核玩家可達性與原版來源，再按風險及既有授權另立 PR。WK-01、AP-05、UI 能量條由獨立工作線處理，不把 Draft 算完成；沒有新確認的 P0 缺陷，不無據立項。
+- **來源不足／核准適配**：四份原版城鎮地圖空白，21格為核准 Web 試玩配置；學校／健身房缺可執行 CGI，不能聲稱其 Web 補完完全原版；大阪十筆缺檔、F 全域 access gate 未核准、原版過期福引及其他未核實入口不可猜測。已核准的 Web 安全差異及玩法適配照舊。
+- **獨立驗證**：真人完整循環、自然低機率事件、長時間經營、全部原版可達子分支、實體裝置／跨 OS 與部署還原、備份輪替／監控／HTTPS 與權限等另記，不能由單元、HTTP、SQLite、固定 RNG 或 Chrome 自動化冒充。未驗收不等於未移植，也不阻擋無關已核准功能施工。沒有證據不宣稱全遊戲移植完成。
+- 下方帶歷史日期的施工段落原樣保留；現行矩陣與優先序已按上述證據更新。J-6 是原定 A～J 工作線的文件結案，不是全遊戲功能、營運或正式部署結案。
+
+## 2026-11-26｜I 正式結案：下一階段 J（歷史）
 
 - [PR #137](https://github.com/Prysline/town-kinki/pull/137) 已合併；正式程式驗收基準 `008c4556519a97f1d4d20721dc1d3213e55b82b8`，tree `112e6ad360637af983c4ef2ee19d31ae7fd7011a` 與已驗收 HEAD `f6b5204507f3454abb17bb0e74dd98c14f0473dd` 完全一致。合併前 [Push](https://github.com/Prysline/town-kinki/actions/runs/45812037082)／[PR](https://github.com/Prysline/town-kinki/actions/runs/45812046342)，合併後 [正式 Push](https://github.com/Prysline/town-kinki/actions/runs/45812519618)／[長期 PR #1](https://github.com/Prysline/town-kinki/actions/runs/45812529214) 四組完整日誌均 955/955，fail/cancelled/skipped/todo=0，server/app 語法通過。master `f74e077780ed96f9b271f66e5afe63037c7c7403` 未修改。
 - I 計畫內實作與自動化驗收結案：#129 蟑螂稅基原子性、#130 eventId 跨日重送、#133 21種原既有資產事件、#134 券兌換防重、#135 #40 河中物品、#137 #28/#36/#37。#01～#44 全部有正式 Web 結算分支（42 非疾病＋2 疾病）；#45/#46 原版不可達，不開放。證據見 [I 完成稽核](phase-i-event-reward-audit.md)。
 - 核准規則維持：跨居民足額完整轉帳，成功才 K±3；不足額取消且不耗笛、不變 K，仍記錄事件、當日不可重抽；抽到本人仍耗笛，單機只有本人；正常直接金錢分支與既有零元下限照舊；技術錯誤整筆回滾。#40 先嘗試入庫，後抽五分之一提示／其餘扣500，不改獎品規則。禁止擅自調參、改冷卻或 schema。
 - 界線：44/44 是已實作 ID 覆蓋，不是全部原版子分支等價或真人驗收；I-4 21 ID 矩陣非窮盡；HTTP 測試以固定亂數呼叫真實事件核心再驗狀態及重啟，非真人操作或真實網路故障。H 真實 Chrome 自動化與真人／實體裝置仍分開。F 未核准全域冷卻不擴張。原版私人玩家資料完全排除。
 - **下一階段 J：只處理新版 Web SQLite 整合／升級／備份與回滾。** 先重新確認最新正式 HEAD、同 HEAD CI、未結案 PR，讀取現有備份／還原工具與測試（不重做已完成 CLI），盤點真實歷史 Web schema 與遷移順序、負 K 點稅表、戰鬥收據版本、NPC 來源、I 事件歷史／耐久／券收據／帳簿及外鍵；以隔離測試副本完成 WAL 備份驗證→非覆寫還原→升級→聯合回歸→故障回滾。不得碰正式玩家資料，不匯入 CGI 舊玩家。從最新正式基準另開小分支 Draft PR，維持既定雙 CI、差異審查、逐項合併及合併後驗收政策；J 尚未實作。
-- 本節是現行接續依據；下方歷史「待 CI／未實作／待核准」不得覆蓋已完成的 I 證據。此結案文件更新為純文件切片，本身仍須經其 PR 驗收與合併。
+- 本節為當時歷史接續依據；現行狀態依最上方 A～J 完成清冊。下方歷史「待 CI／未實作／待核准」不得覆蓋已完成的 I 證據。此結案文件更新為純文件切片，本身仍須經其 PR 驗收與合併。
 
 ## 2026-11-26｜I-6b～d 捐款與兩笛（歷史）
 
@@ -99,17 +130,17 @@
 
 整合驗證共 44 個 web 檔案（43 原始差異檔＋1 審查文件），8 個共用檔案已協調；修正 B 聯賽有號 K 點，銀行結算與稅基交易一致性。聯合多人跨玩法、各模組相同請求碼、重送、帳號隔離、SQLite 重啟／外鍵、單機刪角、B聯賽／大阪／#38 稅基溢位回滾均通過。詳見 [battle-integration-check.md](battle-integration-check.md)。不得再將 A～E 列為從零開發。
 
-### 戰鬥系列 F～J 範圍與驗收契約（F～I 已整合，J 待辦）
+### 戰鬥系列 F～J 範圍與驗收契約（F～I、J-1～J-5 已整合；J-6 文件驗收候選）
 
 2026-11-25：#120 已合併至驗證分支，來源審查與現況測試已通過 884/884；見 [F 行動間隔與跨玩法冷卻審查](phase-f-action-cooldown-audit.md)。原版是城鎮 access gate，不能直接等同所有 Web POST 的 5 秒鎖。尚未核准操作頻率改變；F 審查及自動化驗證已整合；只有新冷卻規則的決策仍待使用者確認。
 
 | 階段 | 工作種類／範圍 | 必須達成的驗收 |
 |---|---|---|
-| F（來源審查／待決策） | 原版等價性審查：`$koudou_seigen`、全域 access 時鐘與各玩法間隔；先查公開 CGI、現行 API／SQLite，列單機與多人實際行為 | 逐來源矩陣、跨玩法重送／冷卻／跨日／重啟案例。若改變玩家操作頻率、全域冷卻範圍或其他玩法，先列方案與影響，取得使用者核准才實作；沒有證據不得新增限制。 |
-| G | 經濟模擬／驗證：真實核心、固定種子、正常培育階段與裝備／醫療／食物／訓練成本 | 各強度、勝敗率、淨收益、耐久、K點、券、物品、每遊戲日／賽季；分開理論上限與正常流程。不可把模擬當真人或擅自平衡調參。 |
-| H | 聯合瀏覽器驗收：B聯賽／大阪欠缺專項實際點擊，四種戰鬥與事件串接 | 真實 Chrome 1440/768/375px、合法入口、戰報、獎品／耐久、重送、錯誤與重啟；真人手動及實體裝置另列。 |
+| F（審查及現況測試完成；新規則未核准） | 原版等價性審查：`$koudou_seigen`、全域 access 時鐘與各玩法間隔；先查公開 CGI、現行 API／SQLite，列單機與多人實際行為 | 逐來源矩陣、跨玩法重送／冷卻／跨日／重啟案例。若改變玩家操作頻率、全域冷卻範圍或其他玩法，先列方案與影響，取得使用者核准才實作；沒有證據不得新增限制。 |
+| G（指定模擬完成） | 經濟模擬／驗證：真實核心、固定種子、正常培育階段與裝備／醫療／食物／訓練成本 | 各強度、勝敗率、淨收益、耐久、K點、券、物品、每遊戲日／賽季；分開理論上限與正常流程。不可把模擬當真人或擅自平衡調參。 |
+| H（指定 Chrome 自動化完成） | 聯合瀏覽器驗收：B聯賽／大阪欠缺專項實際點擊，四種戰鬥與事件串接 | 真實 Chrome 1440/768/375px、合法入口、戰報、獎品／耐久、重送、錯誤與重啟；真人手動及實體裝置另列。 |
 | I（已結案） | #36/#37 原版事件與共用事件獎勵原子性 | 核對惡魔／天使之笛來源、取得、耗用與效果；檢查 #34/#38 與 #44 蟑螂共用領獎、其他有資產風險的舊事件；同日重送、容量、稅基、回滾與重啟。未知行為先標待核實。 |
-| J | 整合／升級／備份與回滾計畫 | 真實歷史 Web SQLite schema、WAL 備份驗證→非覆寫還原→升級→聯合回歸；負 K 點稅務舊表、各戰鬥收據、原版／重建 NPC 來源、資產與外鍵；列原 PR 衝突修正與正式合併順序，依 2026-11-26 逐項驗收政策整合；新玩法/範圍另行核准。 |
+| J（J-1～J-5 正式完成；J-6 文件驗收候選） | 整合／升級／備份與回滾計畫 | 真實歷史 Web SQLite schema、WAL 備份驗證→非覆寫還原→升級→聯合回歸；負 K 點稅務舊表、各戰鬥收據、原版／重建 NPC 來源、資產與外鍵；列原 PR 衝突修正與正式合併順序，依 2026-11-26 逐項驗收政策整合；新玩法/範圍另行核准。 |
 
 每個 F～J 階段先核對最新 HEAD／PR／CI，以最新正式 Web 分支作依賴基準，另開可追溯階段分支與 Draft PR（目標正式 Web 分支；不直接推送）；不得把修正直接塞入原五個 PR 或長期整合分支。依 2026-11-26 逐項驗收合併政策，已驗收且核准範圍內的PR逐項合併；新玩法決策仍須明確核准。P0 資產／越權／損毀問題優先；其他單機優先政策、既有功能矩陣、歷史記錄保留。
 
@@ -140,7 +171,7 @@
 | PH-06 | 狀態頁集中顯示 | 部分實作 | 既有盤點列有程式／測試線索；本輪未逐項重跑，需按風險核對 | 未驗（無真人實機證據） | 原版完整等價性待核實（不得以入口／測試數量代替） | [`migration-audit.md`](migration-audit.md) 原始 CGI 與 Web 來源列；public/index.html::physique-summary；public/app.js::renderDining | 先查核：身高／體重、體型與 BMI 已移至狀態頁常駐摘要；真實手機與桌面瀏覽器操作未驗證 | P1 |
 | PH-08 | 玩家圖示 URL／新角色圖示 | 部分實作 | 既有盤點列有程式／測試線索；本輪未逐項重跑，需按風險核對 | 未驗（無真人實機證據） | 原版完整等價性待核實（不得以入口／測試數量代替） | [`migration-audit.md`](migration-audit.md) 原始 CGI 與 Web 來源列；src/appearance.mjs；public/app.js::renderLegacyIcon；src/legacy-character.mjs | 先查核：原版對戰可顯示 32×32 kounyuu；Web 僅由本人點擊預覽 HTTPS 已封存 URL，未支援原版對戰中對手圖示 | P2 |
 | PH-09 | 原版公開真實個人檔案中的自選外貌描述 | 未實作 | 無已移植玩法驗證；原版來源需核對 | 未驗（無真人實機證據） | 原版已確認有程式或資料；可達條件仍依來源核定 | [`migration-audit.md`](migration-audit.md) 原始 CGI 與 Web 來源列；無完整 Web 真實個人檔案流程（詳 SC-04／SC-05） | 先查核：原版是獨立、玩家自願公開的真實個人檔案，並非從角色 looks、BMI 自動生成 | 後續／P2 |
-| PH-10 | C 聯賽自創角色圖片 | 指定範圍已實作（#121 已合併） | C聯賽 HTTP、Chrome 與聯合883/883 | 未驗（真人） | HTTP(S) 外部連結，非原版自動嵌圖 | [C聯賽](phase72-c-league.md) | H 真人／聯合瀏覽器與 J 整合驗收；不重做資料模型 | 戰鬥後續 F～J |
+| PH-10 | C 聯賽自創角色圖片 | 指定範圍已實作（#121 已合併） | C 聯賽 HTTP、Chrome；H #125/#127 聯合瀏覽器與 J-3/J-5 歷史整合（不表示圖片全部情境已驗） | 未驗（真人） | HTTP(S) 外部連結，非原版自動嵌圖 | [C聯賽](phase72-c-league.md)、[H](phase-h-battle-browser.md)、[J](phase-j-storage-upgrade-audit.md) | 真人／實體設備與圖片來源差異；不重做資料模型 | 已完成切片／真人驗收待辦 |
 | WK-01 | 能量上限及自然恢復 | 部分實作 | 既有盤點列有程式／測試線索；本輪未逐項重跑，需按風險核對 | 未驗（無真人實機證據） | 原版完整等價性待核實（不得以入口／測試數量代替） | [`migration-audit.md`](migration-audit.md) 原始 CGI 與 Web 來源列；src/engine.mjs；src/server.mjs | 先查核：Web 有上限與恢復；需核對所有轉職／體格事件的加扣條件 | P1 |
 | WK-02 | 工作薪資、經驗、冷卻 | 指定範圍已實作 | 第48階段 HTTP/SQLite 工作→銀行→百貨→物品→食堂，兩次 Node 重啟；薪資與防重送 | 未驗（無真人實機證據） | 該已核對的工作與出勤條件一致；其他邊界待核實 | [第48階段](phase48-core-gameplay-restart.md)、`tests/server.test.mjs`、[第67階段](phase67-solo-save-backup-restore.md) | 真人工作／領薪介面；極端長週期及未覆蓋原版條件 | P1 |
 | WK-03 | 飢餓／疾病修正工作 | 部分實作 | 既有盤點列有程式／測試線索；本輪未逐項重跑，需按風險核對 | 未驗（無真人實機證據） | 原版完整等價性待核實（不得以入口／測試數量代替） | [`migration-audit.md`](migration-audit.md) 原始 CGI 與 Web 來源列；src/dining.mjs L82-L103；src/health.mjs | 先查核：未用餐玩家以 provisional 5 經驗預設；非原版完整懲罰 | P1 |
@@ -171,12 +202,12 @@
 | BK-01 | 普通與定存、計息與帳簿 | 部分實作 | 既有盤點列有程式／測試線索；本輪未逐項重跑，需按風險核對 | 未驗（無真人實機證據） | 原版完整等價性待核實（不得以入口／測試數量代替） | [`migration-audit.md`](migration-audit.md) 原始 CGI 與 Web 來源列；src/banking.mjs；tests/banking.test.mjs | 先查核：利率已有 Web 規則，計息觸發時點與原版不完全同等 | P2 |
 | BK-02 | 玩家轉帳與額度 | 部分實作 | 既有盤點列有程式／測試線索；本輪未逐項重跑，需按風險核對 | 未驗（無真人實機證據） | 原版完整等價性待核實（不得以入口／測試數量代替） | [`migration-audit.md`](migration-audit.md) 原始 CGI 與 Web 來源列；src/banking.mjs；src/server.mjs | 先查核：身份校驗與原子交易已載明；需逐項反查原始限制 | 後續／P2 |
 | BK-03 | 住宅貸款及每日還款 | 部分實作 | 既有盤點列有程式／測試線索；本輪未逐項重跑，需按風險核對 | 未驗（無真人實機證據） | 原版完整等價性待核實（不得以入口／測試數量代替） | [`migration-audit.md`](migration-audit.md) 原始 CGI 與 Web 來源列；src/banking.mjs；tests/loans.test.mjs | 先查核：負餘額與違約模式保留 Web 差異；無法稱為等價 | P2 |
-| BK-04 | 原版定期徵稅 | 指定範圍已實作（Web 安全差異） | PR #103 稅基／每週扣款／帳簿、PR #104 歷史欠稅與舊 Web SQLite 升級、PR #105 WAL 備份→還原→續玩；合併後 Web push／Draft PR #1 CI **798／798 通過** | 未驗（無真人手動操作證據；已有 Chrome 自動化） | 星期一按前次已存資產徵稅；Web 使用遊戲當地日期，普通存款不足整筆記未繳且不自動追繳；K 點來源尚非全等價；#121 已納入 B聯賽／Street Fight 有號 K 點、稅表及交易相容 | `town_maker.cgi::login_view`；`src/banking.mjs`、`src/server.mjs`、`public/app.js`；[PR #103](https://github.com/Prysline/town-kinki/pull/103)、[#104](https://github.com/Prysline/town-kinki/pull/104)、[#105](https://github.com/Prysline/town-kinki/pull/105) | **指定稅務切片已結案**；只剩真人介面驗收、F～J 的 K 點來源、稅務升級、Web 安全規則差異，不得再次立項「稅務未接入」 | 已完成切片／真人驗收待辦 |
+| BK-04 | 原版定期徵稅 | 指定範圍已實作（Web 安全差異） | PR #103 稅基／每週扣款／帳簿、PR #104 歷史欠稅與舊 Web SQLite 升級、PR #105 WAL 備份→還原→續玩；合併後 Web push／Draft PR #1 CI **798／798 通過** | 未驗（無真人手動操作證據；已有 Chrome 自動化） | 星期一按前次已存資產徵稅；Web 使用遊戲當地日期，普通存款不足整筆記未繳且不自動追繳；K 點來源尚非全等價；#121 已納入 B聯賽／Street Fight 有號 K 點、稅表及交易相容 | `town_maker.cgi::login_view`；`src/banking.mjs`、`src/server.mjs`、`public/app.js`；[PR #103](https://github.com/Prysline/town-kinki/pull/103)、[#104](https://github.com/Prysline/town-kinki/pull/104)、[#105](https://github.com/Prysline/town-kinki/pull/105) | 指定稅務切片已結案；J-2 #140 實體歷史有號 K 遷移及回滾、J-3b／J-5 負 K 與資產稅基已驗；真人、其他原版 K 點來源及 Web 安全差異另記，不得重開稅務未接入 | 已完成切片／真人驗收待辦 |
 | BK-05 | 原版 A～E 股票市場及持股紀錄 | 未實作 | 無已移植玩法驗證；原版來源需核對 | 未驗（無真人實機證據） | 原版已確認有程式或資料；可達條件仍依來源核定 | [`migration-audit.md`](migration-audit.md) 原始 CGI 與 Web 來源列；src/banking.mjs 只有銀行／貸款模組，無股價交易 | 先查核：原版有獨立五類股價、持股、交易與清算記錄；不可因 Web 已有銀行而算股票已移植 | 後續／P2 |
 | IT-01 | 原版 33 欄商品格式與 Web 背包 | 部分實作 | `inventory-capacity-collapsible.test.mjs` 核對原版 25／10／10 格與分類 HTML；`browser-viewport-smoke.test.mjs` 真實 Chrome 操作背包兩種分類、收合持續性與 375／768px 檢視；其餘 33 欄與物品範圍仍依各專項回歸 | 未驗（無真人實機證據） | 原版完整等價性待核實（不得以入口／測試數量代替） | [`migration-audit.md`](migration-audit.md) 原始 CGI 與 Web 來源列；src/legacy-inventory.mjs；src/legacy-item-use.mjs | 先查核：Web 新商品使用原版 33 欄與已核實作用，不需舊玩家持有物匯入 | P1 |
 | IT-02 | 可確認消耗品／耐久 | 部分實作（PR #98 寵物／信用卡，新增七款原版食物標記修復） | 既有日／回耐久、17 能力、冷卻與防重；[PR #98](https://github.com/Prysline/town-kinki/pull/98) 寵物／卡片及 Chrome UI；`legacy-item-use.test.mjs` 新增七款逐筆來源、能力／熱量／BMI／食物共用60分鐘限制及偽造來源拒絕，`server.test.mjs` 新增真實百貨購買兩款→使用→拒絕→重啟→快轉再用測試；CI 與 PR 結果以最新 GitHub 紀錄為準 | 未驗（無真人實機證據） | 原版 `command.pl::buy_syouhin` 會依 `食料品`／`ファ` 標記改分類；`basic.cgi::item_do` 仍按普通食物扣耐久、提升能力、加熱量並要求用餐冷卻。Web 先前會轉類但把這兩種標記當成不支援，並非原版沒有使用功能 | [原版商品來源](https://github.com/Prysline/town-kinki/blob/master/dat_dir/syouhin.cgi)、`src/retail.mjs`、`src/legacy-item-use.mjs`、`tests/legacy-item-use.test.mjs`、`tests/server.test.mjs`、[七款來源差異](#2026-11-23-it-02原版食物標記轉類後無法使用的修復) | 僅放行七款來源不變欄位相符的實際食物標記，原 33 欄保持唯讀，現金／庫存／耐久／冷卻與防重仍由既有交易保護；其他特殊商品、不同類別或未核實效果不自動擴大；真人 UI 操作仍未驗收 | P1 |
 | IT-03 | 百貨店一／二、販賣機、裝備／禮品／回收 | 部分實作（已完成多種商店交易） | 百貨與自販／裝備／寄禮等已有交易測試；第48階段百貨跨重啟驗收 | 未驗（無真人實機證據） | 各店鋪規則仍有可辨識缺口；不得以「僅單件現金」描述當前百貨 | [第31階段](phase31-department-checkout.md)、[第48階段](phase48-core-gameplay-restart.md)、`src/retail.mjs` | 已支援百貨 1～5 件與本人有效信用卡付款；僅補經證實未涵蓋的店別規則與真人 UI | P2 |
-| IT-04 | 優惠券獲得與兌換 | 指定範圍已實作 | `coupon-redemption.test.mjs`、`server.test.mjs`：30件獎品、33欄、扣券、重送、重啟 | 未驗（無真人實機證據） | 已確認兌換核心；獎品後續效果非全部一致 | [第51階段](phase51-event-coupon-redemption.md)、`src/coupon-redemption.mjs` | 可取得獎品中尚未支援的**有來源**單人用途；真人兌換 UI | P1 |
+| IT-04 | 優惠券獲得與兌換 | 指定範圍已實作 | coupon-redemption.test.mjs、server.test.mjs：30獎品、33欄、扣券、重送、重啟；I #134 待確認請求防重、J-4b/c 舊券收據、J-5 單機／多人獲券→兌換故障回滾 | 未驗（無真人實機證據） | 已確認兌換核心；獎品後續效果非全部一致 | [第51階段](phase51-event-coupon-redemption.md)、src/coupon-redemption.mjs、[I](phase-i-event-reward-audit.md)、[J](phase-j-storage-upgrade-audit.md) | 可取得獎品中尚未支援的**有來源**單人用途；真人兌換 UI | P1 |
 | IT-05 | 原版釣魚與漁獲出售 | 指定範圍已實作 | `fishing.test.mjs`、`server.test.mjs`：買餌、釣魚、賣魚、冷卻、資產及重啟 | 未驗（無真人實機證據） | 已知差異：Web 庫存按本地日界重置，原版使用01時旗標 | [第53階段](phase53-fishing-economy.md)、`src/fishing.mjs` | 真人釣魚 UI；日界差異是否實際阻塞待核定 | P1 |
 | IT-06 | 原版拍賣場刊登與結算 | 未實作 | 無已移植玩法驗證；原版來源需核對 | 未驗（無真人實機證據） | 原版已確認有程式或資料；可達條件仍依來源核定 | [`migration-audit.md`](migration-audit.md) 原始 CGI 與 Web 來源列；Web 無該拍賣／結算流程 | 先查核：原版使用獨立拍賣紀錄與刊登、交付分支；不同於普通商店／回收 | 後續／P2 |
 | IT-07 | 原版合成屋 | 指定範圍已實作 | `crafting.test.mjs`、`server.test.mjs`：12配方、材料、33欄、回滾、重啟 | 未驗（無真人實機證據） | 已知差異：全域 `$koudou_seigen` 與 Web 行動冷卻關聯尚待核實 | [第54階段](phase54-crafting-house.md)、`src/crafting.mjs` | 真人合成 UI；原版全域限制差異查證 | P1 |
@@ -184,23 +215,23 @@
 | HL-02 | 醫院治療與原始保險 | 部分實作 | 既有盤點列有程式／測試線索；本輪未逐項重跑，需按風險核對 | 未驗（無真人實機證據） | 原版完整等價性待核實（不得以入口／測試數量代替） | [`migration-audit.md`](migration-audit.md) 原始 CGI 與 Web 來源列；src/health.mjs；src/inventory.mjs；tests/inventory.test.mjs | 先查核：30 天有效期、折扣已載明；舊道具與有效期基準仍有差異 | P2 |
 | SC-01 | 私訊與玩家互動 | 部分實作 | `private-mail.test.mjs`、`server.test.mjs`：普通信、寄禮信共用50封、刪信、重啟、所有權 | 未驗（無真人實機證據） | 已知差異：已讀／通訊錄／K點附信仍未完成；bbs/tag 非同一功能 | [第49階段](phase49-unified-private-mail.md)、`src/server.mjs` | **私人信核心已完成**，不得當成未開發；其他社交、留言獨立低優先項 | 後續／P2 |
 | SC-02 | 戀愛／婚姻／同居／育兒 | 未實作 | 無已移植玩法驗證；原版來源需核對 | 未驗（無真人實機證據） | 原版已確認有程式或資料；可達條件仍依來源核定 | [`migration-audit.md`](migration-audit.md) 原始 CGI 與 Web 來源列；尚無完整 Web 對應 | 先查核：依賴角色關聯檔、多人帳號及安全同步 | 後續／P2 |
-| SC-03 | B 聯賽決鬥／裝備／獎賞 | 指定範圍已實作（#121 已合併） | 核心、SQLite、HTTP、負 K 點與聯合883/883 | 未驗（真人／B聯賽專項實際點擊待補） | 原版戰鬥與獎賞已核對；非負現金與模組冷卻為 Web 差異 | [B聯賽](b-league-arena.md)、[聯合驗證](battle-integration-check.md) | F～J，不重做已完成切片；atakka.cgi 是防濫用資料檔而非戰鬥 CGI | 戰鬥後續 F～J |
+| SC-03 | B 聯賽決鬥／裝備／獎賞 | 指定範圍已實作（#121 已合併） | 核心、SQLite、HTTP、負 K 點；#121、H Chrome #125/#127、J-3/J-5 歷史收據與藥草使用，最終正式972/972 | 未驗（真人；B 聯賽專項 Chrome 自動化已完成） | 原版戰鬥與獎賞已核對；非負現金與模組冷卻為 Web 差異 | [B聯賽](b-league-arena.md)、[聯合驗證](battle-integration-check.md)、[H](phase-h-battle-browser.md)、[J](phase-j-storage-upgrade-audit.md) | 真人／自然流程；未核准全域冷卻不擴張；atakka.cgi 為防濫用資料檔；不重做 A～J 指定切片 | 已完成切片／真人驗收待辦 |
 | SC-04 | 真實個人檔案自願登記／修改 | 未實作 | 無已移植玩法驗證；原版來源需核對 | 未驗（無真人實機證據） | 原版已確認有程式或資料；可達條件仍依來源核定 | [`migration-audit.md`](migration-audit.md) 原始 CGI 與 Web 來源列；尚無 Web 個人檔案資料模型或表單 | 先查核：原版為玩家主動填寫的真實公開資料（性別／年齡／地址、5 組選項、15 題自由填寫），不是遊戲 looks／BMI | 後續／P2 |
 | SC-05 | 個人檔案搜尋／分頁／傳訊入口 | 未實作 | 無已移植玩法驗證；原版來源需核對 | 未驗（無真人實機證據） | 原版已確認有程式或資料；可達條件仍依來源核定 | [`migration-audit.md`](migration-audit.md) 原始 CGI 與 Web 來源列；尚無 Web 公開檔案搜尋 UI | 先查核：可依名稱、性別、年齡、住所與五選項查詢，每頁 10 筆並有傳訊入口 | 後續／P2 |
 | SC-06 | 原版問卷建立、投票及管理 | 未實作 | 無已移植玩法驗證；原版來源需核對 | 未驗（無真人實機證據） | 原版已確認有程式或資料；可達條件仍依來源核定 | [`migration-audit.md`](migration-audit.md) 原始 CGI 與 Web 來源列；Web 無獨立問卷投票系統 | 先查核：原版有建立問卷、選項、投票與管理分支，不等於登入畫面的事件通知或隨機事件 | 後續／P2 |
 | SC-07 | 原版玩家投稿事件 | 未實作 | 無已移植玩法驗證；原版來源需核對 | 未驗（無真人實機證據） | 原版已確認有程式或資料；可達條件仍依來源核定 | [`migration-audit.md`](migration-audit.md) 原始 CGI 與 Web 來源列；Web 隨機事件模組是 event.pl 的抽選；無 event.cgi 投稿流程 | 先查核：event.cgi 會寫玩家投稿文字、能力與金錢等欄，**不能混成 event.pl #01～#44 已移植**；投稿不是自動加入隨機事件表 | 後續／P2 |
 | SC-08 | 原版遊樂中心各種遊戲入口 | 部分實作（第55～61階段子玩法已實作） | `arcade-*.test.mjs`、`server.test.mjs`：第55～61階段多種玩法、四寶箱、交易、冷卻與重啟 | 未驗（無真人實機證據） | 已知差異／未完：2010年到期福引不自動重開；部分獎品後續效果未全移植 | [第55階段](phase55-arcade-dice.md)、[第61階段](phase61-treasure-chests.md)、`src/arcade-treasure.mjs` | 已完成玩法只需真人 UI 驗收；獎品用途按實際來源立項 | 後續／P2 |
 | GM-02 | 原版競馬 | 未實作 | Web 沒有競馬結算測試證據 | 未驗（無真人實機證據） | 原版 `basic.cgi::keiba` 有實際下注與結果，尚未移植 | `basic.cgi::keiba`、[第30階段差異](migration-audit.md)、`src/server.mjs` | 確認玩家可達、獨立下注／結算與資產風險，按單機價值另立 P2 | 後續／P2 |
-| GM-03 | 弱／強おばちゃん挑戰 | 指定範圍已實作（#121 已合併，核准重建版） | 大阪核心、SQLite、兩難度掉落及道具使用、單機／多人 HTTP；重建來源與切換測試 | 未驗（無真人實機證據） | 原版十筆 NPC 缺漏；完整原版資料優先，重建版 v1 明確標記並逐局保存 | [大阪挑戰](osaka-challenge-source.md) | 保留原版資料追查、真人瀏覽器及經濟平衡驗收 | 戰鬥後續 F～J |
+| GM-03 | 弱／強おばちゃん挑戰 | 指定範圍已實作（#121 已合併，核准重建版） | 大阪核心、SQLite、兩難度掉落及道具使用、單機／多人 HTTP、來源切換；H Chrome、J-3 歷史 unknown/original-file/reconstructed 收據；G 固定種子模擬 | 未驗（無真人實機證據） | 原版十筆 NPC 缺漏；完整原版資料優先，重建版 v1 明確標記並逐局保存 | [大阪挑戰](osaka-challenge-source.md)、[G](phase-g-economic-baseline.md)、[H](phase-h-battle-browser.md)、[J](phase-j-storage-upgrade-audit.md) | 原版十筆 NPC 資料追查、真人與自然流程；不以模擬調參、不重做已完成階段 | 已完成切片／來源及真人驗收待辦 |
 | SC-09 | 原版隱藏口令獎勵 | 未實作（原版可達性待核實） | 無已移植玩法驗證；原版來源需核對 | 未驗（無真人實機證據） | 原版已確認有程式或資料；可達條件仍依來源核定 | [`migration-audit.md`](migration-audit.md) 原始 CGI 與 Web 來源列；Web 無原版活動兌換或已領記錄 | 先查核：原始程式需隱藏口令且每人一次，先領五人與其他玩家獎勵不同；不能從原版片段自動重啟活動或公布口令 | 後續／P2 |
 | AC-01 | 單人／多人角色與登入 | 指定範圍已實作 | `server.test.mjs`：單機／多人身分、會話與資料隔離 | 未驗（無真人實機證據） | Web 自建帳號安全模型，不追求原版密碼機制等價 | `src/server.mjs`、`tests/server.test.mjs` | 實機持續登入與公開部署安全檢查 | P1 |
 | AC-02 | 單人刪角／繼續遊戲 | 指定範圍已實作 | `server.test.mjs`：單機角色刪除、重啟保存、跨日快轉 | 未驗（無真人實機證據） | Web 可繼續進度與單機時間；不等於全系統歷史持久化已逐一驗收 | `src/server.mjs`、`tests/server.test.mjs`、[第48階段](phase48-core-gameplay-restart.md) | 真人返回首頁／繼續、跨版本 SQLite 升級驗收 | P1 |
 | AC-03 | 公開部署／管理權限／速率限制 | 部分實作 | 既有盤點列有程式／測試線索；本輪未逐項重跑，需按風險核對 | 未驗（無真人實機證據） | 原版完整等價性待核實（不得以入口／測試數量代替） | [`migration-audit.md`](migration-audit.md) 原始 CGI 與 Web 來源列；src/server.mjs；README 安全限制 | 先查核：未有完整登入速率限制及公開部署審查；不宜公開直接部署 | 公開部署前門檻 |
 | AC-04 | 原版個人設定及備忘錄／朋友清單／死亡通知 | 部分實作 | 既有盤點列有程式／測試線索；本輪未逐項重跑，需按風險核對 | 未驗（無真人實機證據） | 原版完整等價性待核實（不得以入口／測試數量代替） | [`migration-audit.md`](migration-audit.md) 原始 CGI 與 Web 來源列；Web 有獨立 solo 刪角及帳號登入，沒有等價的完整原版設定資料模型 | 先查核：原版備忘錄可保存、好友清單和字體／音效設定可編輯；死亡通知含密碼及原始關聯檔處理，不能用 Web solo 刪角代稱完成 | P2 |
-| DB-04 | SQLite 遷移／還原 | 部分實作 |第48階段跨兩次 Node 重啟；第67階段 `solo-save.test.mjs`／HTTP 還原續玩、WAL、SHA-256、外鍵；PR #35 真實歷史 schema 子集升級已由 PR #94 驗證（合併前／後 push 與 PR CI 均成功）；PR #53 寄禮信箱舊 FK→雙階段升級及寄件者刪帳保護由已合併 PR #96 補測；最終 PR HEAD push／PR CI、合併後 Web push／長期 PR #1 CI 均 success（合併後 715/715）；PR #113 新增第62階段 Web 公路舊 SQLite 的實體 WAL 備份／還原／HTTP 到站／重啟跨版驗收（已合併 PR #113；測試／文件提交 `ba58629c` 的 [push CI](https://github.com/Prysline/town-kinki/actions/runs/45315268903) 與 [PR CI](https://github.com/Prysline/town-kinki/actions/runs/45315275294) 均成功，808/808）；PR #114 已合併，合併後 push CI 809/809；長期 PR #1 同 HEAD 808/809（六號樂透既有測試失敗，聯合候選修正測試時鐘） | 未驗（無真人實機證據） | 不適用：新版 SQLite 保存與恢復，不以舊 CGI 匯入衡量 |[第67階段](phase67-solo-save-backup-restore.md)、`scripts/solo-save.mjs`、`tests/solo-save.test.mjs`、`tests/server.test.mjs`；[第68階段跨版測試](phase68-sqlite-pr35-upgrade-verification.md)、[第69階段舊信箱跨版測試](phase69-pr53-gift-mail-upgrade.md)、[PR #96](https://github.com/Prysline/town-kinki/pull/96)、[PR #113](https://github.com/Prysline/town-kinki/pull/113)、[第70階段公路跨版驗收](phase70-pr86-road-wal-upgrade.md)、[PR #114](https://github.com/Prysline/town-kinki/pull/114)、[第71階段禮品舊帳簿跨版驗收](phase71-pr42-gift-events-wal-upgrade.md) |**CLI 備份／驗證／新目錄還原已完成**；待跨 Web 版本升級矩陣、跨設備演練、定期管理與真人操作；其他 Web 歷史版本、跨 OS／設備仍待驗收，PR #96 不代表全面矩陣完成 | P1（驗收） |
+| DB-04 | SQLite 遷移／還原 | 指定範圍已實作（CLI 與 J-1～J-5 歷史升級／故障復原） | 第48/67階段重啟、WAL、SHA-256、外鍵、非覆寫 CLI；#94(PR35)、#96(PR53)、#113(PR86)、#114(PR42)、#104/#105 稅務；J-1～J-5 #139～145/#147/#150 指定歷史 schema、單機／多人聯合回歸及注入故障，最終四組972/972 | 未驗（無真人實機證據） | 不適用：新版 SQLite 保存與恢復，不以舊 CGI 匯入衡量 | [第67階段](phase67-solo-save-backup-restore.md)、scripts/solo-save.mjs、tests/solo-save.test.mjs、tests/server.test.mjs；[PR35](phase68-sqlite-pr35-upgrade-verification.md)、[PR53](phase69-pr53-gift-mail-upgrade.md)、[PR86](phase70-pr86-road-wal-upgrade.md)、[PR42](phase71-pr42-gift-events-wal-upgrade.md)、[J 完整稽核](phase-j-storage-upgrade-audit.md) | CLI 與指定歷史矩陣已正式完成；其他未抽樣版本／完整歷史 DB、不同 OS／設備、備份輪替與正式部署演練另記；多人測試快照非產品多人 CLI | 已完成切片／獨立驗收待辦 |
 | DB-05 | Web 自建個人檔案與職業投稿 | 未實作 | 無已移植玩法驗證；原版來源需核對 | 未驗（無真人實機證據） | 原版已確認有程式或資料；可達條件仍依來源核定 | [`migration-audit.md`](migration-audit.md) 原始 CGI 與 Web 來源列；Web 尚缺完整建立／投稿功能 | 先查核：讓新玩家自行填寫，不匯入既有玩家資料 | 後續／P2 |
 | UI-01 | 三欄位狀態切換與原始資訊 | 部分實作 | 既有盤點列有程式／測試線索；本輪未逐項重跑，需按風險核對 | 未驗（無真人實機證據） | 原版完整等價性待核實（不得以入口／測試數量代替） | [`migration-audit.md`](migration-audit.md) 原始 CGI 與 Web 來源列；public/index.html L176-L202；public/app.js | 先查核：有 ARIA tab 與原版分頁；實機 375px/768px/桌機驗收缺少 | P1 |
-| UI-02 | 事件通知及 20 秒挑戰 | 部分實作 | 既有盤點列有程式／測試線索；本輪未逐項重跑，需按風險核對 | 未驗（無真人實機證據） | 原版完整等價性待核實（不得以入口／測試數量代替） | [`migration-audit.md`](migration-audit.md) 原始 CGI 與 Web 來源列；public/app.js；src/event-cockroach.mjs | 先查核：程式顯示與 API 存在；真實操作與動態尺寸未驗證 | P1 |
+| UI-02 | 事件通知及 20 秒挑戰 | 部分實作 | I #129/#130 蟑螂共用領獎、跨日 eventId、防重及 HTTP 重啟；J-4a/b 歷史欄位及收據；既有 UI 不等於全情境真人驗收 | 未驗（無真人實機證據） | 原版完整等價性待核實（不得以入口／測試數量代替） | [差異矩陣](migration-audit.md)、public/app.js、src/event-cockroach.mjs、[I](phase-i-event-reward-audit.md)、[J](phase-j-storage-upgrade-audit.md) | 真人操作及動態尺寸、自然抽選與其他未驗證 UI；不重做已驗核心領獎及歷史升級 | P1 |
 | UI-03 | 地圖、餐點與手機 RWD | 部分實作 | `home-ui.test.mjs` 靜態 DOM/文字；`browser-viewport-smoke.test.mjs` 在真實 Chrome 引擎自動觸發建角、工作、銀行、百貨、背包與 1440/768/375px 交互（PR #95 最終 HEAD push／PR CI 及合併後回歸均成功，714/714） | 未驗（無真人實機證據） | UI 響應、可用性與原版介面不可混為單一等價判定 | `public/index.html`、`public/app.js`、`public/style.css`、`tests/home-ui.test.mjs`、[Chrome 自動化測試](../tests/browser-viewport-smoke.test.mjs)、[PR #95](https://github.com/Prysline/town-kinki/pull/95) | 真人桌面／手機／平板實機操作、食堂／住宅／事件、鍵盤／畫面全面驗收仍缺；自動化不得作真人證據 | P1（驗收） |
 | UI-04 | 部署／監控／備份 | 部分實作 | 第67階段 CLI／HTTP 備份後續玩測試已通過；正式部署測試無證據 | 未驗（無真人實機證據） | 不適用（部署與備份管理要求） | [第67階段](phase67-solo-save-backup-restore.md)、`scripts/solo-save.mjs` | 部署權限／HTTPS／速率限制、安全審查、定期備份輪替與還原演練 | P2 |
 | UI-05 | 地圖教室獨立入口 | 指定範圍已實作 | `home-ui.test.mjs` 與 `server.test.mjs`：教室地圖導航及 HTTP 交易 | 未驗（無真人實機證據） | 已核對地圖教室與獨立學校的差別 | [第30階段教室](phase30-jobs-training-profile-audit.md)、`public/town-home.js` | 只需真人入口操作，不重建導覽 | P1 |
@@ -240,7 +271,7 @@
 |---|---|---|---|---|
 | **IT-02／原版等價性修復（逐個效果）** | `basic.cgi::item_do`、`dat_dir/syouhin.cgi` 與相關設施 CGI | 已有 Web 33欄背包、購物、一般消耗／耐久、事件券與寶箱實體獎品；**不是所有實際取得獎品的特殊效果都可用** | 單機可經百貨、事件券、寶箱獲得；應先按商品效果／來源核查玩家是否實際取得、是否有可執行原版效果；風險為耐久、能力、資產重複扣除 | **P1（限已確認可取得且有來源的單人效果）**：先列出一個確實不可用的 SKU、原版分支及 API 行為，再實作或修正，測試真實取得→使用→重啟／防重；不可將全部商品名稱當任務 |
 <!-- BK-04 已由 PR #103、#104 完成指定範圍，PR #105 補備份還原回歸；不再列為未實作的 P1 候選。仍保留上方功能矩陣的 Web 安全差異與真人驗收缺口。 -->
-| **GM-03／可獨立單機玩法（非當前 P1）** | `gamerand.cgi` → `obatyan.cgi::week/strong/battle` | 已由 #121 正式接入兩難度原子結算、獎品使用、重建 NPC、原版資料優先策略 | 十筆原版資料仍缺；重建不是史料復原；真人及營運平衡待驗 | **戰鬥後續 F～J**：保留 [大阪挑戰](osaka-challenge-source.md) 所列來源及差異，補齊實際原版資料時切換，不修改既往收據 |
+| **GM-03／可獨立單機玩法（非當前 P1）** | `gamerand.cgi` → `obatyan.cgi::week/strong/battle` | 已由 #121 正式接入兩難度原子結算、獎品使用、重建 NPC、原版資料優先策略 | 十筆原版資料仍缺；重建不是史料復原；真人及自然流程另驗；G 模擬不是調參授權 | **已完成指定切片，來源／真人另驗**：保留 [大阪挑戰](osaka-challenge-source.md) 所列來源及差異，補齊可信完整原版資料時切換，不修改既往收據 |
 | **GM-02／競馬（非當前 P1）** | `basic.cgi::keiba` | 原版有實際投注、限制、結果結算；Web 尚無同等投注／結算 API | 依原版可執行功能，但真實街區資料為空；必須確認 Web 單機可達配置與獎金安全 | **P2**：明確單人可達性、下注上限與結算，避免無來源「只有圖示就加賽馬」 |
 | **HS-03／住宅商店特殊用途（分段後再排序）** | 住宅／商業 CGI 的相應可執行分支，見 [差異矩陣](migration-audit.md) | 建屋、出售、改裝、留言已存在；室內進階商業及特殊互動仍缺 | 有可建屋基礎但與所有權、對外交易及多人安全耦合 | **P2**：先確認單機真有可操作的原版功能與建置成本，不能把已有住宅重做 |
 
@@ -271,7 +302,7 @@
 |---|---|---|
 | **真人桌面瀏覽器** | Node HTTP、DOM 與 SQLite 測試已涵蓋主要循環；無真人點擊錄影／截圖證據 | 真正用桌面 Chrome/Firefox 建角→工作與領薪→百貨購物→背包使用→食堂／住宅／事件→離開再繼續；檢查每步角色、金錢、道具、冷卻與錯誤提示 |
 | **375px 手機／768px 平板** | 有 CSS/RWD 與 DOM 測試，但不等於兩種視埠已人工驗收 | 實際瀏覽器在 375、768px 操作導航、地圖、彈窗、狀態／背包／冷卻、券、合成、釣魚、公路；紀錄水平溢出與點擊失敗 |
-| **新版 Web SQLite 升級矩陣** | 第48階段同資料夾重啟、第67階段備份／新目錄還原已通過；PR #94 完成 PR #35 真實 schema 子集跨版測試（兩次合併前／後 CI 成功）；已合併 PR #96 新增 PR #53 寄禮信箱歷史 FK 無損升級切片；最終 PR HEAD push／PR CI 與合併後 Web push／長期 PR #1 回歸 CI 全部成功（715/715） | 按確定舊 Web schema 版本建立資料樣本→備份→升級→重啟，逐一核對現金／銀行／背包／住宅／事件／冷卻／多種設施；失敗不得毀損來源 |
+| **新版 Web SQLite 升級矩陣（指定範圍已驗）** | #94/#96/#113/#114、#104/#105 及 [J-1～J-5](phase-j-storage-upgrade-audit.md) 已正式驗證選定歷史 schema、WAL、非覆寫還原、故障回滾、HTTP 續玩、資產及隔離，#150 四組972/972 | 只對未抽樣且有具體風險的 Web 歷史版本另立補驗；完整歷史 DB、不同 OS／設備及正式部署演練不由合成 fixture 取代；不是重做指定矩陣 |
 | **不同設備與環境還原** | 已有 CLI WAL 快照、SHA-256、驗證與不覆寫還原 | 在不同 OS／檔案系統／權限與實際部署路徑操作；驗證完整性與恢復續玩，不能把 CLI 完成寫成演練完成 |
 | **定期備份管理／正式部署** | 手動 `solo-save.mjs` 已可用；不代表有輪替排程、監控、金鑰或遠端保存 | 若要正式公開部署，實作／驗證排程、保留政策、告警、離線副本、HTTPS／Session／速率限制與資產權限；先經部署安全審查 |
 | **多人安全回歸** | 現有隔離、單筆交易、防重送與刪帳後資料持有權已有自動測試；第49階段私訊亦涵蓋 | 修改共享規則或 schema 時核對兩帳戶、資產所有權、併發、回滾；**不因此新增多人功能** |
@@ -289,10 +320,10 @@
 
 ## 七、下一階段優先序（只選仍有缺口）
 
-**當前接續：J，A～I 已完成指定範圍實作及自動驗收，不重開。** 下列全專案優先序保留，P0 高風險缺陷仍優先；A～E 已獲聯合整合授權；F～J 的新增玩法與限制仍須按各階段核准。
+**當前接續：J-6 文件驗收；A～I 及 J-1～J-5 指定範圍已正式完成，不重開。** J-6 正式四組 CI 與結案留言完成後，按下列全專案剩餘缺口與獨立驗證分流，P0 高風險缺陷仍優先；新玩法／限制仍須依既有授權核准，不自動開工其他工作線。
 
 1. **P0（發現即先做）**：單機無法建角／獲薪／購物／使用／繼續遊玩，或經證實造成資產丟失、SQLite 損毀、越權與重複扣款的問題。當前**未憑文件發現尚待實作的 P0**；不得無根據建立新 P0 階段。
-2. **P1／驗收**：第48與67階段已測循環的真人桌面／375／768px 操作；新版 Web schema 跨版本升級與不同設備還原演練。這是**驗收階段，不是重寫循環或重做 CLI 備份**。
+2. **P1／驗收**：第48與67階段已測循環的真人桌面／375／768px 操作；指定 Web schema 跨版矩陣已由 J 完成；其他未抽樣高風險版本與不同設備還原演練另驗。這是**獨立驗收，不是重寫循環或重做 CLI 備份，也不阻擋無關移植**。
 3. **P1／功能差異**：從玩家確實可取得並有原版可執行效果的商品挑選尚未接通的特殊用途（IT-02）；每案需先記可重現條件、已存在程式、缺失行為、資產風險與驗收條件。**BK-04 已由 PR #103～#105 完成指定切片，不再作為待實作候選。**
 4. **P2**：非阻塞 UI、特殊住宅／來源待核的遊樂玩法、競馬；後續才考慮跨玩家寄禮來源鏈、股票／拍賣、社交、投稿、公開檔案／企業等。不得只依可完成難度或原版 CGI 檔數排序。
 
@@ -313,6 +344,7 @@
 - [README 操作及部署限制](../README.md)／[早期 README 完整歷史紀錄](README-HISTORICAL-NOTES.md)。
 - [原版 CGI／Web 詳細差異、原始功能 ID](migration-audit.md)；[第30階段歷史待辦](phase30-open-audit-backlog.md)；[原版43互動入口歷史清冊](phase30-entrypoint-coverage.md)。
 - [單機優先與試玩街區](phase50-solo-first-play-audit.md)；[第48階段跨重啟實測](phase48-core-gameplay-restart.md)；[第66階段18車來源](phase66-road-retail-source-audit.md)；[第67階段備份還原](phase67-solo-save-backup-restore.md)；[第68階段百貨舊收據](phase68-sqlite-pr35-upgrade-verification.md)；[第69階段寄禮信箱](phase69-pr53-gift-mail-upgrade.md)。
+- [A～E 聯合驗證](battle-integration-check.md)；[F](phase-f-action-cooldown-audit.md)／[G](phase-g-economic-baseline.md)／[H](phase-h-battle-browser.md)／[I](phase-i-event-reward-audit.md)／[J](phase-j-storage-upgrade-audit.md)。
 - [原版舊玩家匯入排除政策](project-scope-no-legacy-player-import.md)；[最新合併 PR](https://github.com/Prysline/town-kinki/pulls?q=is%3Apr+is%3Amerged)；[CI](https://github.com/Prysline/town-kinki/actions)。
 
 此檔不修改原始 CGI、Web API、遊戲規則或 SQLite schema；只為下次開發提供可回查的現行判讀與排序。
