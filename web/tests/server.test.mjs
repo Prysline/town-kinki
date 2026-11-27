@@ -399,6 +399,61 @@ test("M2 工作 HTTP：同交易升級獎金與薪資、第二帳簿寫入故障
   }finally{await srv.stop();}
 });
 
+
+test("M2 工作 HTTP：週一首請求冷卻拒絕仍保留既有獨立結息與前次稅基",async()=>{
+  const srv=await start("solo",undefined,null,{GAME_TIMEZONE:"UTC"});
+  const dir=srv.directory;
+  // 隔離持久化虛擬時鐘：取下一個未到的星期日23:58，避免依賴 CI 真實星期。
+  const sunday=new Date(Date.now());
+  sunday.setUTCHours(23,58,0,0);
+  sunday.setUTCDate(sunday.getUTCDate()+(7-sunday.getUTCDay())%7);
+  if(sunday.getTime()<=Date.now())sunday.setUTCDate(sunday.getUTCDate()+7);
+  const prior=sunday.getTime(),monday=prior+125000;
+  const sundayDay=sunday.toISOString().slice(0,10),mondayDay=new Date(monday).toISOString().slice(0,10);
+  const dbAction=fn=>{const db=new DatabaseSync(join(dir,"solo.sqlite"));try{return fn(db);}finally{db.close();}};
+  const clock=ms=>dbAction(db=>db.prepare("UPDATE solo_clock SET offset_ms=? WHERE id=1").run(ms-Date.now()));
+  const read=()=>dbAction(db=>({
+    character:db.prepare("SELECT * FROM characters").get(),
+    account:db.prepare("SELECT * FROM bank_accounts").get(),
+    tax:db.prepare("SELECT * FROM bank_tax_state").get(),
+    assessments:db.prepare("SELECT * FROM bank_tax_assessments ORDER BY tax_day").all(),
+    ledger:db.prepare("SELECT * FROM bank_ledger ORDER BY id").all()
+  }));
+  try{
+    clock(prior);
+    const created=await api(srv.url,"character",{name:"跨日工作交易",gender:"other",stats:defaultStats()});
+    assert.equal(created.status,200);
+    dbAction(db=>db.prepare("UPDATE characters SET money=2000000,bank=1000000,kpoint=0,salary_payment='bank',last_work_at=?").run(prior));
+    assert.equal((await api(srv.url,"state")).status,200);
+    const before=read();
+    assert.equal(before.tax.snapshot_day,sundayDay);
+    assert.equal(before.tax.assessment_base,3000000);
+    assert.equal(before.account.last_interest_day,sundayDay);
+    assert.equal(before.assessments.length,0);
+    clock(monday);
+    // 不先 GET state；原 work handler 會先獨立結息，再由角色交易拒絕冷卻。
+    const rejected=await api(srv.url,"work",{});
+    assert.equal(rejected.status,400);
+    assert.match(rejected.result.error,/還需要等待/);
+    const after=read();
+    assert.deepEqual(after.character,{...before.character,bank:975000});
+    assert.equal(after.account.last_interest_day,mondayDay);
+    assert.equal(after.assessments.length,1);
+    assert.equal(after.assessments[0].tax_day,mondayDay);
+    assert.equal(after.assessments[0].assessment_base,3000000);
+    assert.equal(after.assessments[0].paid,30000);
+    assert.equal(after.tax.snapshot_day,mondayDay);
+    assert.equal(after.tax.assessment_base,2975000);
+    const entries=after.ledger.slice(before.ledger.length);
+    assert.deepEqual(entries.map(x=>[x.action,x.debit,x.credit,x.balance]),[
+      ["普通存款利息",0,5000,1005000],["每週納稅",30000,0,975000]
+    ]);
+    assert.equal((await api(srv.url,"work",{})).status,400);
+    assert.deepEqual(read(),after,"重送冷卻拒絕不能重複計息、納稅或出勤");
+    console.log("M2_WORK_MONDAY "+JSON.stringify({tax:30000,bank:975000,workRejected:true,settlementCommitted:true}));
+  }finally{await srv.stop();}
+});
+
 test("便利商店五次結薪：前四次兩種帳戶皆不增加，第五次銀行正確入帳，再五次現金正確入帳",async()=>{
   const srv=await start("solo");
   anchorSoloTestAtNoon(srv);
