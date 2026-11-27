@@ -104,7 +104,7 @@ async function run(root,dir){
     await s.stop();s=undefined;s=await launch(root,data,mode,monday-300000);
     const refused=await request("solo Monday first cooldown rejection","work",{},400);
     assert.match(refused.error,/還需要等待/);
-    assert.deepEqual(char()[0],{...prior,bank:975000});
+    assert.deepEqual({...char()[0]},{...prior,bank:975000});
     assert.equal(tax().length,1);assert.equal(tax()[0].assessment_base,3000000);assert.equal(tax()[0].paid,30000);
     await request("solo Monday repeat rejection","work",{},400);
     assert.equal(tax().length,1);assert.equal(char()[0].bank,975000);
