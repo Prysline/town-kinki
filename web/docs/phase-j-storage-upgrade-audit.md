@@ -105,6 +105,17 @@
 - 新增 J-5 test：三個合成帳號、真實核心受控 RNG 產生戰鬥勝利、券及負 K 點，與既存事件、銀行帳簿、稅基、庫存、同請求碼分模組收據一同 WAL 快照；新目錄拒絕覆寫、FK/integrity、來源主檔/WAL/快照 SHA-256。正式 HTTP 歷史重送、另一帳號隔離、未登入／冒用拒絕；注入券收據 INSERT 失敗，核對整個受測歷史資料集合原子回滾，重試只扣一次券、只發一次獎品，重啟後重送及歷史保存。
 - 無玩法、schema、正式 API 變更；只用合成 Web 資料與公開原版規則來源。本機 GitHub DNS 仍失敗，未跑完整 repo，不冒稱本機測試。待同 HEAD Push/PR 完整 CI、diff/合成 tree 與合併後雙 CI。J-5 未結案；聯合證據覆蓋及 J-6 完成清冊另待正式確認。
 
+## J-5 多人切片正式驗收
+
+- #147 已合併正式 HEAD `5fd210b990ac73815b192c420bf31b78fe2716e0`，tree `08097fadaba20a16c5dad6a1bda03f41169b85ce`；候選 `3ef210265494823438e1d1fd90bc2a277c00af8f`、合成 `1140187bd8a432267fe2c586b1312128c41e7133`、#1 合成 `98f7bfd39232b725ff9b97600d5b05d99007a8c2` 同 tree。合併前 [Push](https://github.com/Prysline/town-kinki/actions/runs/45864096827)／[PR](https://github.com/Prysline/town-kinki/actions/runs/45864106443)，合併後 [Push](https://github.com/Prysline/town-kinki/actions/runs/45875844558)／[#1](https://github.com/Prysline/town-kinki/actions/runs/45875855012)，四份完整日誌 971/971、fail/cancelled/skipped/todo=0、server/app 語法成功；多人聯合切片正式完成。
+- 既有 J-3a、J-4b 分別證明單機戰鬥、事件歷史還原，H 有同角色跨系統 Chrome 受控整合，但不是同一歷史單機 DB；因此補下列單機聯合切片，不重做其他歷史測試。
+
+## J-5 單機聯合切片（候選）
+
+- #137 `008c4556519a97f1d4d20721dc1d3213e55b82b8` 與正式基準的 B 聯賽、核心、裝備、事件、道具、銀行、券、單機時鐘及相關公開原版資料共20個直接相關 blob 相同；沿用 J-4c 歷史核心 DDL 及同版初始化器，合成一名角色、虛擬中午時鐘。不是完整舊資料庫。
+- 真實 #30 事件獲5券、B 聯賽勝利取得 MB 藥草及資產、同碼兌換一券且行號不衝突、#4 疾病，實際單機備份/驗證/非覆寫還原至新目錄、來源主檔/WAL/快照雜湊及 FK/integrity。正式 HTTP 同碼分模組收據、單機街頭拒絕；使用收據 INSERT 故障整筆回滾、重試健康與原始能力增量、空白耐久單位不扣回數、其他歷史與稅基保持、重啟防重。受控 RNG、合成 fixture，不是真人或自然低機率驗收。
+- 僅測試與稽核文件，既有多人斷言保留，不修改正式玩法、schema、API、CI 或原版私人檔。待本切片同 HEAD Push/PR、完整 diff、合成 tree、合併後正式 Push/#1 完整 CI，才正式結案 J-5；J-6 未開始。
+
 ## 後續驗收切片（待逐項查證）
 
 1. 【J-2 已完成】#103 真實舊稅表、負 K 點、索引及歷史資料的實體 WAL 升級與失敗回滾；保留 #104/#105 已驗證情境。
