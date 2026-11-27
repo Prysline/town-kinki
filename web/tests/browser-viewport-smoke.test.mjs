@@ -728,6 +728,89 @@ test("Chrome：健身房減重→真實百貨寵物／信用卡→背包使用�
   }
 });
 
+
+test("M1 Chrome 職業介紹所：150職業、搜尋篩選、條件展開保留、實際應徵與薪資偏好",{timeout:120000},async()=>{
+  const workspace=mkdtempSync(join(tmpdir(),"town-chrome-jobs-module-"));
+  const dataDir=join(workspace,"sqlite");
+  let web=null,chrome=null;
+  const state=()=>fetch(web.url+"/api/state").then(r=>r.json());
+  const select=async(id,value)=>{
+    const selected=await evaluate(chrome,`(()=>{const e=document.getElementById(${JSON.stringify(id)});e.value=${JSON.stringify(value)};e.dispatchEvent(new Event("change",{bubbles:true}));return e.value;})()`);
+    assert.equal(selected,value);
+  };
+  try{
+    web=await startWeb(dataDir);
+    const db0=new DatabaseSync(join(dataDir,"solo.sqlite"));
+    try{
+      const parts=new Intl.DateTimeFormat("en-US",{timeZone:"Asia/Taipei",hour:"2-digit",minute:"2-digit",second:"2-digit",hourCycle:"h23"}).formatToParts(new Date());
+      const get=type=>Number(parts.find(x=>x.type===type)?.value??0);
+      const offset=(12*3600000-((get("hour")*60+get("minute"))*60+get("second"))*1000+86400000)%86400000;
+      db0.prepare("UPDATE solo_clock SET offset_ms=? WHERE id=1").run(offset);
+    }finally{db0.close();}
+    chrome=await openChrome(join(workspace,"chrome"));
+    await chrome.send("Page.enable");await chrome.send("Runtime.enable");await viewport(chrome,1440,900);
+    await chrome.send("Page.navigate",{url:web.url});
+    await until(chrome,"!document.querySelector('#create')?.hidden","職業建角");
+    await evaluate(chrome,"window.confirm=()=>true");
+    await fill(chrome,'#create-form [name="name"]',"職業模組驗證");
+    await click(chrome,"#create-submit");
+    await until(chrome,"!document.querySelector('#game')?.hidden","職業主畫面");
+    await click(chrome,"#facility-tab-jobs");
+    const initial=await state();
+    assert.equal(initial.jobs.length,150);
+    assert.equal(await evaluate(chrome,"document.querySelectorAll('#jobs .job').length"),150);
+    assert.equal(await evaluate(chrome,"document.querySelectorAll('#jobs .job.active').length"),1);
+    assert.match(await evaluate(chrome,"document.querySelector('#jobs .job.active .job-main span').textContent"),/日薪打工/);
+    const police=initial.jobs.find(j=>j.originalName==="警官");
+    assert.ok(police);assert.ok(police.reason);
+    await fill(chrome,"#job-search",police.name);
+    const detailSelector='#jobs details[data-job-key='+JSON.stringify(police.key)+']';
+    const rowExpr=`document.querySelector(${JSON.stringify(detailSelector)})?.closest(".job")`;
+    await until(chrome,`Boolean(${rowExpr})`,"警官搜尋");
+    assert.equal(await evaluate(chrome,`${rowExpr}.querySelector("button").disabled`),true);
+    assert.match(await evaluate(chrome,`${rowExpr}.querySelector(".job-eligibility").textContent`),/目前未達就職條件/);
+    await click(chrome,detailSelector+" summary");
+    assert.equal(await evaluate(chrome,`document.querySelector(${JSON.stringify(detailSelector)}).open`),true);
+    assert.match(await evaluate(chrome,`document.querySelector(${JSON.stringify(detailSelector)}).textContent`),/身高.*要求/);
+    assert.ok(await evaluate(chrome,`document.querySelector(${JSON.stringify(detailSelector)}).querySelectorAll(".job-stats-grid .job-condition").length`) > 0);
+    await click(chrome,"#profile-tab-status");await click(chrome,"#refresh");
+    await until(chrome,`document.querySelector(${JSON.stringify(detailSelector)})?.open===true`,"重繪保留條件展開");
+    await click(chrome,"#facility-tab-jobs");
+    await select("job-filter","available");
+    assert.equal(await evaluate(chrome,`Boolean(${rowExpr})`),false);
+    await select("job-filter","all");
+    await fill(chrome,"#job-search","__不存在的職業__");
+    assert.match(await evaluate(chrome,"document.querySelector('#jobs').textContent"),/沒有符合條件的職業/);
+    // 隔離 SQLite 受控資格：沿用正式第48階段警官測試的身高、體重及能力。
+    const seed=new DatabaseSync(join(dataDir,"solo.sqlite"));
+    try{
+      const stats=Object.fromEntries(Object.keys(initial.character.stats).map(k=>[k,Math.max(200,police.requirements[k]??0)]));
+      seed.prepare("UPDATE characters SET height=180,weight=65,bmi=20.1,stats_json=?,body_energy=200,brain_energy=200").run(JSON.stringify(stats));
+    }finally{seed.close();}
+    const eligible=await state();
+    assert.equal(eligible.jobs.find(j=>j.key===police.key).reason,null);
+    await click(chrome,"#profile-tab-status");await click(chrome,"#refresh");
+    await click(chrome,"#facility-tab-jobs");await fill(chrome,"#job-search",police.name);await select("job-filter","available");
+    await until(chrome,`Boolean(${rowExpr})&&!${rowExpr}.querySelector("button").disabled`,"警官可應徵");
+    await viewport(chrome,768,900);
+    // CDP 真實點擊該列的應徵按鈕，不以直接 POST 代替玩家入口。
+    const index=await evaluate(chrome,`[...document.querySelectorAll("#jobs .job")].indexOf(${rowExpr})+1`);
+    assert.ok(index>0);
+    await click(chrome,`#jobs .job:nth-child(${index}) button`);
+    await until(chrome,`Boolean(${rowExpr}?.classList.contains("active"))`,"應徵後任職");
+    const hired=await state();assert.equal(hired.character.jobId,police.key);
+    assert.equal(hired.character.jobExperience,0);assert.equal(hired.character.jobWorkCount,0);
+    assert.equal(hired.character.workCount,initial.character.workCount);
+    await dismiss(chrome);
+    await viewport(chrome,375,812);
+    await select("salary-payment","bank");
+    await until(chrome,"!document.querySelector('#salary-payment').disabled&&document.querySelector('#salary-payment').value==='bank'","薪資偏好保存");
+    const saved=await state();assert.equal(saved.character.salaryPayment,"bank");
+    assert.equal(saved.character.jobId,police.key);assert.equal(saved.character.money,hired.character.money);assert.equal(saved.character.bank,hired.character.bank);
+    console.log("UI_JOBS_MODULE "+JSON.stringify({widths:[1440,768,375],jobs:150,locked:true,search:true,filter:true,expanded:true,hired:police.key,payment:"bank"}));
+  }finally{await chrome?.stop();await web?.stop();rmSync(workspace,{force:true,recursive:true,maxRetries:50,retryDelay:200});}
+});
+
 test("Chrome 多人街頭格鬥：真實按鈕送出戰鬥、展開戰報、手機視窗",{
   timeout:90000
 },async()=>{
