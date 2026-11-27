@@ -1,0 +1,19 @@
+name: V04 independent dice differential (validation only)
+on:
+  push:
+    branches: [validation/v04-dice-differential-20261128]
+jobs:
+  differential:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Pin and compare exact runtime versions
+        run: |
+          git rev-parse HEAD HEAD^{tree}
+          git worktree add --detach "$RUNNER_TEMP/v04-base" c18f56e8df68f3c8998c1ba7733500026e34424b
+          node web/scripts/v04-dice-differential.mjs "$RUNNER_TEMP/v04-base" "$GITHUB_WORKSPACE"
