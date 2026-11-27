@@ -28,7 +28,7 @@ test("GM-02 original roster, odds, limits and exact Perl insertion shuffle",()=>
   assert.equal(oracle.pop(),"24");
   assert.deepEqual(card,oracle.map(s=>{const [name,odds]=s.split("<>");return {name,odds:Number(odds)};}));
   assert.equal(HORSE_LOCK_SECONDS,180);
-  assert.throws(()=>parseHorseRaceSource(basic,ini.replace("'200'","'201'")),/來源/);
+  assert.throws(()=>parseHorseRaceSource(basic,ini.replace("$keiba_gendomaisuu = '200'","$keiba_gendomaisuu = '201'")),/來源/);
 });
 
 test("GM-02 actual Perl initial and turn formulas, discard shuffle, two-way finish and payout",()=>{
