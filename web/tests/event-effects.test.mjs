@@ -203,10 +203,10 @@ test("第 26 號街頭衝突：五種等機率分支，兩種無傷且按整數�
 test("第 27 號溫泉事件：原版增加兩種能量 1000，Web 版不突破目前能力上限",()=>{
   const event=resolveNonItemEvent(27,row({body_energy:10,brain_energy:20}));
   assert.equal(event.event.key,"hotspring");
-  assert.equal(event.changes.body_energy,25);
-  assert.equal(event.changes.brain_energy,35);
-  assert.deepEqual(event.effects,{bodyEnergy:15,brainEnergy:15});
-  const full=resolveNonItemEvent(27,row({body_energy:25,brain_energy:35}));
+  assert.equal(event.changes.body_energy,21);
+  assert.equal(event.changes.brain_energy,23);
+  assert.deepEqual(event.effects,{bodyEnergy:11,brainEnergy:3});
+  const full=resolveNonItemEvent(27,row({body_energy:21,brain_energy:23}));
   assert.equal(full.effects.bodyEnergy,0);
   assert.equal(full.effects.brainEnergy,0);
   assert.match(full.event.description,/0、0/);
@@ -257,17 +257,17 @@ test("新能量事件與職業經驗變化以同一交易寫入，更新恢復�
     assert.equal(settleDailyIllnessEvent(db,1,"2026-11-19",100001,()=>{throw Error("不可重抽");}).checked,false);
     assert.equal(trigger(db,27,[],"2026-11-20").event.key,"hotspring");
     current=db.prepare("SELECT body_energy,brain_energy,recovered_at FROM characters WHERE user_id=1").get();
-    assert.deepEqual({...current},{body_energy:25,brain_energy:35,recovered_at:100000});
+    assert.deepEqual({...current},{body_energy:21,brain_energy:23,recovered_at:100000});
     assert.equal(trigger(db,39,[],"2026-11-21").event.key,"workFocus");
     assert.equal(db.prepare("SELECT job_experience FROM characters WHERE user_id=1").get().job_experience,55);
     assert.equal(trigger(db,33,[.99],"2026-11-22").event.key,"localEncounter");
     current=db.prepare("SELECT body_energy,money FROM characters WHERE user_id=1").get();
-    assert.deepEqual({...current},{body_energy:13,money:50000});
+    assert.deepEqual({...current},{body_energy:11,money:50000});
     const events=listCharacterEvents(db,1);
     assert.deepEqual(events.map(e=>e.originalId),[33,39,27,26]);
     assert.equal(events[0].effects.money,-50000);
     assert.equal(events[1].effects.jobExperience,-5);
-    assert.deepEqual(events[2].effects,{bodyEnergy:11,brainEnergy:15});
+    assert.deepEqual(events[2].effects,{bodyEnergy:7,brainEnergy:3});
     assert.equal(events[3].effects.bodyEnergy,-6);
     assert.equal(listCharacterEvents(db,2).length,0);
   }finally{db.close();}

@@ -7705,6 +7705,7 @@ test("I HTTP：丟棄蟑螂領獎回應、真實 Node 重啟、跨日舊ID與空
 test("三棟訓練信用付款 HTTP：本人卡、餘額、獨立冷卻、帳簿與交易失敗回滾",async()=>{
   const srv=await start("solo");
   try{
+    anchorSoloTestAtNoon(srv);
     const created=await api(srv.url,"character",{name:"共用付款驗收",gender:"other",stats:defaultStats()});
     assert.equal(created.status,200);
     const purchased=Math.floor(created.result.gameTimeMs/1000)-60;
@@ -7736,6 +7737,7 @@ test("三棟訓練信用付款 HTTP：本人卡、餘額、獨立冷卻、帳簿
     }finally{fault.exec("DROP TRIGGER training_credit_fault");fault.close();}
     assert.deepEqual(comparable(await get()),comparable(start));
     for(const [key,label] of [["school-2","學校"],["gym-3","健身房"],["classroom-2","教室"]]){
+      if(key==="classroom-2")assert.equal((await api(srv.url,"solo/time/advance",{preset:"5m"})).status,200);
       const before=await get();
       const price=before.trainingLessons.find(x=>x.key===key).price;
       const paid=await api(srv.url,"train",{key,payment:"credit",sourceLine:1});
@@ -7884,5 +7886,33 @@ test("I 階段真實 SQLite/HTTP：三種居民事件、河中書籍、兩笛手
       }else if(i===3)assert.deepEqual(after.legacyInventory.find(x=>x.origin==="event40"),book);
     }
     const final=new DatabaseSync(join(directory,"multi.sqlite"));try{assert.deepEqual(final.prepare("PRAGMA foreign_key_check").all(),[]);}finally{final.close();}
+  }finally{await srv.stop();}
+});
+
+test("WK-01：舊 Web 工作公式能量值在居民查詢即持久化夾限，不改現金、存款、能力與恢復時計",async()=>{
+  const srv=await start("solo");
+  try{
+    anchorSoloTestAtNoon(srv);
+    const created=await api(srv.url,"character",{name:"WK01能量居民",gender:"other",stats:defaultStats()});
+    assert.equal(created.status,200);
+    assert.equal(created.result.maxBodyEnergy,21);
+    assert.equal(created.result.maxBrainEnergy,23);
+    const db=new DatabaseSync(join(srv.directory,"solo.sqlite"));
+    try{
+      // 真實既有 Web schema，以舊公式的滿能量及未來 60 秒時計隔離自然回復。
+      // 這是受控舊存檔 fixture，不是正式玩家紀錄。
+      const recoveredAt=created.result.gameTimeMs+60000;
+      db.prepare("UPDATE characters SET body_energy=25,brain_energy=35,recovered_at=?").run(recoveredAt);
+      const prior=db.prepare("SELECT money,bank,stats_json,recovered_at FROM characters").get();
+      const result=await api(srv.url,"state");
+      assert.equal(result.status,200);
+      assert.equal(result.result.character.bodyEnergy,21);
+      assert.equal(result.result.character.brainEnergy,23);
+      const stored=db.prepare("SELECT money,bank,stats_json,recovered_at,body_energy,brain_energy FROM characters").get();
+      assert.deepEqual({...stored},{...prior,body_energy:21,brain_energy:23});
+      const again=await api(srv.url,"state");
+      assert.equal(again.result.character.bodyEnergy,21);
+      assert.equal(again.result.character.brainEnergy,23);
+    }finally{db.close();}
   }finally{await srv.stop();}
 });

@@ -151,8 +151,8 @@ test("感冒藥依原版只在風邪分類增加疾病指數，扣除使用次�
     assert.equal(first.changes.brainEnergy,-3);
     assert.equal(read(db).health_index,-3);
     assert.equal(read(db).stats.kenkou,21);
-    assert.equal(read(db).body_energy,23);
-    assert.equal(read(db).brain_energy,32);
+    assert.equal(read(db).body_energy,19);
+    assert.equal(read(db).brain_energy,20);
     assert.equal(read(db).money,100000);
     assert.equal(read(db).bank,50000);
     assert.equal(db.prepare("SELECT remaining,last_used_at_ms FROM legacy_item_usage").get().remaining,2);

@@ -122,10 +122,10 @@ test("第 42 號有票時依二分之一機率發生鬥毆或勝利，Web 能量
   assert.equal(fight.effects.bodyEnergy,-20);
   assert.equal(fight.usedItemName,"阪神タイガースの公式チケット");
   const win=resolveNonItemEvent(42,row(),rng(.99),"阪神タイガースの公式チケット");
-  assert.equal(win.changes.brain_energy,35);
-  assert.equal(win.effects.brainEnergy,15);
+  assert.equal(win.changes.brain_energy,23);
+  assert.equal(win.effects.brainEnergy,3);
   assert.equal(win.usedItemName,"阪神タイガースの公式チケット");
-  const full=resolveNonItemEvent(42,row({brain_energy:35}),rng(.99),"阪神タイガースの公式チケット");
+  const full=resolveNonItemEvent(42,row({brain_energy:23}),rng(.99),"阪神タイガースの公式チケット");
   assert.equal(full.effects.brainEnergy,0);
 });
 
@@ -234,8 +234,8 @@ test("第 42 號門票抽選更新能量與恢復計時，無票時正常實施�
     assert.equal(usage(db,7).remaining,1);
     assert.deepEqual({...db.prepare(
       "SELECT body_energy,brain_energy,recovered_at FROM characters WHERE user_id=1"
-    ).get()},{body_energy:20,brain_energy:35,recovered_at:100000});
-    assert.equal(listCharacterEvents(db,1)[0].effects.brainEnergy,15);
+    ).get()},{body_energy:20,brain_energy:23,recovered_at:100000});
+    assert.equal(listCharacterEvents(db,1)[0].effects.brainEnergy,3);
     trigger(db,42,{choice:0,userId:2});
     assert.equal(stats(db,2).tairyoku,30);
     assert.equal(stats(db,2).kyakuryoku,30);
