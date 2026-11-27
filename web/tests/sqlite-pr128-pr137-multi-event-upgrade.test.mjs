@@ -18,6 +18,10 @@ import {parseLegacyCouponCatalog} from "../src/coupon-catalog.mjs";
 import {SANTA_FIGHT_ITEMS} from "../src/event-santa-fight.mjs";
 import {calendarDay} from "../src/training.mjs";
 import {initStreetFightTables,playStreetFight} from "../src/street-fight.mjs";
+import {backUpSolo,restoreSolo,verifySoloDatabase} from "../scripts/solo-save.mjs";
+import {initSoloClock} from "../src/solo-clock.mjs";
+import {parseArenaCatalog} from "../src/b-league-core.mjs";
+import {initArenaTables,parseArenaDrops,playArena} from "../src/b-league.mjs";
 const root=resolve(dirname(fileURLToPath(import.meta.url)),"..");
 const delay=ms=>new Promise(ok=>setTimeout(ok,ms));
 
@@ -25,9 +29,9 @@ function insert(db,table,values){
   const keys=Object.keys(values);
   db.prepare("INSERT INTO "+table+" ("+keys.join(",")+") VALUES ("+keys.map(()=>"?").join(",")+")").run(...Object.values(values));
 }
-async function serve(dir,npcRoot,policy="auto",timezone="Asia/Taipei"){
+async function serve(dir,npcRoot,policy="auto",timezone="Asia/Taipei",mode="multi"){
   const child=spawn(process.execPath,["src/server.mjs"],{
-    cwd:root,env:{...process.env,GAME_MODE:"multi",HOST:"127.0.0.1",PORT:"0",DATA_DIR:dir,OSAKA_NPC_ROOT:npcRoot,OSAKA_NPC_POLICY:policy,GAME_TIMEZONE:timezone,COOKIE_SECURE:"0"}
+    cwd:root,env:{...process.env,GAME_MODE:mode,HOST:"127.0.0.1",PORT:"0",DATA_DIR:dir,OSAKA_NPC_ROOT:npcRoot,OSAKA_NPC_POLICY:policy,GAME_TIMEZONE:timezone,COOKIE_SECURE:"0"}
   });
   let log="",stdout="";
   child.stdout.on("data",x=>{stdout+=x;log+=x;});
@@ -376,5 +380,111 @@ test("J-5：#137 歷史事件、街頭獲券、同碼跨模組收據及 HTTP 兌
     read(target,x=>{integrity(x);assert.deepEqual(stableFields(joint(x)),stableFields(after));});
     assert.deepEqual(joint(source),before);
     assert.equal(fileHash(sourceFile),mainHash);assert.equal(fileHash(sourceFile+"-wal"),walHash);assert.equal(fileHash(snapshot),snapshotHash);
+  }finally{if(web)await web.stop();if(source)source.close();rmSync(work,{recursive:true,force:true});}
+});
+
+// J-5: 同一 #137 歷史單機 DB 串接事件、戰鬥掉落、券及藥草使用。
+test("J-5：#137 歷史單機事件、B 聯賽藥草與同碼收據，CLI 還原後使用故障復原",async()=>{
+  const work=mkdtempSync(join(tmpdir(),"town-j5-solo-joint-"));
+  const sourceDir=join(work,"source"),targetDir=join(work,"restored"),sourceFile=join(sourceDir,"solo.sqlite"),snapshot=join(work,"snapshot.sqlite");
+  const real=Date.now(),dayMs=86400000,timezone="Asia/Taipei";
+  const offset=(12*3600000-(real+8*3600000)%dayMs+dayMs)%dayMs;
+  const now=real+offset,today=calendarDay(now,timezone),yesterday=calendarDay(now-dayMs,timezone),earlier=calendarDay(now-2*dayMs,timezone);
+  const requestId="j5_solo_shared_receipt",oldCoupon={sourceIndex:0,originalName:"福引券",requestId};
+  const arenaCatalog=parseArenaCatalog(decodeLegacyText(readFileSync(new URL("../../dat_dir/battle.cgi",import.meta.url))));
+  const drops=parseArenaDrops(decodeLegacyText(readFileSync(new URL("../../battle.cgi",import.meta.url))));
+  const joint=db=>({...all(db),users:rows(db,"users"),sessions:rows(db,"sessions"),solo_clock:rows(db,"solo_clock"),town_maps:rows(db,"town_maps"),b_league_battles:rows(db,"b_league_battles"),b_league_default_gear:rows(db,"b_league_default_gear"),equipment_items:rows(db,"equipment_items"),street_fights:rows(db,"street_fights")});
+  const stable=state=>({...state,characters:state.characters.map(({body_energy,brain_energy,recovered_at,...row})=>row)});
+  const soloOk=async(route,body)=>{const response=await api(web.url,route,body);assert.equal(response.status,200,JSON.stringify(response.result));return response.result;};
+  let source=null,web=null;
+  try{
+    mkdirSync(sourceDir);source=new DatabaseSync(sourceFile);
+    // #137 server DDL and initializers; verified historical blob identities, not a complete old database.
+    initSoloClock(source);source.prepare("UPDATE solo_clock SET offset_ms=? WHERE id=1").run(offset);
+    initHistoricalCore(source);initTownMapTable(source);initBankTables(source);initCharacterEvents(source);initCouponRedemptionTables(source);initStreetFightTables(source);initArenaTables(source);
+    source.exec("PRAGMA wal_autocheckpoint=0; PRAGMA wal_checkpoint(TRUNCATE);");
+    const mainHash=fileHash(sourceFile),initial=now-90000;
+    insert(source,"users",{id:1,username:"__local_player__",password_salt:"synthetic-j5-solo",password_hash:"synthetic-j5-solo",created_at:now-10*dayMs});
+    insert(source,"characters",{id:1,user_id:1,name:"J5單機居民",gender:"other",town_id:0,money:4000000,bank:1000000,kpoint:-3,body_energy:1000,brain_energy:1000,recovered_at:initial,job_id:null,work_progress:0,last_work_at:0,work_count:0,height:165,bmi:22,stats_json:JSON.stringify(Object.fromEntries(STAT_KEYS.map(k=>[k,5000]))),weight:60,created_at:now-10*dayMs,last_health_day:today,last_event_day:earlier});
+    insert(source,"bank_accounts",{user_id:1,term_balance:0,last_interest_day:today});
+    insert(source,"bank_tax_state",{user_id:1,assessment_base:5000000,snapshot_day:today});
+    const tiles=Array(192).fill("");tiles[0]="Ｂリーグ";tiles[1]="クーポン";storeTownMap(source,0,{tiles},"web-edited");
+    // Actual event #30 supplies coupons; no direct coupon balance or item injection.
+    assert.equal(settleDailyIllnessEvent(source,1,yesterday,now-dayMs,rng(0,29.5/44,.99),"solo").originalId,30);
+    assert.equal(latest(source,1).coupons,5);
+    assert.equal(rows(source,"character_coupons")[0].quantity,5);
+    const draws=[0,1,0,99,9,0];
+    const battle=playArena(source,1,arenaCatalog,drops,{rank:"d",requestId,now:now-80000,today,hasBuilding:(key,town)=>town===0&&tiles.includes(key),rng:n=>{assert.ok(draws.length,"unexpected battle RNG");const v=draws.shift();assert.ok(v>=0&&v<n);return v;}});
+    assert.deepEqual(draws,[]);assert.equal(battle.outcome,"win");assert.equal(battle.reward.granted,true);assert.equal(battle.reward.sourceLine,9000000);
+    assert.equal(battle.special,true);assert.equal(battle.kpointDelta,3);assert.equal(battle.moneyDelta,battle.monster.money);assert.equal(battle.drop,battle.monster.drops[0]);
+    assert.equal(char(source,1).money,4000000+battle.monster.money);assert.equal(char(source,1).kpoint,0);
+    assert.equal(tax(source,1),char(source,1).money+char(source,1).bank);
+    const raw=drops[battle.drop];assert.equal(raw[0],"MB");assert.equal(raw[1],battle.reward.name);assert.equal(raw[22],"");
+    const magnitude=Number(raw[9].split(",")[1]);assert.ok([5,10,15,20].includes(magnitude));
+    // #30 coupons are actually redeemed; allocation shares the existing battle prize's source-line namespace.
+    const redemption=redeemEventCoupon(source,1,catalog,{...oldCoupon,now:now-70000});
+    assert.equal(redemption.couponCost,1);assert.equal(redemption.sourceLine,battle.reward.sourceLine+1);
+    assert.equal(rows(source,"character_coupons")[0].quantity,4);
+    assert.equal(settleDailyIllnessEvent(source,1,today,now-60000,rng(0,3.5/44),"solo").originalId,4);
+    assert.equal(char(source,1).health_index,-15);
+    const before=joint(source);
+    assert.deepEqual(before.character_events.map(x=>x.original_id),[30,4]);
+    assert.equal(before.users.length,1);assert.equal(before.sessions.length,0);assert.equal(before.street_fights.length,0);
+    const herb=before.legacy_inventory_items.find(x=>x.source_line===battle.reward.sourceLine);
+    assert.equal(herb.original_id,"__web_b_league__");assert.equal(herb.durability,1);
+    const archived=JSON.parse(herb.raw_fields_json);assert.equal(archived.length,33);
+    assert.deepEqual(archived.map((v,i)=>i===30?raw[30]:v),raw);
+    integrity(source);assert.equal(fileHash(sourceFile),mainHash);assert.ok(statSync(sourceFile+"-wal").size>32);
+    const walHash=fileHash(sourceFile+"-wal"),saved=await backUpSolo({dataDir:sourceDir,file:snapshot});
+    assert.equal(verifySoloDatabase(snapshot).sha256,saved.sha256);
+    const target=restoreSolo({dataDir:targetDir,file:snapshot}).file;
+    assert.equal(fileHash(target),saved.sha256);assert.throws(()=>restoreSolo({dataDir:targetDir,file:snapshot}),/拒絕覆寫/);
+    read(target,db=>{integrity(db);assert.deepEqual(joint(db),before);});
+    web=await serve(targetDir,join(work,"missing-npc"),"auto",timezone,"solo");
+    const first=await soloOk("state");
+    assert.equal(first.mode,"solo");assert.equal(first.gameTimeOffsetMs,offset);assert.deepEqual(first.residents,[]);
+    assert.equal(first.health.index,-15);assert.equal(first.couponBalance,4);assert.equal(first.bankTax.assessmentBase,tax(source,1));
+    assert.deepEqual(first.healthEvents.map(x=>x.originalId),[4,30]);
+    assert.equal(first.legacyItemActions.find(x=>x.sourceLine===herb.source_line).remaining,1);
+    async function replayOld(){
+      const b=await soloOk("b-league/play",{rank:"d",requestId});assert.deepEqual(b.bLeagueResult,{...battle,replayed:true});
+      const c=await soloOk("coupon/redeem",oldCoupon);assert.deepEqual(c.couponResult,{...redemption,replayed:true});assert.equal(c.couponBalance,4);
+    }
+    await replayOld();
+    const street=await api(web.url,"street-fight/play",{requestId});assert.equal(street.status,400);
+    const ready=read(target,joint);assert.deepEqual(stable(ready),stable(before));
+    const use={sourceLine:herb.source_line,requestId};
+    const sql=statement=>{const db=new DatabaseSync(target);try{db.exec(statement);}finally{db.close();}};
+    // Failure occurs after health, stats and usage writes, so compare every selected table and all character columns.
+    sql("CREATE TRIGGER j5_solo_use_fault BEFORE INSERT ON legacy_item_use_history BEGIN SELECT RAISE(ABORT,'j5 solo item receipt fault'); END;");
+    const failed=await api(web.url,"inventory/legacy/use",use);
+    assert.equal(failed.status,400);assert.match(failed.result.error,/j5 solo item receipt fault/);assert.deepEqual(read(target,joint),ready);
+    sql("DROP TRIGGER j5_solo_use_fault;");
+    const used=await soloOk("inventory/legacy/use",use);
+    assert.equal(used.itemUseResult.replayed,false);assert.equal(used.itemUseResult.name,herb.original_name);
+    assert.equal(used.itemUseResult.changes.healthIndex,magnitude);assert.equal(used.health.index,-15+magnitude);
+    assert.equal(used.legacyItemActions.find(x=>x.sourceLine===herb.source_line).remaining,1,"原版 MB 空白耐久單位不扣回數");
+    const after=read(target,joint);
+    for(const table of Object.keys(ready).filter(x=>!["characters","legacy_item_usage","legacy_item_use_history"].includes(x)))assert.deepEqual(after[table],ready[table],table);
+    const {health_index,stats_json,body_energy,brain_energy,recovered_at,bmi,...unchanged}=after.characters[0];
+    const {health_index:oldHealth,stats_json:oldStats,body_energy:oldBody,brain_energy:oldBrain,recovered_at:oldRecovered,bmi:oldBmi,...oldUnchanged}=ready.characters[0];
+    assert.deepEqual(unchanged,oldUnchanged);assert.equal(health_index,oldHealth+magnitude);
+    const statFields=[2,3,4,5,6,7,8,10,11,12,13,14,15,16,18,19,20];
+    assert.equal(STAT_KEYS.length,statFields.length);
+    const expectedBonuses=Object.fromEntries(STAT_KEYS.map((key,i)=>[key,Number(raw[statFields[i]])]).filter(([,delta])=>delta!==0));
+    assert.deepEqual(used.itemUseResult.changes.stats,expectedBonuses);
+    const expectedStats=JSON.parse(oldStats);for(const [key,delta] of Object.entries(expectedBonuses))expectedStats[key]+=delta;
+    assert.deepEqual(JSON.parse(stats_json),expectedStats);
+    assert.equal(after.legacy_item_usage.length,1);assert.equal(after.legacy_item_usage[0].remaining,1);assert.equal(after.legacy_item_usage[0].source_line,herb.source_line);
+    assert.equal(after.legacy_item_use_history.length,1);assert.equal(after.legacy_item_use_history[0].request_id,requestId);
+    const wrong=await api(web.url,"inventory/legacy/use",{sourceLine:redemption.sourceLine,requestId});assert.equal(wrong.status,400);assert.match(wrong.result.error,/相同請求編號/);
+    assert.deepEqual(read(target,joint),after);
+    await web.stop();web=null;
+    web=await serve(targetDir,join(work,"missing-npc"),"auto",timezone,"solo");
+    await replayOld();const replay=await soloOk("inventory/legacy/use",use);
+    assert.deepEqual(replay.itemUseResult,{...used.itemUseResult,replayed:true});assert.equal(replay.health.index,-15+magnitude);
+    await web.stop();web=null;
+    read(target,db=>{integrity(db);assert.deepEqual(stable(joint(db)),stable(after));});
+    assert.deepEqual(joint(source),before);assert.equal(fileHash(sourceFile),mainHash);assert.equal(fileHash(sourceFile+"-wal"),walHash);assert.equal(fileHash(snapshot),saved.sha256);
   }finally{if(web)await web.stop();if(source)source.close();rmSync(work,{recursive:true,force:true});}
 });
