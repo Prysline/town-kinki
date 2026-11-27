@@ -1,0 +1,251 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { createCharacterData, decodeLegacyText, bodyMassIndex } from "../src/engine.mjs";
+import {
+  parseLegacySchool, parseLegacyGym, parseLegacyClassroom, calendarDay,
+  trainingAvailability, performTraining
+} from "../src/training.mjs";
+
+const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+const readLegacy = path => decodeLegacyText(readFileSync(resolve(root, "dat_dir", path)));
+const schools = parseLegacySchool(readLegacy("school.cgi"));
+const gyms = parseLegacyGym(readLegacy("gym.cgi"));
+const classrooms = parseLegacyClassroom(readLegacy("kyushitu.cgi"));
+
+test("原始學校與健身房清單全部解析並保留識別碼及繁體中文名稱", () => {
+  assert.equal(schools.length, 6);
+  assert.equal(gyms.length, 9);
+  assert.equal(schools[0].key, "school-2");
+  assert.equal(schools[0].originalName, "英会話講座");
+  assert.equal(schools[0].name, "英語會話課程");
+  assert.equal(schools[0].price, 16000);
+  assert.equal(schools[0].energyCost, 16);
+  assert.equal(schools[0].gains.eigo, 10);
+  assert.equal(gyms[1].name, "健走");
+  assert.equal(gyms[1].price, 800);
+  assert.equal(gyms[1].energyCost, 8);
+  assert.equal(gyms[1].cooldownMs, 15 * 60 * 1000);
+  assert.equal(gyms[1].gains.tairyoku, 2);
+  assert.equal(gyms[1].weightLoss, 0.08);
+  assert.equal(schools[0].weightLoss, undefined);
+});
+
+test("課程消耗現金與頭腦能量，依原始資料增加能力", () => {
+  const now = Date.UTC(2026, 10, 18, 5);
+  const player = createCharacterData("學生", "other", now);
+  const beforeBrain = player.brainEnergy;
+  const result = performTraining(player, schools[0], now, "2026-11-18");
+  assert.equal(result.paid, 16000);
+  assert.equal(result.character.money, 84000);
+  assert.equal(result.character.brainEnergy, beforeBrain - 16);
+  assert.equal(result.character.stats.eigo, player.stats.eigo + 10);
+  assert.equal(result.character.stats.kokugo, player.stats.kokugo + 1);
+  assert.equal(result.character.lastSchoolDay, "2026-11-18");
+  assert.equal(player.money, 100000);
+});
+
+test("同一天只能上一堂課，隔日可恢復上課", () => {
+  const now = Date.UTC(2026, 10, 18, 5);
+  const player = createCharacterData("學生", "other", now);
+  const done = performTraining(player, schools[0], now, "2026-11-18").character;
+  assert.match(trainingAvailability(done, schools[1], now + 60_000, "2026-11-18"), /今日已經/);
+  assert.throws(() => performTraining(done, schools[1], now + 60_000, "2026-11-18"), /今日已經/);
+  const nextDay = now + 24 * 60 * 60 * 1000;
+  assert.equal(trainingAvailability(done, schools[1], nextDay, "2026-11-19"), null);
+  assert.equal(performTraining(done, schools[1], nextDay, "2026-11-19").character.lastSchoolDay, "2026-11-19");
+});
+
+test("健身房冷卻使用已完成的訓練間隔，不能換課程繞過", () => {
+  const now = Date.UTC(2026, 10, 18, 5);
+  // 保留游泳需24點的原版門檻；此冷卻測試需有足夠恢復上限。
+  const player = createCharacterData("居民", "other", now,{...Object.fromEntries(["kokugo","suugaku","rika","syakai","eigo","ongaku","bijutu","looks","tairyoku","kenkou","speed","power","wanryoku","kyakuryoku","love","unique","etti"].map(k=>[k,20])),tairyoku:36});
+  const walk = gyms.find(g => g.originalName === "ウォーキング");
+  const swim = gyms.find(g => g.originalName === "スイミング");
+  const trained=performTraining(player, walk, now, "2026-11-18");
+  const completed = trained.character;
+  assert.equal(trained.weightLoss,0.08);
+  assert.equal(completed.weight,59.92);
+  assert.equal(completed.bmi,bodyMassIndex(completed.height,completed.weight));
+  assert.equal(completed.money, 99200);
+  assert.equal(completed.stats.kenkou, player.stats.kenkou + 3);
+  assert.equal(completed.bodyEnergy, player.bodyEnergy - 8);
+  assert.equal(completed.gymReadyAt, now + 15 * 60 * 1000);
+  assert.match(trainingAvailability(completed, swim, now + 60_000, "2026-11-18"), /健身房還需要/);
+  assert.equal(trainingAvailability(completed, swim, now + 15 * 60 * 1000, "2026-11-18"), null);
+});
+
+test("健身房九項原始課程依身體消耗 / 100 減重，更新 BMI 並保留金錢／增益／能量／冷卻",()=>{
+  const now=Date.UTC(2026,10,18,5);
+  const expectedCosts=[24,8,12,18,5,14,10,100,100];
+  assert.deepEqual(gyms.map(lesson=>lesson.energyCost),expectedCosts);
+  const normal=createCharacterData("九項運動測試","other",now);
+  const base={...normal,
+    stats:Object.fromEntries(Object.keys(normal.stats).map(key=>[key,1000])),
+    bodyEnergy:400,money:1_500_000,
+    height:160,weight:60,bmi:bodyMassIndex(160,60)};
+  for(const lesson of gyms){
+    const trained=performTraining(base,lesson,now,"2026-11-18");
+    const after=trained.character;
+    const expectedLoss=lesson.energyCost/100;
+    const weight=Math.round((base.weight-expectedLoss)*100)/100;
+    assert.equal(lesson.weightLoss,expectedLoss,lesson.name);
+    assert.equal(trained.weightLoss,expectedLoss,lesson.name);
+    assert.equal(after.weight,weight,lesson.name);
+    assert.equal(after.bmi,bodyMassIndex(base.height,weight),lesson.name);
+    assert.equal(after.bodyEnergy,base.bodyEnergy-lesson.energyCost,lesson.name);
+    assert.equal(after.brainEnergy,base.brainEnergy,lesson.name);
+    assert.equal(after.money,base.money-lesson.price,lesson.name);
+    assert.equal(after.lastGymAt,now,lesson.name);
+    assert.equal(after.gymReadyAt,now+lesson.cooldownMs,lesson.name);
+    for(const [key,gain] of Object.entries(lesson.gains))
+      assert.equal(after.stats[key],base.stats[key]+gain,lesson.name+"／"+key);
+    assert.equal(base.weight,60,"訓練不可原地修改角色");
+  }
+});
+
+test("健身房 1 公斤下限、失敗不扣重及教室／學校規則互不改動",()=>{
+  const now=Date.UTC(2026,10,18,5);
+  const p=createCharacterData("體重下限測試","other",now);
+  const walk=gyms.find(lesson=>lesson.originalName==="ウォーキング");
+  const limited={...p,weight:1.03,bmi:bodyMassIndex(p.height,1.03)};
+  const trained=performTraining(limited,walk,now);
+  assert.equal(trained.character.weight,1);
+  assert.equal(trained.weightLoss,0.03,"返回實際減重，不能高估安全下限");
+  assert.equal(trained.character.bmi,bodyMassIndex(p.height,1));
+  const atMin={...p,weight:1,bmi:bodyMassIndex(p.height,1)};
+  const none=performTraining(atMin,walk,now);
+  assert.equal(none.character.weight,1);
+  assert.equal(none.weightLoss,0);
+  const blocked={...p,bodyEnergy:0};
+  assert.throws(()=>performTraining(blocked,walk,now),/身體能量不足/);
+  assert.equal(blocked.weight,p.weight);
+  const poor={...p,money:0};
+  assert.throws(()=>performTraining(poor,walk,now),/現金不足/);
+  assert.equal(poor.weight,p.weight);
+  const last=performTraining(p,walk,now).character;
+  assert.throws(()=>performTraining(last,walk,now+1),/健身房還需要等待/);
+  assert.equal(last.weight,59.92);
+  const school=performTraining(p,schools[0],now);
+  assert.equal(school.character.weight,p.weight);
+  assert.equal(school.weightLoss,0);
+  const classroom=performTraining(p,classrooms[0],now);
+  assert.equal(classroom.weightLoss,0.2);
+  assert.equal(classroom.character.weight,59.8);
+});
+
+test("不允許餘額不足、能量不足、無效訓練與不合法舊資料", () => {
+  const now = Date.UTC(2026, 10, 18, 5);
+  const p = createCharacterData("居民", "other", now);
+  const poor = { ...p, money: 0 };
+  assert.match(trainingAvailability(poor, schools[0], now, "2026-11-18"), /現金不足/);
+  assert.throws(() => performTraining(poor, schools[0], now, "2026-11-18"), /現金不足/);
+  const tired = { ...p, brainEnergy: 0 };
+  assert.match(trainingAvailability(tired, schools[0], now, "2026-11-18"), /頭腦能量不足/);
+  assert.match(trainingAvailability(p, null, now, "2026-11-18"), /找不到訓練/);
+  assert.throws(() => parseLegacySchool("header\n異常課程<>-1<>0<>0"), /無效/);
+});
+
+test("日界線依指定世界時區判定，不依玩家瀏覽器時區", () => {
+  const at = Date.UTC(2026, 10, 17, 16, 30);
+  const day = calendarDay(at, "Asia/Taipei");
+  assert.equal(day.replace(/\D/g, ""), "20261118");
+});
+
+test("原版 kyushitu.cgi 四堂教室課程逐欄解析，保留全部 17 項能力",()=>{
+  assert.equal(classrooms.length,4);
+  assert.deepEqual(classrooms.map(x=>x.key),[
+    "classroom-2","classroom-3","classroom-4","classroom-5"
+  ]);
+  assert.deepEqual(classrooms.map(x=>x.price),[10000,20000,5000000,10000000]);
+  assert.deepEqual(classrooms.map(x=>x.cooldownMs),[2,10,50,100].map(m=>m*60_000));
+  assert.deepEqual(classrooms.map(x=>[x.bodyCost,x.brainCost]),
+    [[10,10],[20,0],[50,50],[100,100]]);
+  assert.equal(Object.keys(classrooms[0].gains).length,17);
+  assert.deepEqual(Object.values(classrooms[0].gains),Array(17).fill(1));
+  assert.equal(classrooms[1].gains.looks,10);
+  assert.equal(classrooms[2].gains.unique,500);
+  assert.equal(classrooms[3].gains.etti,100);
+  assert.throws(()=>parseLegacyClassroom("標頭\n壞課程<>2<>3"),/無效/);
+  assert.throws(()=>parseLegacyClassroom("標頭\n"+[
+    "壞課程",...Array(17).fill("0"),"-1","無","1","1","1"
+  ].join("<>")) ,/無效數字/);
+});
+
+test("教室 cash 路徑完整扣費、雙能量、能力、減重與 BMI，和原版 kyushitu_go 同源",()=>{
+  const now=Date.UTC(2026,10,18,5);
+  const p=createCharacterData("教室測試","other",now);
+  const result=performTraining(p,classrooms[0],now);
+  const after=result.character;
+  assert.equal(result.paid,10000);
+  assert.equal(after.money,90000);
+  assert.equal(after.bodyEnergy,p.bodyEnergy-10);
+  assert.equal(after.brainEnergy,p.brainEnergy-10);
+  assert.equal(after.stats.kokugo,p.stats.kokugo+1);
+  assert.equal(after.stats.looks,p.stats.looks+1);
+  assert.equal(after.stats.etti,p.stats.etti+1);
+  assert.equal(after.weight,59.8);
+  assert.equal(result.weightLoss,0.2);
+  assert.notEqual(after.bmi,undefined);
+  assert.equal(after.classroomReadyAt,now+120_000);
+  assert.equal(after.gymReadyAt,0);
+  assert.equal(after.lastSchoolDay,"");
+  assert.equal(p.money,100000,"原始角色不可原地變更");
+  assert.match(trainingAvailability(after,classrooms[1],now+60_000),/教室還需要等待/);
+  assert.throws(()=>performTraining(after,classrooms[1],now+60_000),/教室還需要等待/);
+  assert.equal(trainingAvailability(after,classrooms[0],now+120_000),null);
+});
+
+test("教室獨立檢查雙能量、現金，健身房和教室不共用訓練冷卻",()=>{
+  const now=Date.UTC(2026,10,18,5);
+  const p=createCharacterData("健身居民","other",now);
+  assert.match(trainingAvailability({...p,money:9999},classrooms[0],now),/現金不足/);
+  assert.match(trainingAvailability({...p,bodyEnergy:9},classrooms[0],now),/身體能量不足/);
+  assert.match(trainingAvailability({...p,brainEnergy:9},classrooms[0],now),/頭腦能量不足/);
+  const classDone=performTraining(p,classrooms[0],now).character;
+  const walk=gyms.find(x=>x.originalName==="ウォーキング");
+  assert.equal(trainingAvailability(classDone,walk,now+1_000),null);
+  const gymDone=performTraining(p,walk,now).character;
+  assert.equal(trainingAvailability(gymDone,classrooms[0],now+1_000),null);
+});
+
+test("原版教室信用付款由普通存款扣款，仍完整執行四課能力與減重規則",()=>{
+  const now=Date.UTC(2026,10,20,5);
+  const p=createCharacterData("信用學員","other",now);
+  const funded={...p,money:0,bank:30000};
+  assert.match(trainingAvailability(funded,classrooms[0],now),/現金不足/);
+  assert.equal(trainingAvailability(funded,classrooms[0],now,calendarDay(now),"credit"),null);
+  const trained=performTraining(funded,classrooms[0],now,calendarDay(now),"credit");
+  assert.equal(trained.payment,"credit");
+  assert.equal(trained.paid,10000);
+  assert.equal(trained.character.money,0);
+  assert.equal(trained.character.bank,20000);
+  assert.equal(trained.character.bodyEnergy,funded.bodyEnergy-10);
+  assert.equal(trained.character.brainEnergy,funded.brainEnergy-10);
+  assert.equal(trained.character.stats.looks,funded.stats.looks+1);
+  assert.equal(trained.character.weight,59.8);
+  assert.equal(trained.character.classroomReadyAt,now+120000);
+  assert.equal(funded.bank,30000);
+  assert.match(trainingAvailability({...funded,bank:9999},classrooms[0],now,calendarDay(now),"credit"),/普通銀行存款不足/);
+  assert.match(trainingAvailability(funded,schools[0],now,calendarDay(now),"bank"),/付款方式/);
+});
+
+test("核准 Web 補完：全部學校與健身房課程信用付款只替換扣款來源，其他結算完全相同",()=>{
+  const now=Date.UTC(2026,10,26,5),day=calendarDay(now);
+  for(const lesson of [...schools,...gyms]){
+    const player=createCharacterData("訓練付款","other",now);
+    // 高階課程需100點身體能量；僅提升測試角色能力與可用能量，不改正式規則。
+    const funded={...player,money:2000000,bank:2000000,
+      stats:Object.fromEntries(Object.keys(player.stats).map(key=>[key,100])),bodyEnergy:100,brainEnergy:100};
+    const cash=performTraining(funded,lesson,now,day,"cash");
+    const credit=performTraining(funded,lesson,now,day,"credit");
+    assert.equal(credit.payment,"credit");
+    assert.equal(credit.character.money,funded.money);
+    assert.equal(credit.character.bank,funded.bank-lesson.price);
+    assert.deepEqual({...credit.character,money:cash.character.money,bank:cash.character.bank},cash.character,lesson.key);
+    assert.match(trainingAvailability({...funded,bank:lesson.price-1},lesson,now,day,"credit"),/普通銀行存款不足/);
+    assert.match(trainingAvailability(credit.character,lesson,now+1,day,"credit"),/今日已經|等待/);
+  }
+});

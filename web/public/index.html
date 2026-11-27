@@ -1,0 +1,1080 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>TOWN 人生遊戲｜繁體中文 Web 雛形</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script type="module" src="/static/app.js"></script>
+</head>
+<body>
+  <header class="header">
+    <div class="identity">
+      <img class="mark" src="/legacy-assets/house/house_1.gif" alt="" width="46" height="46">
+      <div><h1>TOWN 人生遊戲</h1><p>繁體中文 Web 移植版 · 開發中</p></div>
+    </div>
+    <div class="header-right"><span id="mode" class="mode">載入中</span><button id="logout" class="secondary" hidden>登出</button></div>
+  </header>
+  <dialog id="result-dialog" class="result-dialog" aria-modal="true" aria-labelledby="result-dialog-title" aria-describedby="result-dialog-message">
+    <div class="result-dialog-content">
+      <h2 id="result-dialog-title">操作結果</h2>
+      <p id="result-dialog-message"></p>
+      <div class="result-dialog-actions">
+        <button type="button" id="result-dialog-close">確認並返回</button>
+      </div>
+    </div>
+  </dialog>
+  <main>
+    <div id="landing" class="landing-layout" hidden>
+      <section class="card town-home" aria-labelledby="preview-heading">
+        <div class="eyebrow">城鎮入口 · 原版街區預覽</div>
+        <h2 id="preview-heading">探索 TOWN 城鎮</h2>
+        <p class="small">沿用原始 12×16 地圖與像素素材。登入後可探索設施與使用已移植功能。</p>
+        <label class="preview-label" for="preview-town">預覽城鎮</label>
+        <select id="preview-town" aria-label="預覽城鎮"></select>
+        <p id="preview-map-status" class="small" role="status">讀取城鎮地圖中。</p>
+        <div class="map-scroll" tabindex="0" aria-label="唯讀城鎮地圖預覽，可水平捲動">
+          <div id="preview-map" class="town-map" aria-label="城鎮街區預覽（12 列 16 欄）"></div>
+        </div>
+        <p class="small">預覽不提供編輯或遊戲操作；未取得原版街區配置時，保留空白格而不虛構建築。</p>
+      </section>
+      <div class="landing-actions">
+      <section id="solo-lobby" class="intro card" hidden>
+        <h2>返回城鎮</h2>
+        <p>單人模式的角色已儲存在本機遊戲資料庫。離開遊戲只會返回這個首頁，不會刪除進度；單人模式不使用帳號登入。</p>
+        <p class="solo-current-character">目前角色：<strong id="solo-character-name"></strong></p>
+        <button id="solo-continue" type="button">繼續遊戲</button>
+        <details class="solo-delete-box" id="solo-delete-details">
+          <summary>刪除角色並重新開始</summary>
+          <p class="small">此操作無法復原，將永久刪除角色的金錢、能力、職業、房屋、物品、銀行、留言及事件紀錄。你建造的住宅會還原成原本的空地；其他城鎮地圖編輯與單機遊戲時間不會被清除。</p>
+          <form id="solo-delete-form">
+            <label for="solo-delete-name">輸入目前角色的完整名稱以確認
+              <input id="solo-delete-name" name="characterName" required autocomplete="off" spellcheck="false" maxlength="100">
+            </label>
+            <label class="solo-delete-confirm"><input id="solo-delete-ack" type="checkbox" required> 我瞭解角色進度與相關資料將永久刪除</label>
+            <button type="submit" id="solo-delete-submit" class="danger-action">永久刪除角色</button>
+          </form>
+        </details>
+      </section>
+      <section id="auth" class="intro card" hidden>
+        <h2>登入城鎮</h2>
+        <p>多人模式可使用不同帳號建立角色，共享同一座城鎮。</p>
+        <div class="columns">
+          <form id="login-form" class="field-box">
+            <h3>登入</h3>
+            <label>帳號<input name="username" required autocomplete="username"></label>
+            <label>密碼<input name="password" type="password" required autocomplete="current-password"></label>
+            <button type="submit">登入</button>
+          </form>
+          <form id="register-form" class="field-box">
+            <h3>建立帳號</h3>
+            <label>帳號<input name="username" minlength="2" maxlength="24" required autocomplete="username"></label>
+            <label>密碼<input name="password" type="password" minlength="8" maxlength="128" required autocomplete="new-password"></label>
+            <button type="submit">註冊</button>
+          </form>
+        </div>
+      </section>
+      <section id="create" class="intro card" hidden>
+        <h2>建立角色</h2>
+        <p>依照原版的初始能力配點限制，頭腦與身體各最多 200 點，其他能力最多 100 點，每項至少 1 點。</p>
+        <form id="create-form" class="new-char">
+          <label>角色名稱<input name="name" minlength="1" maxlength="18" required></label>
+          <label>角色性別
+            <select name="gender" required>
+              <option value="other">未指定</option><option value="male">男性</option><option value="female">女性</option>
+            </select>
+          </label>
+          <fieldset class="stat-group" data-group="brain">
+            <legend>頭腦能力 <strong id="sum-brain">140 / 200</strong></legend>
+            <div class="ability-inputs">
+              <label>國語<input name="kokugo" type="number" min="1" max="200" step="1" value="20" required></label>
+              <label>數學<input name="suugaku" type="number" min="1" max="200" step="1" value="20" required></label>
+              <label>理科<input name="rika" type="number" min="1" max="200" step="1" value="20" required></label>
+              <label>社會<input name="syakai" type="number" min="1" max="200" step="1" value="20" required></label>
+              <label>英語<input name="eigo" type="number" min="1" max="200" step="1" value="20" required></label>
+              <label>音樂<input name="ongaku" type="number" min="1" max="200" step="1" value="20" required></label>
+              <label>美術<input name="bijutu" type="number" min="1" max="200" step="1" value="20" required></label>
+            </div>
+          </fieldset>
+          <fieldset class="stat-group" data-group="body">
+            <legend>身體能力 <strong id="sum-body">140 / 200</strong></legend>
+            <div class="ability-inputs">
+              <label>外貌<input name="looks" type="number" min="1" max="200" step="1" value="20" required></label>
+              <label>體力<input name="tairyoku" type="number" min="1" max="200" step="1" value="20" required></label>
+              <label>健康<input name="kenkou" type="number" min="1" max="200" step="1" value="20" required></label>
+              <label>速度<input name="speed" type="number" min="1" max="200" step="1" value="20" required></label>
+              <label>力量<input name="power" type="number" min="1" max="200" step="1" value="20" required></label>
+              <label>臂力<input name="wanryoku" type="number" min="1" max="200" step="1" value="20" required></label>
+              <label>腿力<input name="kyakuryoku" type="number" min="1" max="200" step="1" value="20" required></label>
+            </div>
+          </fieldset>
+          <fieldset class="stat-group" data-group="other">
+            <legend>其他能力 <strong id="sum-other">60 / 100</strong></legend>
+            <div class="ability-inputs">
+              <label>LOVE<input name="love" type="number" min="1" max="100" step="1" value="20" required></label>
+              <label>有趣度<input name="unique" type="number" min="1" max="100" step="1" value="20" required></label>
+              <label>情色度<input name="etti" type="number" min="1" max="100" step="1" value="20" required></label>
+            </div>
+          </fieldset>
+          <button id="create-submit" type="submit">開始人生</button>
+        </form>
+      </section>
+      </div>
+    </div>
+
+    <section id="onsen-active-screen" class="card onsen-active" aria-labelledby="onsen-active-title" hidden>
+      <div class="eyebrow">溫泉</div>
+      <h2 id="onsen-active-title"></h2>
+      <img id="onsen-background" alt="原版溫泉場景" hidden>
+      <p id="onsen-active-receipt"></p>
+      <p id="onsen-active-gains" class="small"></p>
+      <dl class="onsen-countdowns">
+        <div><dt>身體能量恢復倒數</dt><dd id="onsen-body-countdown"></dd></div>
+        <div><dt>頭腦能量恢復倒數</dt><dd id="onsen-brain-countdown"></dd></div>
+      </dl>
+      <p class="small">可以提前離開；出浴時才依伺服器時間結算能量。</p>
+      <div id="onsen-time-advance" hidden>
+        <button type="button" class="secondary" data-onsen-advance="5m">快轉 5 分鐘（單機）</button>
+      </div>
+      <button id="onsen-leave" type="button">離開浴池</button>
+    </section>
+    <div id="game" class="layout game-shell" hidden>
+      <div id="compact-status" class="compact-status" hidden aria-label="固定角色能量資訊">
+        <strong id="compact-character-name" class="compact-name"></strong>
+        <div class="compact-energy">
+          <span class="compact-energy-label">身體能量 <b id="compact-body-energy"></b></span>
+          <progress id="compact-body-bar" max="100" value="0" aria-label="身體能量比例"></progress>
+        </div>
+        <div class="compact-energy">
+          <span class="compact-energy-label">頭腦能量 <b id="compact-brain-energy"></b></span>
+          <progress id="compact-brain-bar" max="100" value="0" aria-label="頭腦能量比例"></progress>
+        </div>
+        <div class="compact-finance"><span>現金</span><strong id="compact-money"></strong></div>
+        <div class="compact-finance"><span>銀行存款</span><strong id="compact-bank"></strong></div>
+      </div>
+      <aside id="event-popup" class="event-popup" aria-label="原版事件通知" hidden>
+        <div class="event-popup-heading">
+          <strong id="event-popup-title">事件發生！</strong>
+          <button id="event-popup-close" type="button" class="secondary" aria-label="關閉事件通知">×</button>
+        </div>
+        <p id="event-popup-body" class="small"></p>
+        <div class="event-popup-actions">
+          <button id="event-popup-claim" type="button" hidden>立即拍打蟑螂</button>
+          <button id="event-alert" type="button" class="secondary" hidden>查看事件紀錄</button>
+        </div>
+      </aside>
+      <div class="game-overview">
+        <div class="content game-map-column">
+          <section class="card town-main" id="town-panel">
+          <div class="heading"><div><div class="eyebrow">城鎮</div><h2>探索附近地區</h2></div><span class="muted">原版 12×16 街區</span></div>
+          
+          
+          <h3 id="station-heading">車站 · 原版跨城電車</h3>
+          <p class="small" id="station-status">票價將依目前所在城鎮計算；從現金扣款。</p>
+          <div class="towns" id="towns" aria-labelledby="station-heading"></div>
+          <section id="road-travel-panel" class="road-travel-panel" aria-label="原版徒步、巴士、寶箱及百貨載具公路旅行">
+            <details class="explain">
+              <summary>公路移動：原版步行、500元巴士、腳踏車、寶箱與百貨載具</summary>
+              <p class="small">第62階段依 town_ini.cgi／town_lib.pl／town_maker.cgi：原版徒步移動10秒，20種載具各有獨立秒數（例如腳踏車15秒、保時捷3秒、法拉利2秒、米格25零秒）。原版寶箱真正取得的載具、經正式事件券兌換且擁有本人兌換流水的五款25點券獎車（保時捷、法拉利、捷豹、凱迪拉克、Lotus Europa），及第66階段重新核對的18種原版百貨「交通工具／禮品」（含第65階段先開放的5種普通載具、6種標有「專賣店限定商品」的車與7種禮品類別車），在本人實際從兩間百貨購入、耐久尚在且購買流水與33欄原始資料相符時，才會出現在選單。原版「專賣店限定商品」備註針對「超市」進貨限制，不能誤當成百貨禁止上架；原版也明示公路交通不要求物品分類必為「交通工具」。載具每次旅行原版有1/10事故機率，事故扣該載具1點耐久；徒步與腳踏車可能鍛鍊體力、健康、速度、臂力及腿力。Web會真實儲存「出發→到期→抵達」兩階段，必須到達時間才能完成，不能同時搭電車。原版無序雜湊會任意挑第一輛車，Web改為使用者明確選車；事故在出發時原子扣耐久以免途中移轉物品漏扣。第63階段已依原版補上迷路與事故後改道：從編號3的和歌山島出發不會迷路，其他城出發若持有「三輪滑板車」必定迷路，否則有1/5機率迷路。只有「迷路且發生交通事故」才從四城重新抽選實際抵達城市；單純迷路時，原版雖額外抽一次亂數，卻沒有覆寫目的地，因此仍照原定城市抵達。Web在到站之前不提前公布迷路與事故結果，抵達後一併顯示原定／實際目的地；舊版持久旅程不重新抽號。第64階段新增原版 mati_idou2 巴士：從現金扣500元、5秒抵達、取消迷路且不會發生事故，也不增加徒步／腳踏車的能力。Web為避免負現金，額外限制現金不足500元不可上車；巴士與其他公路行程共用防重送、跨重啟抵達與電車互斥。第66階段僅擴充原版百貨真正購入的載具；現在另外核對五款本人事件券實際兌換所得載具。禮品屋轉換或跨玩家收到的物品仍需要額外來源鏈驗證，不能僅憑同名或「禮品」欄位冒用。</p>
+            </details>
+            <div class="filters retail-filters">
+              <label for="road-travel-to">公路目的地<select id="road-travel-to"></select></label>
+              <label for="road-travel-vehicle">移動方式<select id="road-travel-vehicle"></select></label>
+            </div>
+            <p class="small" id="road-travel-status" role="status"></p>
+            <p class="small" id="road-travel-quote"></p>
+            <div class="actions">
+              <button id="road-travel-start" type="button" disabled>開始公路旅程</button>
+              <button id="road-travel-arrive" type="button" disabled>已到時間，完成抵達</button>
+            </div>
+            <p class="small" id="road-travel-result" aria-live="polite"></p>
+            <details class="explain">
+              <summary>本人最近20次公路旅程</summary>
+              <div id="road-travel-history"></div>
+            </details>
+          </section>
+          <p class="small" id="map-source"></p>
+          <section id="solo-starter-town" class="map-starter" hidden aria-label="單機首次遊玩街區設定">
+            <strong>單機首次探索：建立可操作的試玩街區</strong>
+            <p class="small">這份原版儲存庫沒有四座城鎮的實際街區存檔；目前的空白地圖不是遊戲故障。可以自行建立只含已知原版建築代碼的 Web 試玩街區，快速使用百貨店、食堂、職業介紹所、教室及住宅用空地。<strong>這不是原版歷史地圖</strong>，只在此城鎮尚未配置任何街區、房屋時提供；不會覆蓋已有資料。</p>
+            <button id="solo-starter-create" type="button">建立這座城鎮的單機試玩街區</button>
+          </section>
+          <section id="solo-play-guide" class="map-starter solo-play-guide" hidden aria-labelledby="solo-play-guide-title">
+            <h3 id="solo-play-guide-title">第一次在試玩街區遊玩？</h3>
+            <p class="small">可以先工作取得現金，再逛百貨、到背包使用物品。釣魚要先購買魚餌，合成需要真正持有材料；遊樂中心有下注風險。這些按鈕只帶你前往已存在的功能，不會自動扣款或贈送物品。</p>
+            <div class="starter-guide-actions" aria-label="單機試玩推薦入口">
+              <button type="button" data-facility="jobs-panel">工作賺錢</button>
+              <button type="button" data-facility="retail-panel">逛百貨</button>
+              <button type="button" data-facility="inventory-panel">查看背包</button>
+              <button type="button" data-facility="fishing-panel">釣魚與買餌</button>
+              <button type="button" data-facility="crafting-panel">合成屋</button>
+              <button type="button" data-facility="arcade-dice-panel">遊樂中心</button>
+            </div>
+            <p class="small">也可以直接點地圖上的建築，例如 D5 優惠券兌換所、D7 釣場、D8「合成」合成屋與 D9 遊樂中心。這是 Web 試玩地圖，不是原版歷史街區。</p>
+          </section>
+          <details class="explain"><summary>地圖操作說明</summary><p class="small">點擊已配置的建築圖示可開啟已支援設施；尚未移植的設施只顯示說明，不會產生虛構操作。</p></details>
+          
+          <div id="map-workspace" class="map-workspace">
+            <div class="map-editor" id="map-editor" hidden>
+              <div class="map-edit-controls">
+                <label class="map-editor-switch">
+                  <input type="checkbox" id="map-edit-toggle"> 開啟單機街區編輯模式
+                </label>
+                <label for="map-palette">選擇格子設施
+                  <select id="map-palette" disabled></select>
+                </label>
+              </div>
+              <p class="small" id="map-edit-status">瀏覽模式｜點選格子可查看設施。</p>
+              <p class="small map-edit-feedback" id="map-edit-feedback" role="status">修改只寫入 Web 資料庫，不會覆蓋原版 CGI。</p>
+            </div>
+            <div class="map-scroll" tabindex="0" aria-label="城鎮街區地圖，可水平捲動">
+              <div id="town-map" class="town-map" role="grid" aria-label="12 列 16 欄街區"></div>
+            </div>
+            <p class="small" id="map-selection" role="status"></p>
+          </div>
+          <nav id="facility-shortcuts" class="town-shortcuts" aria-label="城鎮常用操作">
+            <button type="button" id="home-work" data-facility="jobs-panel"><img src="/legacy-assets/button/go_work.png" alt="">工作</button>
+            <button type="button" data-facility="inventory-panel"><img src="/legacy-assets/button/item.png" alt="">物品</button>
+            <button type="button" data-facility="bank-panel"><img src="/legacy-assets/bank.gif" alt="">銀行</button>
+            <button type="button" data-facility="mail-panel">✉ 郵件</button>
+            <button type="button" data-facility="hospital-panel"><img src="/legacy-assets/hospital.gif" alt="">醫院</button>
+            <button type="button" data-facility="dining-panel"><img src="/legacy-assets/syokudou.gif" alt="">食堂</button>
+            <button type="button" data-facility="housing-panel"><img src="/legacy-assets/house/house_1.gif" alt="">住宅</button>
+            <button type="button" data-facility="school-panel"><img src="/legacy-assets/school.gif" alt="">學校</button>
+            <button type="button" data-facility="gym-panel"><img src="/legacy-assets/gym.gif" alt="">健身房</button>
+            <button type="button" id="home-street-fight" data-facility="street-fight-panel">街頭格鬥</button>
+            <button type="button" id="home-c-league" data-facility="c-league-panel">C 聯賽</button>
+          </nav>
+          <div class="residents-line"><strong>同城居民</strong><p class="small" id="residents"></p></div>
+        </section>
+        </div>
+        <aside class="sidebar game-status-column" aria-label="居民與能力資料">
+          <div id="profile-view-tabs" class="profile-view-tabs" role="tablist" aria-label="原版角色資訊切換">
+            <button type="button" id="profile-tab-status" role="tab" aria-controls="player-summary" aria-selected="true" tabindex="0" data-profile-view="status">狀態</button>
+            <button type="button" id="profile-tab-inventory" role="tab" aria-controls="inventory-panel" aria-selected="false" tabindex="-1" data-profile-view="inventory">物品</button>
+            <button type="button" id="profile-tab-attributes" role="tab" aria-controls="attributes-panel" aria-selected="false" tabindex="-1" data-profile-view="attributes">能力值</button>
+          </div>
+          <section class="card player-summary" id="player-summary" role="tabpanel" aria-labelledby="profile-tab-status">
+          <div class="eyebrow">居民資料</div><h2 id="character-name"></h2>
+          <section id="legacy-icon-panel" class="legacy-icon-panel" aria-label="原版玩家圖示" hidden>
+            <strong>原版玩家圖示</strong>
+            <img id="legacy-icon-image" width="32" height="32" alt="原版玩家圖示" referrerpolicy="no-referrer" decoding="async" hidden>
+            <button id="legacy-icon-toggle" type="button" class="secondary" hidden>載入原版圖示</button>
+            <p id="legacy-icon-help" class="small"></p>
+          </section>
+          <dl class="stats status-main">
+            <div><dt>所在地</dt><dd id="current-town"></dd></div>
+            <div><dt>現金</dt><dd id="money"></dd></div>
+            <div><dt>銀行存款</dt><dd id="bank"></dd></div>
+            <div><dt>身體能量</dt><dd id="body-energy"></dd></div>
+            <div><dt>頭腦能量</dt><dd id="brain-energy"></dd></div>
+            <div><dt>目前職業</dt><dd id="current-job"></dd></div>
+          </dl>
+          <div id="job-level-progress" class="job-level-progress" role="group" aria-label="目前職業經驗與精通進度">
+            <div class="job-level-progress-heading">
+              <span id="job-level-xp">本級經驗 0 / 100 XP</span>
+              <span id="job-next-level">距離下一級尚需 100 XP</span>
+            </div>
+            <progress id="job-level-bar" max="100" value="0" aria-label="距離下一級的經驗進度"></progress>
+            <p id="job-mastery-status" class="small">距離 Lv.15 精通尚需 1500 XP</p>
+          </div>
+          <section class="physique-summary" aria-labelledby="physique-summary-title">
+            <h3 id="physique-summary-title">體格資訊</h3>
+            <dl class="stats status-physique">
+              <div><dt>身高／體重</dt><dd id="measurements"></dd></div>
+              <div><dt>體型與 BMI</dt><dd id="physique-status"></dd></div>
+            </dl>
+          </section>
+          <details class="status-details"><summary>更多角色資訊</summary><dl class="stats status-extra">
+            <div><dt>工作次數</dt><dd id="work-count"></dd></div>
+            <div><dt>目前職業累計經驗</dt><dd id="job-experience"></dd></div>
+            <div><dt>最近精通職業</dt><dd id="mastered-job"></dd></div>
+            <div><dt>飽足度</dt><dd id="hunger-status"></dd></div>
+            <div><dt>目前狀態</dt><dd id="condition-status"></dd></div>
+            <div><dt>疾病</dt><dd id="health-status"></dd></div>
+          </dl></details>
+          
+          <div id="solo-time-panel" class="solo-time-panel" hidden>
+            <strong>單人模式 · 時間快轉</strong>
+            <p class="small" id="solo-game-time" aria-live="off">讀取遊戲時間中</p>
+            <div class="solo-time-buttons" aria-label="單機時間快轉">
+              <button type="button" class="secondary" data-advance="5m">＋5 分鐘</button>
+              <button type="button" class="secondary" data-advance="30m">＋30 分鐘</button>
+              <button type="button" class="secondary" data-advance="1h">＋1 小時</button>
+              <button type="button" class="secondary" data-advance="1d">＋1 天</button>
+            </div>
+            <p class="small" id="solo-wait-hints"></p>
+            <details class="explain"><summary>快轉規則</summary>
+              <p class="small">工作需等 5 分鐘、餐點 60 分鐘；健身房依課程，學校每天一次。快轉會真的推進遊戲判定、恢復能量及每日結算，不是只改畫面倒數。＋1 天為 24 小時，不會模擬每個跳過日的所有事件。限時事件期間不可快轉。</p>
+            </details>
+          </div>
+          <div class="player-actions">
+            <button id="work" class="primary" type="button">前往工作</button>
+            <button id="refresh" class="secondary full" type="button">更新狀態</button>
+            <p id="cooldown" class="small"></p>
+            <p id="work-cost-status" class="small"></p>
+            <p id="work-payday-status" class="small" aria-live="polite">工作完成後將依職業發薪週期結算薪資。</p>
+          </div>
+        </section>
+          <section class="card inventory-panel" id="inventory-panel" role="tabpanel" aria-labelledby="profile-tab-inventory" hidden>
+            <div class="eyebrow">持有物</div>
+            <h3>我的物品</h3>
+            <div class="inventory-capacity" role="group" aria-label="目前持有物與原版持有上限">
+              <div><span>一般物品</span><strong id="inventory-general-usage">— / 25 格</strong></div>
+              <div><span>自購禮品</span><strong id="inventory-purchased-gift-usage">— / 10 格</strong></div>
+              <div><span>收到的禮品</span><strong id="inventory-received-gift-usage">— / 10 格</strong></div>
+            </div>
+            <details class="inventory-capacity-rules">
+              <summary>持有上限與計算方式</summary>
+              <p class="small">原版規則：一般持有物最多 25 格，自購／轉換的禮品最多 10 格，收到的禮品最多 10 格；分別計算，不是全部加在一起。</p>
+              <p class="small">同一商品上限 5 組，原版會依剩餘耐久合併；這是商品數量限制，不等於 5 個背包格。已失效物品與已用盡、待移除的物品不計入可用容量。</p>
+            </details>
+            <p id="inventory-summary" class="small"></p>
+            <p id="inventory-insurance-inline" class="small" hidden></p>
+            <div id="legacy-inventory-list" class="inventory-catalog"></div>
+            <details class="inventory-secondary" id="inventory-insurance-management">
+              <summary>健康保險與續保</summary>
+              <p id="insurance-status" class="small"></p>
+              <p class="small">此處保留 Web 暫行健康保險直購入口（基準價）；正式百貨也可依當期上架商品購買。兩種方式的保險有效期會合併計算。</p>
+              <form id="insurance-buy-form">
+                <label>購買份數
+                  <select id="insurance-quantity" name="quantity">
+                    <option value="1">1 份</option>
+                    <option value="2">2 份</option>
+                    <option value="3">3 份</option>
+                    <option value="4">4 份</option>
+                    <option value="5">5 份</option>
+                  </select>
+                </label>
+                <p id="insurance-quote" class="small"></p>
+                <button type="submit" id="insurance-buy">購買健康保險</button>
+              </form>
+              <details class="inventory-nested">
+                <summary>保險購買紀錄</summary>
+                <div id="insurance-purchases"></div>
+              </details>
+            </details>
+            <details class="inventory-secondary" id="inventory-history-details">
+              <summary>最近的道具使用紀錄</summary>
+              <div id="legacy-item-use-history"></div>
+            </details>
+            <details class="inventory-secondary" id="inventory-source-info">
+              <summary>原版商品格式與支援範圍</summary>
+              <p class="small">新 Web 角色從商店、事件、釣魚及優惠券獲得的原版 33 欄商品會持久保存，已核實的物品透過獨立使用紀錄與正式設施操作。未支援的效果只顯示原版資料，不會假裝已生效。裝備使用獨立裝備欄；寄送用禮品請至禮品店或郵件操作。</p>
+            </details>
+          </section>
+          <section class="card attributes-panel" id="attributes-panel" role="tabpanel" aria-labelledby="profile-tab-attributes" hidden>
+            <h3>能力值</h3>
+            <p class="small ability-caption">延續原版頭腦／身體／其他三組黃色能力條。長度僅比較目前能力的相對大小。</p>
+            <div class="ability-groups" id="attributes"></div>
+          </section>
+        </aside>
+      </div>
+      <section class="facility-shell" aria-labelledby="facilities-title">
+        <div class="facility-topline">
+          <h2 id="facilities-title">設施操作</h2>
+          <span class="muted">選擇一項功能，不必捲過全部表單</span>
+        </div>
+        <div id="facility-tabs" class="facility-tabs" role="tablist" aria-label="城鎮設施分頁">
+          <button id="facility-tab-house" type="button" role="tab" data-pane="house" aria-controls="facility-pane-house" aria-selected="false" tabindex="-1">住宅</button>
+        <button id="facility-tab-dining" type="button" role="tab" data-pane="dining" aria-controls="facility-pane-dining" aria-selected="false" tabindex="-1">食堂</button>
+        <button id="facility-tab-shops" type="button" role="tab" data-pane="shops" aria-controls="facility-pane-shops" aria-selected="false" tabindex="-1">百貨店</button>
+        <button id="facility-tab-games" type="button" role="tab" data-pane="games" aria-controls="facility-pane-games" aria-selected="false" tabindex="-1">遊樂</button>
+        <button id="facility-tab-training" type="button" role="tab" data-pane="training" aria-controls="facility-pane-training" aria-selected="false" tabindex="-1">學習</button>
+        <button id="facility-tab-jobs" type="button" role="tab" data-pane="jobs" aria-controls="facility-pane-jobs" aria-selected="true" tabindex="0">工作</button>
+        <button id="facility-tab-bank" type="button" role="tab" data-pane="bank" aria-controls="facility-pane-bank" aria-selected="false" tabindex="-1">銀行</button>
+        <button id="facility-tab-hospital" type="button" role="tab" data-pane="hospital" aria-controls="facility-pane-hospital" aria-selected="false" tabindex="-1">醫院</button>
+        <button id="facility-tab-onsen" type="button" role="tab" data-pane="onsen" aria-controls="facility-pane-onsen" aria-selected="false" tabindex="-1">溫泉</button>
+        <button id="facility-tab-events" type="button" role="tab" data-pane="events" aria-controls="facility-pane-events" aria-selected="false" tabindex="-1">事件</button>
+        <button id="facility-tab-battle" type="button" role="tab" data-pane="battle" aria-controls="facility-pane-battle" aria-selected="false" tabindex="-1">戰鬥</button>
+        <button id="facility-tab-mail" type="button" role="tab" data-pane="mail" aria-controls="facility-pane-mail" aria-selected="false" tabindex="-1">郵件</button>
+
+        </div>
+      <div id="facility-pane-house" class="facility-pane" role="tabpanel" aria-labelledby="facility-tab-house" tabindex="0" hidden>
+        <section class="card" id="housing-panel">
+          <div class="heading">
+            <div><div class="eyebrow">土地與住宅</div><h2>建築公司</h2></div>
+            <span id="house-count" class="muted"></span>
+          </div>
+          <details class="explain"><summary>玩法與限制說明</summary><p class="small">請在上方街區點選「空地」或「空地（二）」等建地，再選擇房屋外觀、室內等級和付款方式。建造費依原版城鎮地價與外觀、室內價格計算。</p></details>
+          <p class="small" id="house-target">尚未選擇建築位置。</p>
+          <form id="house-form" class="housing-form">
+            <label>房屋外觀
+              <select id="house-design" name="image" required></select>
+            </label>
+            <div class="house-preview-row">
+              <img id="house-preview" src="/legacy-assets/house/house_1.gif" alt="目前選擇的房屋外觀" width="48" height="48">
+              <div id="house-design-cost" class="small"></div>
+            </div>
+            <label>室內等級
+              <select id="house-interior" name="interiorRank" required></select>
+            </label>
+            <label>付款方式
+              <select id="house-payment" name="payment">
+                <option value="cash">現金支付</option>
+                <option value="bank">銀行存款支付</option>
+              </select>
+            </label>
+            <dl id="house-quote" class="stats"></dl>
+            <button id="house-submit" type="submit" disabled>確認建造房屋</button>
+          </form>
+          <h3>我擁有的房屋</h3>
+          <div id="owned-houses" class="owned-houses"></div>
+          <p class="small">出售房屋時，依原版只退還該城鎮的土地地價，不退外觀與室內費用。出售後原空地會復原，可以再購買其他地點。目前住宅內可設商店，向問屋進貨並由其他玩家實際購買；配偶代理、分店與公司仍待移植。</p>
+          <details class="history-details">
+          <summary>查看住宅交易及改裝紀錄</summary>
+          <h3>住宅交易紀錄</h3>
+          <div id="house-events" class="house-events"></div>
+          <h3>房屋改裝紀錄</h3>
+          <div id="house-remodel-events" class="house-events"></div>
+        </details>
+        </section>
+        <section class="card" id="room-panel" hidden>
+          <div class="heading">
+            <div><div class="eyebrow">住宅內部</div><h2 id="room-title">住宅參訪</h2></div>
+            <button id="room-close" class="secondary" type="button">離開住宅</button>
+          </div>
+          <p id="room-owner" class="small"></p>
+          <div id="room-nav" class="room-nav" aria-label="住宅內容選單"></div>
+          <div id="room-body"></div>
+          <div id="room-settings" hidden>
+            <h3>室內內容設定</h3>
+            <p class="small">依原版室內等級，最多配置四個內容欄位。一般留言板與屋主公告板可使用；商店室內入口已能開啟供問屋進貨的自有店鋪倉庫，玩家可在此住宅公開的商店欄位選商品，店主可定價；顧客可用現金或本人有效信用卡購買，對外交易會更新店主銀行收入與買家持有物；自訂網址僅供連結，不會在網站內載入外部內容。設定會在出售後保留。可使用「更新室內內容」取得最新留言。</p>
+            <form id="room-config-form">
+              <div id="room-slot-inputs"></div>
+              <button type="submit">儲存室內配置</button>
+            </form>
+          </div>
+        </section>
+      </div>
+      <div id="facility-pane-dining" class="facility-pane" role="tabpanel" aria-labelledby="facility-tab-dining" tabindex="0" hidden>
+        <section class="card" id="dining-panel">
+          <div class="heading">
+            <div><div class="eyebrow">日常生活</div><h2>中央食堂</h2></div>
+            <span class="muted" id="meal-status">每次用餐間隔 60 分鐘</span>
+          </div>
+          <details class="explain"><summary>玩法與限制說明</summary><p class="small">依原版食品來源計算售價（原始標價三倍）、能力與體重變化。兩間食堂各每日抽選最多 30 道；所有玩家共用剩餘份數，庫存不足時重新補貨。沒有在當日菜單中的食品不能直接點餐。原版補貨判斷受玩家現金影響的部分，Web 改為依剩餘品項數量處理。</p></details>
+          <p class="small muted" id="meal-menu-day">今日菜單</p>
+          <label for="meal-menu">查看菜單來源</label>
+          <select id="meal-menu">
+            <option value="main">中央食堂</option>
+            <option value="second">第二食堂</option>
+          </select>
+          <div id="meal-list" class="training-grid"></div>
+        </section>
+      </div>
+      <div id="facility-pane-shops" class="facility-pane" role="tabpanel" aria-labelledby="facility-tab-shops" tabindex="0" hidden>
+        <section class="card" id="retail-panel">
+          <div class="heading"><div><div class="eyebrow">原版建築購物</div><h2>百貨店</h2></div><span class="muted">每日上架，庫存全玩家共用</span></div>
+          <details class="explain"><summary>購物規則與目前限制</summary>
+            <p class="small">依原版 command.pl::depart_gamen，百貨店一與二每日各抽選最多 110 種非食堂商品，現金價為商品原始標價三倍。玩家必須在目前城鎮的地圖中有對應百貨店才能購物；每次可購買 1～5 件（原版每種至多持有 5 組）；一般物品持有上限 25 格，購入禮品獨立上限 10 格。已有相同 Web 購入的一般商品會合併耐久，不需要原版舊玩家持有物匯入。可用現金或本人有效原版信用卡從普通存款付款，款項、共用庫存、帳簿與 33 欄持有物一起交易。商品表格可直接比較完整的能力增減，展開明細可檢視原始 33 欄的能力增減、特殊效果代碼、熱量、使用間隔、能量消耗及備註；這些資料不等同於 Web 都已能執行。未支援的特殊效果會另標示，不會假裝已生效。原版購物贈券及部分特殊物品行為仍待移植。</p>
+          </details>
+          <div class="filters retail-filters">
+            <label for="retail-shop-select">所在城鎮的百貨店
+              <select id="retail-shop-select">
+                <option value="depart1">百貨店（一）</option>
+                <option value="depart2">百貨店（二）</option>
+              </select>
+            </label>
+            <label for="retail-search">搜尋商品名稱或種類
+              <input id="retail-search" type="search" placeholder="輸入商品名稱或種類">
+            </label>
+          </div>
+          <p class="small" id="retail-status"></p>
+          <div id="retail-items" class="shop-list"></div>
+          <h3>近期百貨購物紀錄</h3>
+          <div id="retail-purchases"></div>
+        </section>
+        <section class="card" id="fishing-panel">
+          <div class="heading">
+            <div><div class="eyebrow">單機生活 · 原版海邊</div><h2>釣魚與魚餌商店</h2></div>
+            <span class="muted">原版 sea.cgi／hanbai1.cgi</span>
+          </div>
+          <p id="fishing-status" class="small" role="status"></p>
+          <details class="explain">
+            <summary>原版釣魚與競價規則</summary>
+            <p class="small">須在城鎮有「販売1」原版商店才能買魚餌，有「釣場」才可釣魚或出售。買餌依原版定價並扣現金，商店品項由 dat_dir/syouhin.cgi 的「餌」類別直接核對；Web 版每天重新補充原版庫存。每次釣魚消耗 1 次實際持有的魚餌／魚，100 秒後可再釣；空手不能釣。原版先抽三種魚，再按不同餌料的原始中獎率決定釣獲，未中魚也會消耗魚餌。漁獲為真實 33 欄物品，原版可每種持有至多五份、總背包 25 格。可把一般魚當魚餌或在競價市場出售，也可出售稀有魚；售出後魚會扣除 1 次耐久並按原版範圍隨機獲得現金。原始碼每組雖列四件獎品，但 int(rand(3)) 實際只會抽前三件；Web 不會虛構第四件獎品。</p>
+          </details>
+          <h3>餌料商店「販売1」</h3>
+          <p id="fishing-shop-status" class="small"></p>
+          <div id="fishing-bait-goods" class="training-grid"></div>
+          <h3>釣魚區</h3>
+          <p id="fishing-cooldown" class="small"></p>
+          <label for="fishing-bait-select">使用哪件本人持有的魚餌／漁獲
+            <select id="fishing-bait-select"></select>
+          </label>
+          <button id="fishing-cast" type="button">開始釣魚（消耗一回）</button>
+          <h3>漁獲競價市場</h3>
+          <label for="fishing-sell-select">選擇要賣出的魚（消耗一回）
+            <select id="fishing-sell-select"></select>
+          </label>
+          <button id="fishing-sell" type="button">將漁獲出售</button>
+          <h3>最近釣魚紀錄</h3>
+          <div id="fishing-history"></div>
+        </section>
+        <section class="card" id="crafting-panel">
+          <div class="heading">
+            <div><div class="eyebrow">單機生活 · 原版合成屋</div><h2>合成屋</h2></div>
+            <span class="muted">gouseiya.cgi／dat_dir/gousei.cgi</span>
+          </div>
+          <p id="crafting-status" class="small" role="status"></p>
+          <details class="explain">
+            <summary>配方與材料使用規則</summary>
+            <p class="small">依原版 12 種配方，需要兩或三種實際持有材料，每製作一組按配方耗用指定回數、取得該成品原始耐久；手續費 0 元。Web 版依同筆交易檢查本人材料、25 格背包、同品最多 5 組、防重送及失敗回滾。材料剩餘回數與製作紀錄保存在 SQLite。部分合成原料必須先從實際上架的商店、獎品或其他合成品取得；沒有材料時無法憑空製造。原版配方「冰淇淋」材料欄末尾多一個冒號，按原 CGI 解析結果視為冰箱 1 回，不改寫原始配方檔。</p>
+          </details>
+          <div id="crafting-recipes" class="training-grid"></div>
+          <div class="filters retail-filters">
+            <label for="crafting-select">選擇合成品
+              <select id="crafting-select"></select>
+            </label>
+            <label for="crafting-quantity">製作組數
+              <input id="crafting-quantity" type="number" min="1" max="5" value="1" step="1">
+            </label>
+          </div>
+          <button type="button" id="crafting-submit" disabled>確認製作（手續費 0 元）</button>
+          <h3>近期合成紀錄</h3>
+          <div id="crafting-history"></div>
+        </section>
+        <section class="card" id="vending-panel">
+          <div class="heading"><div><div class="eyebrow">原版獨立建築</div><h2>自動販賣機</h2></div><span class="muted">獨立飲料貨架</span></div>
+          <details class="explain"><summary>販賣機與百貨店差異</summary>
+            <p class="small">必須在所在城鎮地圖中有原版「自動販賣機」建築才能進入。依 command.pl::hanbai 從 dat_dir/jihanki.cgi 的獨立商品檔抽選最多 10 種，直接以商品原價出售，不乘百貨三倍。上架與庫存由所有玩家共用，依原版中午 12 點換檔週期刷新；可買 1～5 件，依本人持有上限、安全同品耐久及有效信用卡規則交易。原版「活力牛奶」與「清爽牛奶」可按已驗證的負能量消耗欄位恢復身體／頭腦能量；上架飲料可直接查看原版能力、熱量與備註，其他特殊飲料效果仍不推測。</p>
+          </details>
+          <p class="small" id="vending-status"></p>
+          <div id="vending-items" class="shop-list"></div>
+          <h3>近期自販機購物紀錄</h3>
+          <div id="vending-purchases"></div>
+        </section>
+        <section class="card" id="b-league-panel">
+          <div class="heading"><div><div class="eyebrow">原版怪物戰鬥</div><h2>B 聯賽怪物鬥技場</h2></div><span class="muted">S／A／B／C／D</span></div>
+          <p class="small">依原版難度抽選怪物，雙方交替攻擊最多 50 次。身體或頭腦能量歸零即分勝負；失敗可能損失現金，裝備也可能耗盡。</p>
+          <p id="b-league-status" class="small" role="status"></p>
+          <div id="b-league-ranks" class="training-grid"></div>
+          <h3>最近戰鬥與逐次攻擊紀錄</h3>
+          <div id="b-league-result"></div>
+          <h3>近期戰鬥歷史</h3>
+          <div id="b-league-history"></div>
+        </section>
+        <section class="card" id="equipment-panel">
+          <div class="heading"><div><div class="eyebrow">原版獨立建築</div><h2>裝備屋</h2></div><span class="muted">武器／防具／魔法／御守</span></div>
+          <details class="explain"><summary>原版裝備交易與目前界線</summary>
+            <p class="small">只有所在城鎮地圖設有「装備屋」才能交易。使用原始 dat_dir/soubi.cgi 六個主要欄位，而非百貨 33 欄；原價現金單件購買，現金必須高於售價，已持有或已裝備的同名物不可重複購入。購買後進入獨立倉庫，可裝備與同種類換裝，舊裝備退回倉庫；僅倉庫內未穿戴物品可出售，回收金額依原版售價／10 × 裝備等級計算，Web 整數金額捨去小數。裝備屋的鍛造已依原版選項支援威力及使用次數各增加 1／3／5／10／15／25／50，每點分別收取 10,000／1,000 元；可強化倉庫或已穿戴裝備。裝備可在 B 聯賽怪物鬥技場實際參戰，依原版判定命中／閃避、消耗使用次數與成長。</p>
+          </details>
+          <p class="small" id="equipment-status"></p>
+          <h3>原版裝備商品</h3>
+          <div id="equipment-goods" class="training-grid"></div>
+          <h3>我的裝備與倉庫</h3>
+          <div id="equipment-inventory" class="training-grid"></div>
+          <h3>近期裝備交易紀錄</h3>
+          <div id="equipment-history"></div>
+        </section>
+        <section class="card" id="gift-panel">
+          <div class="heading"><div><div class="eyebrow">原版獨立建築</div><h2>禮品店</h2></div><span class="muted">將持有物轉換成禮品</span></div>
+          <details class="explain"><summary>轉換與寄送規則</summary>
+            <p class="small">原版 gifutoya.cgi：只能在有「禮品店」的城鎮轉換；每次收取現金 50,000 元。可把本人 Web 持有物的全部剩餘耐久轉成「禮品」，或切出指定的回數／日數。未寄送禮品最多持有 10 格。轉送可指定另一名角色和正整數份數；對方收到的是「已收禮品」，最多持有 10 格。只處理新 Web 玩家自己取得的物品；優惠券已另設真實兌換所。Web 寄禮會同步寫入雙方各自的站內信；可於「郵件」分頁閱讀、刪除，也能不附禮物寄送純文字信件。所有收／寄、純文字與寄禮信每人合計最多 50 封。K 點數附件及優惠券送禮特例尚未移植（原版舊玩家信件不需匯入），不能透過此頁轉送優惠券。</p>
+          </details>
+          <p id="gift-status" class="small"></p>
+          <h3>可轉換與可寄送物品</h3>
+          <div id="gift-sources" class="training-grid"></div>
+          <h3>近期禮品操作紀錄</h3>
+          <div id="gift-events"></div>
+          <p class="small">寄禮信件已統一收進「郵件」分頁；在此仍可寄送附禮訊息。</p>
+        </section>
+        <section class="card" id="recycle-panel">
+          <div class="heading"><div><div class="eyebrow">原版獨立建築</div><h2>回收商店</h2></div><span class="muted">全玩家共用二手市場</span></div>
+          <details class="explain"><summary>原版回收買賣規則</summary>
+            <p class="small">所在城鎮必須設有「回收商店」。原版 recycle.cgi：購入後至少 30 分鐘才可出售，按日計耐久的商品還須經過一整天；出售收入最高 200,000 元。商品會進入最多 50 筆、上架 7 天的共用二手貨架。價格由原版持有物耐久與每單位價格決定；超過回收上限時，會再按原版八成規則調整轉售單價。購買二手物品以現金結帳，普通非食品進入「回收商品」分類。原版匯入存檔保持唯讀，不會直接出售原始封存檔。</p>
+          </details>
+          <p id="recycle-status" class="small"></p>
+          <h3>二手貨架</h3>
+          <div id="recycle-market" class="training-grid"></div>
+          <h3>出售本人持有物</h3>
+          <div id="recycle-sellable" class="training-grid"></div>
+          <h3>近期回收交易</h3>
+          <div id="recycle-history"></div>
+        </section>
+        <section class="card" id="wholesale-panel">
+          <div class="heading"><div><div class="eyebrow">原版商店供應鏈</div><h2>問屋（批發商）</h2></div><span class="muted">商品進入本人住宅商店倉庫</span></div>
+          <details class="explain"><summary>原版批發規則與目前功能範圍</summary>
+            <p class="small">原版 unit.pl::問屋 與 command.pl::orosi：必須擁有一間住宅商店，先在自己住宅的「室內配置」啟用「玩家商店」，再設定商店類別；只有所在城鎮有問屋才能進貨。每期抽選最多 120 種，商品來源庫存乘二，款項從普通銀行存款扣除。商店須與商品分類相符；「超市」可跨類進貨，但售價為問屋標價的 1.5 倍，不能進貨專賣店限定與秘傳商品。庫存每種最多 100 件、商店最多 100 種商品。退貨依原版返還進貨單價的 75%；超市另乘 1.5，退款進入普通銀行。原版每日隨機換檔時刻目前 Web 採遊戲當地日期首次造訪換檔；超市遇半元計價時 Web 以整數向上取整。商店對外零售已於住宅室內欄位提供；配偶代理進貨及舊存檔匯入另待移植。</p>
+          </details>
+          <p id="wholesale-status" class="small"></p>
+          <h3>住宅商店設定</h3>
+          <div class="filters">
+            <label for="wholesale-house-select">本人住宅
+              <select id="wholesale-house-select"></select>
+            </label>
+            <label for="wholesale-category">商店類別
+              <select id="wholesale-category"></select>
+            </label>
+            <label for="wholesale-shop-title">商店名稱
+              <input id="wholesale-shop-title" maxlength="40" placeholder="例如：我的日用品店">
+            </label>
+            <button id="wholesale-shop-save" type="button">設定住宅商店</button>
+          </div>
+          <p class="small" id="wholesale-shop-summary"></p>
+          <h3>問屋本期上架商品</h3>
+          <div class="filters">
+            <label for="wholesale-search">搜尋本期商品
+              <input id="wholesale-search" type="search" placeholder="商品名稱或分類">
+            </label>
+          </div>
+          <div id="wholesale-goods" class="training-grid"></div>
+          <h3>我的商店倉庫與退貨</h3>
+          <div id="wholesale-inventory" class="training-grid"></div>
+          <h3>近期進貨及退貨紀錄</h3>
+          <div id="wholesale-history"></div>
+        </section>
+      </div>
+      <div id="facility-pane-games" class="facility-pane" role="tabpanel" aria-labelledby="facility-tab-games" tabindex="0" hidden>
+        <section class="card" id="osaka-panel">
+          <div class="heading">
+            <div><div class="eyebrow">大阪挑戰 · 原版規則／來源標示</div><h2>大阪阿姨挑戰</h2></div>
+            <span class="muted">obatyan.cgi／gamerand.cgi</span>
+          </div>
+          <p id="osaka-status" class="small" role="status"></p>
+          <details class="explain"><summary>原版規則及 Web 相容差異</summary>
+            <p class="small">弱／強各從五名同來源 NPC 中等機率抽一名，速度較高先攻（同速由對手先攻），最多 50 次交替攻擊。16 種攻擊以雙方對應能力差計算傷害，不消耗裝備。勝利每次攻擊獲弱 1,500／強 5,000 元；敗北扣弱 300／強 1,000 元，Web 現金最低零；平手無金錢。四款原始獎品各 25%（已確認修正原版 rand(3) 疑似疏漏）。先檢查 25 格再合併，兩款「阿姨的力量」已依原始欄位及使用者確認修正，可正常使用。Web 共用五秒大阪行動間隔，伺服器原子結算；原版十筆 NPC 資料完整時優先使用；缺檔時預設使用經確認的 Web 重建版（非原版），不混用兩套資料。管理者可限定原版；資料格式異常時停用挑戰。每局保留實際來源與版本。</p>
+          </details>
+          <div id="osaka-modes" class="filters"></div>
+          <div id="osaka-result" aria-live="polite"></div>
+          <h3>本人最近 20 局</h3>
+          <div id="osaka-history"></div>
+        </section>
+        <section class="card" id="arcade-dice-panel">
+          <div class="heading">
+            <div><div class="eyebrow">單機優先 · 原版遊樂中心</div><h2>雙骰猜奇偶</h2></div>
+            <span class="muted">gamerand.cgi／saikoro.cgi</span>
+          </div>
+          <p id="arcade-dice-status" class="small" role="status"></p>
+          <details class="explain">
+            <summary>原始骰子遊戲規則與 Web 安全差異</summary>
+            <p class="small">原版每次擲兩顆六面骰：先從 0～35 等機率抽一個整數，再推算兩顆骰面。猜總和是奇數或偶數；猜中增加所選下注額，猜錯扣除同額現金。可下注 10,000、50,000、100,000、500,000 或 1,000,000 元，同一玩家每局間隔 5 分鐘。Web 版需在所在城鎮有「遊樂中心」建築、下注現金必須足夠；原版可在現金不足時下注，但 Web 為保護現金存檔而拒絕。結果以伺服器擲骰、本人 SQLite 原子交易結算，重複請求不會重複輸贏。只顯示本人的最近 20 局；High／Low 及三種抽牌已於下方面板開放，樂透、福引及寶箱等仍未移植。</p>
+          </details>
+          <div class="filters retail-filters">
+            <label for="arcade-dice-guess">猜測總和
+              <select id="arcade-dice-guess">
+                <option value="even">偶數</option>
+                <option value="odd">奇數</option>
+              </select>
+            </label>
+            <label for="arcade-dice-stake">下注現金
+              <select id="arcade-dice-stake"></select>
+            </label>
+          </div>
+          <p id="arcade-dice-quote" class="small" role="status"></p>
+          <button type="button" id="arcade-dice-submit" disabled>確認下注並擲骰</button>
+          <p id="arcade-dice-result" class="small" aria-live="polite"></p>
+          <h3>本人最近 20 局紀錄</h3>
+          <div id="arcade-dice-history"></div>
+        </section>
+        <section class="card" id="arcade-highlow-panel">
+          <div class="heading">
+            <div><div class="eyebrow">原版卡牌遊戲 · donus4</div><h2>High／Low（猜高低）</h2></div>
+            <span class="muted">donut.cgi／town_ini.cgi</span>
+          </div>
+          <details class="explain">
+            <summary>原版牌桌與 Web 單機適配</summary>
+            <p class="small">五種點數 1～5 等機率抽一張，選比前一張「高」或「低」。猜對獲得牌桌累積張數 × 10,000 元；猜錯扣除同額並重置桌面為這次抽到的一張牌。抽到同點數時，原版設定為獲勝且金額 × 2。原版遊戲紀錄是一張跨玩家共用牌桌，原始空檔首次抽牌時前卡未設定、數值比較按 0 計算，桌上預設一張「1」；因此第一局猜高必勝、猜低必敗，這不是 Web 另外設計的機率。遊戲原始設定為10分鐘間隔，還有依未確認的連抽旗標控制相鄰玩家回合；Web 單機允許本人在滿10分鐘後接續玩，並以帳號隔離本人歷史、保留共用牌桌。必須在有「遊樂中心」的城鎮且有足額現金。所有抽牌及獎懲由伺服器處理並防重送。</p>
+          </details>
+          <p id="arcade-highlow-status" class="small" role="status"></p>
+          <p id="arcade-highlow-table" class="small"></p>
+          <div class="filters retail-filters">
+            <label for="arcade-highlow-guess">選擇押注方向
+              <select id="arcade-highlow-guess">
+                <option value="hi">比前一張高</option>
+                <option value="low">比前一張低</option>
+              </select>
+            </label>
+          </div>
+          <p id="arcade-highlow-quote" class="small" role="status"></p>
+          <button type="button" id="arcade-highlow-submit" disabled>確認猜高低並抽牌</button>
+          <p id="arcade-highlow-result" class="small" aria-live="polite"></p>
+          <h3>本人最近 20 局 High／Low 紀錄</h3>
+          <div id="arcade-highlow-history"></div>
+        </section>
+        <section class="card" id="arcade-donuts-panel">
+          <div class="heading">
+            <div><div class="eyebrow">原版卡牌遊戲 · donus／donus2／donus3</div><h2>三種抽牌遊戲</h2></div>
+            <span class="muted">gamerand.cgi／donut.cgi</span>
+          </div>
+          <details class="explain">
+            <summary>三種原版抽牌規則及 Web 單機適配</summary>
+            <p class="small">三種遊戲各有自己一張跨玩家共用牌桌，從原版空白紀錄初始化為一張「1」牌。第一種「不同點數×1萬元」抽1～5點，與前一張不同時獲得累積張數×10,000元，相同時扣同額並重置牌桌；原版沒有啟用卡牌10分鐘限制，但禁止同一玩家連續抽牌，Web 單機改採原版5秒全域行動限制後可再抽。第二種「不同點數×2萬元」同樣抽1～5點，收益與損失均為累積張數×20,000元，原版每人10分鐘間隔。第三種「相同點數×10萬元」抽1～3點，相同時獲得累積張數×100,000元並重置牌桌；不同則固定扣除100,000元、牌串再增加一張，原版每人10分鐘間隔。原始空桌的前一張：第一、二種未設定，Perl數值比較0，因此首次抽牌必為「不同」；第三種明訂首次比較點數1。Web 版讓單機玩家達到限制時間後接續牌桌、必須有足額現金，使用伺服器抽牌、SQLite原子結算與防重送；本人紀錄最多顯示20局。多帳號共用三張不同的桌面，但交易紀錄仍分開。原版連抽旗標未確認為啟用狀態，不宣稱兩者完全等價。</p>
+          </details>
+          <p id="arcade-donuts-status" class="small" role="status"></p>
+          <div class="filters retail-filters">
+            <label for="arcade-donuts-mode">選擇卡牌玩法
+              <select id="arcade-donuts-mode">
+                <option value="donus">不同點數 × 1萬元</option>
+                <option value="donus2">不同點數 × 2萬元</option>
+                <option value="donus3">相同點數 × 10萬元</option>
+              </select>
+            </label>
+          </div>
+          <p id="arcade-donuts-table" class="small"></p>
+          <p id="arcade-donuts-quote" class="small" role="status"></p>
+          <button type="button" id="arcade-donuts-submit" disabled>確認承擔風險並抽一張牌</button>
+          <p id="arcade-donuts-result" class="small" aria-live="polite"></p>
+          <h3>所選模式：本人最近20局紀錄</h3>
+          <div id="arcade-donuts-history"></div>
+        </section>
+        <section class="card" id="arcade-loto-panel">
+          <div class="heading">
+            <div><div class="eyebrow">原版遊樂中心 · 即時開獎</div><h2>六位數樂透</h2></div>
+            <span class="muted">gamerand.cgi／loto.cgi</span>
+          </div>
+          <details class="explain">
+            <summary>原版六位數開獎規則與安全差異</summary>
+            <p class="small">這是原版「loto.cgi」的即時樂透，與另一個定時開獎並將獎金匯入銀行的「loto6.cgi」不同。選六個0～9數字，每個位置獨立等機率開出0～9；僅相同位置相符才算猜中，並允許重複數字。原始下注額為500、1,000、5,000、10,000、50,000、100,000元。猜中0～6位的發還倍率依序為0、2、5、20、100、500、1,000倍。結算是「先扣下注額，再發還下注額×倍率」，因此顯示的淨收入＝下注額×（倍率−1）。原版只有當最後一位玩樂透的人仍是自己，才需要等三分鐘；若其他玩家已玩過，就不適用這個限制。單機只會有本人，須等三分鐘再玩。原版紀錄保留最多50筆共用歷史；Web保留本人最近20筆畫面紀錄及完整個人帳本。必須有「遊樂中心」建築和足額現金，採伺服器抽號、原子扣款發獎、防重送及安全整數檢查。原版另外的六號樂透及已於2010年結束的福引活動尚未在此開放。</p>
+          </details>
+          <p id="arcade-loto-status" class="small" role="status"></p>
+          <div class="filters retail-filters">
+            <label for="arcade-loto-digit-1">第1位<select id="arcade-loto-digit-1" class="arcade-loto-digit"></select></label>
+            <label for="arcade-loto-digit-2">第2位<select id="arcade-loto-digit-2" class="arcade-loto-digit"></select></label>
+            <label for="arcade-loto-digit-3">第3位<select id="arcade-loto-digit-3" class="arcade-loto-digit"></select></label>
+            <label for="arcade-loto-digit-4">第4位<select id="arcade-loto-digit-4" class="arcade-loto-digit"></select></label>
+            <label for="arcade-loto-digit-5">第5位<select id="arcade-loto-digit-5" class="arcade-loto-digit"></select></label>
+            <label for="arcade-loto-digit-6">第6位<select id="arcade-loto-digit-6" class="arcade-loto-digit"></select></label>
+            <label for="arcade-loto-stake">下注金額<select id="arcade-loto-stake"></select></label>
+          </div>
+          <p id="arcade-loto-quote" class="small" role="status"></p>
+          <button type="button" id="arcade-loto-submit" disabled>確認六位數與下注，立即開獎</button>
+          <p id="arcade-loto-result" class="small" aria-live="polite"></p>
+          <h3>本人最近20局即時樂透</h3>
+          <div id="arcade-loto-history"></div>
+        </section>
+        <section class="card" id="arcade-loto6-panel">
+          <div class="heading">
+            <div><div class="eyebrow">原版遊樂中心 · 定時／滿額開獎</div><h2>六號樂透 LOTO6</h2></div>
+            <span class="muted">gamerand.cgi／loto6.cgi</span>
+          </div>
+          <details class="explain">
+            <summary>原版六號樂透規則與 Web 開獎方式</summary>
+            <p class="small">不同於上方立即開獎的六位數樂透：此遊戲每注2,500元，從1～36選6個不重複號碼；亦可由伺服器隨機選六號。每人每輪最多20注、全服累計200注後，下次存取即可開獎；當地時間06:00後當日尚未開過獎，也會在進入本遊戲的檢查或購券操作時開獎。原版不是在背景定時執行，因此 Web 需要按「檢查／執行開獎」才會主動開獎，或於購券時先結清已到期的上一輪。中0、1、2、3、4、5、6號的獎金分別為0、2,500、5,000、100,000、1,000,000、10,000,000、100,000,000元，全部匯到普通銀行存款，購券費則扣身上現金；這是固定獎金，非倍數。開獎對全體待開獎彩券同批結算，本人紀錄最多顯示最近20張。Web 使用原子交易、防重送、足額現金與安全整數檢查，銀行會在獎金入帳前完成當日應有利息。不會因單純停留畫面而在背景開獎。</p>
+          </details>
+          <p id="arcade-loto6-status" class="small" role="status"></p>
+          <div class="filters retail-filters">
+            <label for="arcade-loto6-random"><input id="arcade-loto6-random" type="checkbox" checked> 由伺服器隨機選六號（原版預設）</label>
+            <label for="arcade-loto6-number-1">號碼1<select id="arcade-loto6-number-1"></select></label>
+            <label for="arcade-loto6-number-2">號碼2<select id="arcade-loto6-number-2"></select></label>
+            <label for="arcade-loto6-number-3">號碼3<select id="arcade-loto6-number-3"></select></label>
+            <label for="arcade-loto6-number-4">號碼4<select id="arcade-loto6-number-4"></select></label>
+            <label for="arcade-loto6-number-5">號碼5<select id="arcade-loto6-number-5"></select></label>
+            <label for="arcade-loto6-number-6">號碼6<select id="arcade-loto6-number-6"></select></label>
+          </div>
+          <p id="arcade-loto6-quote" class="small" role="status"></p>
+          <div class="actions">
+            <button type="button" id="arcade-loto6-buy" disabled>購買一注六號樂透</button>
+            <button type="button" id="arcade-loto6-check" disabled>檢查／執行開獎</button>
+          </div>
+          <p id="arcade-loto6-result" class="small" aria-live="polite"></p>
+          <h3>本人最近20張彩券</h3>
+          <div id="arcade-loto6-history"></div>
+        </section>
+        <section class="card" id="arcade-cardw-panel">
+          <div class="heading">
+            <div><div class="eyebrow">原版遊樂中心 · cardw2.cgi</div><h2>多卡挑戰</h2></div>
+            <span class="muted">共用倍率 · 五種課程</span>
+          </div>
+          <details class="explain">
+            <summary>原版多卡規則、真實成功機率與單機差異</summary>
+            <p class="small">原版「cardw2.cgi」五種課程的基本金額為10,000／100,000／1,000,000／10,000,000／100,000,000元。實際賭注＝課程基本金額×所有玩家共用的目前倍率，空白原版紀錄從倍率1開始；成功獲得同額現金、倍率加1，失敗扣除同額、倍率重設為1。原版畫面標示機率80%／65%／50%／35%／20%，但程式使用抽1～100且「抽到大於或等於門檻就失敗」，因此真正成功機率是79%／64%／49%／34%／19%；下方同時呈現兩者，不擅自修正來源。原版實際各課程冷卻均設為0分鐘，但明訂同一位玩家不能連續抽卡；多人Web保留此限制，單機因沒有其他玩家，改為本人每隔原版基本行動5秒可續玩。下注需足額現金，伺服器抽牌並以SQLite原子更新本人現金、全服倍率與交易紀錄；最近20局只顯示本人的結果。此遊戲不會得到道具。</p>
+          </details>
+          <p id="arcade-cardw-status" class="small" role="status"></p>
+          <div class="filters retail-filters">
+            <label for="arcade-cardw-course">選擇多卡課程
+              <select id="arcade-cardw-course">
+                <option value="0">1萬元課程（畫面80%／實際79%）</option>
+                <option value="1">10萬元課程（畫面65%／實際64%）</option>
+                <option value="2">100萬元課程（畫面50%／實際49%）</option>
+                <option value="3">1,000萬元課程（畫面35%／實際34%）</option>
+                <option value="4">1億元課程（畫面20%／實際19%）</option>
+              </select>
+            </label>
+          </div>
+          <p id="arcade-cardw-quote" class="small"></p>
+          <button type="button" id="arcade-cardw-submit" disabled>確認本局賭注並抽卡</button>
+          <p id="arcade-cardw-result" class="small" aria-live="polite"></p>
+          <h3>本人最近20局多卡紀錄</h3>
+          <div id="arcade-cardw-history"></div>
+        </section>
+        <section class="card" id="arcade-treasure-panel">
+          <div class="heading">
+            <div><div class="eyebrow">原版遊樂中心 · otakara.cgi</div><h2>四種寶箱</h2></div>
+            <span class="muted">原始110筆獎品 · 道具與狀態即時入帳</span>
+          </div>
+          <details class="explain">
+            <summary>原版寶箱、抽樣機率、道具入庫與安全差異</summary>
+            <p class="small">原版四種寶箱為銅箱500元、銀箱1,000元、金箱2,500,000元、特殊箱500,000元。每人每隔5分鐘可再開箱，不禁止同人連續開。獎池直接取自 dat_dir/otakara.cgi，共110筆：銅34筆、銀35筆、金39筆、特殊箱會從全部110筆中抽取。注意原版以 int(rand($#陣列)) 抽樣，最後一筆永遠不會被抽到，因此實際候選數分別為33、34、38、109，特殊箱也不會抽到獎池最後一筆的究極純白金車。原版依效果欄位直接修改能力／疾病／現金（沒有能力提升時發給獎品標價），或把原始33欄獎品真正寫入背包；金塊屬於直接現金獎品，並非背包物件。Web 保留原始抽樣、5分鐘、價格、25格一般背包上限與同類物品耐久堆疊，使用SQLite交易將扣款和真正入庫／生效以及紀錄同時完成，重送不重抽。部分原始物品雖能持有，其後續使用功能仍未完整移植，會在背包中標示不支援，不能把持有物等同功能皆可使用。</p>
+          </details>
+          <p id="arcade-treasure-status" class="small" role="status"></p>
+          <div class="filters retail-filters">
+            <label for="arcade-treasure-box">選擇寶箱
+              <select id="arcade-treasure-box">
+                <option value="copper">銅箱 · 500元</option>
+                <option value="silver">銀箱 · 1,000元</option>
+                <option value="gold">金箱 · 2,500,000元</option>
+                <option value="special">特殊箱 · 500,000元</option>
+              </select>
+            </label>
+          </div>
+          <p id="arcade-treasure-quote" class="small" role="status"></p>
+          <button type="button" id="arcade-treasure-open" disabled>確認費用並開啟寶箱</button>
+          <p id="arcade-treasure-result" class="small" aria-live="polite"></p>
+          <h3>本人最近20次寶箱紀錄</h3>
+          <div id="arcade-treasure-history"></div>
+        </section>
+      </div>
+      <div id="facility-pane-training" class="facility-pane" role="tabpanel" aria-labelledby="facility-tab-training" tabindex="0" hidden>
+        <section class="card" id="school-panel">
+          <div class="heading">
+            <div><div class="eyebrow">能力培養</div><h2><img class="facility-icon" src="/legacy-assets/school.gif" alt="">學校</h2></div>
+            <span id="school-status" class="muted">每日一堂課</span>
+          </div>
+          <details class="explain"><summary>玩法與限制說明</summary><p class="small">沿用原始課程的能力增幅、費用和頭腦能量消耗；每天最多一堂。現金或本人有效信用卡付款（信用卡為核准的 Web 補完）。</p></details>
+          <div class="training-payment">
+            <label for="school-payment">共用付款方式
+              <select id="school-payment" aria-describedby="school-payment-balance school-payment-note"><option value="cash">現金付款</option></select>
+            </label>
+            <p id="school-payment-balance" class="small"></p>
+            <p id="school-payment-note" class="small" role="status"></p>
+          </div>
+          <div id="school-lessons" class="training-grid"></div>
+        </section>
+        <section class="card" id="gym-panel">
+          <div class="heading">
+            <div><div class="eyebrow">能力培養</div><h2><img class="facility-icon" src="/legacy-assets/gym.gif" alt="">健身房</h2></div>
+            <span id="gym-status" class="muted">等待狀態</span>
+          </div>
+          <details class="explain"><summary>玩法與限制說明</summary><p class="small">沿用原始訓練項目、能力增幅、費用和體力消耗。時間間隔暫依原始資料欄位計算。現金或本人有效信用卡付款（信用卡為核准的 Web 補完）。</p></details>
+          <div class="training-payment">
+            <label for="gym-payment">共用付款方式
+              <select id="gym-payment" aria-describedby="gym-payment-balance gym-payment-note"><option value="cash">現金付款</option></select>
+            </label>
+            <p id="gym-payment-balance" class="small"></p>
+            <p id="gym-payment-note" class="small" role="status"></p>
+          </div>
+          <div id="gym-lessons" class="training-grid"></div>
+        </section>
+        <section class="card" id="classroom-panel">
+          <div class="heading">
+            <div><div class="eyebrow">原版獨立設施</div><h2><img class="facility-icon" src="/legacy-assets/kyositu.gif" alt="">教室</h2></div>
+            <span id="classroom-status" class="muted">訓練間隔</span>
+          </div>
+          <details class="explain"><summary>教室規則與付款限制</summary>
+            <p class="small">依原版 kyushitu.cgi 的四筆課程，分別消耗身體與頭腦能量、提升能力並減輕體重。訓練間隔按課程分鐘計算，與學校／健身房分開。可用現金付款；若持有仍在有效天數內的原版信用卡，也可由普通銀行存款扣款並留下帳簿紀錄。可在百貨購入卡片；沒有有效信用卡時不能使用銀行付款。三種訓練均不允許透支或自動改用其他資產。</p>
+          </details>
+          <div class="training-payment">
+            <label for="classroom-payment">共用付款方式
+              <select id="classroom-payment" aria-describedby="classroom-payment-balance classroom-payment-note"><option value="cash">現金付款</option></select>
+            </label>
+            <p id="classroom-payment-balance" class="small"></p>
+            <p id="classroom-payment-note" class="small" role="status"></p>
+          </div>
+          <div id="classroom-lessons" class="training-grid"></div>
+        </section>
+      </div>
+      <div id="facility-pane-jobs" class="facility-pane" role="tabpanel" aria-labelledby="facility-tab-jobs" tabindex="0">
+        <section class="card" id="jobs-panel">
+          <div class="heading"><div><div class="eyebrow">職業介紹所</div><h2>選擇工作</h2></div><span id="job-count" class="muted"></span></div>
+          <p class="small job-rank-help">職業名稱後的 * 代表原版職業階級（階級減一顆星），不同於角色目前的職業等級。</p>
+          <div class="filters">
+            <label class="sr-only" for="job-search">搜尋職業</label>
+            <input id="job-search" placeholder="搜尋職業名稱">
+            <label class="sr-only" for="job-filter">職業篩選</label>
+            <select id="job-filter"><option value="all">全部職業</option><option value="available">目前可選</option></select>
+          </div>
+          <label class="salary-payment-label" for="salary-payment">下次工作薪資與升級獎金的領取方式
+            <select id="salary-payment">
+              <option value="cash">現金領取</option>
+              <option value="bank">轉入普通銀行存款</option>
+            </select>
+          </label>
+          <p class="small">此設定會保存到角色資料，自下一次工作結算生效；若選擇銀行，薪資與升級獎金會分別記入普通存款帳簿。</p>
+          <div id="jobs" class="jobs"></div>
+          <details class="explain"><summary>玩法與限制說明</summary><p class="small">未翻譯的職業會暫時顯示原始日文。職業經驗與精通、用餐飽足度與體型對工作狀態的影響已接入；疾病治療與事件仍待移植。</p></details>
+        </section>
+      </div>
+      <div id="facility-pane-bank" class="facility-pane" role="tabpanel" aria-labelledby="facility-tab-bank" tabindex="0" hidden>
+        <section class="card" id="bank-panel">
+          <h3>銀行</h3>
+          <dl class="bank-current-balances" aria-label="目前可用資金">
+            <div><dt>現金</dt><dd id="bank-available-cash"></dd></div>
+            <div><dt>普通銀行存款</dt><dd id="bank-available-balance"></dd></div>
+          </dl>
+          <details class="explain"><summary>玩法與限制說明</summary><p class="small">普通存款每日利息 0.5%，超級定期每日利息 1%。Web 版於每日第一次讀取狀態時計息一次，不會補發未讀取期間的多日利息。</p></details>
+          <p class="small" id="bank-interest-day"></p>
+          <p class="small" id="bank-tax-status" aria-live="polite"></p>
+          <details class="explain"><summary>每週稅務規則與安全差異</summary><p class="small">原版於跨日進入星期一時，按前次保存淨資產的 1%／3%／5%／7% 徵稅；100 萬元以下免稅，K 點可折扣。Web 以遊戲當地日期為準，普通存款不足時整筆留為未繳紀錄，不扣成負存款，也不自動追繳。舊 Web 存檔升級當日不追溯徵稅。</p></details>
+          <form id="bank-form">
+            <label>普通帳戶金額（元）<input name="amount" type="number" min="1" step="1" required></label>
+            <div class="bank-actions">
+              <button type="submit" name="action" value="deposit">存款</button>
+              <button type="submit" name="action" value="withdraw" class="secondary">提款</button>
+            </div>
+          </form>
+          <details class="bank-advanced">
+          <summary>轉帳、定期存款、貸款及交易明細</summary>
+          <div class="bank-transfer" id="bank-transfer-panel" hidden>
+            <h3>轉帳給其他玩家</h3>
+            <p class="small">從普通存款轉入對方的普通存款。單筆與每日同一收款人的上限均為 1 兆元，超額會直接拒絕。收款人註冊未滿七天時，單筆不得達 100 萬元。</p>
+            <form id="bank-transfer-form">
+              <label>收款角色名稱
+                <input name="recipientName" type="text" maxlength="18" autocomplete="off" required>
+              </label>
+              <label>轉帳金額（元）
+                <input name="amount" type="number" min="1" max="1000000000000" step="1" required>
+              </label>
+              <button type="submit">確認轉帳</button>
+            </form>
+          </div>
+          <div class="bank-term">
+            <h3>超級定期存款</h3>
+            <p class="small">以每 100 萬元為單位存入，解約必須全數提領至現金。</p>
+            <p id="term-balance" class="bank-balance"></p>
+            <form id="term-deposit-form">
+              <label>存入單位（每單位 100 萬元）
+                <input name="units" type="number" min="1" step="1" required>
+              </label>
+              <button type="submit">存入超級定期</button>
+            </form>
+            <button id="term-cancel" type="button" class="secondary">解約並領回全部定期存款</button>
+          </div>
+          <div class="bank-loan">
+            <h3>住宅貸款與融資</h3>
+            <p class="small">依目前職業薪資、經驗、工作次數及存款評估最高貸款額。原版提供 12 至 120 期，每期為一個遊戲日，利息 5% 至 14%。</p>
+            <div id="loan-status" class="small"></div>
+            <form id="loan-borrow-form">
+              <label>還款方案
+                <select id="loan-plan" name="payments"></select>
+              </label>
+              <p id="loan-quote" class="small"></p>
+              <button id="loan-borrow" type="submit">借入評估最高額度</button>
+            </form>
+            <button id="loan-payoff" type="button" class="secondary" hidden>一次清償剩餘貸款</button>
+            <p class="small">每日首次讀取狀態時，先計息再扣當期款項。餘額不足會記錄一次未繳並保留剩餘期數，不會扣成負數，與原版的負餘額行為不同。</p>
+          </div>
+          <div class="bank-passbook">
+            <h3>銀行交易明細</h3>
+            <label for="bank-ledger-filter">帳戶篩選</label>
+            <select id="bank-ledger-filter">
+              <option value="all">全部紀錄</option>
+              <option value="ordinary">普通存款</option>
+              <option value="term">超級定期</option>
+            </select>
+            <p class="small">普通與定期合計保存最近 100 筆明細，較舊的紀錄會被移除。</p>
+            <div id="bank-ledger-list"></div>
+          </div>
+        </details>
+        </section>
+      </div>
+      <div id="facility-pane-hospital" class="facility-pane" role="tabpanel" aria-labelledby="facility-tab-hospital" tabindex="0" hidden>
+        <section class="card" id="hospital-panel">
+          <div class="eyebrow">健康管理</div>
+          <h3>醫院</h3>
+          <p id="hospital-diagnosis" class="small"></p>
+          <p id="hospital-cost" class="small"></p>
+          <button id="hospital-treat" type="button">接受治療</button>
+          <details class="explain"><summary>玩法與限制說明</summary><p class="small">治療會將疾病指數恢復為 50。有效的健康保險可將醫療費降為三分之一，折抵金額由伺服器依持有物判定。</p></details>
+        </section>
+      </div>
+      <div id="facility-pane-onsen" class="facility-pane" role="tabpanel" aria-labelledby="facility-tab-onsen" tabindex="0" hidden>
+        <section class="card" id="onsen-panel">
+          <div class="eyebrow">能量恢復</div>
+          <h3>溫泉</h3>
+          <p class="small" id="onsen-status"></p>
+          <div id="onsen-options" class="onsen-options"></div>
+          <details class="explain"><summary>玩法與限制說明</summary><p class="small">原版八種浴池依不同倍率恢復身體及頭腦能量。特別浴池的費用與倍率依能力計算；銅、銀、金浴池有原版能力抽選。入浴後先離開浴池，才可返回街區操作。</p></details>
+        </section>
+      </div>
+      <div id="facility-pane-events" class="facility-pane" role="tabpanel" aria-labelledby="facility-tab-events" tabindex="0" hidden>
+        <section class="card" id="event-panel">
+          <div class="eyebrow">日常生活</div>
+          <h3>最近的隨機事件</h3>
+          <details class="explain"><summary>玩法與限制說明</summary><p class="small">沿用原版三分之一機率抽選，再從 44 種事件中挑選，目前已實作 37 種。Web 版每天最多抽選一次。</p></details>
+          <p class="small" id="event-coupon-count">Web 事件所得優惠券：0 點</p>
+          <section class="coupon-shop" aria-label="優惠券兌換所">
+            <h3>優惠券兌換所 · 事件券換獎品</h3>
+            <p id="coupon-shop-status" class="small">依原版獎品目錄與券點數顯示；必須先前往有「優惠券兌換所」的城鎮。</p>
+            <details class="explain"><summary>原版規則與 Web 兌換限制</summary>
+              <p class="small">原版 coupon.cgi 依獎品序號和名稱核對，再用「優惠券」點數換完整 33 欄的獎品。這裡只可使用「Web 隨機事件所得」的優惠券點數，尚不將舊玩家匯入的原版券併入或扣除。每次交付一件真實物品，不額外扣現金；一般持有物上限 25 格，重複送出不會重複扣券或產生獎品。部分原版獎品雖已入庫，其特殊使用效果仍未移植，請在背包確認支援情況。這個列表本身不代表免費領取。</p>
+            </details>
+            <div id="coupon-rewards" class="coupon-rewards training-grid"></div>
+            <h3>最近兌換紀錄</h3>
+            <div id="coupon-redemptions"></div>
+          </section>
+          <p class="small" id="event-kpoint">Web K 點數：0</p>
+          <div id="cockroach-challenge" hidden>
+            <p id="cockroach-remaining" role="status">蟑螂出現！</p>
+            <button type="button" id="cockroach-claim">拍打蟑螂（20 秒內）</button>
+          </div>
+          <div id="health-event-history" class="health-event-history"></div>
+        </section>
+      </div>
+
+      <div id="facility-pane-battle" class="facility-pane" role="tabpanel" aria-labelledby="facility-tab-battle" tabindex="0" hidden>
+          <section id="street-fight-panel" class="map-starter" aria-labelledby="street-fight-title">
+            <h3 id="street-fight-title">街頭格鬥 Street Fight</h3>
+            <details class="explain"><summary>玩法與限制說明</summary>
+            <p class="small">原版隨機與居民交戰，使用 16 種攻擊，最多 50 次。保留原版抽選：名單最後一列不參與，抽到本人則沒有對手。勝負只改本人存檔；對手不會被扣款。</p>
+            <p class="small">參戰須持有至少 15,000 元現金（銀行存款不計）；敗北按每次攻擊 300 元結算，最多損失 15,000 元，不是固定入場費。可能損失能量及 K 點。</p>
+            </details>
+            <p id="street-fight-status" class="small" role="status"></p>
+            <button type="button" id="street-fight-play" disabled>出發尋找對手</button>
+            <div id="street-fight-history"></div>
+          </section>
+          <section class="map-starter" id="c-league-panel">
+            <h3>C 聯賽｜角色培育</h3>
+            <details class="explain"><summary>玩法與限制說明</summary>
+            <p class="small">14 天一季，每季 100 場，間隔 1 分鐘。培育每點扣本人能力 1 點及 10,000 元；原版模仿者允許單機比賽。</p>
+            <p class="small">保留原版抽選：排除本人後，兩名以上候選對手的最後一列不參與；另有三分之一機率遇到模仿者，無對手時也使用模仿者。零能量可參賽；雙方能量皆零時，第一次攻擊後判本人勝利，收入為零時補發 100 元。</p>
+            </details>
+            <p id="c-league-status" role="status"></p>
+            <button id="c-league-open" type="button">進入／更新 C 聯賽</button>
+            <details id="c-league-training">
+              <summary>培育角色／設定攻擊台詞</summary>
+              <label>名稱 <input id="c-league-name" maxlength="30"></label>
+              <label>圖片網址（可空白） <input id="c-league-image" type="url" maxlength="2048"></label>
+              <div id="c-league-fields"></div>
+              <label>付款 <select id="c-league-payment"></select></label>
+              <p class="small">信用付款須持有本人有效信用卡，只扣普通存款；餘額不足拒絕，不挪用現金或定存。</p>
+              <p id="c-league-cost" role="status"></p>
+              <button id="c-league-train" type="button">確認培育／儲存</button>
+            </details>
+            <p id="c-league-fighter"></p>
+            <a id="c-league-image-preview" hidden target="_blank" rel="noopener noreferrer">開啟角色圖片（外部網站）</a>
+            <button id="c-league-play" type="button" disabled>進行 C 聯賽</button>
+            <p id="c-league-result" role="status"></p>
+            <details><summary>本季排名／前季／累積積分／最近賽事</summary><div id="c-league-rankings"></div></details>
+            <details><summary>本人最近 20 場戰報</summary><div id="c-league-history"></div></details>
+          </section>
+      </div>
+
+      <div id="facility-pane-mail" class="facility-pane" role="tabpanel" aria-labelledby="facility-tab-mail" tabindex="0" hidden>
+        <section class="card" id="mail-panel">
+          <div class="heading"><div><div class="eyebrow">原版首頁社交系統</div><h2>私人站內信</h2></div><span class="muted">收件與寄件合計最多 50 封</span></div>
+          <details class="explain"><summary>郵件規則與目前限制</summary>
+            <p class="small">依原版 command.pl::mail_do，輸入其他角色名稱與非空訊息就能寄出，收件人和寄件人各自保有紀錄。純文字信與禮品附信共用同一個信箱與 50 封上限；最新信件排前，超過上限的最舊訊息自動清理。只能刪除自己的信件，不能刪除對方的副本。Web 支援繁體中文及其他 Unicode 文字，原版 Shift-JIS 限制未照搬。原版 mail.cgi 歷史郵件、朋友地址簿、K 點數附件及完整原版讀信狀態尚未移植。</p>
+          </details>
+          <form id="mail-compose">
+            <label for="mail-recipient">收件角色名稱
+              <input id="mail-recipient" name="recipientName" type="text" maxlength="40" required autocomplete="off" placeholder="完整角色名稱">
+            </label>
+            <label for="mail-message">信件內容
+              <textarea id="mail-message" name="message" rows="4" maxlength="1000" required placeholder="寫給其他角色的訊息（最多 1,000 字）"></textarea>
+            </label>
+            <button type="submit">寄出私人站內信</button>
+          </form>
+          <p id="mail-status" class="small" role="status"></p>
+          <h3>我的郵件（收／寄共同保留 50 封）</h3>
+          <div id="mail-messages"></div>
+        </section>
+      </div>
+      </section>
+    </div>
+  </main>
+  <footer>本頁為移植中的測試版本，原始 CGI 程式及遊戲素材保留在原始儲存庫。</footer>
+</body>
+</html>
