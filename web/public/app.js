@@ -1,4 +1,5 @@
 import { townCellAction } from "./town-home.js";
+import {createHorseRaceUI} from "./modules/horse-race.js";
 import { displayLoto6DrawReason,formatLoto6DrawNotice } from "./loto6-display.js";
 import { displayJobName,displayGameError,displayBankLedgerAction } from "./game-display-translations.js";
 import { displayRetailItemName,displayRetailItemCategory } from "./retail-item-translations.js";
@@ -541,6 +542,7 @@ function renderTownMap() {
             if(cell.key==="ギフト屋")renderGiftShop();
             if(cell.key==="リサイ")renderRecycle();
             if(cell.key==="問屋")renderWholesale();
+            if(cell.key==="競馬")horseRaceUI.open();
           }
           else if(destination.kind==="station"){
             el("station-heading").scrollIntoView({behavior:"smooth",block:"start"});
@@ -4544,6 +4546,12 @@ el("c-league-payment").addEventListener("change",cLeagueCost);
 el("c-league-play").onclick=()=>submitCLeague("play",{});
 el("c-league-open").onclick=()=>submitCLeague("open",{});
 
+const horseRaceUI=createHorseRaceUI({getState:()=>state,request:api,money,
+  applyState:next=>{
+    state=next;
+    if(next.horseRaceResult?.status==="completed")activeFacilityTab="games";
+    render();
+  }});
 let onsenBusy=false;
 let pendingOnsenEntry=null;
 function onsenDuration(seconds){
@@ -4647,7 +4655,9 @@ function render() {
   if(lobby)text("solo-character-name",state.character.name);
   el("landing").hidden=Boolean(state.character)&&!lobby;
   const bathing=Boolean(state.onsen?.active);
-  el("game").hidden = !state.character || lobby || bathing;
+  const racing=Boolean(state.horseRace?.active)&&!bathing;
+  el("game").hidden = !state.character || lobby || bathing || racing;
+  horseRaceUI.render(Boolean(state.character)&&!lobby&&!bathing);
   el("onsen-active-screen").hidden=!bathing||lobby||!state.character;
   el("logout").hidden = !state.user || lobby || (solo && !state.character);
   el("logout").textContent=solo?"離開遊戲":"登出";
@@ -4661,6 +4671,11 @@ function render() {
   }
   if(bathing){
     renderActiveOnsen();
+    updateCompactVisibility();
+    el("event-popup").hidden=true;
+    return;
+  }
+  if(racing){
     updateCompactVisibility();
     el("event-popup").hidden=true;
     return;
@@ -5212,6 +5227,9 @@ el("salary-payment").addEventListener("change",async()=>{
   catch (error) { notify("無法連線至遊戲伺服器：" + error.message, true); }
 })();
 setInterval(async () => {
-  if (!state?.character||onsenBusy) return;
-  try { state = await api("state"); render(); } catch {}
+  if (!state?.character||onsenBusy||horseRaceUI.isBusy()||state.horseRace?.active) return;
+  try {
+    const next=await api("state");
+    if(!horseRaceUI.isBusy()&&!state?.horseRace?.active){state=next;render();}
+  } catch {}
 }, 30000);

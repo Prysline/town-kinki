@@ -1,0 +1,13 @@
+.horse-race-active{max-width:720px;margin:20px auto;padding:16px}
+.horse-race-bet-row{display:grid;grid-template-columns:minmax(0,1fr) 92px;gap:10px;align-items:center;margin:6px 0}
+.horse-race-bet-row input{width:100%;min-width:0}
+.horse-race-lane{padding:8px 0;border-bottom:1px solid var(--line,#c9d7c9)}
+.horse-race-track{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;font-variant-numeric:tabular-nums}
+.horse-race-course{position:relative;min-width:0;margin:0 15px;height:32px;display:flex;align-items:center}
+.horse-race-course progress{width:100%;min-width:0;height:14px;accent-color:#397c5a}
+.horse-race-course img{position:absolute;top:0;transform:translateX(-50%);pointer-events:none;image-rendering:pixelated;width:30px;height:30px;object-fit:contain}
+#horse-race-ranking{overflow-x:auto}
+#horse-race-ranking table{width:100%;border-collapse:collapse;font-size:.85rem}
+#horse-race-ranking td,#horse-race-ranking th{text-align:left;padding:4px;border-bottom:1px solid var(--line,#c9d7c9)}
+#horse-race-error,#horse-race-active-error{color:#a32626}
+#horse-race-result{font-weight:600}

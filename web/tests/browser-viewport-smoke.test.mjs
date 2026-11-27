@@ -1284,7 +1284,7 @@ test("Chrome AP-05：地圖溫泉、八種浴池、入浴重載及跨視埠出�
     assert.equal(reload.onsen.active.id,bath.onsen.active.id);
     assert.equal(reload.character.money,bath.character.money);
     await click(chrome,'#onsen-time-advance button[data-onsen-advance="5m"]');
-    await until(chrome,"document.querySelector('#onsen-body-countdown').textContent==='0 分 0 秒'&&document.querySelector('#onsen-brain-countdown').textContent==='0 分 0 秒'","單機快轉");
+    await until(chrome,"document.querySelector('#onsen-body-countdown').textContent==='0 分 0 秒'&&document.querySelector('#onsen-brain-countdown').textContent==='0 分 0 秒'&&!document.querySelector('#onsen-leave').disabled","單機快轉完成且可出浴");
     await click(chrome,"#onsen-leave");
     await until(chrome,"!document.querySelector('#game').hidden&&document.querySelector('#onsen-active-screen').hidden","出浴返回");
     const after=await evaluate(chrome,"(async()=>await(await fetch('/api/state')).json())()");
@@ -1292,4 +1292,54 @@ test("Chrome AP-05：地圖溫泉、八種浴池、入浴重載及跨視埠出�
     assert.equal(after.character.bodyEnergy,21);assert.equal(after.character.brainEnergy,23);
     console.log("UI_ONSEN "+JSON.stringify({widths:[1440,768,375],options:8,reload:true,exit:true}));
   }finally{await chrome?.stop();await web?.stop();rmSync(workspace,{force:true,recursive:true,maxRetries:50,retryDelay:200});}
+});
+
+test("GM-02 Chrome actual map entry, wager, original timed rounds, mobile result and rankings",{
+  timeout:180000
+},async()=>{
+  const workspace=mkdtempSync(join(tmpdir(),"town-horse-chrome-"));
+  let web=null,chrome=null;
+  try{
+    web=await startWeb(join(workspace,"sqlite"));
+    // Controlled clock only, no injected cash or race outcome.
+    const clock=new DatabaseSync(join(workspace,"sqlite","solo.sqlite"));
+    try{
+      const parts=new Intl.DateTimeFormat("en-US",{timeZone:"Asia/Taipei",hour:"2-digit",minute:"2-digit",second:"2-digit",hourCycle:"h23"}).formatToParts(new Date());
+      const get=k=>Number(parts.find(p=>p.type===k).value);
+      clock.prepare("UPDATE solo_clock SET offset_ms=? WHERE id=1").run((43200000-(get("hour")*3600+get("minute")*60+get("second"))*1000+86400000)%86400000);
+    }finally{clock.close();}
+    chrome=await openChrome(join(workspace,"chrome-profile"));
+    await chrome.send("Page.enable");await chrome.send("Runtime.enable");
+    await viewport(chrome,1440,900);await chrome.send("Page.navigate",{url:web.url});
+    await until(chrome,"!document.querySelector('#create')?.hidden","建角表單");
+    await fill(chrome,'#create-form [name="name"]',"競馬瀏覽器居民");await click(chrome,"#create-submit");
+    await until(chrome,"!document.querySelector('#game')?.hidden","建角完成");
+    const before=await evaluate(chrome,"(async()=>{const s=await(await fetch('/api/state')).json();return s.character.money})()");
+    await click(chrome,"#map-edit-toggle");
+    await evaluate(chrome,"(()=>{const p=document.querySelector('#map-palette');p.value='競馬';p.dispatchEvent(new Event('change',{bubbles:true}));return p.value})()");
+    await click(chrome,'#town-map button[aria-label^="A1："]');
+    await until(chrome,"document.querySelector('#town-map button[aria-label^=\"A1：賽馬場\"]')!==null","單機實際配置競馬");
+    await click(chrome,"#map-edit-toggle");
+    await click(chrome,'#town-map button[aria-label^="A1：賽馬場"]');
+    await until(chrome,"document.querySelectorAll('#horse-race-card input').length===6&&!document.querySelector('#horse-race-bets').hidden","地圖開啟六馬名單");
+    await fill(chrome,'#horse-race-card input[name="horse-0"]',"1");
+    await click(chrome,"#horse-race-start");
+    await until(chrome,"!document.querySelector('#horse-race-active-screen').hidden","真實競馬進行畫面");
+    assert.equal(await evaluate(chrome,"document.querySelectorAll('#horse-race-tracks progress').length"),6);
+    await viewport(chrome,375,800);
+    await until(chrome,"parseInt(document.querySelector('#horse-race-active-status').textContent.match(/第 (\\d+)/)?.[1]||0)>=1","原版三秒自動推進");
+    let completed=false;
+    for(let i=0;i<160;i++){
+      if(await evaluate(chrome,"document.querySelector('#horse-race-result').textContent.includes('第一名')&&!document.querySelector('#game').hidden")){completed=true;break;}
+      await pause(500);
+    }
+    assert.equal(completed,true,"原版自動賽程未完成");
+    const result=await evaluate(chrome,"(async()=>{const s=await(await fetch('/api/state')).json();return {money:s.character.money,race:s.horseRace.latest,rank:s.horseRace.rankings}})()");
+    assert.equal(result.race.status,"completed");assert.equal(result.race.cost,500);
+    assert.equal(result.money,before-500+result.race.payout);
+    assert.equal(result.rank[0].spent,500);
+    assert.equal(await evaluate(chrome,"document.querySelectorAll('#horse-race-ranking tbody tr').length"),1);
+    assert.equal(await evaluate(chrome,"document.querySelector('#facility-pane-games').hidden"),false);
+    await viewport(chrome,375,800);
+  }finally{if(chrome)await chrome.stop();if(web)await web.stop();rmSync(workspace,{recursive:true,force:true});}
 });

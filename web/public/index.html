@@ -6,6 +6,7 @@
   <meta name="color-scheme" content="light">
   <title>TOWN 人生遊戲｜繁體中文 Web 雛形</title>
   <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/modules/horse-race.css">
   <script type="module" src="/static/app.js"></script>
 </head>
 <body>
@@ -138,6 +139,14 @@
         <button type="button" class="secondary" data-onsen-advance="5m">快轉 5 分鐘（單機）</button>
       </div>
       <button id="onsen-leave" type="button">離開浴池</button>
+    </section>
+    <section id="horse-race-active-screen" class="card horse-race-active" aria-labelledby="horse-race-active-title" hidden>
+      <div class="eyebrow">原版競馬 · 賽事進行中</div>
+      <h2 id="horse-race-active-title">賽馬場</h2>
+      <p id="horse-race-active-status" role="status"></p>
+      <div id="horse-race-tracks"></div>
+      <p id="horse-race-active-error" class="small" role="alert"></p>
+      <button id="horse-race-retry" type="button" hidden>重新連線並繼續</button>
     </section>
     <div id="game" class="layout game-shell" hidden>
       <div id="compact-status" class="compact-status" hidden aria-label="固定角色能量資訊">
@@ -825,6 +834,21 @@
           <p id="arcade-treasure-result" class="small" aria-live="polite"></p>
           <h3>本人最近20次寶箱紀錄</h3>
           <div id="arcade-treasure-history"></div>
+        </section>
+        <section class="card" id="horse-race-panel">
+          <div class="heading"><div><div class="eyebrow">原版獨立設施 · basic.cgi::keiba</div><h2><img class="facility-icon" src="/legacy-assets/keiba.gif" alt="">賽馬場</h2></div></div>
+          <p class="small">每張馬券 500 元，每場最多 200 張、最多投注兩匹馬。開始後每 3 秒自動推進一回合。</p>
+          <p id="horse-race-status" role="status"></p>
+          <button id="horse-race-quote" type="button">查看出賽名單</button>
+          <form id="horse-race-bets" hidden>
+            <div id="horse-race-card"></div>
+            <p id="horse-race-cost" class="small" role="status"></p>
+            <button id="horse-race-start" type="submit">確認購票並開始賽事</button>
+          </form>
+          <p id="horse-race-error" class="small" role="alert"></p>
+          <p id="horse-race-result" role="status"></p>
+          <h3>競馬排名｜前十名</h3>
+          <div id="horse-race-ranking"></div>
         </section>
       </div>
       <div id="facility-pane-training" class="facility-pane" role="tabpanel" aria-labelledby="facility-tab-training" tabindex="0" hidden>
