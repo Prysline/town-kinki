@@ -1,0 +1,8 @@
+# V02｜V01 結案與跨日診斷候選（2026-11-28 UTC+8）
+- 正式仍 c18f56e8df68f3c8998c1ba7733500026e34424b / d462bbd51f94066499ff3c1e084d6fa4532ed47e；master 未變。
+- V01 713c39a00cfaa8a0ec4967aa7c9af8c28dc0fafa / a9f7d4a73bf7dae4f18df3fa9bcaf0e5380f0843，合成 dd1717c8c7608c313ac8dc900f9dad727dcb0375 同 tree。Push 46032122550/job 140618260492、PR 46032145522/job 140618339252 完整日誌各993/993、fail/cancelled/skipped/todo=0。V01_PLAYER 兩次 workPaid1000、bathFee500、restart/replay/continued true、naturalRng true、human false。不是真人/長程。
+- A #153 a87717b512a2bdb061bfc32d7eca0cc2cf906563 / cbe3fddb8c77ae2489ae63b8cdffbef8f05f0107，合成 a13c7555f4307b89b8e32e4024f46914a043830f 同 tree，Push 46032137352/job 140618310872、PR 46032147683/job 140618346083 各995/995、零失敗跳過。重讀 master basic.cgi 530–579、629–688、700–790、851–885，六馬/賠率插入洗牌、24個前置 RNG、起跑/前進距離、400封頂、同時抵達抽選、獎金及180秒嚴格小於鎖清理契約相符；原測試完整 Perl oracle 僅洗牌與距離，終點抽選及獎金是 JS 斷言，尚需完整差分、拒絕/交易/鎖/正式入口，未完成 GM-02。
+- M #155 9a402c12b1ab029b5b14362459cefc1a040c8d73 / 92392e7aec04a314ee0171b30f602b47e957f597 仍文件盤點，無行為候選。骰子試點依 M0，不能宣稱拆分前後相同。
+- 新增 V02：固定 Date.now（UTC 2026-11-29/30）與 Math.random=0.5 的隔離子程序，其他 crypto RNG 未固定，走真 server/HTTP/SQLite/CLI。跨日浴中唯讀→WAL備份→新目錄還原→出浴→利息、稅務、健康、日事件、重送與源存檔不變；另真多人/單機 schema DDL、索引、外鍵、integrity 清冊輸出。非真人、非自然 RNG、非完整差分。
+- 新確認風險待實跑：server 的直接 POST /api/onsen/enter 在一般 snapshot 之前；onsen.mjs:130 左右刷新當日 bank_tax_state，banking.mjs:settleWeeklyTax prior.snapshot_day>=today 直接略過。疑似週一首次請求入浴覆蓋前一日稅基，利息仍結算但每週稅不結算。V02 嚴格重現案例使用受控富裕角色 300萬稅基、週一首次 POST、出浴預期稅30000與普通銀行975000，若實際不一致保留紅燈並移交 A；未執行不稱缺陷確認。
+- 增加僅 V 分支的 inventory workflow（不改既有 workflow），即使測試失敗仍輸出逐檔案例數與 JSON artifact。新測試與 workflow 尚待 CI；本機 Node22/Perl可用但 GitHub DNS 失敗。沒有正式規則變更、降斷言或修改 A/M。

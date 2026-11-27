@@ -1,0 +1,24 @@
+name: V validation inventory (branch only)
+on:
+  push:
+    branches: ['validation/v01-pre-modularization-20261128']
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Discover and execute tests with source reporter
+        working-directory: web
+        run: node --test --test-reporter ./scripts/v01-test-inventory.mjs tests/*.test.mjs > /tmp/v02-inventory.json
+      - name: Print actual per-file counts even on failure
+        if: always()
+        run: |
+          node -e 'const x=require("/tmp/v02-inventory.json");for(const f of x.files)console.log(f.count+"\t"+f.file);console.log(JSON.stringify(x.summary.filter(s=>!s.file)))'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: v02-test-inventory
+          path: /tmp/v02-inventory.json
