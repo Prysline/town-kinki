@@ -194,7 +194,7 @@ function renderSoloTime() {
 let publicPreview=null;
 let previewLoading=false;
 // 方案 B：一次顯示一組設施。原本的表單留在 DOM，既有事件和資料更新不受影響。
-const FACILITY_TAB_NAMES = Object.freeze(["house","dining","shops","games","training","jobs","bank","hospital","events","battle","mail"]);
+const FACILITY_TAB_NAMES = Object.freeze(["house","dining","shops","games","training","jobs","bank","hospital","onsen","events","battle","mail"]);
 const PROFILE_VIEWS = Object.freeze(["status","inventory","attributes"]);
 let activeProfileView="status";
 function selectProfileView(name,{focus=false}={}) {
@@ -4544,6 +4544,95 @@ el("c-league-payment").addEventListener("change",cLeagueCost);
 el("c-league-play").onclick=()=>submitCLeague("play",{});
 el("c-league-open").onclick=()=>submitCLeague("open",{});
 
+let onsenBusy=false;
+let pendingOnsenEntry=null;
+function onsenDuration(seconds){
+  const n=Math.max(0,Math.ceil(seconds));
+  return Math.floor(n/60)+" 分 "+n%60+" 秒";
+}
+function renderOnsen(){
+  const info=state?.onsen;
+  const list=el("onsen-options");
+  list.replaceChildren();
+  text("onsen-status",info?.available?(info.reason||"請選擇浴池。入浴費用由現金支付。"):"目前所在城鎮沒有溫泉設施。");
+  for(const bath of info?.options??[]){
+    const row=document.createElement("div");
+    row.className="onsen-option";
+    const details=document.createElement("div");
+    const title=document.createElement("strong");
+    title.textContent=bath.label+"｜"+money(bath.fee);
+    const estimate=document.createElement("p");
+    estimate.className="small";
+    estimate.textContent="恢復倍率 "+bath.rate+" 倍；身體 "+onsenDuration(bath.bodySeconds)+"、頭腦 "+onsenDuration(bath.brainSeconds);
+    details.append(title,estimate);
+    const button=document.createElement("button");
+    button.type="button";
+    button.dataset.bathKey=bath.key;
+    button.textContent=bath.reason||"入浴";
+    button.disabled=Boolean(bath.reason)||onsenBusy;
+    button.addEventListener("click",()=>submitOnsenEntry(bath.key));
+    row.append(details,button);
+    list.append(row);
+  }
+}
+function updateOnsenCountdown(){
+  const entry=state?.onsen?.active?.entry;
+  if(!entry)return;
+  text("onsen-body-countdown",onsenDuration((entry.bodyReadyAt-browserGameNow())/1000));
+  text("onsen-brain-countdown",onsenDuration((entry.brainReadyAt-browserGameNow())/1000));
+}
+function renderActiveOnsen(){
+  const entry=state.onsen.active.entry;
+  text("onsen-active-title",entry.label+"｜入浴中");
+  text("onsen-active-receipt","已付 "+money(entry.fee)+"；恢復倍率 "+entry.rate+" 倍；現金 "+money(state.character.money));
+  const gains=Object.entries(entry.gains??{}).filter(([,value])=>value>0).map(([key,value])=>(labels[key]??key)+" +"+value);
+  text("onsen-active-gains",gains.length?"入浴能力提升："+gains.join("、"):"本次沒有能力提升。");
+  const image=el("onsen-background");
+  if(Number.isInteger(entry.backgroundIndex)&&entry.backgroundIndex>=1&&entry.backgroundIndex<=10){
+    image.src="/legacy-assets/onsen/"+entry.backgroundIndex+".jpg";
+    image.hidden=false;
+  }else image.hidden=true;
+  el("onsen-leave").disabled=onsenBusy;
+  el("onsen-time-advance").hidden=state.mode!=="solo";
+  for(const button of el("onsen-time-advance").querySelectorAll("button"))button.disabled=onsenBusy;
+  updateOnsenCountdown();
+}
+async function submitOnsenEntry(bathKey){
+  if(onsenBusy||state?.onsen?.active)return;
+  const owner=state?.character?.name;
+  if(!pendingOnsenEntry||pendingOnsenEntry.owner!==owner||pendingOnsenEntry.bathKey!==bathKey)
+    pendingOnsenEntry={owner,bathKey,requestId:crypto.randomUUID()};
+  onsenBusy=true;
+  renderOnsen();
+  try{
+    state=await api("onsen/enter",{bathKey,requestId:pendingOnsenEntry.requestId});
+    pendingOnsenEntry=null;
+    closeRoom();
+  }catch(error){
+    if(error.status>=400&&error.status<500)pendingOnsenEntry=null;
+    notify(error.message,true);
+  }finally{onsenBusy=false;render();}
+}
+el("onsen-leave").addEventListener("click",async()=>{
+  const visitId=state?.onsen?.active?.id;
+  if(!visitId||onsenBusy)return;
+  onsenBusy=true;renderActiveOnsen();
+  try{
+    state=await api("onsen/leave",{visitId});
+    const exit=state.onsenResult.exit;
+    notify("已離開溫泉。身體能量 "+exit.bodyEnergy+" / "+exit.maxima.body+"，頭腦能量 "+exit.brainEnergy+" / "+exit.maxima.brain+"。");
+  }catch(error){notify(error.message,true);}
+  finally{onsenBusy=false;render();}
+});
+el("onsen-time-advance").addEventListener("click",async event=>{
+  const preset=event.target.closest("button")?.dataset.onsenAdvance;
+  if(!preset||onsenBusy||state?.mode!=="solo"||!state.onsen?.active)return;
+  onsenBusy=true;renderActiveOnsen();
+  try{state=await api("solo/time/advance",{preset});}
+  catch(error){notify(error.message,true);}
+  finally{onsenBusy=false;render();}
+});
+
 function render() {
   if (!state) return;
   const solo = state.mode === "solo";
@@ -4557,13 +4646,21 @@ function render() {
   el("solo-lobby").hidden=!lobby;
   if(lobby)text("solo-character-name",state.character.name);
   el("landing").hidden=Boolean(state.character)&&!lobby;
-  el("game").hidden = !state.character || lobby;
+  const bathing=Boolean(state.onsen?.active);
+  el("game").hidden = !state.character || lobby || bathing;
+  el("onsen-active-screen").hidden=!bathing||lobby||!state.character;
   el("logout").hidden = !state.user || lobby || (solo && !state.character);
   el("logout").textContent=solo?"離開遊戲":"登出";
   renderLegacyIcon();
   if (!state.character || lobby) {
     if(!state.character){cLeagueOwner=null;cLeaguePending=null;el("c-league-fields").replaceChildren();}
     if(!publicPreview&&!previewLoading)loadPublicPreview();
+    updateCompactVisibility();
+    el("event-popup").hidden=true;
+    return;
+  }
+  if(bathing){
+    renderActiveOnsen();
     updateCompactVisibility();
     el("event-popup").hidden=true;
     return;
@@ -4599,6 +4696,7 @@ function render() {
   text("mastered-job", displayJobName(c.masteredJob,state.jobs) || "無");
   text("measurements", c.height + " 公分／" + c.weight + " 公斤");
   renderDining();
+  renderOnsen();
   renderRetail();
   renderVending();
   renderFishing();
@@ -4954,6 +5052,7 @@ el("solo-time-panel").addEventListener("click",async event=>{
 });
 setInterval(()=>{
   updateTownTheme(); // 跨越原版時段分界時，即使沒操作也會更新背景。
+  if(state?.onsen?.active){if(!soloAtHome)updateOnsenCountdown();return;}
   updateInventoryCooldowns(); // 使用伺服器遊戲時間倒數，不依賴瀏覽器本地時鐘。
   if(state?.mode==="solo"&&state?.character&&!soloAtHome)
     renderSoloTime(); // 同步顯示遊戲時鐘，限時事件結束後也恢復快轉按鈕
@@ -5113,6 +5212,6 @@ el("salary-payment").addEventListener("change",async()=>{
   catch (error) { notify("無法連線至遊戲伺服器：" + error.message, true); }
 })();
 setInterval(async () => {
-  if (!state?.character) return;
+  if (!state?.character||onsenBusy) return;
   try { state = await api("state"); render(); } catch {}
 }, 30000);

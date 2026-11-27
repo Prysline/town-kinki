@@ -30,6 +30,8 @@ import {parseOriginalLoto6,initLoto6Tables,loto6Overview,buyLoto6Ticket,settleLo
 import {parseOriginalMultiCard,initMultiCardTables,multiCardOverview,playMultiCard} from "./arcade-cardw.mjs";
 import {parseOriginalTreasure,initTreasureTables,treasureOverview,openTreasure} from "./arcade-treasure.mjs";
 import {parseOriginalRoadTransport,initRoadTravelTables,roadOverview,beginRoadTrip,arriveRoadTrip} from "./road-travel.mjs";
+import {parseOriginalOnsenConfig} from "./onsen-source.mjs";
+import {initOnsenTables,activeOnsenVisit,onsenOverview,enterOnsen,leaveOnsen} from "./onsen.mjs";
 import {initCouponRedemptionTables,listCouponRewards,listCouponRedemptions,redeemEventCoupon,COUPON_SHOP_SYMBOL} from "./coupon-redemption.mjs";
 import { getCockroachChallenge,claimCockroachForEvent } from "./event-cockroach.mjs";
 import { parseLegacyInsurance, initInventoryTables, inventoryOverview, hasActiveHealthInsurance, listInsurancePurchases, buyHealthInsurance } from "./inventory.mjs";
@@ -126,6 +128,7 @@ initLoto6Tables(db);
 initMultiCardTables(db);
 initTreasureTables(db);
 initRoadTravelTables(db);
+initOnsenTables(db);
 initInventoryTables(db);
 initDiningStockTables(db);
 initLegacyItemUseTables(db);
@@ -208,6 +211,7 @@ const treasureSource=parseOriginalTreasure(
   decodeLegacyText(readFileSync(resolve(REPO_ROOT,"dat_dir","otakara.cgi"))),
   decodeLegacyText(readFileSync(resolve(REPO_ROOT,"town_ini.cgi")))
 );
+const onsenConfig=parseOriginalOnsenConfig(decodeLegacyText(readFileSync(resolve(REPO_ROOT,"town_ini.cgi"))));
 const roadSource=parseOriginalRoadTransport(
   decodeLegacyText(readFileSync(resolve(REPO_ROOT,"town_ini.cgi"))),
   decodeLegacyText(readFileSync(resolve(REPO_ROOT,"town_lib.pl"))),
@@ -323,6 +327,18 @@ function mutateCharacter(userId, callback, afterSave, energyContext="resident") 
 function snapshot(user) {
   const now = gameNow();
   const today = calendarDay(now, GAME_TIMEZONE);
+  // The original bathing screen does not execute the resident/status settlement.
+  // While bathing, only expose a read-only preview; explicit exit settles recovery once.
+  if(user&&activeOnsenVisit(db,user.id)){
+    const character=getCharacter(user.id);
+    if(!character)throw Error("入浴角色資料不存在");
+    const onsen=onsenOverview(db,user.id,onsenConfig,now);
+    return {mode:MODE,gameTimeMs:now,gameTimeZone:GAME_TIMEZONE,
+      gameTimeOffsetMs:MODE==="solo"?soloOffset(db):0,
+      user:{username:MODE==="solo"?"單機玩家":user.username},
+      character,onsen,maxBodyEnergy:onsen.active.entry.maxima.body,
+      maxBrainEnergy:onsen.active.entry.maxima.brain,towns:TOWNS};
+  }
   if (user) settleBankInterest(db,user.id,today,now);
   const character = user ? getCharacter(user.id) : null;
   let updated = character ? recoverEnergy(character, now) : null;
@@ -471,6 +487,7 @@ function snapshot(user) {
     multiCard:updated?multiCardOverview(db,user.id,multiCardSource,now,{solo:MODE==="solo"}):null,
     treasure:updated?treasureOverview(db,user.id,treasureSource,now):null,
     roadTravel:updated?roadOverview(db,user.id,roadSource,now):null,
+    onsen:updated?onsenOverview(db,user.id,onsenConfig,now):null,
     cockroachChallenge: updated ? getCockroachChallenge(db,user.id,now) : null,
     hospital: updated ? getTreatmentQuote(updated,hasActiveHealthInsurance(db,user.id,insuranceItem,now)) : null,
     insurance: updated ? inventoryOverview(db,user.id,insuranceItem,now) : null,
@@ -648,6 +665,7 @@ async function handle(req, res) {
     if (req.method === "GET" && path === "/api/house/visit") {
       const visitor = getUser(req);
       if (!visitor) throw new HttpError(401, "請先登入");
+      if(activeOnsenVisit(db,visitor.id))throw new HttpError(409,"目前正在泡溫泉，請先離開浴池");
       const houseId = Number(url.searchParams.get("houseId"));
       const slotParam = url.searchParams.get("slot");
       const slot = slotParam === null ? null : Number(slotParam);
@@ -657,6 +675,7 @@ async function handle(req, res) {
     if(req.method==="GET"&&path==="/api/shop/visit"){
       const visitor=getUser(req);
       if(!visitor)throw new HttpError(401,"請先登入");
+      if(activeOnsenVisit(db,visitor.id))throw new HttpError(409,"目前正在泡溫泉，請先離開浴池");
       const houseId=Number(url.searchParams.get("houseId"));
       try{return sendJson(res,200,viewPlayerStore(db,visitor.id,houseId));}
       catch(error){throw new HttpError(400,error.message);}
@@ -707,6 +726,24 @@ async function handle(req, res) {
 
     const user = getUser(req);
     if (!user) throw new HttpError(401, "請先登入");
+
+    if(path==="/api/onsen/enter"){
+      const now=gameNow();
+      let result;
+      try{result=enterOnsen(db,user.id,onsenConfig,{bathKey:data.bathKey,requestId:data.requestId,
+        now,today:calendarDay(now,GAME_TIMEZONE)});}
+      catch(error){throw new HttpError(400,error.message);}
+      return sendJson(res,200,{...snapshot(user),onsenResult:result});
+    }
+    if(path==="/api/onsen/leave"){
+      let result;
+      try{result=leaveOnsen(db,user.id,onsenConfig,{visitId:data.visitId,now:gameNow()});}
+      catch(error){throw new HttpError(400,error.message);}
+      return sendJson(res,200,{...snapshot(user),onsenResult:result});
+    }
+    // Permit the existing solo clock/delete operations and logout, but no resident actions during a visit.
+    if(activeOnsenVisit(db,user.id)&&!["/api/solo/time/advance","/api/solo/character/delete"].includes(path))
+      throw new HttpError(409,"目前正在泡溫泉，請先離開浴池");
 
     if (path === "/api/solo/character/delete") {
       if (MODE !== "solo") throw new HttpError(403, "只有單人模式可以刪除角色");

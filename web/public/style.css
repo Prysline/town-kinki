@@ -689,3 +689,6 @@ body.compact-status-active .game-shell .map-editor.is-editing{top:var(--compact-
 .game-shell .training-payment p{margin:0;overflow-wrap:anywhere}
 .game-shell .training-payment p[role="status"]{grid-column:1/-1}
 @media(max-width:600px){.game-shell .training-payment{grid-template-columns:minmax(0,1fr)}}
+
+/* AP-05：浴池清單與原版場景使用獨立區塊，不改居民能量條樣式。 */
+.onsen-options{display:grid;gap:8px}.onsen-option{display:flex;align-items:center;justify-content:space-between;gap:12px;border:1px solid var(--line,#c8c8c8);border-radius:8px;padding:12px}.onsen-option p{margin:4px 0 0}.onsen-option button{flex-shrink:0}.onsen-active{max-width:640px;margin:24px auto;padding:20px}.onsen-active img{display:block;width:100%;max-height:320px;object-fit:contain;border-radius:8px}.onsen-active img[hidden]{display:none}.onsen-countdowns{display:grid;gap:8px}.onsen-countdowns>div{display:flex;justify-content:space-between;gap:8px}.onsen-countdowns dd{margin:0;font-variant-numeric:tabular-nums;font-weight:600}.onsen-active #onsen-time-advance{margin-bottom:12px}.onsen-active #onsen-leave{width:100%}@media(max-width:480px){.onsen-active{margin:12px auto;padding:14px}.onsen-option{gap:6px;padding:8px}.onsen-option strong{font-size:.9rem}.onsen-countdowns>div{flex-wrap:wrap}}

@@ -4267,15 +4267,15 @@ test("第50階段單機首次遊玩：空白街區一鍵配置後可工作、百
     const first=await api(srv.url,"solo/map/starter",{townId:3});
     assert.equal(first.status,200);
     assert.deepEqual(first.result.mapStarterResult,{
-      townId:0,placed:21,source:"web-solo-starter"
+      townId:0,placed:22,source:"web-solo-starter"
     },"初始化只能配置伺服器上的目前城鎮，不接受客戶端冒填城鎮");
     assert.equal(first.result.map.source,"web-solo-starter");
     assert.equal(first.result.map.configured,true);
     assert.equal(first.result.map.cells.length,192);
-    assert.equal(first.result.map.cells.filter(x=>x.raw).length,21);
+    assert.equal(first.result.map.cells.filter(x=>x.raw).length,22);
     const expected=[
       [0,0,"駅"],[0,1,"職安"],[0,2,"銀行"],[0,3,"病院"],
-      [1,0,"食堂"],[1,1,"食堂２"],[1,2,"デパ"],[1,3,"デパ2"],
+      [1,0,"食堂"],[1,1,"食堂２"],[1,2,"デパ"],[1,3,"デパ2"],[1,4,"温泉"],
       [2,0,"自販機"],[2,1,"装備屋"],[2,2,"教室"],[2,3,"建築"],
       [3,0,"空地"],[3,1,"空地2"],[3,2,"リサイ"],[3,3,"空地3"],[3,4,"クーポン"],[3,5,"販売1"],[3,6,"釣り"]
     ];
@@ -4601,7 +4601,7 @@ test("第53階段單機 HTTP：買真正原版魚餌→釣魚耗餌及100秒冷�
     assert.deepEqual(created.result.fishing.baitGoods,[]);
     const starter=await api(srv.url,"solo/map/starter",{});
     assert.equal(starter.status,200);
-    assert.equal(starter.result.mapStarterResult.placed,21);
+    assert.equal(starter.result.mapStarterResult.placed,22);
     assert.equal(starter.result.map.cells[3*16+5].key,"販売1");
     assert.equal(starter.result.map.cells[3*16+6].key,"釣り");
     assert.equal(starter.result.fishing.fishingAvailable,true);
@@ -4711,7 +4711,7 @@ test("第54階段單機 HTTP：原版合成屋→真正扣材料→成品33欄�
     })).status,400);
     const starter=await api(srv.url,"solo/map/starter",{});
     assert.equal(starter.status,200);
-    assert.equal(starter.result.mapStarterResult.placed,21);
+    assert.equal(starter.result.mapStarterResult.placed,22);
     assert.equal(starter.result.map.cells[3*16+7].key,"合成");
     assert.equal(starter.result.crafting.available,true);
     assert.equal(starter.result.crafting.recipes.length,12);
@@ -4817,7 +4817,7 @@ test("第55階段單機 HTTP：骰子遊戲建築→原版奇偶下注→5分鐘
     })).status,400);
     const starter=await api(srv.url,"solo/map/starter",{});
     assert.equal(starter.status,200);
-    assert.equal(starter.result.mapStarterResult.placed,21);
+    assert.equal(starter.result.mapStarterResult.placed,22);
     assert.equal(starter.result.map.cells[3*16+8].key,"ゲーセン");
     assert.equal(starter.result.arcadeDice.available,true);
     assert.equal(starter.result.arcadeDice.cooldownMs,300000);
@@ -5097,7 +5097,7 @@ test("第57階段單機HTTP：三種donus獨立牌桌、原版空桌、現金結
     })).status,400);
     const starter=await api(srv.url,"solo/map/starter",{});
     assert.equal(starter.status,200);
-    assert.equal(starter.result.mapStarterResult.placed,21);
+    assert.equal(starter.result.mapStarterResult.placed,22);
     assert.equal(starter.result.arcadeDonuts.available,true);
     assert.equal(starter.result.map.cells[3*16+8].key,"ゲーセン");
     for(const m of starter.result.arcadeDonuts.modes){
@@ -5295,7 +5295,7 @@ test("第58階段單機HTTP：原版六位數即時樂透選號、下注結算�
     })).status,400);
     const starter=await api(srv.url,"solo/map/starter",{});
     assert.equal(starter.status,200);
-    assert.equal(starter.result.mapStarterResult.placed,21);
+    assert.equal(starter.result.mapStarterResult.placed,22);
     assert.equal(starter.result.instantLoto.available,true);
     assert.equal(starter.result.map.cells[3*16+8].key,"ゲーセン");
     const balance=starter.result.character.money;
@@ -5461,7 +5461,7 @@ test("第59階段單機HTTP：六號樂透在06:00由玩家明確觸發，銀行
     assert.equal((await api(srv.url,"arcade/loto6/check",{})).status,400);
     const starter=await api(srv.url,"solo/map/starter",{});
     assert.equal(starter.status,200);
-    assert.equal(starter.result.mapStarterResult.placed,21);
+    assert.equal(starter.result.mapStarterResult.placed,22);
     assert.equal(starter.result.loto6.available,true);
     const initial=(await api(srv.url,"state")).result;
     assert.equal(initial.loto6.hour,5);
@@ -5640,7 +5640,7 @@ test("第60階段單機HTTP：多卡五課程共用倍率、下注結算、五�
     })).status,400);
     const starter=await api(srv.url,"solo/map/starter",{});
     assert.equal(starter.status,200);
-    assert.equal(starter.result.mapStarterResult.placed,21);
+    assert.equal(starter.result.mapStarterResult.placed,22);
     assert.equal(starter.result.multiCard.available,true);
     assert.equal(starter.result.map.cells[3*16+8].key,"ゲーセン");
     const db=new DatabaseSync(join(dir,"solo.sqlite"));
@@ -5800,7 +5800,7 @@ test("第61階段單機HTTP：四寶箱真實扣款、抽到物品或即時效�
     })).status,400);
     const starter=await api(srv.url,"solo/map/starter",{});
     assert.equal(starter.status,200);
-    assert.equal(starter.result.mapStarterResult.placed,21);
+    assert.equal(starter.result.mapStarterResult.placed,22);
     assert.equal(starter.result.treasure.available,true);
     const base=starter.result.character.money;
     assert.equal((await api(srv.url,"arcade/treasure/open",{
@@ -7914,5 +7914,87 @@ test("WK-01：舊 Web 工作公式能量值在居民查詢即持久化夾限，�
       assert.equal(again.result.character.bodyEnergy,21);
       assert.equal(again.result.character.brainEnergy,23);
     }finally{db.close();}
+  }finally{await srv.stop();}
+});
+
+test("AP-05 單機 HTTP：地圖入口、現金扣款、重送、入浴隔離、重新啟動及伺服器出浴",async()=>{
+  let srv=await start("solo");
+  const directory=srv.directory;
+  try{
+    anchorSoloTestAtNoon(srv);
+    const created=await api(srv.url,"character",{name:"溫泉驗收",gender:"other",stats:defaultStats()});
+    assert.equal(created.status,200);
+    const request={bathKey:"futuu",requestId:"onsen-http-ordinary-001",rate:10000,fee:0,now:0};
+    assert.equal((await api(srv.url,"onsen/enter",request)).status,400);
+    const map=await api(srv.url,"solo/map/starter",{});
+    assert.equal(map.status,200);assert.equal(map.result.onsen.available,true);
+    assert.equal(map.result.onsen.options.length,8);
+    assert.equal(map.result.map.cells[20].key,"温泉");
+    const db=new DatabaseSync(join(directory,"solo.sqlite"));
+    try{db.prepare("UPDATE characters SET body_energy=0,brain_energy=0,recovered_at=?").run(map.result.gameTimeMs);}
+    finally{db.close();}
+    const entry=await api(srv.url,"onsen/enter",request);
+    assert.equal(entry.status,200,JSON.stringify(entry.result));
+    assert.equal(entry.result.onsen.active.entry.fee,500);
+    assert.equal(entry.result.onsen.active.entry.rate,10);
+    assert.equal(entry.result.character.money,map.result.character.money-500);
+    assert.equal(entry.result.onsen.active.entry.maxima.body,22);
+    assert.equal(entry.result.onsen.active.entry.maxima.brain,24);
+    const visitId=entry.result.onsen.active.id;
+    const persisted=()=>{const d=new DatabaseSync(join(directory,"solo.sqlite"));try{return d.prepare("SELECT money,body_energy,brain_energy,recovered_at,stats_json FROM characters").get();}finally{d.close();}};
+    const original=persisted();
+    for(const [route,body] of [["work",{}],["bank",{action:"deposit",amount:1}],["move",{townId:1}]]){
+      assert.equal((await api(srv.url,route,body)).status,409,route);
+    }
+    assert.equal((await api(srv.url,"onsen/enter",{...request,requestId:"onsen-other-request"})).status,400);
+    assert.equal((await api(srv.url,"onsen/enter",{...request,bathKey:"special_kin"})).status,400);
+    const replay=await api(srv.url,"onsen/enter",request);
+    assert.equal(replay.status,200);assert.equal(replay.result.onsenResult.replayed,true);
+    assert.equal(replay.result.onsen.active.id,visitId);
+    assert.equal((await api(srv.url,"state")).result.onsen.active.id,visitId);
+    assert.deepEqual(persisted(),original);
+    await srv.stop({preserveData:true});srv=await start("solo",null,directory);
+    assert.equal((await api(srv.url,"state")).result.onsen.active.id,visitId);
+    assert.deepEqual(persisted(),original);
+    const advanced=await api(srv.url,"solo/time/advance",{preset:"5m"});
+    assert.equal(advanced.status,200);assert.equal(advanced.result.onsen.bodyRemainingMs,0);
+    assert.deepEqual(persisted(),original);
+    const left=await api(srv.url,"onsen/leave",{visitId,now:0,rate:10000});
+    assert.equal(left.status,200,JSON.stringify(left.result));
+    assert.equal(left.result.onsen.active,null);
+    assert.equal(left.result.onsenResult.exit.bodyEnergy,21);
+    assert.equal(left.result.onsenResult.exit.brainEnergy,23);
+    assert.equal(left.result.character.money,original.money);
+    assert.equal((await api(srv.url,"onsen/leave",{visitId})).result.onsenResult.replayed,true);
+    assert.equal((await api(srv.url,"state")).result.character.money,original.money);
+  }finally{await srv.stop();}
+});
+
+test("AP-05 多人 HTTP：本人浴池、禁止他人出浴及多人快轉，登出登入保存",async()=>{
+  const srv=await start("multi",directory=>{
+    const db=new DatabaseSync(join(directory,"multi.sqlite"));
+    try{
+      db.exec("CREATE TABLE town_maps(town_id INTEGER PRIMARY KEY, original_name TEXT NOT NULL DEFAULT '', original_record TEXT NOT NULL DEFAULT '', source TEXT NOT NULL, tiles_json TEXT NOT NULL, updated_at INTEGER NOT NULL)");
+      const grid=Array(192).fill("");grid[0]="温泉";
+      db.prepare("INSERT INTO town_maps(town_id,original_name,source,tiles_json,updated_at) VALUES(?,?,?,?,?)").run(0,"京阪神ストリート","legacy-import",JSON.stringify(grid),Date.now());
+    }finally{db.close();}
+  });
+  try{
+    assert.equal((await api(srv.url,"onsen/enter",{bathKey:"futuu",requestId:"onsen-unauth-0001"})).status,401);
+    const a=await api(srv.url,"register",{username:"onsen_a",password:"onsen-pass-123"});
+    const b=await api(srv.url,"register",{username:"onsen_b",password:"onsen-pass-456"});
+    assert.equal(a.status,200);assert.equal(b.status,200);
+    for(const [account,name] of [[a,"浴池甲"],[b,"浴池乙"]])
+      assert.equal((await api(srv.url,"character",{name,gender:"other",stats:defaultStats()},account.cookie)).status,200);
+    const entry=await api(srv.url,"onsen/enter",{bathKey:"futuu",requestId:"onsen-multi-a-01"},a.cookie);
+    assert.equal(entry.status,200,JSON.stringify(entry.result));
+    const visitId=entry.result.onsen.active.id;
+    assert.equal((await api(srv.url,"onsen/leave",{visitId},b.cookie)).status,400);
+    assert.equal((await api(srv.url,"solo/time/advance",{preset:"5m"},a.cookie)).status,403);
+    assert.equal((await api(srv.url,"state",undefined,b.cookie)).result.onsen.active,null);
+    assert.equal((await api(srv.url,"logout",{},a.cookie)).status,200);
+    const login=await api(srv.url,"login",{username:"onsen_a",password:"onsen-pass-123"});
+    assert.equal(login.status,200);assert.equal(login.result.onsen.active.id,visitId);
+    assert.equal((await api(srv.url,"onsen/leave",{visitId},login.cookie)).status,200);
   }finally{await srv.stop();}
 });

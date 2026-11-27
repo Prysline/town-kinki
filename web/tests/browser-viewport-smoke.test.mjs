@@ -1252,3 +1252,44 @@ test("Chrome：三棟訓練共用付款列、各自保存選擇、信用扣款�
     console.log("UI_TRAINING_PAYMENT "+JSON.stringify({widths:[1440,768,375],buildings:3,shared:true,reload:true,expiredBlocked:true}));
   }finally{await chrome?.stop();await web?.stop();rmSync(workspace,{force:true,recursive:true,maxRetries:50,retryDelay:200});}
 });
+
+test("Chrome AP-05：地圖溫泉、八種浴池、入浴重載及跨視埠出浴",{timeout:90000},async()=>{
+  const workspace=mkdtempSync(join(tmpdir(),"town-chrome-onsen-"));
+  let web=null,chrome=null;
+  try{
+    web=await startWeb(join(workspace,"sqlite"));chrome=await openChrome(join(workspace,"chrome"));
+    await chrome.send("Page.enable");await chrome.send("Runtime.enable");await viewport(chrome,1440,900);
+    await chrome.send("Page.navigate",{url:web.url});await until(chrome,"!document.querySelector('#create')?.hidden","建角");
+    await evaluate(chrome,"window.confirm=()=>true");await fill(chrome,'#create-form [name="name"]',"溫泉畫面驗收");await click(chrome,"#create-submit");
+    await until(chrome,"!document.querySelector('#game')?.hidden","主畫面");
+    await click(chrome,"#solo-starter-create");
+    await until(chrome,"document.querySelector('#solo-starter-town')?.hidden===true","試玩街區完成");
+    await click(chrome,'#town-map button[aria-label^="B5："]');
+    await until(chrome,"!document.querySelector('#facility-pane-onsen').hidden","溫泉設施");
+    assert.equal(await evaluate(chrome,"document.querySelectorAll('#onsen-options button').length"),8);
+    const before=await evaluate(chrome,"(async()=>await(await fetch('/api/state')).json())()");
+    await click(chrome,'#onsen-options button[data-bath-key="futuu"]');
+    await until(chrome,"!document.querySelector('#onsen-active-screen').hidden&&document.querySelector('#game').hidden","獨立入浴");
+    assert.match(await evaluate(chrome,"document.querySelector('#onsen-active-title').textContent"),/普通浴池/);
+    assert.match(await evaluate(chrome,"document.querySelector('#onsen-active-receipt').textContent"),/500 元/);
+    await until(chrome,"document.querySelector('#onsen-background').complete&&document.querySelector('#onsen-background').naturalWidth>0","原版場景載入");
+    const bath=await evaluate(chrome,"(async()=>await(await fetch('/api/state')).json())()");
+    assert.equal(bath.character.money,before.character.money-500);
+    await viewport(chrome,768,900);await viewport(chrome,375,812);
+    await chrome.send("Page.reload");
+    await until(chrome,"!document.querySelector('#onsen-active-screen')?.hidden||!document.querySelector('#solo-lobby')?.hidden","重載");
+    if(await evaluate(chrome,"!document.querySelector('#solo-lobby')?.hidden"))await click(chrome,"#solo-continue");
+    await until(chrome,"!document.querySelector('#onsen-active-screen')?.hidden","重載續浴");
+    const reload=await evaluate(chrome,"(async()=>await(await fetch('/api/state')).json())()");
+    assert.equal(reload.onsen.active.id,bath.onsen.active.id);
+    assert.equal(reload.character.money,bath.character.money);
+    await click(chrome,'#onsen-time-advance button[data-onsen-advance="5m"]');
+    await until(chrome,"document.querySelector('#onsen-body-countdown').textContent==='0 分 0 秒'&&document.querySelector('#onsen-brain-countdown').textContent==='0 分 0 秒'","單機快轉");
+    await click(chrome,"#onsen-leave");
+    await until(chrome,"!document.querySelector('#game').hidden&&document.querySelector('#onsen-active-screen').hidden","出浴返回");
+    const after=await evaluate(chrome,"(async()=>await(await fetch('/api/state')).json())()");
+    assert.equal(after.onsen.active,null);assert.equal(after.character.money,bath.character.money);
+    assert.equal(after.character.bodyEnergy,21);assert.equal(after.character.brainEnergy,23);
+    console.log("UI_ONSEN "+JSON.stringify({widths:[1440,768,375],options:8,reload:true,exit:true}));
+  }finally{await chrome?.stop();await web?.stop();rmSync(workspace,{force:true,recursive:true,maxRetries:50,retryDelay:200});}
+});

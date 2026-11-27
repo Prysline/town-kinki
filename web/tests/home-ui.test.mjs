@@ -148,7 +148,7 @@ test("地圖車站接回原版六組票價與真實跨城操作而非免費切�
 });
 test("原 CGI 建築代碼只連到 Web 真正已實作的設施入口",()=>{
   const expected={
-    "銀行":"bank-panel","病院":"hospital-panel","職安":"jobs-panel",
+    "銀行":"bank-panel","病院":"hospital-panel","温泉":"onsen-panel","職安":"jobs-panel",
     "教室":"classroom-panel","食堂":"dining-panel","食堂２":"dining-panel",
     "デパ":"retail-panel","デパ2":"retail-panel","自販機":"vending-panel","装備屋":"equipment-panel","Ｂリーグ":"b-league-panel","ギフト屋":"gift-panel","リサイ":"recycle-panel","クーポン":"event-panel","釣り":"fishing-panel","販売1":"fishing-panel","合成":"crafting-panel","ゲーセン":"arcade-dice-panel","おばちゃん":"osaka-panel","おばちゃん強":"osaka-panel","問屋":"wholesale-panel","建築":"housing-panel"
   };
@@ -394,12 +394,13 @@ const paneMap={
   jobs:["jobs-panel"],
   bank:["bank-panel"],
   hospital:["hospital-panel"],
+  onsen:["onsen-panel"],
   events:["event-panel"],
   mail:["mail-panel"],
   games:["arcade-dice-panel"],
   battle:["street-fight-panel","c-league-panel"]
 };
-test("高密度主畫面：地圖摘要與十一組可存取設施分頁，保留全部現有操作元件",()=>{
+test("高密度主畫面：地圖摘要與十二組可存取設施分頁，保留全部現有操作元件",()=>{
   const main=html.slice(html.indexOf('id="game"'));
   assert.ok(main.indexOf('id="town-panel"')<main.indexOf('id="player-summary"'));
   assert.ok(main.indexOf('id="player-summary"')<main.indexOf('id="facility-tabs"'));
@@ -1171,4 +1172,12 @@ test("六號樂透三種通知及最近開獎紀錄顯示確認文案，保留�
   assert.ok(script.includes("notify(formatLoto6DrawNotice(result,money));"));
   assert.ok(script.includes('"｜"+displayLoto6DrawReason(info.lastDraw.reason)+'));
   assert.ok(!script.includes("200注滿額"));
+});
+
+test("溫泉具有原版設施入口與獨立入浴畫面，使用伺服器入浴及出浴交易",()=>{
+  for(const id of ["onsen-active-screen","onsen-background","onsen-body-countdown","onsen-brain-countdown","onsen-leave","onsen-options"])
+    assert.match(html,new RegExp('id="'+id+'"'));
+  assert.match(script,/api\("onsen\/enter",\{bathKey,requestId:pendingOnsenEntry.requestId\}\)/);
+  assert.match(script,/api\("onsen\/leave",\{visitId\}\)/);
+  assert.match(script,/el\("game"\)\.hidden = !state.character \|\| lobby \|\| bathing/);
 });
