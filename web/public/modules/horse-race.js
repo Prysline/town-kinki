@@ -62,12 +62,13 @@ export function createHorseRaceUI({getState,request,money,applyState}){
       const row=node("div");row.className="horse-race-lane";
       row.append(node("span",horse.name+"｜"+horse.odds+" 倍｜"+horse.tickets+" 張"));
       const track=node("div");track.className="horse-race-track";
-      // Native progress is CSP-safe and exposes the original 400 distance.
+      const course=node("div");course.className="horse-race-course";
       const progress=node("progress");progress.max=400;progress.value=horse.distance;
-      progress.setAttribute("aria-label",horse.name+" 賽程");
+      progress.setAttribute("aria-label",horse.name+" 賽程");course.append(progress);
       const file=HORSE_IMAGES[horse.name];
-      if(file){const image=node("img");image.src="/legacy-assets/uma/"+file;image.alt="";image.width=30;image.height=30;track.append(image);}
-      track.append(progress,node("span",horse.distance+" / 400"));row.append(track);target.append(row);
+      if(file){const image=node("img");image.src="/legacy-assets/uma/"+file;image.alt="";image.width=30;image.height=30;
+        image.style.left=Math.max(0,Math.min(100,horse.distance/400*100))+"%";course.append(image);}
+      track.append(course,node("span",horse.distance+" / 400"));row.append(track);target.append(row);
     }
   }
   function schedule(race){
@@ -83,7 +84,12 @@ export function createHorseRaceUI({getState,request,money,applyState}){
   }
   function render(show=visible){
     const nextOwner=owner();
-    if(nextOwner!==ownerKey){cancel();ownerKey=nextOwner;cardKey=null;pending=null;halted=false;error="";busy=false;}
+    if(nextOwner!==ownerKey){
+      cancel();ownerKey=nextOwner;cardKey=null;pending=null;halted=false;error="";busy=false;
+      for(const id of ["horse-race-card","horse-race-tracks","horse-race-ranking","horse-race-result","horse-race-error","horse-race-active-error","horse-race-active-status"])
+        el(id).replaceChildren();
+      el("horse-race-bets").hidden=true;
+    }
     visible=Boolean(show&&ownerKey);
     const s=getState(),info=s?.horseRace,active=info?.active;
     el("horse-race-active-screen").hidden=!(visible&&active);
