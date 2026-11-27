@@ -29,7 +29,7 @@ function setup(file=":memory:"){
 const cash=(db,user=1)=>db.prepare("SELECT money FROM characters WHERE user_id=?").get(user).money;
 const tax=(db,user=1)=>db.prepare("SELECT assessment_base FROM bank_tax_state WHERE user_id=?").get(user)?.assessment_base;
 const quote=(db,user=1,more={})=>quoteHorseRace(db,user,source,{requestId:"quote_0001",now:NOW,rand,...more});
-const start=(db,id,user=1,more={})=>enterHorseRace(db,user,source,{raceId:id,tickets:[100,0,0,0,0,0],requestId:"start_0001",now:NOW,today,rand,...more});
+const start=(db,id,user=1,more={})=>enterHorseRace(db,user,source,{raceId:id,tickets:[0,0,0,0,0,100],requestId:"start_0001",now:NOW,today,rand,...more});
 const step=(db,race,user=1,more={})=>stepHorseRace(db,user,source,{raceId:race.id,expectedTurn:race.turn,requestId:"turn_"+String(race.turn).padStart(5,"0"),now:NOW+1000+race.turn,today,rand,...more});
 function finish(db,race,user=1,more={}){
   for(let i=0;i<20&&race.status==="running";i++)race=step(db,race,user,more);
@@ -51,7 +51,7 @@ test("GM-02 SQLite genuine quote/start/turn/payout, receipts and rank, bank/tax 
     assert.throws(()=>step(db,r,1,{requestId:"stale_turn_1"}),/回合已變更/);
     const out=finish(db,next);
     const winner=out.horses.find(h=>h.name===out.winner);
-    assert.equal(out.payout,winner.tickets*winner.odds*500);
+    assert.equal(out.payout,winner.tickets*winner.odds*500);assert.ok(out.payout>0);
     assert.equal(cash(db),150000+out.payout);assert.equal(tax(db),cash(db)+1234);
     assert.equal(activeHorseRace(db,1),null);
     assert.deepEqual(horseRaceRankings(db),[{name:"甲",spent:50000,won:out.payout,profit:out.payout-50000,lastPlayedAt:out.lastAt}]);
@@ -118,7 +118,7 @@ test("GM-02 SQL failures roll back entry, turn, payout, rank, tax and receipts; 
     assert.throws(()=>step(db,r),/receipt fault/);assert.equal(cash(db),150000);
     assert.deepEqual(horseRaceRankings(db),[]);
     db.exec("DROP TRIGGER fail_receipt");
-    const out=step(db,r);assert.equal(out.status,"completed");
+    const out=step(db,r);assert.equal(out.status,"completed");assert.ok(out.payout>0);
     assert.deepEqual(step(db,r,1,{rand:noRand}),{...out,replayed:true});
     assert.equal(cash(db),150000+out.payout);
   }finally{db.close();}
