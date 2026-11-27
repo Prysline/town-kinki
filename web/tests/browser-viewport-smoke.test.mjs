@@ -371,6 +371,131 @@ test("Chrome：桌面→768px平板→375px手機，操作真實建角／工作�
 
 
 
+
+test("M1/M2 Chrome 骰子：真實地圖、取消／下注、遺失回應重試、三視埠、快轉及重啟",{timeout:150000},async()=>{
+  const workspace=mkdtempSync(join(tmpdir(),"town-chrome-dice-module-"));
+  const dataDir=join(workspace,"sqlite");
+  let web=null,chrome=null;
+  const state=()=>fetch(web.url+"/api/state").then(r=>r.json());
+  const post=(path,data,headers={})=>fetch(web.url+"/api/"+path,{
+    method:"POST",headers:{"Content-Type":"application/json",...headers},body:JSON.stringify(data)
+  });
+  const saved=()=>{
+    const db=new DatabaseSync(join(dataDir,"solo.sqlite"));
+    try{return {
+      character:db.prepare("SELECT money,bank,kpoint FROM characters").get(),
+      rows:db.prepare("SELECT request_id,guess,stake,die_one,die_two,won,delta,played_at FROM arcade_dice_rounds ORDER BY id").all()
+    };}finally{db.close();}
+  };
+  const enter=async()=>{
+    for(let attempt=0;attempt<3;attempt++){
+      await click(chrome,'#town-map button[aria-label^="D9："]');
+      if(await evaluate(chrome,"document.activeElement?.id==='arcade-dice-panel'&&!document.querySelector('#facility-pane-games').hidden"))return;
+    }
+    assert.fail("真實地圖點擊未聚焦骰子設施");
+  };
+  try{
+    web=await startWeb(dataDir);
+    // 受控時鐘：角色建立前固定在台北中午，避免測試跨日另觸發事件。
+    const db0=new DatabaseSync(join(dataDir,"solo.sqlite"));
+    try{
+      const parts=new Intl.DateTimeFormat("en-US",{timeZone:"Asia/Taipei",hour:"2-digit",minute:"2-digit",second:"2-digit",hourCycle:"h23"}).formatToParts(new Date());
+      const get=type=>Number(parts.find(x=>x.type===type)?.value??0);
+      const offset=(12*3600000-((get("hour")*60+get("minute"))*60+get("second"))*1000+86400000)%86400000;
+      db0.prepare("UPDATE solo_clock SET offset_ms=? WHERE id=1").run(offset);
+    }finally{db0.close();}
+    chrome=await openChrome(join(workspace,"chrome"));
+    await chrome.send("Page.enable");await chrome.send("Runtime.enable");
+    await viewport(chrome,1440,900);
+    await chrome.send("Page.navigate",{url:web.url});
+    await until(chrome,"!document.querySelector('#create')?.hidden","骰子建角入口");
+    await evaluate(chrome,"window.confirm=()=>true");
+    await fill(chrome,'#create-form [name="name"]',"骰子模組驗證");
+    await click(chrome,"#create-submit");
+    await until(chrome,"!document.querySelector('#game')?.hidden","骰子建角完成");
+    const seed=new DatabaseSync(join(dataDir,"solo.sqlite"));
+    try{seed.prepare("UPDATE characters SET money=200000").run();}finally{seed.close();}
+    await click(chrome,"#solo-starter-create");
+    await until(chrome,"document.querySelector('#solo-starter-town')?.hidden===true","骰子試玩街區");
+    await enter();
+    assert.deepEqual(await evaluate(chrome,"[...document.querySelector('#arcade-dice-stake').options].map(x=>Number(x.value))"),[10000,50000,100000,500000,1000000]);
+    assert.equal(await evaluate(chrome,"document.querySelector('#arcade-dice-submit').disabled"),false);
+    const initial=saved();
+    assert.equal(initial.rows.length,0);
+    assert.equal(initial.character.money,200000);
+    const blocked=await post("arcade/dice/play",{guess:"even",stake:10000,requestId:"m1_dice_bad_origin"},{Origin:"https://example.invalid"});
+    assert.equal(blocked.status,403);
+    assert.equal((await fetch(web.url+"/api/arcade/dice/play")).status,404);
+    assert.deepEqual(saved(),initial);
+    // 沿用既有真實提交後遺失回應工具；只截取此 URL，非替換伺服器亂數或交易。
+    await loseBattleResponse(chrome,"arcade/dice/play");
+    await evaluate(chrome,"window.confirm=()=>false");
+    await click(chrome,"#arcade-dice-submit");
+    assert.equal(await evaluate(chrome,"window.hRetry.requests.length"),0);
+    assert.deepEqual(saved(),initial);
+    await evaluate(chrome,"window.confirm=()=>true");
+    await click(chrome,"#arcade-dice-submit");
+    await until(chrome,"window.hRetry.lost&&!document.querySelector('#arcade-dice-submit').disabled","骰子已提交但回應遺失可重試");
+    const first=saved();
+    assert.equal(first.rows.length,1);
+    const row=first.rows[0];
+    assert.equal(row.stake,10000);assert.equal(row.guess,"even");
+    assert.equal(Boolean(row.won),(row.die_one+row.die_two)%2===0);
+    assert.equal(row.delta,row.won?10000:-10000);
+    assert.equal(first.character.money,initial.character.money+row.delta);
+    assert.equal(first.character.bank,initial.character.bank);
+    assert.equal(first.character.kpoint,initial.character.kpoint);
+    await click(chrome,"#arcade-dice-submit");
+    await until(chrome,"document.querySelector('#result-dialog').open&&document.querySelector('#result-dialog-message').textContent.includes('已結算')","同請求重試結果");
+    await verifyBattleRetry(chrome);
+    assert.deepEqual(saved(),first);
+    assert.equal(await evaluate(chrome,"document.querySelectorAll('#arcade-dice-history li').length"),1);
+    assert.equal(await evaluate(chrome,"document.querySelector('#arcade-dice-submit').disabled"),true);
+    assert.match(await evaluate(chrome,"document.querySelector('#arcade-dice-status').textContent"),/冷卻中/);
+    const premature=await post("arcade/dice/play",{guess:"odd",stake:10000,requestId:"m1_dice_too_early"});
+    assert.equal(premature.status,400);assert.deepEqual(saved(),first);
+    await viewport(chrome,768,900);
+    await click(chrome,"#profile-tab-status");
+    // 若建角自然抽到20秒限時事件，只等原有事件結束，不更改機率或解除 guard。
+    if(await evaluate(chrome,"document.querySelector('#solo-time-panel button[data-advance=\"5m\"]').disabled"))await pause(21000);
+    await until(chrome,"!document.querySelector('#solo-time-panel button[data-advance=\"5m\"]').disabled","既有事件已結束可快轉");
+    await click(chrome,'#solo-time-panel button[data-advance="5m"]');
+    await until(chrome,"!document.querySelector('#arcade-dice-submit').disabled","骰子快轉後可下注");
+    await enter();
+    await viewport(chrome,375,812);
+    await evaluate(chrome,"(()=>{const e=document.querySelector('#arcade-dice-guess');e.value='odd';e.dispatchEvent(new Event('change',{bubbles:true}));return e.value;})()");
+    await click(chrome,"#arcade-dice-submit");
+    await until(chrome,"document.querySelectorAll('#arcade-dice-history li').length===2","手機第二局");
+    const second=saved();
+    assert.equal(second.rows.length,2);
+    assert.equal(second.rows[1].guess,"odd");assert.equal(second.rows[1].stake,10000);
+    assert.ok(second.rows[1].played_at-row.played_at>=300000);
+    assert.equal(second.character.money,first.character.money+second.rows[1].delta);
+    assert.equal(second.character.bank,first.character.bank);
+    assert.equal(second.character.kpoint,first.character.kpoint);
+    await dismiss(chrome);
+    // 真實伺服器重啟及同一 SQLite，不用新建測試角色。
+    await web.stop();web=await startWeb(dataDir);
+    await chrome.send("Page.navigate",{url:web.url});
+    await until(chrome,"!document.querySelector('#game')?.hidden||!document.querySelector('#solo-lobby')?.hidden","重啟載入");
+    if(await evaluate(chrome,"!document.querySelector('#solo-lobby')?.hidden"))await click(chrome,"#solo-continue");
+    await until(chrome,"!document.querySelector('#game')?.hidden","重啟續玩");
+    await enter();
+    assert.equal(await evaluate(chrome,"document.querySelectorAll('#arcade-dice-history li').length"),2);
+    assert.deepEqual(saved(),second);
+    const restored=await state();
+    assert.equal(restored.arcadeDice.history.length,2);
+    assert.equal(restored.character.money,second.character.money);
+    // POST 入浴 guard 保留在新 handler 之前，即使是可重送的既有骰子請求。
+    const bath=await post("onsen/enter",{bathKey:"futuu",requestId:"m1_dice_onsen_guard"});
+    assert.equal(bath.status,200);
+    const beforeGuard=saved();
+    const guard=await post("arcade/dice/play",{guess:row.guess,stake:row.stake,requestId:row.request_id});
+    assert.equal(guard.status,409);assert.deepEqual(saved(),beforeGuard);
+    console.log("UI_DICE_MODULE "+JSON.stringify({widths:[1440,768,375],cancelled:true,lostResponse:true,replayed:true,cooldown:true,restart:true,originGuard:true,onsenGuard:true,rounds:2}));
+  }finally{await chrome?.stop();await web?.stop();rmSync(workspace,{force:true,recursive:true,maxRetries:50,retryDelay:200});}
+});
+
 test("Chrome：原版優惠券獎車實際兌換→手機背包可辨識→公路選車出發",{
   timeout:180000
 },async()=>{
