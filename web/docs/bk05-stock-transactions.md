@@ -6,3 +6,4 @@
 SPA 接線：初次載入有角色且非單機首頁/入浴/未抵達、繼續、登入/建角、原版結果返回 login_view 的工作/轉職/食堂/課程/醫院/銀行轉帳及貸款/物品使用/建屋/交通抵達/出浴，以及明確返回城鎮按鈕；背景 GET、更新狀態、股票交易及仍停留於設施的連續操作不抽。原版依據 town_lib.pl 989–1075 message/hooter、basic.cgi 274/344/388/401/924/2671/2835/工作結果 login_view、command.pl 419/1159/1401、kyushitu.cgi 165、station.cgi 163；SPA 將成功結果已回到可操作街區視為返回，不重做既有職業/dice/交易。原操作已成功若行情返回失敗，不假報操作失敗；保留同 requestId 供手動重試。原本有回執的交通/溫泉/轉帳等使用穩定返回 ID。股票獨立前端模組、銀行頁內獨立設施、地圖 株 真入口、行情摘要及明細；不改地圖預設配置。待實際HTTP及Chrome驗證。
 
 新增真 solo/multi HTTP 與 Chrome（受控資金夾具，非真人）驗證：首次/返回/繼續收據計數、GET不抽、本人持股隔離、假 guest/price/clock/userId 無效、跨來源、地圖實際開啟、買賣清算、重啟及重送。上一版 CI 狀態不代表本次。
+追加逐來源校正：basic.cgi L274 普通/定期存提款成功預設 message(login_view)，original_house.cgi L1177/L1255 售屋/改建結果返回 login_view，故增加這四路。basic.cgi L2660–2678 物品使用結果有繼續使用選項；command.pl L2373–2382 百貨購買有回商店選項，gouseiya.cgi L375–391、coupon.cgi L182–196、recycle.cgi L222–235/L500–513、command.pl L897–910 可在設施繼續；現行 SPA 繼續留在設施時不自動抽選，玩家明確返回城鎮時才抽。此為第三項A的來源映射校正，非新增平衡限制。

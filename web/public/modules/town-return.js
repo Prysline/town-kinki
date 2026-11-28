@@ -1,7 +1,7 @@
 // Source-backed SPA adapter: original result pages returning to login_view.
 // Repeated facility actions that remain in the facility are not town returns.
 const RETURNS=new Set(["login","character","work","job","meal/eat","train","hospital/treat",
-  "bank/transfer","bank/loan/borrow","bank/loan/payoff","inventory/legacy/use","house/build","move","road/arrive","onsen/leave"]);
+  "bank","bank/term","bank/transfer","bank/loan/borrow","bank/loan/payoff","house/build","house/remodel","house/sell","move","road/arrive","onsen/leave"]);
 export function shouldReturnToTown(path,data,result){
   return RETURNS.has(path)&&canReturnToTown(result);
 }
