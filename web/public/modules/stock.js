@@ -59,5 +59,5 @@ export function createStockUI({api,getState,applyState,money,notify}){
   el("stock-open").addEventListener("click",()=>submit("open"));
   el("stock-form").addEventListener("submit",e=>{e.preventDefault();submit(e.submitter?.value==="sell"?"sell":"buy");});
   el("stock-clear").addEventListener("click",()=>submit("clear"));
-  return {render,open:()=>submit("open"),leave:()=>{opened=false;render();},busy:()=>busy};
+  return {render,open:()=>submit("open"),close:()=>{opened=false;},leave:()=>{opened=false;render();},busy:()=>busy};
 }

@@ -75,7 +75,7 @@ async function api(path, data) {
 }
 
 // Town return is a separate server transaction; a market fault never turns an already committed action into a failed action.
-let pendingTownReturn=null;
+const pendingTownReturns=new Map();
 let townReturnBusy=false;
 let townReturnInFlight=0;
 async function returnTownFor(target,requestId=returnReceiptKey("manual")){
@@ -85,11 +85,12 @@ async function returnTownFor(target,requestId=returnReceiptKey("manual")){
   try{
     const delta=await api("town/return",{requestId});
     target.stock=delta.stock;
-    if(pendingTownReturn?.requestId===requestId)pendingTownReturn=null;
-    if(!pendingTownReturn)text("stock-return-status","");
+    pendingTownReturns.delete(owner+"\u0000"+requestId);
+    stockUI.close();
+    if(![...pendingTownReturns.values()].some(p=>p.owner===owner))text("stock-return-status","");
     return true;
   }catch(e){
-    pendingTownReturn={owner,requestId};
+    pendingTownReturns.set(owner+"\u0000"+requestId,{owner,requestId});
     text("stock-return-status","行情返回尚未確認，可按返回城鎮重試；已完成的操作不會重做。");
     return false;
   }finally{townReturnInFlight--;}
@@ -4663,7 +4664,8 @@ el("town-return").addEventListener("click",async()=>{
   if(townReturnBusy||!canReturnToTown(state))return;
   townReturnBusy=true;el("town-return").disabled=true;
   try{
-    const id=pendingTownReturn?.owner===state.character.name?pendingTownReturn.requestId:returnReceiptKey("manual");
+    const retry=[...pendingTownReturns.values()].find(p=>p.owner===state.character.name);
+    const id=retry?.requestId??returnReceiptKey("manual");
     await returnTownFor(state,id);stockUI.leave();render();
     el("town-panel").scrollIntoView({block:"start"});
   }finally{townReturnBusy=false;el("town-return").disabled=false;}
@@ -4702,6 +4704,7 @@ function render() {
     return;
   }
   const c = state.character;
+  text("stock-return-status",[...pendingTownReturns.values()].some(p=>p.owner===c.name)?"行情返回尚未確認，可按返回城鎮重試；已完成的操作不會重做。":"");
   renderSoloTime();
   text("character-name", c.name);
   text("current-town", state.towns.find(t => t.id === c.townId)?.name || "未知");

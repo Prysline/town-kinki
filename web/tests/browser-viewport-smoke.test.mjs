@@ -1304,6 +1304,9 @@ test("BK-05 Chrome actual stock map, buy/sell, clear, town returns and read-only
     const withDb=fn=>{const d=new DatabaseSync(dbPath);try{d.exec("PRAGMA busy_timeout=5000");return fn(d);}finally{d.close();}};
     const returns=()=>withDb(d=>d.prepare("SELECT COUNT(*) n FROM stock_receipts WHERE args_json=?").get('["town-return"]').n);
     await chrome.send("Page.enable");await chrome.send("Runtime.enable");await viewport(chrome,1440,900);
+    // Capture the actual registered 30-second callback, leaving real interval intact.
+    // Invoke it under controlled test timing rather than waiting through a full interval.
+    await chrome.send("Page.addScriptToEvaluateOnNewDocument",{source:`(()=>{const original=window.setInterval;window.setInterval=function(fn,ms,...args){if(ms===30000)window.stockPollTest=fn;return original.call(this,fn,ms,...args);};})()`});
     await chrome.send("Page.navigate",{url:web.url});await until(chrome,"!document.querySelector('#create')?.hidden","建角");
     await fill(chrome,'#create-form [name="name"]',"股票瀏覽器居民");await click(chrome,"#create-submit");
     await until(chrome,"!document.querySelector('#game')?.hidden","建角完成");
@@ -1337,6 +1340,17 @@ test("BK-05 Chrome actual stock map, buy/sell, clear, town returns and read-only
     await click(chrome,"#solo-continue");await until(chrome,"!document.querySelector('#game').hidden","繼續遊戲");
     assert.equal(returns(),3);
     await click(chrome,"#refresh");await pause(250);assert.equal(returns(),3);
-    console.log("UI_STOCK "+JSON.stringify({widths:[1440,375],buy:true,sell:true,clear:true,townReturns:returns(),pollReadOnly:true}));
+    assert.equal(await evaluate(chrome,"typeof window.stockPollTest"),"function");
+    await evaluate(chrome,"(async()=>{await window.stockPollTest();await window.stockPollTest();return true})()");
+    assert.equal(returns(),3);
+    // A normal bank action uses the real UI/HTTP and original default return semantics.
+    await click(chrome,"#facility-tab-bank");
+    const beforeDeposit=await state();
+    await fill(chrome,'#bank-form [name="amount"]',"100");await click(chrome,'#bank-form button[value="deposit"]');
+    await until(chrome,"document.querySelector('#result-dialog-message')?.textContent?.includes('存款完成')","銀行完成並返回");
+    const deposited=await state();assert.equal(deposited.character.money,beforeDeposit.character.money-100);
+    assert.equal(deposited.character.bank,beforeDeposit.character.bank+100);
+    assert.equal(returns(),4);
+    console.log("UI_STOCK "+JSON.stringify({widths:[1440,375],buy:true,sell:true,clear:true,townReturns:returns(),bankReturn:true,pollReadOnly:true,controlledPollCallback:true}));
   }finally{await chrome?.stop();await web?.stop();rmSync(workspace,{force:true,recursive:true,maxRetries:50,retryDelay:200});}
 });
