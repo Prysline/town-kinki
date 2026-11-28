@@ -312,6 +312,9 @@
           <div class="player-actions">
             <button id="work" class="primary" type="button">前往工作</button>
             <button id="refresh" class="secondary full" type="button">更新狀態</button>
+            <button id="town-return" class="secondary full" type="button">返回城鎮</button>
+            <p id="stock-return-status" class="small" aria-live="polite"></p>
+            <p id="stock-ticker" class="small"></p>
             <p id="cooldown" class="small"></p>
             <p id="work-cost-status" class="small"></p>
             <p id="work-payday-status" class="small" aria-live="polite">工作完成後將依職業發薪週期結算薪資。</p>
@@ -968,6 +971,26 @@
             <div id="bank-ledger-list"></div>
           </div>
         </details>
+        </section>
+        <section class="card" id="stock-panel" hidden>
+          <h3>股票交易所</h3>
+          <p class="small">每種股票最多持有200股。買入時現金及普通存款都必須足夠，僅扣現金。交易期間為全域180秒，每次進入或交易均重新計時。</p>
+          <p id="stock-wallet"></p>
+          <button id="stock-open" type="button">開啟股票交易</button>
+          <p id="stock-notice" aria-live="polite"></p>
+          <div id="stock-controls" hidden>
+            <form id="stock-form">
+              <label>股票<select id="stock-key"><option value="A">大阪股</option><option value="B">滋賀股</option><option value="C">兵庫股</option><option value="D">奈良股</option><option value="E">近畿股</option></select></label>
+              <label>股數<input id="stock-quantity" type="number" value="1" min="0" max="200" step="1" required></label>
+              <button id="stock-buy" type="submit" value="buy">買入</button>
+              <button id="stock-sell" type="submit" value="sell" class="secondary">賣出</button>
+            </form>
+            <p id="stock-total"></p>
+            <div class="stock-table-wrap" tabindex="0" aria-label="持股明細"><table class="stock-table"><thead><tr><th>股票</th><th>股價</th><th>持股</th><th>可買股數</th><th>平均股價</th><th>持股損益</th><th>投入</th><th>回收</th><th>累計損益</th></tr></thead><tbody id="stock-holdings"></tbody></table></div>
+            <button id="stock-clear" type="button" class="secondary">清算全部持股及紀錄</button>
+            <h4>個人交易紀錄</h4><ol id="stock-history"></ol>
+            <h4>市場行情紀錄</h4><ol id="stock-market-history"></ol>
+          </div>
         </section>
       </div>
       <div id="facility-pane-hospital" class="facility-pane" role="tabpanel" aria-labelledby="facility-tab-hospital" tabindex="0" hidden>
