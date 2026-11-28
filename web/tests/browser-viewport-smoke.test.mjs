@@ -1314,8 +1314,8 @@ test("BK-05 Chrome actual stock map, buy/sell, clear, town returns and read-only
     await click(chrome,"#map-edit-toggle");
     await evaluate(chrome,"(()=>{const p=document.querySelector('#map-palette');p.value='株';p.dispatchEvent(new Event('change',{bubbles:true}));return p.value})()");
     await click(chrome,'#town-map button[aria-label^="A1："]');
-    await until(chrome,"document.querySelector('#town-map button[aria-label^=\"A1：\"]').querySelector('img')!==null","實際配置股票設施");
-    await click(chrome,"#map-edit-toggle");await click(chrome,'#town-map button[aria-label^="A1："]');
+    await until(chrome,"document.querySelector('#town-map button[aria-label^=\"A1：股票交易所\"]')!==null","實際配置股票設施");
+    await click(chrome,"#map-edit-toggle");await click(chrome,'#town-map button[aria-label^="A1：股票交易所"]');
     await until(chrome,"!document.querySelector('#stock-controls').hidden&&!document.querySelector('#stock-buy').disabled","地圖開啟股票交易");
     assert.equal(returns(),1);
     const state=()=>evaluate(chrome,"(async()=>await(await fetch('/api/state')).json())()");
