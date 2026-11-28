@@ -61,11 +61,31 @@ test("HS-04 SQLite income B owner and officers, atomic receipt and no second sam
  db.prepare("INSERT INTO enterprise_officers VALUES(1,2,?)").run(now);
  const j=[{originalName:"A",salary:4000},{originalName:"B",salary:8000}];
  const balances=()=>db.prepare("SELECT bank FROM characters ORDER BY user_id").all().map(x=>x.bank);
+ db.prepare("INSERT INTO bank_accounts(user_id,term_balance,last_interest_day) VALUES(2,0,?)").run("2026-11-27");
+ db.prepare("INSERT INTO bank_tax_state(user_id,assessment_base,snapshot_day) VALUES(2,3000000,?)").run("2026-11-27");
  const before=balances(),run=()=>{db.exec("BEGIN IMMEDIATE");try{const r=settleEnterpriseIncomeInTransaction(db,j,1,today,now);db.exec("COMMIT");return r;}catch(e){db.exec("ROLLBACK");throw e;}};
  db.exec("CREATE TRIGGER reject_income BEFORE INSERT ON enterprise_income_days BEGIN SELECT RAISE(ABORT,'fault');END;");
  assert.throws(run,/fault/);assert.deepEqual(balances(),before);
  db.exec("DROP TRIGGER reject_income");
  assert.equal(run().ownerTotal,30000);assert.deepEqual(balances(),[before[0]+30000,before[1]+20000,before[2]]);
  assert.equal(run().replayed,true);assert.deepEqual(balances(),[before[0]+30000,before[1]+20000,before[2]]);
+ assert.equal(db.prepare("SELECT snapshot_day FROM bank_tax_state WHERE user_id=2").get().snapshot_day,"2026-11-27");
+ }finally{db.close();}
+});
+
+test("HS-04 original visit projects job; company officer permission and all employee education",()=>{
+ const db=setup();try{
+ const h=build(db,"corporation",1,"build_corporation");
+ const common={houseId:h.houseId,now,today};
+ assert.equal(enterpriseOverview(db,rules,jobs,2,h.houseId).employees[0].job,"");
+ mutateEnterprise(db,rules,jobs,2,{...common,action:"open",requestId:"visit_original"});
+ assert.ok(enterpriseOverview(db,rules,jobs,2,h.houseId).employees[0].job);
+ mutateEnterprise(db,rules,jobs,1,{...common,action:"hire",requestId:"hire_employee"});
+ db.prepare("INSERT INTO enterprise_officers VALUES(1,2,?)").run(now);
+ const args={...common,action:"train-all",stat:"kokugo",amount:10,payment:"cash",requestId:"train_all_staff"};
+ const before=db.prepare("SELECT money FROM characters WHERE user_id=2").get().money;
+ assert.equal(mutateEnterprise(db,rules,jobs,2,args).cost,40000);
+ assert.equal(db.prepare("SELECT money FROM characters WHERE user_id=2").get().money,before-40000);
+ assert.equal(enterpriseOverview(db,rules,jobs,1,h.houseId).employees.filter(e=>e.stats.kokugo===1).length,2);
  }finally{db.close();}
 });

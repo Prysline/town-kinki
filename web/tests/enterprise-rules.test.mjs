@@ -34,6 +34,8 @@ test("HS-04 fee A: exact balance, zero-gain source choices, per employee cooldow
  assert.throws(()=>trainEmployees(rules,jobs,{...batch,actorStats:stats(19)}),/能力不足/);
  assert.equal(e.stats.kokugo,0);assert.equal(employeeCap(rules,"operation",1),5);assert.equal(employeeCap(rules,"corporation",10),30);
  assert.equal(trainEmployees(rules,jobs,{...batch,stat:"food"}).employees[0].foodTenths,1);
+ assert.throws(()=>trainEmployees(rules,jobs,{...batch,amount:5}),/教育選項/);
+ assert.throws(()=>trainEmployees(rules,jobs,{...batch,employees:[e,e,e]}),/教育選項/);
 });
 test("HS-04 income B: independent owner and officer credits, old-job display separate from stored job",()=>{
  const mock=[{originalName:"A",salary:4000,requirements:stats(0)},{originalName:"B",salary:8000,requirements:stats(1)}];

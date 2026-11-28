@@ -79,20 +79,23 @@ export function enterpriseOverview(db,rules,jobs,userId,houseId){
 export function mutateEnterprise(db,rules,jobs,userId,{houseId,action,indices=[],stat=null,amount=null,payment="cash",cardSourceLine=null,requestId,now,today}){
  return tx(db,()=>receipt(db,userId,requestId,[houseId,action,indices,stat,amount,payment,cardSourceLine],()=>{
   const {h,owner,memberIds}=visit(db,userId,houseId);
-  if(!memberIds.includes(userId))throw Error("沒有企業教育權限");
   let rows=employees(db,owner,h.kind),cap=employeeCap(rules,h.kind,memberIds.length);
+  // Original visit recalculates and persists jobs for every employee, even for a visitor.
+  if(action==="open"){rows=rows.map(e=>projectEmployee(e,jobs));writeEmployees(db,owner,h.kind,rows);return {count:rows.length};}
+  if(!memberIds.includes(userId))throw Error("沒有企業教育權限");
   if(action==="hire"){
    if(userId!==owner)throw Error("只有企業屋主可增員");
    if(rows.length>=cap)throw Error("員工已達上限");
    rows=[...rows,emptyEmployee(rules)].map(e=>projectEmployee(e,jobs));
    writeEmployees(db,owner,h.kind,rows);return {count:rows.length};
   }
-  if(action!=="train")throw Error("無效企業操作");
-  if(!indices.every(i=>i<cap))throw Error("員工已超過現任役員名額");
+  if(action==="train-all"&&h.kind==="corporation")indices=rows.map((_,i)=>i);
+  else if(action!=="train"||indices.length!==1||!indices.every(i=>i<cap))throw Error("無效企業教育操作或員工已超過現任役員名額");
   settleBankInterestInTransaction(db,userId,today,now);
   if(payment==="credit")requireClassroomCreditCard(db,userId,cardSourceLine,now);
   const c=character(db,userId);
   const result=trainEmployees(rules,jobs,{kind:h.kind,employees:rows,indices,actorStats:JSON.parse(c.stats_json),cash:c.money,bank:c.bank,payment,creditValid:payment==="credit",stat,amount,nowSeconds:Math.floor(now/1000)});
+  if(h.kind==="corporation"&&action==="train")result.employees[indices[0]].lastTrainedBy=c.name;
   writeEmployees(db,owner,h.kind,result.employees);
   db.prepare("UPDATE characters SET money=?,bank=?,stats_json=? WHERE user_id=?").run(result.cash,result.bank,JSON.stringify(result.actorStats),userId);
   if(payment==="credit"&&result.cost)recordBankEntry(db,userId,"ordinary","員工教育",result.cost,0,result.bank,now);
@@ -114,7 +117,10 @@ export function settleEnterpriseIncomeInTransaction(db,jobs,ownerId,today,now){
   const c=character(db,id),balance=safe(c.bank+amount);
   db.prepare("UPDATE characters SET bank=? WHERE user_id=?").run(balance,id);
   recordBankEntry(db,id,"ordinary",action,0,amount,balance,now);
-  refreshBankTaxSnapshot(db,id,today);
+  // An officer who has not personally settled today keeps the old tax base.
+  // Crediting a company payout is not a town login and must not silently skip Monday tax.
+  const account=db.prepare("SELECT last_interest_day FROM bank_accounts WHERE user_id=?").get(id);
+  if(id===ownerId||account?.last_interest_day>=today)refreshBankTaxSnapshot(db,id,today);
  };
  if(operation.length)credit(ownerId,result.operating,"運營公司收入");
  if(corporation.length){credit(ownerId,result.corporate,"股份有限公司收入");for(const o of result.officers)credit(o.userId,o.amount,"役員公司收入");}

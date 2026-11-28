@@ -53,9 +53,9 @@ export function projectEmployee(employee,jobs){
  return {...next,displayIncome:employeeIncome({...next,job:employee.job},jobs)};
 }
 export function trainEmployees(rules,jobs,{kind,employees,indices,actorStats,cash,bank,payment,creditValid,stat,amount,nowSeconds}){
- if(!["operation","corporation"].includes(kind)||!TRAIN_AMOUNTS.includes(amount)||!Number.isSafeInteger(nowSeconds)||nowSeconds<0||
+ if(!["operation","corporation"].includes(kind)||!TRAIN_AMOUNTS.includes(amount)||(kind==="corporation"&&amount<10)||!Number.isSafeInteger(nowSeconds)||nowSeconds<0||
  !Array.isArray(indices)||!indices.length||new Set(indices).size!==indices.length||
- (kind==="operation"&&indices.length!==1)||!indices.every(i=>Number.isInteger(i)&&i>=0&&i<employees.length))throw Error("無效教育選項");
+ (kind==="operation"&&indices.length!==1)||(kind==="corporation"&&indices.length>1&&indices.length!==employees.length)||!indices.every(i=>Number.isInteger(i)&&i>=0&&i<employees.length))throw Error("無效教育選項");
  const food=stat==="food"&&kind==="corporation";
  if(!food&&!STAT_KEYS.includes(stat))throw Error("無效能力項目");
  checkStats(actorStats);safe(cash);safe(bank);
