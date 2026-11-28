@@ -86,6 +86,8 @@ export function stockTownReturn(db,user,{now,requestId,rand}={}){
       return {...JSON.parse(prior.result_json),replayed:true};
     }
     character(db,user);assertNoActiveOnsen(db,user);
+    if(db.prepare("SELECT 1 FROM arcade_road_trips WHERE user_id=? AND completed_at IS NULL").get(user))
+      throw Error("公路旅程尚未抵達");
     const guestCount=db.prepare("SELECT COUNT(*) n FROM stock_guests").get().n;
     const next=tickInTransaction(db,user,{now,guestCount,rand});
     const seconds=Math.floor(now/1000);
