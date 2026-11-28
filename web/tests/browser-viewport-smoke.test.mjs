@@ -305,13 +305,16 @@ test("Chrome：桌面→768px平板→375px手機，操作真實建角／工作�
     await fill(chrome,'#bank-form [name="amount"]',"100");
     const before=await evaluate(chrome,"(async()=>{const j=await(await fetch('/api/state')).json();return {money:j.character.money,bank:j.character.bank}})()");
     await click(chrome,'#bank-form button[value="deposit"]');
-    await until(chrome,"(document.querySelector('#bank')?.textContent?.length||0)>0","銀行資料刷新");
+    await until(chrome,"document.querySelector('#result-dialog')?.open&&document.querySelector('#result-dialog-message')?.textContent.includes('存款完成')","銀行與城鎮返回完整完成");
+    await click(chrome,"#result-dialog-close");
+    await until(chrome,"!document.querySelector('#result-dialog')?.open","銀行結果確認關閉");
     const after=await evaluate(chrome,"(async()=>{const j=await(await fetch('/api/state')).json();return {money:j.character.money,bank:j.character.bank}})()");
     assert.equal(after.money,before.money-100,"Chrome 存款應真實扣現金");
     assert.equal(after.bank,before.bank+100,"Chrome 存款應真實增加銀行資產");
     // 僅在隔離 Chrome 測試存檔加入兩週稅務紀錄，驗證 UI 不隱藏較早欠稅。
     const historyDb=new DatabaseSync(join(workspace,"sqlite","solo.sqlite"));
     try{
+      historyDb.exec("PRAGMA busy_timeout=5000");
       const add=historyDb.prepare(
         "INSERT INTO bank_tax_assessments(user_id,tax_day,assessment_base,kpoint,rate_percent,gross,discount,due,paid,unpaid,created_at) VALUES(1,?,?,0,1,?,0,?,?,?,?)"
       );
