@@ -7,3 +7,4 @@ SPA 接線：初次載入有角色且非單機首頁/入浴/未抵達、繼續�
 
 新增真 solo/multi HTTP 與 Chrome（受控資金夾具，非真人）驗證：首次/返回/繼續收據計數、GET不抽、本人持股隔離、假 guest/price/clock/userId 無效、跨來源、地圖實際開啟、買賣清算、重啟及重送。上一版 CI 狀態不代表本次。
 追加逐來源校正：basic.cgi L274 普通/定期存提款成功預設 message(login_view)，original_house.cgi L1177/L1255 售屋/改建結果返回 login_view，故增加這四路。basic.cgi L2660–2678 物品使用結果有繼續使用選項；command.pl L2373–2382 百貨購買有回商店選項，gouseiya.cgi L375–391、coupon.cgi L182–196、recycle.cgi L222–235/L500–513、command.pl L897–910 可在設施繼續；現行 SPA 繼續留在設施時不自動抽選，玩家明確返回城鎮時才抽。此為第三項A的來源映射校正，非新增平衡限制。
+1c1f11a5 HTTP接線候選 Push 46121078558 / PR 46121082832 各1004/1004；409d4e46 前端 Push 46121143671 1004/1004、PR 46121148804 1003/1004，唯一失敗為既有多人街頭格鬥 Chrome 測試外部 SQLite setCash fixture 遇 database is locked。新增 bounded busy_timeout=5000 只在測試 fixture 連線，保留 14999/15000 真實門檻及全部斷言，並核對更新一列。不改正式DB鎖、玩法或測試門檻。最新新測試仍待驗。

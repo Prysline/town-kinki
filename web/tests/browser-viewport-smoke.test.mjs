@@ -753,7 +753,7 @@ test("Chrome 多人街頭格鬥：真實按鈕送出戰鬥、展開戰報、手�
     assert.deepEqual(seeded,[200,200,200,200]);
     const setCash=amount=>{
       const db=new DatabaseSync(join(workspace,"sqlite","multi.sqlite"));
-      try{db.prepare("UPDATE characters SET money=?,bank=1000000 WHERE name=?").run(amount,"格鬥居民乙");}
+      try{db.exec("PRAGMA busy_timeout=5000");assert.equal(db.prepare("UPDATE characters SET money=?,bank=1000000 WHERE name=?").run(amount,"格鬥居民乙").changes,1);}
       finally{db.close();}
     };
     setCash(14999);
@@ -1301,7 +1301,7 @@ test("BK-05 Chrome actual stock map, buy/sell, clear, town returns and read-only
     const dataDir=join(workspace,"sqlite");
     web=await startWeb(dataDir);chrome=await openChrome(join(workspace,"chrome"));
     const dbPath=join(dataDir,"solo.sqlite");
-    const withDb=fn=>{const d=new DatabaseSync(dbPath);try{return fn(d);}finally{d.close();}};
+    const withDb=fn=>{const d=new DatabaseSync(dbPath);try{d.exec("PRAGMA busy_timeout=5000");return fn(d);}finally{d.close();}};
     const returns=()=>withDb(d=>d.prepare("SELECT COUNT(*) n FROM stock_receipts WHERE args_json=?").get('["town-return"]').n);
     await chrome.send("Page.enable");await chrome.send("Runtime.enable");await viewport(chrome,1440,900);
     await chrome.send("Page.navigate",{url:web.url});await until(chrome,"!document.querySelector('#create')?.hidden","建角");
