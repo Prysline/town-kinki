@@ -1,4 +1,6 @@
 import { townCellAction } from "./town-home.js";
+import {createStockUI} from "./modules/stock.js";
+import {shouldReturnToTown,canReturnToTown,returnReceiptKey} from "./modules/town-return.js";
 import { displayLoto6DrawReason,formatLoto6DrawNotice } from "./loto6-display.js";
 import { displayJobName,displayGameError,displayBankLedgerAction } from "./game-display-translations.js";
 import { displayRetailItemName,displayRetailItemCategory } from "./retail-item-translations.js";
@@ -68,7 +70,27 @@ async function api(path, data) {
   });
   const result = await response.json();
   if (!response.ok) throw Object.assign(new Error(result.error || "操作失敗"),{status:response.status});
+  if(data!==undefined&&shouldReturnToTown(path,data,result))await returnTownFor(result,returnReceiptKey(path,data));
   return result;
+}
+
+// Town return is a separate server transaction; a market fault never turns an already committed action into a failed action.
+let pendingTownReturn=null;
+let townReturnBusy=false;
+async function returnTownFor(target,requestId=returnReceiptKey("manual")){
+  if(!canReturnToTown(target))return false;
+  const owner=target.character.name;
+  try{
+    const delta=await api("town/return",{requestId});
+    target.stock=delta.stock;
+    if(pendingTownReturn?.requestId===requestId)pendingTownReturn=null;
+    if(!pendingTownReturn)text("stock-return-status","");
+    return true;
+  }catch(e){
+    pendingTownReturn={owner,requestId};
+    text("stock-return-status","行情返回尚未確認，可按返回城鎮重試；已完成的操作不會重做。");
+    return false;
+  }
 }
 
 // 原版的交易與錯誤結果採中央訊息畫面。Web 保留原操作頁面，改用確認後返回的對話框；
@@ -541,6 +563,7 @@ function renderTownMap() {
             if(cell.key==="ギフト屋")renderGiftShop();
             if(cell.key==="リサイ")renderRecycle();
             if(cell.key==="問屋")renderWholesale();
+            if(cell.key==="株")stockUI.open();
           }
           else if(destination.kind==="station"){
             el("station-heading").scrollIntoView({behavior:"smooth",block:"start"});
@@ -4633,6 +4656,16 @@ el("onsen-time-advance").addEventListener("click",async event=>{
   finally{onsenBusy=false;render();}
 });
 
+const stockUI=createStockUI({api,getState:()=>state,applyState:next=>{state=next;render();},money,notify});
+el("town-return").addEventListener("click",async()=>{
+  if(townReturnBusy||!canReturnToTown(state))return;
+  townReturnBusy=true;el("town-return").disabled=true;
+  try{
+    const id=pendingTownReturn?.owner===state.character.name?pendingTownReturn.requestId:returnReceiptKey("manual");
+    await returnTownFor(state,id);stockUI.leave();render();
+    el("town-panel").scrollIntoView({block:"start"});
+  }finally{townReturnBusy=false;el("town-return").disabled=false;}
+});
 function render() {
   if (!state) return;
   const solo = state.mode === "solo";
@@ -4672,6 +4705,7 @@ function render() {
   text("money", money(c.money));
   text("bank", money(c.bank));
   renderBank();
+  stockUI.render();
   text("body-energy", c.bodyEnergy + " / " + state.maxBodyEnergy);
   text("brain-energy", c.brainEnergy + " / " + state.maxBrainEnergy);
   renderCompactStatus(c);
@@ -4992,10 +5026,12 @@ el("logout").addEventListener("click", async () => {
     notify("已登出多人模式帳號");
   }catch(error){notify(error.message,true);}
 });
-el("solo-continue").addEventListener("click",()=>{
+el("solo-continue").addEventListener("click",async()=>{
+  if(townReturnBusy)return;
+  townReturnBusy=true;
   soloAtHome=false;
   try{sessionStorage.removeItem("town-solo-at-home");}catch{}
-  render();
+  try{await returnTownFor(state);render();}finally{townReturnBusy=false;}
   notify("已繼續單機遊戲。",false,{inline:true});
 });
 let soloDeleteBusy=false;
@@ -5208,10 +5244,10 @@ el("salary-payment").addEventListener("change",async()=>{
   }
 });
 (async () => {
-  try { state = await api("state"); render(); }
+  try { state = await api("state"); if(!soloAtHome)await returnTownFor(state); render(); }
   catch (error) { notify("無法連線至遊戲伺服器：" + error.message, true); }
 })();
 setInterval(async () => {
-  if (!state?.character||onsenBusy) return;
+  if (!state?.character||onsenBusy||townReturnBusy||stockUI.busy()) return;
   try { state = await api("state"); render(); } catch {}
 }, 30000);
