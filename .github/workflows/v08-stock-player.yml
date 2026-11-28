@@ -1,0 +1,18 @@
+name: V08 natural stock player (validation only)
+on:
+  push:
+    branches: [validation/v08-stock-player-flow-20261128]
+jobs:
+  stock-player:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: |
+          git rev-parse HEAD HEAD^{tree}
+          node --check web/scripts/v08-stock-player.mjs
+          node web/scripts/v08-stock-player.mjs "$GITHUB_WORKSPACE"
