@@ -31,6 +31,9 @@ import {parseOriginalMultiCard,initMultiCardTables,multiCardOverview,playMultiCa
 import {parseOriginalTreasure,initTreasureTables,treasureOverview,openTreasure} from "./arcade-treasure.mjs";
 import {parseOriginalRoadTransport,initRoadTravelTables,roadOverview,beginRoadTrip,arriveRoadTrip} from "./road-travel.mjs";
 import {parseOriginalOnsenConfig} from "./onsen-source.mjs";
+import {parseStockSource} from "./stock-source.mjs";
+import {initStockTables,stockOverview} from "./stock-market.mjs";
+import {handleStockPost} from "./routes/stock.mjs";
 import {initOnsenTables,activeOnsenVisit,onsenOverview,enterOnsen,leaveOnsen} from "./onsen.mjs";
 import {initCouponRedemptionTables,listCouponRewards,listCouponRedemptions,redeemEventCoupon,COUPON_SHOP_SYMBOL} from "./coupon-redemption.mjs";
 import { getCockroachChallenge,claimCockroachForEvent } from "./event-cockroach.mjs";
@@ -129,6 +132,8 @@ initMultiCardTables(db);
 initTreasureTables(db);
 initRoadTravelTables(db);
 initOnsenTables(db);
+const stockSource=parseStockSource(decodeLegacyText(readFileSync(resolve(REPO_ROOT,"event.pl"))),decodeLegacyText(readFileSync(resolve(REPO_ROOT,"kabu.cgi"))));
+initStockTables(db,stockSource);
 initInventoryTables(db);
 initDiningStockTables(db);
 initLegacyItemUseTables(db);
@@ -488,6 +493,7 @@ function snapshot(user) {
     treasure:updated?treasureOverview(db,user.id,treasureSource,now):null,
     roadTravel:updated?roadOverview(db,user.id,roadSource,now):null,
     onsen:updated?onsenOverview(db,user.id,onsenConfig,now):null,
+    stock:updated?stockOverview(db,user.id):null,
     cockroachChallenge: updated ? getCockroachChallenge(db,user.id,now) : null,
     hospital: updated ? getTreatmentQuote(updated,hasActiveHealthInsurance(db,user.id,insuranceItem,now)) : null,
     insurance: updated ? inventoryOverview(db,user.id,insuranceItem,now) : null,
@@ -744,6 +750,11 @@ async function handle(req, res) {
     // Permit the existing solo clock/delete operations and logout, but no resident actions during a visit.
     if(activeOnsenVisit(db,user.id)&&!["/api/solo/time/advance","/api/solo/character/delete"].includes(path))
       throw new HttpError(409,"目前正在泡溫泉，請先離開浴池");
+
+    if(path==="/api/town/return"||path==="/api/stock/access"){
+      const result=handleStockPost(path,data,{db,user,gameNow,todayFor:now=>calendarDay(now,GAME_TIMEZONE),snapshot,HttpError});
+      return sendJson(res,200,result);
+    }
 
     if (path === "/api/solo/character/delete") {
       if (MODE !== "solo") throw new HttpError(403, "只有單人模式可以刪除角色");

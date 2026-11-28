@@ -148,7 +148,7 @@ test("地圖車站接回原版六組票價與真實跨城操作而非免費切�
 });
 test("原 CGI 建築代碼只連到 Web 真正已實作的設施入口",()=>{
   const expected={
-    "銀行":"bank-panel","病院":"hospital-panel","温泉":"onsen-panel","職安":"jobs-panel",
+    "銀行":"bank-panel","株":"stock-panel","病院":"hospital-panel","温泉":"onsen-panel","職安":"jobs-panel",
     "教室":"classroom-panel","食堂":"dining-panel","食堂２":"dining-panel",
     "デパ":"retail-panel","デパ2":"retail-panel","自販機":"vending-panel","装備屋":"equipment-panel","Ｂリーグ":"b-league-panel","ギフト屋":"gift-panel","リサイ":"recycle-panel","クーポン":"event-panel","釣り":"fishing-panel","販売1":"fishing-panel","合成":"crafting-panel","ゲーセン":"arcade-dice-panel","おばちゃん":"osaka-panel","おばちゃん強":"osaka-panel","問屋":"wholesale-panel","建築":"housing-panel"
   };
@@ -160,10 +160,7 @@ test("原 CGI 建築代碼只連到 Web 真正已實作的設施入口",()=>{
     assert.match(html,new RegExp('id="'+panelId+'"'));
   }
   assert.deepEqual(townCellAction(describeTile("駅")),{kind:"station"});
-  for(const key of ["株"]){
-    const cell=describeTile(key);
-    assert.deepEqual(townCellAction(cell),{kind:"unavailable"});
-  }
+  assert.deepEqual(townCellAction(describeTile("株")),{kind:"facility",panelId:"stock-panel"});
   assert.deepEqual(townCellAction({category:"empty"}),{kind:"inspect"});
 });
 
@@ -392,7 +389,7 @@ const paneMap={
   shops:["retail-panel"],
   training:["school-panel","gym-panel","classroom-panel"],
   jobs:["jobs-panel"],
-  bank:["bank-panel"],
+  bank:["bank-panel","stock-panel"],
   hospital:["hospital-panel"],
   onsen:["onsen-panel"],
   events:["event-panel"],

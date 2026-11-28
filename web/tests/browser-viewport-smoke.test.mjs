@@ -305,13 +305,16 @@ test("Chrome：桌面→768px平板→375px手機，操作真實建角／工作�
     await fill(chrome,'#bank-form [name="amount"]',"100");
     const before=await evaluate(chrome,"(async()=>{const j=await(await fetch('/api/state')).json();return {money:j.character.money,bank:j.character.bank}})()");
     await click(chrome,'#bank-form button[value="deposit"]');
-    await until(chrome,"(document.querySelector('#bank')?.textContent?.length||0)>0","銀行資料刷新");
+    await until(chrome,"document.querySelector('#result-dialog')?.open&&document.querySelector('#result-dialog-message')?.textContent.includes('存款完成')","銀行與城鎮返回完整完成");
+    await dismiss(chrome); // Existing click helper already uses this result-confirmation path.
+    await until(chrome,"!document.querySelector('#result-dialog')?.open","銀行結果確認關閉");
     const after=await evaluate(chrome,"(async()=>{const j=await(await fetch('/api/state')).json();return {money:j.character.money,bank:j.character.bank}})()");
     assert.equal(after.money,before.money-100,"Chrome 存款應真實扣現金");
     assert.equal(after.bank,before.bank+100,"Chrome 存款應真實增加銀行資產");
     // 僅在隔離 Chrome 測試存檔加入兩週稅務紀錄，驗證 UI 不隱藏較早欠稅。
     const historyDb=new DatabaseSync(join(workspace,"sqlite","solo.sqlite"));
     try{
+      historyDb.exec("PRAGMA busy_timeout=5000");
       const add=historyDb.prepare(
         "INSERT INTO bank_tax_assessments(user_id,tax_day,assessment_base,kpoint,rate_percent,gross,discount,due,paid,unpaid,created_at) VALUES(1,?,?,0,1,?,0,?,?,?,?)"
       );
@@ -753,7 +756,7 @@ test("Chrome 多人街頭格鬥：真實按鈕送出戰鬥、展開戰報、手�
     assert.deepEqual(seeded,[200,200,200,200]);
     const setCash=amount=>{
       const db=new DatabaseSync(join(workspace,"sqlite","multi.sqlite"));
-      try{db.prepare("UPDATE characters SET money=?,bank=1000000 WHERE name=?").run(amount,"格鬥居民乙");}
+      try{db.exec("PRAGMA busy_timeout=5000");assert.equal(db.prepare("UPDATE characters SET money=?,bank=1000000 WHERE name=?").run(amount,"格鬥居民乙").changes,1);}
       finally{db.close();}
     };
     setCash(14999);
@@ -1291,5 +1294,66 @@ test("Chrome AP-05：地圖溫泉、八種浴池、入浴重載及跨視埠出�
     assert.equal(after.onsen.active,null);assert.equal(after.character.money,bath.character.money);
     assert.equal(after.character.bodyEnergy,21);assert.equal(after.character.brainEnergy,23);
     console.log("UI_ONSEN "+JSON.stringify({widths:[1440,768,375],options:8,reload:true,exit:true}));
+  }finally{await chrome?.stop();await web?.stop();rmSync(workspace,{force:true,recursive:true,maxRetries:50,retryDelay:200});}
+});
+
+test("BK-05 Chrome actual stock map, buy/sell, clear, town returns and read-only refresh",{timeout:90000},async()=>{
+  const workspace=mkdtempSync(join(tmpdir(),"town-stock-chrome-"));
+  let web=null,chrome=null;
+  try{
+    const dataDir=join(workspace,"sqlite");
+    web=await startWeb(dataDir);chrome=await openChrome(join(workspace,"chrome"));
+    const dbPath=join(dataDir,"solo.sqlite");
+    const withDb=fn=>{const d=new DatabaseSync(dbPath);try{d.exec("PRAGMA busy_timeout=5000");return fn(d);}finally{d.close();}};
+    const returns=()=>withDb(d=>d.prepare("SELECT COUNT(*) n FROM stock_receipts WHERE args_json=?").get('["town-return"]').n);
+    await chrome.send("Page.enable");await chrome.send("Runtime.enable");await viewport(chrome,1440,900);
+    // Capture the actual registered 30-second callback, leaving real interval intact.
+    // Invoke it under controlled test timing rather than waiting through a full interval.
+    await chrome.send("Page.addScriptToEvaluateOnNewDocument",{source:`(()=>{const original=window.setInterval;window.setInterval=function(fn,ms,...args){if(ms===30000)window.stockPollTest=fn;return original.call(this,fn,ms,...args);};})()`});
+    await chrome.send("Page.navigate",{url:web.url});await until(chrome,"!document.querySelector('#create')?.hidden","建角");
+    await fill(chrome,'#create-form [name="name"]',"股票瀏覽器居民");await click(chrome,"#create-submit");
+    await until(chrome,"!document.querySelector('#game')?.hidden","建角完成");
+    assert.equal(returns(),1);
+    withDb(d=>d.exec("UPDATE characters SET money=1000000,bank=1000000"));
+    await click(chrome,"#refresh");await until(chrome,"document.querySelector('#money').textContent.includes('1,000,000')","受控資金");
+    assert.equal(returns(),1);
+    await click(chrome,"#map-edit-toggle");
+    await evaluate(chrome,"(()=>{const p=document.querySelector('#map-palette');p.value='株';p.dispatchEvent(new Event('change',{bubbles:true}));return p.value})()");
+    await click(chrome,'#town-map button[aria-label^="A1："]');
+    await until(chrome,"document.querySelector('#town-map button[aria-label^=\"A1：股票交易所\"]')!==null","實際配置股票設施");
+    await click(chrome,"#map-edit-toggle");await click(chrome,'#town-map button[aria-label^="A1：股票交易所"]');
+    await until(chrome,"!document.querySelector('#stock-controls').hidden&&!document.querySelector('#stock-buy').disabled","地圖開啟股票交易");
+    assert.equal(returns(),1);
+    const state=()=>evaluate(chrome,"(async()=>await(await fetch('/api/state')).json())()");
+    const before=await state();const price=before.stock.market.prices[0];
+    await fill(chrome,"#stock-quantity","2");await click(chrome,"#stock-buy");
+    await until(chrome,"document.querySelector('#stock-notice').textContent.includes('交易完成')&&!document.querySelector('#stock-buy').disabled","買入完成");
+    let after=await state();assert.equal(after.character.money,before.character.money-price*2);assert.equal(after.character.bank,before.character.bank);
+    assert.equal(after.stock.holdings[0].shares,2);
+    await viewport(chrome,375,812);
+    await fill(chrome,"#stock-quantity","1");await click(chrome,"#stock-sell");
+    await until(chrome,"document.querySelector('#stock-holdings tr:first-child td:nth-child(3)').textContent==='1'&&!document.querySelector('#stock-sell').disabled","賣出完成");
+    after=await state();assert.equal(after.character.money,before.character.money-price);
+    await evaluate(chrome,"window.confirm=()=>true");await click(chrome,"#stock-clear");
+    await until(chrome,"document.querySelector('#stock-notice').textContent.includes('已清算')&&!document.querySelector('#stock-clear').disabled","清算完成");
+    after=await state();assert.equal(after.character.money,before.character.money);assert.equal(after.stock.history.length,1);assert.equal(returns(),1);
+    await click(chrome,"#town-return");await until(chrome,"!document.querySelector('#town-return').disabled&&document.querySelector('#stock-controls').hidden","主動返回");
+    assert.equal(returns(),2);
+    await click(chrome,"#logout");await until(chrome,"!document.querySelector('#solo-lobby').hidden","單機首頁");
+    await click(chrome,"#solo-continue");await until(chrome,"!document.querySelector('#game').hidden","繼續遊戲");
+    assert.equal(returns(),3);
+    await click(chrome,"#refresh");await pause(250);assert.equal(returns(),3);
+    assert.equal(await evaluate(chrome,"typeof window.stockPollTest"),"function");
+    await evaluate(chrome,"(async()=>{await window.stockPollTest();await window.stockPollTest();return true})()");
+    assert.equal(returns(),3);
+    // A normal bank action uses the real UI/HTTP and original default return semantics.
+    await click(chrome,"#facility-tab-bank");
+    const beforeDeposit=await state();
+    await fill(chrome,'#bank-form [name="amount"]',"100");await click(chrome,'#bank-form button[value="deposit"]');
+    await until(chrome,"document.querySelector('#result-dialog-message')?.textContent?.includes('存款完成')","銀行完成並返回");
+    const deposited=await state();assert.equal(deposited.character.money,beforeDeposit.character.money-100);
+    assert.equal(deposited.character.bank,beforeDeposit.character.bank+100);
+    assert.equal(returns(),4);
+    console.log("UI_STOCK "+JSON.stringify({widths:[1440,375],buy:true,sell:true,clear:true,townReturns:returns(),bankReturn:true,pollReadOnly:true,controlledPollCallback:true}));
   }finally{await chrome?.stop();await web?.stop();rmSync(workspace,{force:true,recursive:true,maxRetries:50,retryDelay:200});}
 });

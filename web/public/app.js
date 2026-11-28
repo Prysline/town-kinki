@@ -1,4 +1,6 @@
 import { townCellAction } from "./town-home.js";
+import {createStockUI} from "./modules/stock.js";
+import {shouldReturnToTown,canReturnToTown,returnReceiptKey} from "./modules/town-return.js";
 import { displayLoto6DrawReason,formatLoto6DrawNotice } from "./loto6-display.js";
 import { displayJobName,displayGameError,displayBankLedgerAction } from "./game-display-translations.js";
 import { displayRetailItemName,displayRetailItemCategory } from "./retail-item-translations.js";
@@ -68,7 +70,30 @@ async function api(path, data) {
   });
   const result = await response.json();
   if (!response.ok) throw Object.assign(new Error(result.error || "操作失敗"),{status:response.status});
+  if(data!==undefined&&shouldReturnToTown(path,data,result))await returnTownFor(result,returnReceiptKey(path,data));
   return result;
+}
+
+// Town return is a separate server transaction; a market fault never turns an already committed action into a failed action.
+const pendingTownReturns=new Map();
+let townReturnBusy=false;
+let townReturnInFlight=0;
+async function returnTownFor(target,requestId=returnReceiptKey("manual")){
+  if(!canReturnToTown(target))return false;
+  const owner=target.character.name;
+  townReturnInFlight++;
+  try{
+    const delta=await api("town/return",{requestId});
+    target.stock=delta.stock;
+    pendingTownReturns.delete(owner+"\u0000"+requestId);
+    stockUI.close();
+    if(![...pendingTownReturns.values()].some(p=>p.owner===owner))text("stock-return-status","");
+    return true;
+  }catch(e){
+    pendingTownReturns.set(owner+"\u0000"+requestId,{owner,requestId});
+    text("stock-return-status","行情返回尚未確認，可按返回城鎮重試；已完成的操作不會重做。");
+    return false;
+  }finally{townReturnInFlight--;}
 }
 
 // 原版的交易與錯誤結果採中央訊息畫面。Web 保留原操作頁面，改用確認後返回的對話框；
@@ -541,6 +566,7 @@ function renderTownMap() {
             if(cell.key==="ギフト屋")renderGiftShop();
             if(cell.key==="リサイ")renderRecycle();
             if(cell.key==="問屋")renderWholesale();
+            if(cell.key==="株")stockUI.open();
           }
           else if(destination.kind==="station"){
             el("station-heading").scrollIntoView({behavior:"smooth",block:"start"});
@@ -4633,6 +4659,17 @@ el("onsen-time-advance").addEventListener("click",async event=>{
   finally{onsenBusy=false;render();}
 });
 
+const stockUI=createStockUI({api,getState:()=>state,applyState:next=>{state=next;render();},money,notify});
+el("town-return").addEventListener("click",async()=>{
+  if(townReturnBusy||!canReturnToTown(state))return;
+  townReturnBusy=true;el("town-return").disabled=true;
+  try{
+    const retry=[...pendingTownReturns.values()].find(p=>p.owner===state.character.name);
+    const id=retry?.requestId??returnReceiptKey("manual");
+    await returnTownFor(state,id);stockUI.leave();render();
+    el("town-panel").scrollIntoView({block:"start"});
+  }finally{townReturnBusy=false;el("town-return").disabled=false;}
+});
 function render() {
   if (!state) return;
   const solo = state.mode === "solo";
@@ -4653,6 +4690,7 @@ function render() {
   el("logout").textContent=solo?"離開遊戲":"登出";
   renderLegacyIcon();
   if (!state.character || lobby) {
+    stockUI.leave();
     if(!state.character){cLeagueOwner=null;cLeaguePending=null;el("c-league-fields").replaceChildren();}
     if(!publicPreview&&!previewLoading)loadPublicPreview();
     updateCompactVisibility();
@@ -4666,12 +4704,14 @@ function render() {
     return;
   }
   const c = state.character;
+  text("stock-return-status",[...pendingTownReturns.values()].some(p=>p.owner===c.name)?"行情返回尚未確認，可按返回城鎮重試；已完成的操作不會重做。":"");
   renderSoloTime();
   text("character-name", c.name);
   text("current-town", state.towns.find(t => t.id === c.townId)?.name || "未知");
   text("money", money(c.money));
   text("bank", money(c.bank));
   renderBank();
+  stockUI.render();
   text("body-energy", c.bodyEnergy + " / " + state.maxBodyEnergy);
   text("brain-energy", c.brainEnergy + " / " + state.maxBrainEnergy);
   renderCompactStatus(c);
@@ -4992,10 +5032,12 @@ el("logout").addEventListener("click", async () => {
     notify("已登出多人模式帳號");
   }catch(error){notify(error.message,true);}
 });
-el("solo-continue").addEventListener("click",()=>{
+el("solo-continue").addEventListener("click",async()=>{
+  if(townReturnBusy)return;
+  townReturnBusy=true;
   soloAtHome=false;
   try{sessionStorage.removeItem("town-solo-at-home");}catch{}
-  render();
+  try{await returnTownFor(state);render();}finally{townReturnBusy=false;}
   notify("已繼續單機遊戲。",false,{inline:true});
 });
 let soloDeleteBusy=false;
@@ -5208,10 +5250,10 @@ el("salary-payment").addEventListener("change",async()=>{
   }
 });
 (async () => {
-  try { state = await api("state"); render(); }
+  try { state = await api("state"); if(!soloAtHome)await returnTownFor(state); render(); }
   catch (error) { notify("無法連線至遊戲伺服器：" + error.message, true); }
 })();
 setInterval(async () => {
-  if (!state?.character||onsenBusy) return;
+  if (!state?.character||onsenBusy||townReturnBusy||townReturnInFlight||stockUI.busy()) return;
   try { state = await api("state"); render(); } catch {}
 }, 30000);
