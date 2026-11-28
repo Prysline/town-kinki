@@ -12,7 +12,7 @@ export function returnReceiptKey(path,data={},random=()=>crypto.randomUUID()){
   // Receipt IDs on previously idempotent actions stay stable across lost responses.
   if(path==="road/arrive"&&Number.isSafeInteger(data.tripId))return "stock_road_"+data.tripId;
   if(path==="onsen/leave"&&Number.isSafeInteger(data.visitId))return "stock_onsen_"+data.visitId;
-  if(typeof data.requestId==="string"&&/^[A-Za-z0-9_-]{8,48}$/.test(data.requestId))
+  if(typeof data.requestId==="string"&&/^[A-Za-z0-9_-]{8,40}$/.test(data.requestId))
     return "stock_return_"+path.replaceAll("/","_")+"_"+data.requestId;
   return "stock_return_"+random();
 }

@@ -77,9 +77,11 @@ async function api(path, data) {
 // Town return is a separate server transaction; a market fault never turns an already committed action into a failed action.
 let pendingTownReturn=null;
 let townReturnBusy=false;
+let townReturnInFlight=0;
 async function returnTownFor(target,requestId=returnReceiptKey("manual")){
   if(!canReturnToTown(target))return false;
   const owner=target.character.name;
+  townReturnInFlight++;
   try{
     const delta=await api("town/return",{requestId});
     target.stock=delta.stock;
@@ -90,7 +92,7 @@ async function returnTownFor(target,requestId=returnReceiptKey("manual")){
     pendingTownReturn={owner,requestId};
     text("stock-return-status","行情返回尚未確認，可按返回城鎮重試；已完成的操作不會重做。");
     return false;
-  }
+  }finally{townReturnInFlight--;}
 }
 
 // 原版的交易與錯誤結果採中央訊息畫面。Web 保留原操作頁面，改用確認後返回的對話框；
@@ -4686,6 +4688,7 @@ function render() {
   el("logout").textContent=solo?"離開遊戲":"登出";
   renderLegacyIcon();
   if (!state.character || lobby) {
+    stockUI.leave();
     if(!state.character){cLeagueOwner=null;cLeaguePending=null;el("c-league-fields").replaceChildren();}
     if(!publicPreview&&!previewLoading)loadPublicPreview();
     updateCompactVisibility();
@@ -5248,6 +5251,6 @@ el("salary-payment").addEventListener("change",async()=>{
   catch (error) { notify("無法連線至遊戲伺服器：" + error.message, true); }
 })();
 setInterval(async () => {
-  if (!state?.character||onsenBusy||townReturnBusy||stockUI.busy()) return;
+  if (!state?.character||onsenBusy||townReturnBusy||townReturnInFlight||stockUI.busy()) return;
   try { state = await api("state"); render(); } catch {}
 }, 30000);

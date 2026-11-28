@@ -1293,3 +1293,50 @@ test("Chrome AP-05：地圖溫泉、八種浴池、入浴重載及跨視埠出�
     console.log("UI_ONSEN "+JSON.stringify({widths:[1440,768,375],options:8,reload:true,exit:true}));
   }finally{await chrome?.stop();await web?.stop();rmSync(workspace,{force:true,recursive:true,maxRetries:50,retryDelay:200});}
 });
+
+test("BK-05 Chrome actual stock map, buy/sell, clear, town returns and read-only refresh",{timeout:90000},async()=>{
+  const workspace=mkdtempSync(join(tmpdir(),"town-stock-chrome-"));
+  let web=null,chrome=null;
+  try{
+    const dataDir=join(workspace,"sqlite");
+    web=await startWeb(dataDir);chrome=await openChrome(join(workspace,"chrome"));
+    const dbPath=join(dataDir,"solo.sqlite");
+    const withDb=fn=>{const d=new DatabaseSync(dbPath);try{return fn(d);}finally{d.close();}};
+    const returns=()=>withDb(d=>d.prepare("SELECT COUNT(*) n FROM stock_receipts WHERE args_json=?").get('["town-return"]').n);
+    await chrome.send("Page.enable");await chrome.send("Runtime.enable");await viewport(chrome,1440,900);
+    await chrome.send("Page.navigate",{url:web.url});await until(chrome,"!document.querySelector('#create')?.hidden","建角");
+    await fill(chrome,'#create-form [name="name"]',"股票瀏覽器居民");await click(chrome,"#create-submit");
+    await until(chrome,"!document.querySelector('#game')?.hidden","建角完成");
+    assert.equal(returns(),1);
+    withDb(d=>d.exec("UPDATE characters SET money=1000000,bank=1000000"));
+    await click(chrome,"#refresh");await until(chrome,"document.querySelector('#money').textContent.includes('1,000,000')","受控資金");
+    assert.equal(returns(),1);
+    await click(chrome,"#map-edit-toggle");
+    await evaluate(chrome,"(()=>{const p=document.querySelector('#map-palette');p.value='株';p.dispatchEvent(new Event('change',{bubbles:true}));return p.value})()");
+    await click(chrome,'#town-map button[aria-label^="A1："]');
+    await until(chrome,"document.querySelector('#town-map button[aria-label^=\"A1：\"]').querySelector('img')!==null","實際配置股票設施");
+    await click(chrome,"#map-edit-toggle");await click(chrome,'#town-map button[aria-label^="A1："]');
+    await until(chrome,"!document.querySelector('#stock-controls').hidden&&!document.querySelector('#stock-buy').disabled","地圖開啟股票交易");
+    assert.equal(returns(),1);
+    const state=()=>evaluate(chrome,"(async()=>await(await fetch('/api/state')).json())()");
+    const before=await state();const price=before.stock.market.prices[0];
+    await fill(chrome,"#stock-quantity","2");await click(chrome,"#stock-buy");
+    await until(chrome,"document.querySelector('#stock-notice').textContent.includes('交易完成')&&!document.querySelector('#stock-buy').disabled","買入完成");
+    let after=await state();assert.equal(after.character.money,before.character.money-price*2);assert.equal(after.character.bank,before.character.bank);
+    assert.equal(after.stock.holdings[0].shares,2);
+    await viewport(chrome,375,812);
+    await fill(chrome,"#stock-quantity","1");await click(chrome,"#stock-sell");
+    await until(chrome,"document.querySelector('#stock-holdings tr:first-child td:nth-child(3)').textContent==='1'&&!document.querySelector('#stock-sell').disabled","賣出完成");
+    after=await state();assert.equal(after.character.money,before.character.money-price);
+    await evaluate(chrome,"window.confirm=()=>true");await click(chrome,"#stock-clear");
+    await until(chrome,"document.querySelector('#stock-notice').textContent.includes('已清算')&&!document.querySelector('#stock-clear').disabled","清算完成");
+    after=await state();assert.equal(after.character.money,before.character.money);assert.equal(after.stock.history.length,1);assert.equal(returns(),1);
+    await click(chrome,"#town-return");await until(chrome,"!document.querySelector('#town-return').disabled&&document.querySelector('#stock-controls').hidden","主動返回");
+    assert.equal(returns(),2);
+    await click(chrome,"#logout");await until(chrome,"!document.querySelector('#solo-lobby').hidden","單機首頁");
+    await click(chrome,"#solo-continue");await until(chrome,"!document.querySelector('#game').hidden","繼續遊戲");
+    assert.equal(returns(),3);
+    await click(chrome,"#refresh");await pause(250);assert.equal(returns(),3);
+    console.log("UI_STOCK "+JSON.stringify({widths:[1440,375],buy:true,sell:true,clear:true,townReturns:returns(),pollReadOnly:true}));
+  }finally{await chrome?.stop();await web?.stop();rmSync(workspace,{force:true,recursive:true,maxRetries:50,retryDelay:200});}
+});
