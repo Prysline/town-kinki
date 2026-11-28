@@ -1,6 +1,7 @@
 // 依原始 unit.pl 與 town-map.mjs 的建築代碼導航，沒有移植的功能不冒充已支援。
 export const FACILITY_PANELS=Object.freeze({
   "銀行":"bank-panel",
+  "株":"stock-panel",
   "病院":"hospital-panel",
   "温泉":"onsen-panel",
   "職安":"jobs-panel",
