@@ -436,7 +436,7 @@ test("M2 工作 HTTP：週一首請求冷卻拒絕仍保留既有獨立結息與
     assert.equal(rejected.status,400);
     assert.match(rejected.result.error,/還需要等待/);
     const after=read();
-    assert.deepEqual(after.character,{...before.character,bank:975000});
+    assert.deepEqual({...after.character},{...before.character,bank:975000});
     assert.equal(after.account.last_interest_day,mondayDay);
     assert.equal(after.assessments.length,1);
     assert.equal(after.assessments[0].tax_day,mondayDay);
