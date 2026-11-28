@@ -306,7 +306,7 @@ test("Chrome：桌面→768px平板→375px手機，操作真實建角／工作�
     const before=await evaluate(chrome,"(async()=>{const j=await(await fetch('/api/state')).json();return {money:j.character.money,bank:j.character.bank}})()");
     await click(chrome,'#bank-form button[value="deposit"]');
     await until(chrome,"document.querySelector('#result-dialog')?.open&&document.querySelector('#result-dialog-message')?.textContent.includes('存款完成')","銀行與城鎮返回完整完成");
-    await click(chrome,"#result-dialog-close");
+    await dismiss(chrome); // Existing click helper already uses this result-confirmation path.
     await until(chrome,"!document.querySelector('#result-dialog')?.open","銀行結果確認關閉");
     const after=await evaluate(chrome,"(async()=>{const j=await(await fetch('/api/state')).json();return {money:j.character.money,bank:j.character.bank}})()");
     assert.equal(after.money,before.money-100,"Chrome 存款應真實扣現金");
