@@ -1,0 +1,48 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {readFileSync} from "node:fs";
+import {STAT_KEYS,parseLegacyJobs,decodeLegacyText} from "../src/engine.mjs";
+import {parseHouseCatalog} from "../src/housing.mjs";
+import {parseEnterpriseRules,quoteExtraBuilding,emptyEmployee,employeeCap,employeeIncome,projectEmployee,trainEmployees,projectEnterpriseIncome} from "../src/enterprise-source.mjs";
+const src=n=>decodeLegacyText(readFileSync(new URL("../../"+n,import.meta.url)));
+const rules=parseEnterpriseRules(src("command.pl"),src("unei_2.pl"),src("kaishiya.pl"),src("original_house.cgi"));
+const catalog=parseHouseCatalog(src("town_ini.cgi"),src("command.pl"));
+const jobs=parseLegacyJobs(src("dat_dir/job.cgi"));
+const stats=n=>Object.fromEntries(STAT_KEYS.map(k=>[k,n]));
+test("HS-03 actual catalog additional building quote and original 18-condition admission",()=>{
+ assert.deepEqual(rules.extraWan,[100,100,1000,500]);assert.equal(rules.maxBuildings,5);assert.equal(rules.appearanceMultiplier,2);assert.equal(rules.retainOnSale,true);
+ const h=catalog.houses.find(x=>x.supported),args={townId:0,image:h.id,kind:"operation",existingKinds:["home"],assets:0,stats:stats(0)};
+ const q=quoteExtraBuilding(rules,catalog,args);
+ assert.equal(q.total,(catalog.landWan[0]+2*h.priceWan+100)*10000);
+ assert.throws(()=>quoteExtraBuilding(rules,catalog,{...args,existingKinds:["home","operation"]}));
+ assert.throws(()=>quoteExtraBuilding(rules,catalog,{...args,kind:"corporation",assets:99999999,stats:stats(10000)}));
+ assert.throws(()=>quoteExtraBuilding(rules,catalog,{...args,kind:"resale",assets:100000000,stats:{...stats(10000),etti:9999}}));
+ assert.equal(quoteExtraBuilding(rules,catalog,{...args,kind:"corporation",assets:100000000,stats:stats(10000)}).extraWan,1000);
+});
+test("HS-04 fee A: exact balance, zero-gain source choices, per employee cooldown and all-or-none batch",()=>{
+ const e=emptyEmployee(rules),args={kind:"operation",employees:[e],indices:[0],actorStats:stats(20),cash:20000,bank:0,payment:"cash",stat:"kokugo",amount:10,nowSeconds:3600};
+ const out=trainEmployees(rules,jobs,args);assert.equal(out.cash,0);assert.equal(out.actorStats.kokugo,10);assert.equal(out.employees[0].stats.kokugo,1);assert.equal(out.employees[0].score,11);
+ assert.equal(trainEmployees(rules,jobs,{...args,cash:0,amount:5}).consumed,5);
+ assert.throws(()=>trainEmployees(rules,jobs,{...args,cash:19999}),/教育費不足/);
+ assert.throws(()=>trainEmployees(rules,jobs,{...args,payment:"credit",bank:20000,creditValid:false}),/信用卡/);
+ assert.equal(trainEmployees(rules,jobs,{...args,payment:"credit",bank:20000,creditValid:true}).bank,0);
+ assert.throws(()=>trainEmployees(rules,jobs,{...args,employees:out.employees,nowSeconds:7199}),/間隔/);
+ assert.equal(trainEmployees(rules,jobs,{...args,employees:out.employees,nowSeconds:7200}).gain,1);
+ const batch={...args,kind:"corporation",employees:[e,e],indices:[0,1],cash:40000};
+ assert.equal(trainEmployees(rules,jobs,batch).cost,40000);
+ assert.throws(()=>trainEmployees(rules,jobs,{...batch,cash:39999}),/教育費不足/);
+ assert.throws(()=>trainEmployees(rules,jobs,{...batch,actorStats:stats(19)}),/能力不足/);
+ assert.equal(e.stats.kokugo,0);assert.equal(employeeCap(rules,"operation",1),5);assert.equal(employeeCap(rules,"corporation",10),30);
+ assert.equal(trainEmployees(rules,jobs,{...batch,stat:"food"}).employees[0].foodTenths,1);
+ assert.throws(()=>trainEmployees(rules,jobs,{...batch,amount:5}),/教育選項/);
+ assert.throws(()=>trainEmployees(rules,jobs,{...batch,employees:[e,e,e]}),/教育選項/);
+});
+test("HS-04 income B: independent owner and officer credits, old-job display separate from stored job",()=>{
+ const mock=[{originalName:"A",salary:4000,requirements:stats(0)},{originalName:"B",salary:8000,requirements:stats(1)}];
+ const e=emptyEmployee(rules);
+ const a={...e,job:"A"},b={...e,job:"B"};
+ assert.deepEqual(projectEnterpriseIncome({operation:[a],corporation:[b],ownerId:1,officerIds:[1,2,2,3]},mock),{operating:10000,corporate:20000,ownerTotal:30000,officers:[{userId:2,amount:20000},{userId:3,amount:20000}]});
+ const changed=projectEmployee({...e,stats:stats(1),job:"A"},mock);
+ assert.equal(changed.job,"B");assert.equal(changed.displayIncome,Math.trunc((40000+changed.score*10)/4));
+ assert.equal(employeeIncome(changed,mock),Math.trunc((80000+changed.score*10)/4));
+});
